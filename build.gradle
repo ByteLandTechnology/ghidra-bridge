@@ -1,0 +1,198 @@
+plugins {
+    id 'base'
+}
+
+group = 'app.byteland'
+version = '0.2.0'
+
+apply from: 'gradle/ghidra-detect.gradle'
+
+subprojects {
+    group = rootProject.group
+    version = rootProject.version
+
+    if (project.path == ':transport') {
+        apply plugin: 'base'
+        return
+    }
+
+    apply plugin: 'java-library'
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+    repositories { mavenCentral() }
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+}
+
+def ghidraJars = ghidraInstallDir == null ? files() : fileTree(dir: ghidraInstallDir, include: ['**/*.jar'])
+
+project(':wire') {
+    dependencies { api project(':domain') }
+}
+project(':runtime') {
+    dependencies { api project(':wire') }
+}
+project(':adapter') {
+    dependencies {
+        api project(':domain')
+        implementation project(':wire')
+        implementation project(':runtime')
+        compileOnly ghidraJars
+        compileOnly 'com.github.spotbugs:spotbugs-annotations:4.9.8'
+    }
+}
+project(':transport:websocket') {
+    dependencies { api project(':runtime') }
+}
+project(':transport:mcp') {
+    dependencies { api project(':runtime') }
+}
+project(':launcher') {
+    dependencies {
+        implementation project(':adapter')
+        implementation project(':transport:websocket')
+        implementation project(':transport:mcp')
+        compileOnly ghidraJars
+    }
+}
+
+tasks.register('verifyGhidraInstallDir') {
+    doLast {
+        if (ghidraInstallDir == null) {
+            throw new GradleException('Ghidra installation not found. Set GHIDRA_INSTALL_DIR or -PghidraInstallDir.')
+        }
+    }
+}
+project(':adapter').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+project(':launcher').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+
+project(':launcher') {
+    tasks.register('runtimeJar', Jar) {
+        dependsOn tasks.named('classes'), configurations.runtimeClasspath
+        archiveFileName = 'ghidra-bridge.jar'
+        destinationDirectory = layout.buildDirectory.dir('runtime-libs')
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+        from(sourceSets.main.output)
+        from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+        exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+        manifest { attributes 'Main-Class': 'app.byteland.ghidra.Bootstrap',
+            'Implementation-Version': rootProject.version }
+    }
+
+    def generateScript = { String taskName, String className, String bootstrapMethod, String logPrefix ->
+        tasks.register(taskName, Copy) {
+            from 'src/main/templates/GhidraLauncher.java.template'
+            into layout.buildDirectory.dir('generated/scripts')
+            rename { className + '.java' }
+            filter { String line ->
+                line.replace('__CLASS__', className)
+                    .replace('__BOOTSTRAP_METHOD__', bootstrapMethod)
+                    .replace('__LOG_PREFIX__', logPrefix)
+            }
+        }
+    }
+    generateScript('generateBridgeScript', 'Bridge', 'startFromScript', 'ghidra-bridge')
+    generateScript('generateMcpScript', 'GhidraMcp', 'startMcpFromScript', 'ghidra-mcp')
+
+    tasks.register('buildGhidraScript', Sync) {
+        dependsOn tasks.named('runtimeJar'), tasks.named('generateBridgeScript'), tasks.named('generateMcpScript')
+        into rootProject.layout.buildDirectory.dir('ghidra-script')
+        from layout.buildDirectory.dir('generated/scripts')
+        from tasks.named('runtimeJar')
+    }
+}
+
+tasks.register('buildGhidraScript') {
+    dependsOn ':launcher:buildGhidraScript'
+}
+
+def contractOutputs = ['docs/asyncapi.yaml', 'docs/mcp-tools.json', 'docs/api.md']
+def contractGenerators = [
+    [name: 'Api', projectPath: ':wire', mainClass: 'app.byteland.ghidra.api.ApiContractGenerator'],
+    [name: 'Mcp', projectPath: ':transport:mcp', mainClass: 'app.byteland.ghidra.mcp.McpContractGenerator']
+]
+contractGenerators.each { generator ->
+    tasks.register("generate${generator.name}Contract", JavaExec) {
+        group = 'documentation'
+        dependsOn project(generator.projectPath).tasks.named('classes')
+        classpath = project(generator.projectPath).sourceSets.main.runtimeClasspath
+        mainClass = generator.mainClass
+        args rootDir.absolutePath
+    }
+    tasks.register("stage${generator.name}Contract", JavaExec) {
+        group = 'verification'
+        dependsOn project(generator.projectPath).tasks.named('classes')
+        classpath = project(generator.projectPath).sourceSets.main.runtimeClasspath
+        mainClass = generator.mainClass
+        args layout.buildDirectory.dir('generated-contracts').get().asFile.absolutePath
+    }
+}
+tasks.register('generateApiContracts') {
+    group = 'documentation'
+    dependsOn 'generateApiContract', 'generateMcpContract'
+}
+tasks.register('verifyApiContracts') {
+    group = 'verification'
+    dependsOn 'stageApiContract', 'stageMcpContract'
+    doLast {
+        contractOutputs.each { relative ->
+            def checkedIn = file(relative)
+            def generated = layout.buildDirectory.file("generated-contracts/${relative}").get().asFile
+            if (!checkedIn.isFile() || !generated.isFile() || checkedIn.text != generated.text) {
+                throw new GradleException("Generated contract drift: ${relative}; run ./gradlew generateApiContracts")
+            }
+        }
+    }
+}
+
+tasks.register('verifyDistribution') {
+    group = 'verification'
+    dependsOn 'buildGhidraScript', 'compileGeneratedScripts'
+    doLast {
+        def output = layout.buildDirectory.dir('ghidra-script').get().asFile
+        def names = output.listFiles().collect { it.name }.sort()
+        if (names != ['Bridge.java', 'GhidraMcp.java', 'ghidra-bridge.jar']) {
+            throw new GradleException("Unexpected distribution contents: ${names}")
+        }
+        new java.util.jar.JarFile(new File(output, 'ghidra-bridge.jar')).withCloseable { jar ->
+            if (jar.getJarEntry('app/byteland/ghidra/Bootstrap.class') == null) {
+                throw new GradleException('Runtime jar is missing Bootstrap.class')
+            }
+        }
+    }
+}
+
+tasks.register('compileGeneratedScripts', JavaCompile) {
+    group = 'verification'
+    dependsOn ':launcher:generateBridgeScript', ':launcher:generateMcpScript', 'verifyGhidraInstallDir'
+    source project(':launcher').layout.buildDirectory.dir('generated/scripts')
+    classpath = ghidraJars
+    destinationDirectory = layout.buildDirectory.dir('compiled-scripts')
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
+    options.encoding = 'UTF-8'
+}
+
+tasks.register('verifyArchitecture') {
+    group = 'verification'
+    doLast {
+        ['domain', 'wire', 'runtime', 'transport/websocket', 'transport/mcp'].each { module ->
+            fileTree("modules/${module}/src/main/java") { include '**/*.java' }.each { source ->
+                if (source.readLines().any { it ==~ /^import ghidra\..*/ }) {
+                    throw new GradleException("Ghidra API import outside adapter/launcher: ${source}")
+                }
+            }
+        }
+    }
+}
+
+tasks.register('verify') {
+    group = 'verification'
+    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+}

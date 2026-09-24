@@ -1,0 +1,293 @@
+def isWindows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('win')
+def analyzeHeadlessName = isWindows ? 'analyzeHeadless.bat' : 'analyzeHeadless'
+def ghidraRunName = isWindows ? 'ghidraRun.bat' : 'ghidraRun'
+
+def canonicalizeExistingPath = { File candidate ->
+    try {
+        candidate.canonicalFile
+    } catch (Exception ignored) {
+        candidate.absoluteFile
+    }
+}
+
+def isFilePath = { File candidate ->
+    candidate != null && candidate.isFile()
+}
+
+def pathEntries = {
+    def rawPath = System.getenv('PATH') ?: System.getenv('Path')
+    rawPath ? rawPath.split(java.util.regex.Pattern.quote(File.pathSeparator)).findAll { !it.isBlank() } : []
+}
+
+def executableNames = { String baseName ->
+    if (!isWindows) {
+        return [baseName]
+    }
+
+    def pathext = (System.getenv('PATHEXT') ?: '.EXE;.CMD;.BAT;.COM')
+            .split(';')
+            .collect { it.toLowerCase(Locale.ROOT) }
+            .findAll { !it.isBlank() }
+    [
+        baseName,
+        *pathext.collect { ext ->
+            "${baseName}${ext}"
+        }
+    ]
+}
+
+def findExecutableOnPath = { String baseName ->
+    for (def entry : pathEntries()) {
+        for (def name : executableNames(baseName)) {
+            def candidate = new File(entry, name)
+            if (candidate.isFile()) {
+                return canonicalizeExistingPath(candidate)
+            }
+        }
+    }
+    null
+}
+
+def analyzeCandidatesFromInstallDir = { File installDir ->
+    [
+        new File(installDir, "support/${analyzeHeadlessName}"),
+        new File(installDir, "libexec/support/${analyzeHeadlessName}"),
+        new File(installDir, "libexec/${analyzeHeadlessName}"),
+        new File(installDir, analyzeHeadlessName)
+    ]
+}
+
+def ghidraRunCandidatesFromInstallDir = { File installDir ->
+    [
+        new File(installDir, "bin/${ghidraRunName}"),
+        new File(installDir, "support/${ghidraRunName}"),
+        new File(installDir, "libexec/support/${ghidraRunName}"),
+        new File(installDir, "libexec/${ghidraRunName}"),
+        new File(installDir, ghidraRunName)
+    ]
+}
+
+def uniqueFiles = { Collection<File> candidates ->
+    def seen = new LinkedHashSet<String>()
+    def values = []
+    for (def candidate : candidates) {
+        if (candidate == null) {
+            continue
+        }
+        def resolved = candidate.absoluteFile
+        if (seen.add(resolved.path)) {
+            values << resolved
+        }
+    }
+    values
+}
+
+def readdirSafe = { File root ->
+    if (!root.isDirectory()) {
+        return []
+    }
+    def entries = root.listFiles()
+    entries == null ? [] : entries.toList()
+}
+
+def installDirCandidates = { File root ->
+    def resolvedRoot = canonicalizeExistingPath(root)
+    uniqueFiles([
+        resolvedRoot,
+        *readdirSafe(resolvedRoot)
+    ])
+}
+
+def installDirFromResolvedBinary = { File binaryPath ->
+    def resolved = canonicalizeExistingPath(binaryPath)
+    File current = resolved.parentFile
+    def matches = []
+
+    for (int depth = 0; depth < 4 && current != null; depth += 1) {
+        if (analyzeCandidatesFromInstallDir(current).collect { canonicalizeExistingPath(it).path }.contains(resolved.path) ||
+                ghidraRunCandidatesFromInstallDir(current).collect { canonicalizeExistingPath(it).path }.contains(resolved.path)) {
+            matches << current
+        }
+
+        if (current.parentFile == null || current.parentFile == current) {
+            break
+        }
+        current = current.parentFile
+    }
+
+    matches ? matches.last() : null
+}
+
+def resolveGhidraFromInstallDir = { File installDir ->
+    def resolvedInstallDir = canonicalizeExistingPath(installDir)
+    def analyzeHeadless = analyzeCandidatesFromInstallDir(resolvedInstallDir).find(isFilePath)
+    analyzeHeadless ? resolvedInstallDir : null
+}
+
+def resolveGhidraFromCandidatePath = { String candidatePath ->
+    if (candidatePath == null || candidatePath.trim().isEmpty()) {
+        return null
+    }
+
+    def resolved = canonicalizeExistingPath(file(candidatePath))
+    if (resolved.isFile()) {
+        def installDir = installDirFromResolvedBinary(resolved)
+        return installDir == null ? null : resolveGhidraFromInstallDir(installDir)
+    }
+
+    if (resolved.isDirectory()) {
+        for (def installDir : installDirCandidates(resolved)) {
+            def installation = resolveGhidraFromInstallDir(installDir)
+            if (installation != null) {
+                return installation
+            }
+        }
+    }
+
+    null
+}
+
+// Stop a command that blocks Ghidra detection during Gradle setup.
+def RUN_COMMAND_TIMEOUT_SECONDS = 10L
+
+def runCommand = { List<String> command ->
+    Process process = null
+    try {
+        process = new ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .start()
+        // Read output on another thread so the timeout can stop a blocked command.
+        def outputRef = new StringBuilder()
+        def readerThread = new Thread({
+            outputRef.append(process.inputStream.getText('UTF-8'))
+        } as Runnable, 'ghidra-detect-brew-output-reader')
+        // Let the JVM stop even if the output reader stays blocked.
+        readerThread.daemon = true
+        readerThread.start()
+        def exited = process.waitFor(RUN_COMMAND_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+        if (!exited) {
+            process.destroyForcibly()
+            return null
+        }
+        readerThread.join(java.util.concurrent.TimeUnit.SECONDS.toMillis(RUN_COMMAND_TIMEOUT_SECONDS))
+        process.exitValue() == 0 ? outputRef.toString().trim() : null
+    } catch (Exception ignored) {
+        process?.destroyForcibly()
+        null
+    }
+}
+
+def homebrewGhidraInstallDirs = {
+    def candidates = []
+    def brew = findExecutableOnPath('brew')
+    if (brew == null) {
+        return candidates
+    }
+
+    def info = runCommand([
+        brew.path,
+        'info',
+        '--json=v2',
+        'ghidra'
+    ])
+    if (info != null) {
+        try {
+            def parsed = new groovy.json.JsonSlurper().parseText(info)
+            for (def formula : parsed.formulae ?: []) {
+                for (def installed : formula.installed ?: []) {
+                    if (installed.prefix) {
+                        candidates << file(installed.prefix as String)
+                    }
+                }
+                if (formula.cellar && formula.linked_keg) {
+                    candidates << file("${formula.cellar}/${formula.linked_keg}")
+                }
+            }
+        } catch (Exception ignored) {
+            // Try other paths if brew returns invalid JSON.
+        }
+    }
+
+    def prefix = runCommand([
+        brew.path,
+        '--prefix',
+        'ghidra'
+    ])
+    if (prefix != null) {
+        candidates << file(prefix)
+    }
+
+    candidates
+}
+
+def commonInstallDirs = {
+    def candidates = [
+        file('/opt/ghidra'),
+        file('/usr/local/ghidra'),
+        file('/Applications/ghidra'),
+        file('/opt/homebrew/opt/ghidra'),
+        file('/opt/homebrew/Cellar/ghidra'),
+        file('/usr/local/opt/ghidra'),
+        file('/usr/local/Cellar/ghidra'),
+        file('/Applications/Ghidra.app/Contents/Resources')
+    ]
+    def applicationsDir = file('/Applications')
+    if (applicationsDir.isDirectory()) {
+        applicationsDir.listFiles()?.findAll { it.name ==~ /(?i)^ghidra.*/ }?.each { candidates << it }
+    }
+    candidates.findAll { it.isDirectory() }
+}
+
+def resolveGhidraInstallDir = {
+    def explicit = providers.gradleProperty('ghidraInstallDir').orNull
+    if (explicit != null && !explicit.trim().isEmpty()) {
+        def installation = resolveGhidraFromCandidatePath(explicit)
+        if (installation != null) {
+            return installation
+        }
+    }
+
+    def envInstallDir = providers.environmentVariable('GHIDRA_INSTALL_DIR').orNull
+    if (envInstallDir != null && !envInstallDir.trim().isEmpty()) {
+        def installation = resolveGhidraFromCandidatePath(envInstallDir)
+        if (installation != null) {
+            return installation
+        }
+    }
+
+    def ghidraRunOnPath = findExecutableOnPath('ghidraRun')
+    if (ghidraRunOnPath != null) {
+        def installation = resolveGhidraFromCandidatePath(ghidraRunOnPath.path)
+        if (installation != null) {
+            return installation
+        }
+    }
+
+    for (def installDir : uniqueFiles(homebrewGhidraInstallDirs())) {
+        def installation = resolveGhidraFromCandidatePath(installDir.path)
+        if (installation != null) {
+            return installation
+        }
+    }
+
+    def analyzeOnPath = findExecutableOnPath('analyzeHeadless')
+    if (analyzeOnPath != null) {
+        def installation = resolveGhidraFromCandidatePath(analyzeOnPath.path)
+        if (installation != null) {
+            return installation
+        }
+    }
+
+    for (def installDir : uniqueFiles(commonInstallDirs())) {
+        def installation = resolveGhidraFromCandidatePath(installDir.path)
+        if (installation != null) {
+            return installation
+        }
+    }
+
+    null
+}
+
+ext.analyzeHeadlessName = analyzeHeadlessName
+ext.resolveGhidraInstallDir = resolveGhidraInstallDir
+ext.ghidraInstallDir = resolveGhidraInstallDir()

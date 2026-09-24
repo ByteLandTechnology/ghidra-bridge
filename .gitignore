@@ -1,0 +1,42 @@
+.gradle/
+ghidra-dist/
+tests/mcp-client/target/
+**/build/
+!**/src/**/build/
+
+# Ignore Gradle GUI files.
+gradle-app.setting
+
+# Keep the Gradle wrapper JAR.
+!gradle-wrapper.jar
+
+# Keep the Gradle wrapper settings.
+!gradle-wrapper.properties
+
+# Ignore the project cache.
+.gradletasknamecache
+
+# Ignore Eclipse files.
+.project
+# Ignore Java tools in Eclipse.
+.classpath
+.settings/
+
+# Ignore local agent, editor, and system files.
+.agents/
+.zcode/
+.claude/
+.idea/
+.vscode/
+.fleet/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Ignore compiler output, crash files, and logs.
+.kotlin/
+bin/
+out/
+*.log
+hs_err_pid*.log
+*.hprof

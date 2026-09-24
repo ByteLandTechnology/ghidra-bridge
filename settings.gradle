@@ -1,0 +1,13 @@
+rootProject.name = 'ghidra-bridge'
+
+include ':domain', ':wire', ':runtime', ':adapter', ':transport:websocket', ':transport:mcp', ':launcher'
+
+// Set project directories in the modules folder.
+project(':domain').projectDir = file('modules/domain')
+project(':wire').projectDir = file('modules/wire')
+project(':runtime').projectDir = file('modules/runtime')
+project(':adapter').projectDir = file('modules/adapter')
+project(':transport').projectDir = file('modules/transport')
+project(':transport:websocket').projectDir = file('modules/transport/websocket')
+project(':transport:mcp').projectDir = file('modules/transport/mcp')
+project(':launcher').projectDir = file('modules/launcher')

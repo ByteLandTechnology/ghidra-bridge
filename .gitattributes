@@ -1,0 +1,12 @@
+# Normalize line endings in text files.
+* text=auto
+
+# Keep Windows batch scripts in CRLF.
+*.bat text eol=crlf
+
+# Keep shell scripts in LF so they run on Unix.
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Treat the Gradle wrapper JAR as binary.
+gradle-wrapper.jar binary
