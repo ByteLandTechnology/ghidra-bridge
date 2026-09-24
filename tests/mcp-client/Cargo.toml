@@ -1,0 +1,16 @@
+[package]
+name = "ghidra-mcp-client"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+description = "Test client that runs every Ghidra Bridge MCP tool against a headless Ghidra session"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+jsonschema = { version = "0.57", default-features = false }
+serde_json = "1"
+ureq = "3"
