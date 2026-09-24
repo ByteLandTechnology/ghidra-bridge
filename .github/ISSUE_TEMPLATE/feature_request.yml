@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an improvement to Ghidra Bridge.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Problem
+      description: Describe the task that you cannot complete.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected behavior. List any affected methods or arguments.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Other approaches
+      description: List any other approach that you considered.
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Can you prepare a pull request?
+      options:
+        - "Yes"
+        - "Maybe, with help"
+        - "No"
