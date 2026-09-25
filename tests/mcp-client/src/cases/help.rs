@@ -31,8 +31,12 @@ fn help(ctx: &mut TestContext, arguments: Value) -> Result<Value> {
 
 fn domains(ctx: &mut TestContext) -> Result<()> {
     let result = help(ctx, json!({}))?;
+    let domains: Vec<String> = DOMAIN_TOOLS
+        .iter()
+        .map(|tool| ctx.client.wire_name(tool))
+        .collect();
     ensure!(
-        result == json!({"domains": DOMAIN_TOOLS}),
+        result == json!({"domains": domains}),
         "unexpected domains: {result}"
     );
     Ok(())
@@ -42,7 +46,10 @@ fn domains(ctx: &mut TestContext) -> Result<()> {
 fn operations(ctx: &mut TestContext) -> Result<()> {
     for tool in DOMAIN_TOOLS {
         let result = help(ctx, json!({"domain": tool}))?;
-        ensure!(result["domain"] == json!(tool), "wrong domain in {result}");
+        ensure!(
+            result["domain"] == json!(ctx.client.wire_name(tool)),
+            "wrong domain in {result}"
+        );
         let listed: BTreeSet<String> = result["operations"]
             .as_array()
             .context("no operations array")?
@@ -60,10 +67,10 @@ fn operations(ctx: &mut TestContext) -> Result<()> {
             "{tool}: help lists {listed:?}, tools/list has {published:?}"
         );
     }
-    // The domain name also works without the "ghidra." prefix.
+    // The domain name also works without the tool prefix.
     let result = help(ctx, json!({"domain": "memory"}))?;
     ensure!(
-        result["domain"] == json!("ghidra.memory"),
+        result["domain"] == json!(ctx.client.wire_name("ghidra.memory")),
         "short domain name failed: {result}"
     );
     Ok(())

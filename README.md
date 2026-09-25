@@ -83,6 +83,9 @@ ws_url=ws://127.0.0.1:8765/ws/agent session_id=demo token=secret
 
 # MCP HTTP server
 host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
+
+# Second MCP HTTP server with its own tool names
+host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 ```
 
 ### Parameter Reference
@@ -95,6 +98,7 @@ host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 | `session_id` | Program name | Unique identifier string for this active session. |
 | `token` | *(none)* | Shared secret token for bearer authentication. |
 | `ws_url` | *(none)* | Remote WebSocket URL when operating as an outbound client. |
+| `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra.program`. Use a different value for each server that one client connects to. |
 | `jar` | *(auto)* | Path to `ghidra-bridge.jar` if moved away from script file. |
 
 ## Security Rules

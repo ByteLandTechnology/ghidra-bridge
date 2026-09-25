@@ -23,7 +23,7 @@ use clap::Parser;
 use crate::cli::Args;
 use crate::context::TestContext;
 use crate::ghidra::GhidraProcess;
-use crate::mcp::McpClient;
+use crate::mcp::{McpClient, DEFAULT_TOOL_PREFIX};
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -57,8 +57,17 @@ fn run(args: &Args) -> Result<bool> {
         &args.script_dir,
         &binary,
         &work_dir,
+        args.tool_prefix.as_deref(),
     )?;
-    let client = McpClient::new(ghidra.endpoint(), Some(ghidra.token().to_string()));
+    let tool_prefix = args
+        .tool_prefix
+        .clone()
+        .unwrap_or_else(|| DEFAULT_TOOL_PREFIX.into());
+    let client = McpClient::new(
+        ghidra.endpoint(),
+        Some(ghidra.token().to_string()),
+        tool_prefix,
+    );
     println!("starting Ghidra; log: {}", ghidra.log_path().display());
     let started = Instant::now();
     if let Err(error) =

@@ -7,11 +7,21 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Groups the API methods into MCP tools named {@code <prefix>.<domain>}, plus
+ * {@code <prefix>.help}.
+ */
 final class McpToolRegistry {
+  private final String prefix;
   private final Map<String, Map<String, MethodDescriptor>> domains = new LinkedHashMap<>();
   private final List<Map<String, Object>> listedTools;
 
   McpToolRegistry(ApiCatalog catalog) {
+    this(catalog, McpConfig.DEFAULT_TOOL_PREFIX);
+  }
+
+  McpToolRegistry(ApiCatalog catalog, String prefix) {
+    this.prefix = McpConfig.requireToolPrefix(prefix);
     for (MethodDescriptor method : catalog.methods()) {
       if (method.name().equals("interface.get")) continue;
       String[] target = target(method.name());
@@ -19,7 +29,7 @@ final class McpToolRegistry {
           .put(target[1], method);
     }
     List<Map<String, Object>> tools = new ArrayList<>();
-    tools.add(Map.of("name", "ghidra.help", "description", "Get domains, operations, schemas, and effects.",
+    tools.add(Map.of("name", helpToolName(), "description", "Get domains, operations, schemas, and effects.",
         "inputSchema", Map.of("type", "object", "properties", Map.of(
             "domain", Map.of("type", "string"), "operation", Map.of("type", "string")),
             "additionalProperties", false),
@@ -48,7 +58,7 @@ final class McpToolRegistry {
     };
   }
 
-  private static Map<String, Object> groupTool(
+  private Map<String, Object> groupTool(
       String domain, Map<String, MethodDescriptor> operations) {
     List<Map<String, Object>> inputs = new ArrayList<>();
     List<Map<String, Object>> outputs = new ArrayList<>();
@@ -60,7 +70,7 @@ final class McpToolRegistry {
           "operation", Map.of("const", entry.getKey()), "result", entry.getValue().outputSchema()),
           "required", List.of("operation", "result"), "additionalProperties", false));
     }
-    return Map.of("name", "ghidra." + domain,
+    return Map.of("name", toolName(domain),
         "description", "Use this tool for " + domain + " data. Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
         "inputSchema", Map.of("type", "object", "oneOf", inputs),
@@ -72,13 +82,15 @@ final class McpToolRegistry {
   List<Map<String, Object>> listTools() { return listedTools; }
 
   MethodDescriptor findTool(String name, String operation) {
-    Map<String, MethodDescriptor> methods = domains.get(stripPrefix(name));
+    String domain = domainOf(name);
+    Map<String, MethodDescriptor> methods = domain == null ? null : domains.get(domain);
     return methods == null ? null : methods.get(operation);
   }
 
   boolean hasTool(String name) {
-    return name.equals("ghidra.help") ||
-        (name.startsWith("ghidra.") && domains.containsKey(stripPrefix(name)));
+    if (isHelpTool(name)) return true;
+    String domain = domainOf(name);
+    return domain != null && domains.containsKey(domain);
   }
 
   Map<String, Object> help(Map<String, Object> arguments) {
@@ -90,23 +102,43 @@ final class McpToolRegistry {
       if (arguments.containsKey("operation")) {
         throw new IllegalArgumentException("operation requires domain");
       }
-      return Map.of("domains", domains.keySet().stream().map(d -> "ghidra." + d).toList());
+      return Map.of("domains", domains.keySet().stream().map(this::toolName).toList());
     }
-    String domain = stripPrefix(domainValue.toString());
+    String domain = helpDomain(domainValue.toString());
     Map<String, MethodDescriptor> operations = domains.get(domain);
     if (operations == null) throw new IllegalArgumentException("Unknown domain: " + domainValue);
     Object operationValue = arguments.get("operation");
-    if (operationValue == null) return Map.of("domain", "ghidra." + domain,
+    if (operationValue == null) return Map.of("domain", toolName(domain),
         "operations", List.copyOf(operations.keySet()));
     MethodDescriptor descriptor = operations.get(operationValue.toString());
     if (descriptor == null) throw new IllegalArgumentException("Unknown operation: " + operationValue);
-    return Map.of("domain", "ghidra." + domain, "operation", operationValue,
+    return Map.of("domain", toolName(domain), "operation", operationValue,
         "method", descriptor.name(), "description", descriptor.description(),
         "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
         "effects", descriptor.contractValue().get("effects"));
   }
 
-  private static String stripPrefix(String name) {
-    return name.startsWith("ghidra.") ? name.substring(7) : name;
+  boolean isHelpTool(String name) {
+    return helpToolName().equals(name);
+  }
+
+  private String helpToolName() {
+    return toolName("help");
+  }
+
+  private String toolName(String domain) {
+    return prefix + "." + domain;
+  }
+
+  /** Returns the domain of a tool name with this prefix, or null for any other name. */
+  private String domainOf(String name) {
+    String start = prefix + ".";
+    return name.startsWith(start) ? name.substring(start.length()) : null;
+  }
+
+  /** Accepts a domain in {@code ghidra.help} as a full tool name or as a bare domain name. */
+  private String helpDomain(String value) {
+    String domain = domainOf(value);
+    return domain == null ? value : domain;
   }
 }

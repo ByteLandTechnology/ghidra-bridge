@@ -71,7 +71,7 @@ public final class McpHttpServer implements AutoCloseable {
     this.config = Objects.requireNonNull(config, "config");
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
-    this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog());
+    this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
     Map<String, Object> toolContract = new LinkedHashMap<>();
     toolContract.put("protocol_version", MCP_PROTOCOL_VERSION);
     toolContract.put("tools", toolRegistry.listTools());
@@ -334,7 +334,7 @@ public final class McpHttpServer implements AutoCloseable {
     }
     Map<String, Object> arguments = requireArguments(params.get("arguments"), id);
     try {
-      if (name.equals("ghidra.help")) {
+      if (toolRegistry.isHelpTool(name)) {
         log.ok().status(200);
         return toolResult(toolRegistry.help(arguments), false);
       }

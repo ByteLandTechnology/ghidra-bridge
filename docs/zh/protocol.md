@@ -177,6 +177,18 @@ MCP 将操作组织为 15 个工具：
 
 领域工具共公开 52 个方法。`interface.get` 仅通过 WebSocket 提供。
 
+### 工具名前缀
+
+所有工具名都以前缀和一个点开头，默认前缀为 `ghidra`。
+通过 `tool_prefix` 启动参数可以修改前缀，例如 `tool_prefix=sample`。
+此时工具名为 `sample.help`、`sample.program` 等。
+当一个 MCP 客户端接入多个桥接服务时，为每个桥接服务设置不同的前缀。
+
+前缀以字母开头，由 1 至 64 个字母、数字、`_` 或 `-` 组成。
+服务端拒绝使用其他前缀的工具名。
+在 `ghidra.help` 中，`domain` 参数既接受完整工具名，也接受不带前缀的领域名，例如 `memory`。
+本文档中的示例均使用默认前缀。
+
 `ghidra.help` 接受可选的 `domain` 与 `operation` 参数：
 - 不带参数：返回领域工具列表。
 - 仅 `domain`：返回该领域工具的操作名列表。

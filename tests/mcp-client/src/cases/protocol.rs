@@ -25,6 +25,7 @@ pub fn cases() -> Vec<Case> {
         Case::new("protocol.metadata", metadata),
         Case::new("protocol.headers", headers),
         Case::new("protocol.tool_call_errors", tool_call_errors),
+        Case::new("protocol.tool_prefix", tool_prefix),
     ]
 }
 
@@ -300,9 +301,11 @@ fn headers(ctx: &mut TestContext) -> Result<()> {
         expect_http(&reply, 400, Some(-32020)).with_context(|| format!("{header}={value:?}"))?;
     }
 
+    let help = ctx.client.wire_name("ghidra.help");
+    let program = ctx.client.wire_name("ghidra.program");
     let params = json!({"name": "ghidra.help", "arguments": {}});
-    let call_headers = ctx.client.headers_for("tools/call", Some("ghidra.help"));
-    for value in [None, Some("ghidra.program")] {
+    let call_headers = ctx.client.headers_for("tools/call", Some(&help));
+    for value in [None, Some(program.as_str())] {
         let changed = replace_header(call_headers.clone(), "Mcp-Name", value);
         let body = ctx
             .client
@@ -313,7 +316,7 @@ fn headers(ctx: &mut TestContext) -> Result<()> {
     }
 
     // A base64-encoded header value is decoded before the comparison.
-    let encoded = base64::engine::general_purpose::STANDARD.encode("ghidra.help");
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&help);
     let changed = replace_header(
         call_headers,
         "Mcp-Name",
@@ -369,6 +372,49 @@ fn tool_call_errors(ctx: &mut TestContext) -> Result<()> {
     ensure!(
         error["target"].as_str().is_some(),
         "a validation error must have a target: {error}"
+    );
+    Ok(())
+}
+
+/// Every tool name uses the configured prefix, and names with another prefix do not work.
+fn tool_prefix(ctx: &mut TestContext) -> Result<()> {
+    let prefix = ctx.client.tool_prefix().to_string();
+    let tools = ctx.client.rpc("tools/list", json!({}))?;
+    let names: Vec<&str> = tools["tools"]
+        .as_array()
+        .context("no tools array")?
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect();
+    ensure!(
+        names
+            .iter()
+            .all(|name| name.starts_with(&format!("{prefix}."))),
+        "a tool name does not use the prefix {prefix}: {names:?}"
+    );
+
+    // A client that connects to several bridges must not reach this one with another prefix.
+    let other = if prefix == "ghidra" {
+        "other"
+    } else {
+        "ghidra"
+    };
+    let foreign = format!("{other}.program");
+    let params = json!({"name": foreign, "arguments": {"operation": "get", "params": {}}});
+    let body = ctx.client.envelope_exact("tools/call", params).to_string();
+    let headers = ctx.client.headers_for("tools/call", Some(&foreign));
+    let reply = ctx.client.send("POST", "", &headers, Some(&body))?;
+    expect_http(&reply, 400, Some(-32602))?;
+
+    let help = ctx.client.wire_name("ghidra.help");
+    let params = json!({"name": help, "arguments": {"domain": format!("{other}.memory")}});
+    let body = ctx.client.envelope_exact("tools/call", params).to_string();
+    let headers = ctx.client.headers_for("tools/call", Some(&help));
+    let reply = ctx.client.send("POST", "", &headers, Some(&body))?;
+    let result = reply.json()?;
+    ensure!(
+        result.pointer("/result/isError") == Some(&json!(true)),
+        "help accepted a domain with another prefix: {result}"
     );
     Ok(())
 }

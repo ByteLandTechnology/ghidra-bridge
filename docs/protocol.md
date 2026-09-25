@@ -177,6 +177,18 @@ MCP organizes operations into 15 tools:
 
 The domain tools expose 52 methods. `interface.get` is available only through WebSocket.
 
+### Tool Name Prefix
+
+Every tool name starts with a prefix and a dot. The default prefix is `ghidra`.
+Set the `tool_prefix` startup argument to change it, for example `tool_prefix=sample`.
+Then the tools are `sample.help`, `sample.program`, and so on.
+Use a different prefix for each bridge when one MCP client connects to more than one bridge.
+
+The prefix starts with a letter and has 1 to 64 letters, digits, `_`, or `-`.
+The server rejects a tool name with a different prefix.
+In `ghidra.help`, the `domain` argument accepts the full tool name or the domain name without the prefix, such as `memory`.
+The examples in this document use the default prefix.
+
 `ghidra.help` accepts optional `domain` and `operation` arguments:
 - No arguments: Returns the list of domain tools.
 - `domain`: Returns the operation names of one domain tool.

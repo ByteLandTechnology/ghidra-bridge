@@ -134,6 +134,7 @@ public final class Bootstrap {
     script.println(
         "[ghidra-mcp]   Auth Token: " + (mcpConfig.token() == null ? "disabled" : "configured"));
     script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
+    script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
 
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
@@ -225,7 +226,7 @@ public final class Bootstrap {
         "[ghidra-mcp] Defaults: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp"
-            + " session_id=<current-program-name>");
+            + " session_id=<current-program-name> tool_prefix=ghidra");
     script.printerr(
         "[ghidra-mcp] Example: host="
             + LOOPBACK_HOST

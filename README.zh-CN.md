@@ -83,6 +83,9 @@ ws_url=ws://127.0.0.1:8765/ws/agent session_id=demo token=secret
 
 # MCP HTTP 服务端
 host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
+
+# 使用独立工具名的第二个 MCP HTTP 服务端
+host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 ```
 
 ### 参数参考表
@@ -95,6 +98,7 @@ host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 | `session_id` | 程序名 | 当前活跃会话的唯一标识字符串。 |
 | `token` | *(无)* | Bearer 认证所需的共享密钥 Token。 |
 | `ws_url` | *(无)* | 作为出站客户端连接时的远程 WebSocket URL。 |
+| `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra.program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
 | `jar` | *(自动)* | 当 `ghidra-bridge.jar` 移离脚本所在目录时指定的实际路径。 |
 
 ## 安全规范

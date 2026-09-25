@@ -83,6 +83,9 @@ ws_url=ws://127.0.0.1:8765/ws/agent session_id=demo token=secret
 
 # MCP HTTP サーバー
 host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
+
+# 独自のツール名を持つ 2 つ目の MCP HTTP サーバー
+host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 ```
 
 ### パラメータ仕様
@@ -95,6 +98,7 @@ host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 | `session_id` | プログラム名 | 現在のアクティブセッションを一意に識別する文字列。 |
 | `token` | *(なし)* | Bearer 認証用の共有シークレットトークン。 |
 | `ws_url` | *(なし)* | 送信型クライアントとして接続する際のリモート WebSocket URL。 |
+| `tool_prefix` | `ghidra` | MCP 専用。すべてのツール名の先頭部分（`ghidra.program` の `ghidra` など）。1 つのクライアントが複数のサーバーに接続する場合、サーバーごとに異なる値を指定します。 |
 | `jar` | *(自動)* | `ghidra-bridge.jar` をスクリプトと別ディレクトリに配置した場合のパス。 |
 
 ## セキュリティ規定

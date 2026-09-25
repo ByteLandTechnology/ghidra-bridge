@@ -6,6 +6,10 @@ use serde_json::{json, Value};
 
 pub const PROTOCOL_VERSION: &str = "2026-07-28";
 
+/// The tool prefix that the test cases use. The client replaces it with the prefix of the
+/// server under test.
+pub const DEFAULT_TOOL_PREFIX: &str = "ghidra";
+
 /// A raw HTTP response from the MCP endpoint.
 #[derive(Debug)]
 pub struct HttpReply {
@@ -46,15 +50,19 @@ pub struct ToolReply {
 /// MCP Streamable HTTP client for the Ghidra Bridge server.
 ///
 /// Every request carries the metadata and headers that the server requires.
+///
+/// Test cases name tools with the default prefix, such as `ghidra.program`. The client
+/// sends them with the prefix of the server, such as `re1.program`.
 pub struct McpClient {
     endpoint: String,
     token: Option<String>,
+    tool_prefix: String,
     agent: ureq::Agent,
     next_id: Cell<u64>,
 }
 
 impl McpClient {
-    pub fn new(endpoint: String, token: Option<String>) -> Self {
+    pub fn new(endpoint: String, token: Option<String>, tool_prefix: String) -> Self {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .timeout_global(Some(Duration::from_secs(600)))
@@ -63,6 +71,7 @@ impl McpClient {
         Self {
             endpoint,
             token,
+            tool_prefix,
             agent,
             next_id: Cell::new(1),
         }
@@ -74,6 +83,32 @@ impl McpClient {
 
     pub fn token(&self) -> Option<&str> {
         self.token.as_deref()
+    }
+
+    pub fn tool_prefix(&self) -> &str {
+        &self.tool_prefix
+    }
+
+    /// Converts a tool name with the default prefix to the name that the server uses.
+    pub fn wire_name(&self, name: &str) -> String {
+        match name
+            .strip_prefix(DEFAULT_TOOL_PREFIX)
+            .and_then(|rest| rest.strip_prefix('.'))
+        {
+            Some(domain) => format!("{}.{domain}", self.tool_prefix),
+            None => name.to_string(),
+        }
+    }
+
+    /// Converts a tool name that the server uses to the name with the default prefix.
+    pub fn logical_name(&self, name: &str) -> String {
+        match name
+            .strip_prefix(&self.tool_prefix)
+            .and_then(|rest| rest.strip_prefix('.'))
+        {
+            Some(domain) => format!("{DEFAULT_TOOL_PREFIX}.{domain}"),
+            None => name.to_string(),
+        }
     }
 
     /// Sends an HTTP request exactly as given. `url_suffix` is appended to the endpoint.
@@ -115,7 +150,30 @@ impl McpClient {
     }
 
     /// Builds a JSON-RPC request envelope with MCP metadata in `params._meta`.
-    pub fn envelope(&self, method: &str, params: Value) -> Value {
+    ///
+    /// For `tools/call`, the tool name and the `ghidra.help` domain get the server prefix.
+    pub fn envelope(&self, method: &str, mut params: Value) -> Value {
+        if method == "tools/call" {
+            let name = params
+                .get("name")
+                .and_then(Value::as_str)
+                .map(|name| self.wire_name(name));
+            if let Some(name) = name {
+                if name == self.wire_name("ghidra.help") {
+                    if let Some(domain) =
+                        params.pointer("/arguments/domain").and_then(Value::as_str)
+                    {
+                        params["arguments"]["domain"] = json!(self.wire_name(domain));
+                    }
+                }
+                params["name"] = json!(name);
+            }
+        }
+        self.envelope_exact(method, params)
+    }
+
+    /// Builds a request envelope without changing tool names.
+    pub fn envelope_exact(&self, method: &str, params: Value) -> Value {
         let mut params = match params {
             Value::Object(map) => map,
             Value::Null => serde_json::Map::new(),
@@ -146,8 +204,9 @@ impl McpClient {
 
     /// Sends a well-formed MCP request and returns the raw reply.
     pub fn rpc_raw(&self, method: &str, params: Value) -> Result<HttpReply> {
-        let name = mcp_name(method, &params);
-        let body = self.envelope(method, params).to_string();
+        let envelope = self.envelope(method, params);
+        let name = mcp_name(method, &envelope["params"]);
+        let body = envelope.to_string();
         self.send(
             "POST",
             "",

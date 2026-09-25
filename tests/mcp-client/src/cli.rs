@@ -22,6 +22,11 @@ pub struct Args {
     #[arg(long, value_name = "PATH")]
     pub binary: PathBuf,
 
+    /// Tool name prefix to pass to the bridge as `tool_prefix`. Without this option, the
+    /// bridge uses its default prefix, `ghidra`.
+    #[arg(long, value_name = "PREFIX")]
+    pub tool_prefix: Option<String>,
+
     /// Directory for the Ghidra project and log. The default is a new directory in the
     /// system temporary directory.
     #[arg(long, value_name = "DIR")]

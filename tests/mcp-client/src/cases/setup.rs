@@ -61,15 +61,19 @@ fn tool_catalog(ctx: &mut TestContext) -> Result<()> {
         .iter()
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    let mut expected = vec!["ghidra.help"];
-    expected.extend(DOMAIN_TOOLS);
+    // Every tool name has the prefix of the server.
+    let expected: Vec<String> = std::iter::once("ghidra.help")
+        .chain(DOMAIN_TOOLS)
+        .map(|name| ctx.client.wire_name(name))
+        .collect();
     ensure!(
         names == expected,
         "tools/list returned {names:?}, expected {expected:?}"
     );
 
     for tool in tools {
-        let name = text(tool, "/name")?;
+        // Coverage keys use the default prefix, like the test cases.
+        let name = ctx.client.logical_name(text(tool, "/name")?);
         ensure!(
             tool.get("description").and_then(Value::as_str).is_some(),
             "{name} has no description"

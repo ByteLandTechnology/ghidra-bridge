@@ -31,6 +31,7 @@ impl GhidraProcess {
         script_dir: &Path,
         binary: &Path,
         work_dir: &Path,
+        tool_prefix: Option<&str>,
     ) -> Result<Self> {
         let analyze_headless = analyze_headless_path(ghidra_install_dir)?;
         let script_dir = canonical(script_dir, "script directory")?;
@@ -53,7 +54,8 @@ impl GhidraProcess {
 
         let port = free_port()?;
         let token = random_token();
-        let child = Command::new(&analyze_headless)
+        let mut command = Command::new(&analyze_headless);
+        command
             .arg(&project_dir)
             .arg(PROJECT_NAME)
             .arg("-import")
@@ -66,7 +68,12 @@ impl GhidraProcess {
             .arg(format!("port={port}"))
             .arg(format!("path={MCP_PATH}"))
             .arg(format!("session_id={SESSION_ID}"))
-            .arg(format!("token={token}"))
+            .arg(format!("token={token}"));
+        // Without tool_prefix, the bridge uses its default prefix.
+        if let Some(prefix) = tool_prefix {
+            command.arg(format!("tool_prefix={prefix}"));
+        }
+        let child = command
             .stdin(Stdio::null())
             .stdout(log.try_clone()?)
             .stderr(log)

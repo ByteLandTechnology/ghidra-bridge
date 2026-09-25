@@ -43,6 +43,7 @@ Supply each path as an argument.
 | `--ghidra-install-dir` | Yes | Ghidra installation directory. It must contain `support/analyzeHeadless`. |
 | `--script-dir` | Yes | Directory with `GhidraMcp.java` and `ghidra-bridge.jar`. |
 | `--binary` | Yes | Binary to import. Use the sample binary; the cases check its names, types, and calls. |
+| `--tool-prefix` | No | Tool name prefix to pass to the bridge as `tool_prefix`. Without it, the bridge uses `ghidra`. |
 | `--work-dir` | No | Directory for the Ghidra project and `ghidra.log`. The default is a new temporary directory. |
 | `--keep-work-dir` | No | Keep the work directory after a successful run. |
 | `--startup-timeout-secs` | No | Time limit for import, analysis, and server startup. The default is 600. |
@@ -57,7 +58,7 @@ The client starts `analyzeHeadless` with the `GhidraMcp.java` post-script on a f
 It waits until `ping` answers, and then runs the cases in this order:
 
 1. **Setup**: Reads `tools/list` and finds the sample functions, globals, and memory blocks by name. No case uses a fixed address.
-2. **Protocol**: Tests `server/discover`, `ping`, resources, notifications, HTTP methods, content type, origin checks, bearer authentication, request metadata, and protocol headers.
+2. **Protocol**: Tests `server/discover`, `ping`, resources, notifications, HTTP methods, content type, origin checks, bearer authentication, request metadata, protocol headers, and the tool name prefix.
 3. **Tools**: Tests every operation of every domain tool and `ghidra.help`. Mutation cases undo their changes.
 4. **Shutdown**: Calls `ghidra.bridge` `shutdown` and checks that Ghidra exits.
 
@@ -88,3 +89,5 @@ The tests accept this current behavior. Each item may need a change in the bridg
 3. Use `ctx.ok(tool, operation, params)` for calls that must succeed.
    Use `ctx.fail` or `ctx.fail_with` for calls that must fail.
 4. Get addresses from `ctx.entry(name)` or `ctx.fact(key)`. Do not write fixed addresses.
+5. Name tools with the default prefix, such as `ghidra.program`.
+   The client changes the prefix to the value of `--tool-prefix` before it sends a request.
