@@ -91,3 +91,36 @@ bash .github/scripts/verify-repository-hygiene.sh
 `tests/` ディレクトリには MCP テストスイートがあります。
 Ghidra ヘッドレスモードで、C/C++ サンプルバイナリに対してすべての MCP ツールを実行します。
 実行方法は [tests/README.md](../../tests/README.md) を参照してください。
+
+## リリース
+
+CI ワークフローは semantic-release でリリースを公開します。
+リリースは `main` へのプッシュが `verify` ジョブに合格した後にのみ開始されます。
+
+semantic-release は直前の `v*` タグ以降の Conventional Commit メッセージを読み取ります:
+- `fix`: パッチリリース（`0.3.1` など）を公開します。
+- `feat`: マイナーリリース（`0.4.0` など）を公開します。
+- タイプの後の `!` または `BREAKING CHANGE:` フッター: メジャーリリースを公開します。
+- その他のタイプ（`docs`、`ci`、`test` など）: リリースを公開しません。
+
+各リリースは `v<バージョン>` タグと、生成されたノート付きの GitHub リリースを作成します。
+リリースには 2 つのアセットがあります:
+- `ghidra-bridge-<バージョン>.zip`: `Bridge.java`、`GhidraMcp.java`、`ghidra-bridge.jar`、`LICENSE`、`README.md`。
+- `ghidra-bridge-<バージョン>.zip.sha256`: アーカイブの SHA-256 チェックサム。
+
+リリースはリポジトリにファイルをコミットしません。
+ビルドは Gradle プロパティ `releaseVersion` からバージョンを取得します。
+ローカルビルドのバージョンは `0.0.0-dev` です。
+
+リリースアーカイブをローカルでビルドするには、次を実行します:
+
+```bash
+bash .github/scripts/package-release.sh 0.3.0
+```
+
+リリースせずに次のバージョンを確認するには、次を実行します:
+
+```bash
+npm ci
+npx semantic-release --dry-run --no-ci
+```

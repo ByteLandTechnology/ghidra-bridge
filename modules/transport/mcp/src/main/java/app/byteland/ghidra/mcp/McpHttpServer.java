@@ -616,7 +616,7 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static String serverVersion() {
     String version = McpHttpServer.class.getPackage().getImplementationVersion();
-    return version == null || version.isBlank() ? "0.2.0" : version;
+    return version == null || version.isBlank() ? "0.0.0-dev" : version;
   }
 
   private static String rootMessage(Throwable error) {

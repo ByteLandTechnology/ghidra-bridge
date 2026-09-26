@@ -9,7 +9,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a run on main. It can be publishing a release.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   # Use one Ghidra release and one Java version for each run.
@@ -25,41 +26,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - name: Set up Java and Ghidra
+        uses: ./.github/actions/setup-ghidra
         with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Cache Ghidra distribution
-        id: cache-ghidra
-        uses: actions/cache@v4
-        with:
-          path: ghidra-dist
-          key: ghidra-${{ env.GHIDRA_VERSION }}-${{ env.GHIDRA_BUILD_DATE }}
-
-      - name: Download Ghidra
-        if: steps.cache-ghidra.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          zip_name="ghidra_${GHIDRA_VERSION}_PUBLIC_${GHIDRA_BUILD_DATE}.zip"
-          tag="Ghidra_${GHIDRA_VERSION}_build"
-          url="https://github.com/NationalSecurityAgency/ghidra/releases/download/${tag}/${zip_name}"
-          curl -sL --fail -o "$zip_name" "$url"
-          echo "${GHIDRA_ZIP_SHA256}  ${zip_name}" | sha256sum -c -
-          mkdir -p ghidra-dist
-          unzip -q "$zip_name" -d ghidra-dist
-          rm "$zip_name"
-
-      - name: Resolve GHIDRA_INSTALL_DIR
-        run: |
-          set -euo pipefail
-          install_dir="$(find ghidra-dist -maxdepth 1 -mindepth 1 -type d | head -n 1)"
-          if [ -z "$install_dir" ]; then
-            echo "Could not locate an extracted Ghidra directory under ghidra-dist/" >&2
-            exit 1
-          fi
-          echo "GHIDRA_INSTALL_DIR=$(cd "$install_dir" && pwd)" >> "$GITHUB_ENV"
+          ghidra-version: ${{ env.GHIDRA_VERSION }}
+          ghidra-build-date: ${{ env.GHIDRA_BUILD_DATE }}
+          ghidra-zip-sha256: ${{ env.GHIDRA_ZIP_SHA256 }}
 
       - name: Verify Gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
@@ -69,3 +41,39 @@ jobs:
 
       - name: Run clean repository verification
         run: ./gradlew --no-daemon clean verify
+
+  release:
+    # Publish a release after a push to main passes verification.
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # semantic-release reads the full history and all tags.
+          fetch-depth: 0
+
+      - name: Set up Java and Ghidra
+        uses: ./.github/actions/setup-ghidra
+        with:
+          ghidra-version: ${{ env.GHIDRA_VERSION }}
+          ghidra-build-date: ${{ env.GHIDRA_BUILD_DATE }}
+          ghidra-zip-sha256: ${{ env.GHIDRA_ZIP_SHA256 }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install release tools
+        # The repository has no lock file (see .npmrc).
+        run: npm install
+
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

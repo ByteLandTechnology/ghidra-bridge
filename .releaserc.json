@@ -1,0 +1,24 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    [
+      "@semantic-release/exec",
+      { "prepareCmd": "bash .github/scripts/package-release.sh ${nextRelease.version}" }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          { "path": "build/release/*.zip", "label": "Ghidra Bridge scripts (zip)" },
+          { "path": "build/release/*.zip.sha256", "label": "SHA-256 checksum" }
+        ],
+        "successComment": false,
+        "failComment": false,
+        "releasedLabels": false
+      }
+    ]
+  ]
+}

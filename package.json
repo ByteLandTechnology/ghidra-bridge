@@ -1,0 +1,20 @@
+{
+  "name": "ghidra-bridge-release",
+  "private": true,
+  "description": "Release tools for Ghidra Bridge. The project itself builds with Gradle.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "release": "semantic-release"
+  },
+  "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.10",
+    "@semantic-release/release-notes-generator": "^14.1.1",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
+    "semantic-release": "^25.0.9"
+  }
+}

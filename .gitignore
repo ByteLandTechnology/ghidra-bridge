@@ -1,6 +1,7 @@
 .gradle/
 ghidra-dist/
 tests/mcp-client/target/
+node_modules/
 **/build/
 !**/src/**/build/
 

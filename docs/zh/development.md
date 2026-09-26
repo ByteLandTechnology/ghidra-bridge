@@ -91,3 +91,35 @@ bash .github/scripts/verify-repository-hygiene.sh
 `tests/` 目录包含 MCP 测试套件。
 它在 Ghidra Headless 模式下，针对 C/C++ 示例二进制测试全部 MCP 工具。
 运行方法见 [tests/README.md](../../tests/README.md)。
+
+## 版本发布
+
+CI 工作流使用 semantic-release 自动发布版本。
+只有推送到 `main` 且 `verify` 任务通过后，才会开始发布。
+
+semantic-release 读取上一个 `v*` 标签之后的 Conventional Commit 提交消息：
+- `fix`：发布补丁版本，例如 `0.3.1`。
+- `feat`：发布次版本，例如 `0.4.0`。
+- 类型后带 `!` 或包含 `BREAKING CHANGE:` 脚注：发布主版本。
+- 其他类型（例如 `docs`、`ci`、`test`）：不发布版本。
+
+每次发布都会创建 `v<版本号>` 标签，以及附带自动生成说明的 GitHub Release。
+Release 包含两个附件：
+- `ghidra-bridge-<版本号>.zip`：包含 `Bridge.java`、`GhidraMcp.java`、`ghidra-bridge.jar`、`LICENSE` 与 `README.md`。
+- `ghidra-bridge-<版本号>.zip.sha256`：压缩包的 SHA-256 校验和。
+
+发布过程不会向仓库提交文件。
+构建从 Gradle 属性 `releaseVersion` 获取版本号，本地构建使用版本号 `0.0.0-dev`。
+
+在本地构建发布压缩包：
+
+```bash
+bash .github/scripts/package-release.sh 0.3.0
+```
+
+在不发布的情况下预览下一个版本号：
+
+```bash
+npm ci
+npx semantic-release --dry-run --no-ci
+```

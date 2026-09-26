@@ -91,3 +91,36 @@ The verification tasks check:
 The `tests/` directory holds an MCP test suite.
 It runs every MCP tool against a sample C/C++ binary in Ghidra headless mode.
 See [tests/README.md](../tests/README.md) for instructions.
+
+## Releases
+
+The CI workflow publishes releases with semantic-release.
+A release starts only after a push to `main` passes the `verify` job.
+
+semantic-release reads the Conventional Commit messages since the last `v*` tag:
+- `fix`: Publishes a patch release, such as `0.3.1`.
+- `feat`: Publishes a minor release, such as `0.4.0`.
+- A `!` after the type or a `BREAKING CHANGE:` footer: Publishes a major release.
+- Other types, such as `docs`, `ci`, and `test`: Do not publish a release.
+
+Each release creates a `v<version>` tag and a GitHub release with generated notes.
+The release has two assets:
+- `ghidra-bridge-<version>.zip`: `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`, `LICENSE`, and `README.md`.
+- `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
+
+The release does not commit files to the repository.
+The build gets the version from the `releaseVersion` Gradle property.
+Local builds use the version `0.0.0-dev`.
+
+To build a release archive locally, run:
+
+```bash
+bash .github/scripts/package-release.sh 0.3.0
+```
+
+To preview the next version without a release, run:
+
+```bash
+npm ci
+npx semantic-release --dry-run --no-ci
+```

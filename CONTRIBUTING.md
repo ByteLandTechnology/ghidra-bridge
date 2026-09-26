@@ -22,6 +22,6 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 Run `./gradlew --no-daemon clean verify`. State the behavior change and its effect on users in the pull request.
 
-Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`.
+Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
 
 Report a security problem as described in [SECURITY.md](SECURITY.md). Do not put a security report in a public issue.
