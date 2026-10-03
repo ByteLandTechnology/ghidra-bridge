@@ -24,6 +24,12 @@ public final class AgentClient {
 
   private static final long CANCELLATION_POLL_INTERVAL_MILLIS = 100L;
 
+  /** The interval of the keepalive pings to the host. */
+  private static final Duration KEEPALIVE_INTERVAL = Duration.ofSeconds(5);
+
+  /** The maximum time for the send of one keepalive ping. */
+  private static final Duration KEEPALIVE_TIMEOUT = Duration.ofSeconds(10);
+
   public interface LifecycleListener {
     default void onListening() {}
 
@@ -100,21 +106,23 @@ public final class AgentClient {
       if (ws == null) {
         return;
       }
-      activateOutbound(ws, channelRef, messageHandler::sendReady);
+      AgentClientChannels.OutboundMessageChannel channel =
+          activateOutbound(ws, channelRef, messageHandler::sendReady);
       lifecycleListener.onConnected();
 
-      awaitDisconnect(cancellationRequested);
+      awaitDisconnect(cancellationRequested, channel);
     }
   }
 
-  static void activateOutbound(
+  static AgentClientChannels.OutboundMessageChannel activateOutbound(
       WebSocket webSocket,
       AtomicReference<AgentClientChannels.MessageChannel> channelRef,
       Consumer<AgentClientChannels.MessageChannel> readySender) {
-    AgentClientChannels.MessageChannel channel = AgentClientChannels.outbound(webSocket);
+    AgentClientChannels.OutboundMessageChannel channel = AgentClientChannels.outbound(webSocket);
     channelRef.set(channel);
     readySender.accept(channel);
     webSocket.request(1);
+    return channel;
   }
 
   static void logTransportError(String message, Throwable error) {
@@ -169,9 +177,32 @@ public final class AgentClient {
   }
 
   private void awaitDisconnect(BooleanSupplier cancellationRequested) throws InterruptedException {
+    awaitDisconnect(cancellationRequested, null);
+  }
+
+  /**
+   * Waits until the session ends. With an outbound {@code channel}, it also sends keepalive pings.
+   * The JDK WebSocket does not always report a connection that the host closed, for example when
+   * the host process stopped. A ping to such a connection fails, and the session then ends.
+   */
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
+  private void awaitDisconnect(
+      BooleanSupplier cancellationRequested, AgentClientChannels.OutboundMessageChannel channel)
+      throws InterruptedException {
+    long nextPing = System.nanoTime() + KEEPALIVE_INTERVAL.toNanos();
     while (!disconnectLatch.await(CANCELLATION_POLL_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)) {
       if (cancellationRequested.getAsBoolean()) {
         disconnect();
+      } else if (channel != null && System.nanoTime() - nextPing >= 0) {
+        try {
+          channel.ping(KEEPALIVE_TIMEOUT);
+        } catch (RuntimeException lost) {
+          logTransportError("WebSocket keepalive failed; the host connection is lost", lost);
+          channelRef.set(null);
+          channel.abort();
+          disconnectLatch.countDown();
+        }
+        nextPing = System.nanoTime() + KEEPALIVE_INTERVAL.toNanos();
       }
     }
   }

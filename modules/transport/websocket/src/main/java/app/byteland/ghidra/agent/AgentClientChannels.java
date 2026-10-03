@@ -3,6 +3,7 @@ package app.byteland.ghidra.agent;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.http.WebSocket;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -23,11 +24,11 @@ final class AgentClientChannels {
     void close(int code, String reason);
   }
 
-  static MessageChannel outbound(WebSocket webSocket) {
+  static OutboundMessageChannel outbound(WebSocket webSocket) {
     return outbound(webSocket, DEFAULT_OPERATION_TIMEOUT);
   }
 
-  static MessageChannel outbound(WebSocket webSocket, Duration operationTimeout) {
+  static OutboundMessageChannel outbound(WebSocket webSocket, Duration operationTimeout) {
     return new OutboundMessageChannel(webSocket, operationTimeout);
   }
 
@@ -35,7 +36,7 @@ final class AgentClientChannels {
     return new ServerMessageChannel(connection);
   }
 
-  private static final class OutboundMessageChannel implements MessageChannel {
+  static final class OutboundMessageChannel implements MessageChannel {
     private final WebSocket webSocket;
     private final Duration operationTimeout;
 
@@ -46,7 +47,20 @@ final class AgentClientChannels {
 
     @Override
     public synchronized void sendText(String message) {
-      await(webSocket.sendText(message, true), "sendText");
+      await(webSocket.sendText(message, true), "sendText", operationTimeout);
+    }
+
+    /**
+     * Sends a ping and waits a maximum of {@code timeout} for the send. A send fails on a connection
+     * that the peer closed, also when the WebSocket did not report the close.
+     */
+    synchronized void ping(Duration timeout) {
+      await(webSocket.sendPing(ByteBuffer.allocate(0)), "sendPing", timeout);
+    }
+
+    /** Closes the connection at once, without a close handshake. */
+    void abort() {
+      webSocket.abort();
     }
 
     @Override
@@ -56,14 +70,15 @@ final class AgentClientChannels {
 
     @Override
     public synchronized void close(int code, String reason) {
-      await(webSocket.sendClose(code, reason), "sendClose");
+      await(webSocket.sendClose(code, reason), "sendClose", operationTimeout);
     }
 
     @SuppressWarnings("PMD.PreserveStackTrace")
-    private void await(CompletableFuture<WebSocket> operation, String operationName) {
+    private void await(
+        CompletableFuture<WebSocket> operation, String operationName, Duration limit) {
       Objects.requireNonNull(operation, operationName + " future");
       try {
-        operation.get(operationTimeout.toNanos(), TimeUnit.NANOSECONDS);
+        operation.get(limit.toNanos(), TimeUnit.NANOSECONDS);
       } catch (InterruptedException interrupted) {
         operation.cancel(true);
         Thread.currentThread().interrupt();
@@ -79,7 +94,7 @@ final class AgentClientChannels {
                 "Timed out waiting for WebSocket "
                     + operationName
                     + " after "
-                    + operationTimeout.toMillis()
+                    + limit.toMillis()
                     + "ms",
                 timeout);
         abortAfter(failure);

@@ -35,9 +35,6 @@ final class GracefulExit implements AutoCloseable {
   /** The time that the JVM gets to exit after a save that ran at the deadline. */
   private static final Duration AFTER_SAVE_GRACE = Duration.ofSeconds(30);
 
-  /** The exit status of a JVM that the exit deadline halts. */
-  private static final int HALT_STATUS = 1;
-
   private final CheckedAction saveAction;
   private final Runnable saveSucceeded;
   private final java.util.function.Consumer<Exception> saveFailed;
@@ -95,8 +92,10 @@ final class GracefulExit implements AutoCloseable {
    * stops it.
    */
   void startExitDeadline(Duration delay, java.util.function.Consumer<String> log) {
-    Thread thread =
-        new Thread(
+    Thread.ofPlatform()
+        .daemon()
+        .name("ghidra-bridge-exit-deadline")
+        .start(
             () -> {
               try {
                 Thread.sleep(delay.toMillis());
@@ -108,11 +107,8 @@ final class GracefulExit implements AutoCloseable {
                 return;
               }
               log.accept("[ghidra-bridge] Ghidra did not exit after the session ended; halting.");
-              Runtime.getRuntime().halt(HALT_STATUS);
-            },
-            "ghidra-bridge-exit-deadline");
-    thread.setDaemon(true);
-    thread.start();
+              Runtime.getRuntime().halt(1);
+            });
   }
 
   @Override
