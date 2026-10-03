@@ -100,6 +100,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `ws_url` | *(なし)* | 送信型クライアントとして接続する際のリモート WebSocket URL。 |
 | `tool_prefix` | `ghidra` | MCP 専用。すべてのツール名の先頭部分（`ghidra.program` の `ghidra` など）。1 つのクライアントが複数のサーバーに接続する場合、サーバーごとに異なる値を指定します。 |
 | `jar` | *(自動)* | `ghidra-bridge.jar` をスクリプトと別ディレクトリに配置した場合のパス。 |
+| `exit_deadline_sec` | *(なし)* | 送信型のみ。セッション終了後、この秒数以内に Ghidra が終了しない場合に JVM を強制停止します。その時点で実行中の保存は先に完了します。ホストが起動するヘッドレスの Ghidra にのみ使用してください。 |
 
 ## セキュリティ規定
 

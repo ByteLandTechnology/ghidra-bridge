@@ -78,6 +78,7 @@ The launcher module bootstraps the bridge and generates Ghidra scripts:
 - `Bootstrap` reads launch arguments and starts the selected transport.
 - The build generates `Bridge.java` and `GhidraMcp.java` from `GhidraLauncher.java.template`.
 - It packages the compiled runtime into `ghidra-bridge.jar`.
+- In outbound mode, the session ends when the connection closes, also when the host process stopped. Then the bridge cancels a running analysis, saves the program, and the script returns, so a headless Ghidra exits. With `exit_deadline_sec`, the host asks `GracefulExit` to halt the JVM if Ghidra does not exit in that time after the session ends. A save that runs at the deadline completes first. The host does not need a separate watchdog process.
 
 ## Architecture Rules and Enforcement
 

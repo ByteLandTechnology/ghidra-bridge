@@ -10,6 +10,7 @@ import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.program.ProgramService;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.listing.Program;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -96,7 +97,15 @@ public final class Bootstrap {
           gracefulExit.installShutdownHook(client::disconnect, onShutdown);
         }
 
-        client.connect(scriptCancelRequested(script));
+        try {
+          client.connect(scriptCancelRequested(script));
+        } finally {
+          // Start the deadline however the session ends. The close, the save and the exit follow.
+          if (config.exitDeadlineSeconds() != null) {
+            gracefulExit.startExitDeadline(
+                Duration.ofSeconds(config.exitDeadlineSeconds()), script::printerr);
+          }
+        }
         script.println("[ghidra-bridge] Bridge session ended.");
       }
     }
@@ -124,7 +133,8 @@ public final class Bootstrap {
             mcpConfig.port(),
             mcpConfig.path(),
             mcpConfig.token(),
-            mcpConfig.sessionId());
+            mcpConfig.sessionId(),
+            null);
 
     saveCheckpoint(script, program, "[ghidra-mcp]");
 

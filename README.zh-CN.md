@@ -100,6 +100,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `ws_url` | *(无)* | 作为出站客户端连接时的远程 WebSocket URL。 |
 | `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra.program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
 | `jar` | *(自动)* | 当 `ghidra-bridge.jar` 移离脚本所在目录时指定的实际路径。 |
+| `exit_deadline_sec` | *(无)* | 仅出站模式。会话结束后若 Ghidra 在该秒数内仍未退出，则强制停止 JVM。届时正在进行的保存会先完成。仅用于由宿主启动的 headless Ghidra。 |
 
 ## 安全规范
 

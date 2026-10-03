@@ -78,6 +78,7 @@ modules/domain (领域服务接口与数据模型)
 - `Bootstrap` 读取启动参数并拉起所选的网络传输通道。
 - 构建系统根据 `GhidraLauncher.java.template` 生成 `Bridge.java` 与 `GhidraMcp.java`。
 - 打包编译产物并输出独立的 `ghidra-bridge.jar`。
+- 出站模式下，连接关闭（包括宿主进程已停止）时会话结束。随后桥接取消正在运行的分析、保存程序，脚本返回，headless Ghidra 随之退出。宿主可通过 `exit_deadline_sec` 让 `GracefulExit` 在会话结束后的这段时间内 Ghidra 仍未退出时强制停止 JVM。到期时正在进行的保存会先完成。宿主不需要另外的看门狗进程。
 
 ## 架构边界检验
 

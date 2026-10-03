@@ -11,11 +11,17 @@ import java.util.Set;
  * Configuration settings for a bridge runtime session.
  */
 public record AgentConfig(
-    String wsUrl, String host, Integer port, String path, String token, String sessionId) {
+    String wsUrl,
+    String host,
+    Integer port,
+    String path,
+    String token,
+    String sessionId,
+    Integer exitDeadlineSeconds) {
   private static final String DEFAULT_LOOPBACK_HOST =
       InetAddress.getLoopbackAddress().getHostAddress();
   private static final Set<String> ALLOWED =
-      Set.of("ws_url", "host", "port", "path", "session_id", "token", "jar");
+      Set.of("ws_url", "host", "port", "path", "session_id", "token", "jar", "exit_deadline_sec");
 
   public AgentConfig {
     boolean pathWasProvided = optionalText(path) != null;
@@ -33,6 +39,12 @@ public record AgentConfig(
     if (port != null) requireValidPort(port);
     if (port != null && host == null) host = DEFAULT_LOOPBACK_HOST;
     if (port != null) NetworkBinding.requireTokenForNonLoopback(host, token);
+    if (exitDeadlineSeconds != null && wsUrl == null) {
+      throw new IllegalArgumentException("exit_deadline_sec requires ws_url");
+    }
+    if (exitDeadlineSeconds != null && exitDeadlineSeconds < 1) {
+      throw new IllegalArgumentException("exit_deadline_sec must be positive");
+    }
   }
 
   public static AgentConfig fromArgs(String... args) {
@@ -48,7 +60,8 @@ public record AgentConfig(
         optionalInteger(args.get("port"), "port"),
         args.get("path"),
         args.get("token"),
-        args.get("session_id"));
+        args.get("session_id"),
+        optionalInteger(args.get("exit_deadline_sec"), "exit_deadline_sec"));
   }
 
   public static Map<String, String> parseArgs(String... args) {

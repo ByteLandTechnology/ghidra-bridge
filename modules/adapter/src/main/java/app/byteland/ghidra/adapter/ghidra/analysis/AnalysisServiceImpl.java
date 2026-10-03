@@ -67,11 +67,24 @@ public final class AnalysisServiceImpl implements AnalysisService {
     }
   }
 
+  /**
+   * Cancels the running analysis and waits until it stops.
+   *
+   * <p>The session ends when its connection closes, also when the host process stopped. An
+   * analysis can run for hours, so close must not wait for it to complete. The program keeps the
+   * analysis results that exist when the analysis stops.
+   */
   @Override
   public void close() {
+    AnalysisTask task;
     synchronized (lock) {
       closed = true;
+      task = currentTask;
     }
+    if (task != null) {
+      task.cancel();
+    }
+    manager.cancelQueuedTasks();
     ExecutorShutdown.shutdownAndAwait(executor);
     AnalysisManagerWait.awaitIdle(manager);
   }
