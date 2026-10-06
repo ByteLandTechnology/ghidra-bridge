@@ -47,7 +47,7 @@ markdown_files=(README*.md)
 while IFS= read -r -d '' candidate; do
   markdown_files+=("$candidate")
 done < <(find docs -type f -name '*.md' -print0)
-stale_protocol="$(grep -lE '2025-11-25|:tooling:contract-docs|distribution/src/main/templates' "${markdown_files[@]}" || true)"
+stale_protocol="$(grep -lE ':tooling:contract-docs|distribution/src/main/templates' "${markdown_files[@]}" || true)"
 [[ -z "$stale_protocol" ]] || fail "stale protocol or build paths remain" "$stale_protocol"
 
 zero_byte_files=""

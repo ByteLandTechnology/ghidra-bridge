@@ -124,9 +124,15 @@ MCP HTTP 服务端按以下规则处理入站请求：
 - **内容类型**：POST 请求必须发送 `Content-Type: application/json`，否则返回状态码 `415`。
 - **通知**：不含 `id` 的请求返回状态码 `202`，且不含响应体。
 
-### 请求元数据
+### 初始化兼容
 
-每个 POST 请求都必须在 `params._meta` 中携带 MCP 元数据：
+客户端也可以通过 `initialize` 使用 `2025-06-18` 或 `2025-11-25`。响应包含 `protocolVersion`、`serverInfo` 和 `capabilities`；不支持的请求版本会协商为 `2025-11-25`。
+不带新版逐请求元数据的初始化请求进入此兼容流程。初始化可省略版本头部，但显式携带不支持的版本头部会返回 HTTP `400`。后续请求必须携带协商后的 `MCP-Protocol-Version`；缺少或不支持的版本返回 HTTP `400`。
+这些请求不要求新版 `_meta` 字段或 `Mcp-Method`/`Mcp-Name` 头部。`notifications/initialized` 返回 `202`，不含响应体。
+
+### 请求元数据（`2026-07-28`）
+
+每个 `2026-07-28` POST 请求都必须在 `params._meta` 中携带协议版本和客户端能力；客户端信息为可选字段：
 
 ```json
 {
@@ -143,7 +149,7 @@ MCP HTTP 服务端按以下规则处理入站请求：
 }
 ```
 
-每个 POST 请求还必须发送以下 HTTP 头部：
+这些请求还必须发送以下 HTTP 头部：
 - `MCP-Protocol-Version`：与 `io.modelcontextprotocol/protocolVersion` 的值相同。
 - `Mcp-Method`：与 JSON-RPC 的 `method` 相同。
 - `Mcp-Name`：`tools/call` 时为工具名，`resources/read` 时为资源 URI；其他方法不使用该头部。
@@ -151,15 +157,16 @@ MCP HTTP 服务端按以下规则处理入站请求：
 对于非纯 ASCII 文本，头部值可以使用 `=?base64?<base64 文本>?=` 形式。
 
 元数据不合法时，服务端返回以下错误：
-- 缺少 `_meta` 字段：HTTP `400`，错误码 `-32602`。
+- 缺少必需的 `_meta` 字段：HTTP `400`，错误码 `-32602`。
 - 协议版本不受支持：HTTP `400`，错误码 `-32022`，`data` 字段列出支持的版本。
 - 头部与请求体不一致：HTTP `400`，错误码 `-32020`。
 
 ### 支持的 MCP 方法
 
 服务端实现以下 MCP 方法：
+- `initialize`：为使用初始化流程的客户端协商版本，详见上文。
 - `server/discover`：返回服务端标识与支持的能力特性。
-- `ping`：探测健康状态并返回完成标志。
+- `ping`：使用初始化流程的旧版标准健康检查；在 `2026-07-28` 中作为桥接服务兼容方法保留。
 - `tools/list`：返回全部 15 个工具的 Schema 定义。
 - `tools/call`：执行具体的工具操作并返回结构化内容。
 - `resources/list`：列出可用资源，包括 `ghidra-bridge://contracts/mcp-tools`。
@@ -167,7 +174,9 @@ MCP HTTP 服务端按以下规则处理入站请求：
 - `resources/templates/list`：返回空模板列表。
 
 其他方法返回 HTTP `404`，错误码 `-32601`。
-所有成功结果均包含 `"resultType": "complete"`。
+所有 `2026-07-28` 成功结果均包含 `"resultType": "complete"`；使用初始化流程的旧版 `ping` 返回 `{}`。
+新版的服务发现、工具列表、资源列表、资源模板列表和资源读取还包含 `ttlMs: 0` 与 `cacheScope: "private"`。未知资源 URI 在 `2026-07-28` 下返回 HTTP `400` / `-32602`，在使用初始化流程的旧版下返回 HTTP `404` / `-32002`。
+无法识别请求 ID 的错误在 `2025-11-25` 及之后版本省略 `id`；`2025-06-18` 遵循 JSON-RPC 的 `id: null` 规则，该版已发布的 MCP 错误 schema 无法表示此情形。
 
 ### 工具调用规范
 

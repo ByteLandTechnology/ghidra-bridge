@@ -145,7 +145,7 @@ For example, the `program.get` method is the `get` operation of `ghidra.program`
 }
 ```
 
-Each MCP request must also send MCP metadata and headers. See [Protocol Specification](docs/protocol.md).
+Requests using `2026-07-28` must also send MCP metadata and headers; clients using `initialize` are supported with versions `2025-06-18` and `2025-11-25`. See [Protocol Specification](docs/protocol.md).
 
 The MCP tool schema is also available at `ghidra-bridge://contracts/mcp-tools`.
 

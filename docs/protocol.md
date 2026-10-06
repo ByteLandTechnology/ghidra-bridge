@@ -124,9 +124,15 @@ The MCP HTTP server handles incoming requests:
 - **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.
 
-### Request Metadata
+### Initialization Compatibility
 
-Every POST request must include MCP metadata in `params._meta`:
+Clients can also use `initialize` with `2025-06-18` or `2025-11-25`. The response includes `protocolVersion`, `serverInfo`, and `capabilities`; an unsupported requested version negotiates `2025-11-25`.
+Initialization without modern per-request metadata selects this compatibility path. Its version header is optional, but an explicitly unsupported header returns HTTP `400`. Subsequent requests must send the negotiated `MCP-Protocol-Version`; a missing or unsupported version returns HTTP `400`.
+These requests do not require the modern `_meta` fields or `Mcp-Method`/`Mcp-Name` headers. `notifications/initialized` returns `202` without a body.
+
+### Request Metadata (`2026-07-28`)
+
+Every `2026-07-28` POST request must include protocol version and client capabilities in `params._meta`; client information is optional:
 
 ```json
 {
@@ -143,7 +149,7 @@ Every POST request must include MCP metadata in `params._meta`:
 }
 ```
 
-Every POST request must also send these HTTP headers:
+These requests must also send these HTTP headers:
 - `MCP-Protocol-Version`: The same value as `io.modelcontextprotocol/protocolVersion`.
 - `Mcp-Method`: The same value as the JSON-RPC `method`.
 - `Mcp-Name`: For `tools/call`, the tool name. For `resources/read`, the resource URI. Other methods do not use this header.
@@ -151,15 +157,16 @@ Every POST request must also send these HTTP headers:
 A header value can use the form `=?base64?<base64 text>?=` for text that is not plain ASCII.
 
 The server returns these errors for bad metadata:
-- Missing `_meta` fields: HTTP `400`, code `-32602`.
+- Missing required `_meta` fields: HTTP `400`, code `-32602`.
 - An unsupported protocol version: HTTP `400`, code `-32022`. The `data` property lists the supported versions.
 - A header that does not match the request body: HTTP `400`, code `-32020`.
 
 ### Supported MCP Methods
 
 The server handles these MCP methods:
+- `initialize`: Negotiates a version for initialization-based clients, as described above.
 - `server/discover`: Returns server identification and capabilities.
-- `ping`: Verifies connection health and returns completion status.
+- `ping`: Standard health check in initialization-based versions; retained as a bridge compatibility method in `2026-07-28`.
 - `tools/list`: Returns tool schemas for all 15 bridge tools.
 - `tools/call`: Executes a tool operation and returns structured content.
 - `resources/list`: Lists available resources, including `ghidra-bridge://contracts/mcp-tools`.
@@ -167,7 +174,9 @@ The server handles these MCP methods:
 - `resources/templates/list`: Returns an empty template list.
 
 Other methods return HTTP `404` with code `-32601`.
-Every successful result includes `"resultType": "complete"`.
+Every successful `2026-07-28` result includes `"resultType": "complete"`. Initialization-based `ping` returns `{}`.
+Modern discovery, tool lists, resource lists, resource template lists, and resource reads also include `ttlMs: 0` and `cacheScope: "private"`. Unknown resource URIs return HTTP `400` / `-32602` in `2026-07-28`, and HTTP `404` / `-32002` in initialization-based versions.
+Errors without an identifiable request ID omit `id` from `2025-11-25` onward. For `2025-06-18`, the bridge follows JSON-RPC's `id: null` rule; that version's published MCP error schema cannot represent this case.
 
 ### Tool Call Convention
 

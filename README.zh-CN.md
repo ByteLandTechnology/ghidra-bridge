@@ -145,7 +145,7 @@ MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映
 }
 ```
 
-每个 MCP 请求还必须携带 MCP 元数据与头部，详见[协议规范](docs/zh/protocol.md)。
+`2026-07-28` 请求还必须携带 MCP 元数据与头部；同时支持通过 `initialize` 协商的 `2025-06-18` 和 `2025-11-25` 客户端，详见[协议规范](docs/zh/protocol.md)。
 
 完整的 MCP 工具 Schema 亦可通过资源 `ghidra-bridge://contracts/mcp-tools` 获取。
 

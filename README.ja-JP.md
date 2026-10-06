@@ -145,7 +145,7 @@ MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 
 }
 ```
 
-各 MCP リクエストには MCP メタデータとヘッダーも必要です。詳細は[プロトコル仕様](docs/ja/protocol.md)を参照してください。
+`2026-07-28` のリクエストには MCP メタデータとヘッダーも必要です。`initialize` を使用する `2025-06-18` と `2025-11-25` のクライアントにも対応しています。詳細は[プロトコル仕様](docs/ja/protocol.md)を参照してください。
 
 完全な MCP ツールスキーマは `ghidra-bridge://contracts/mcp-tools` リソースからも取得可能です。
 

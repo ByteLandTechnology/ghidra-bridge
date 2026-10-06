@@ -9,10 +9,12 @@ use crate::context::TestContext;
 use crate::mcp::{HttpReply, PROTOCOL_VERSION};
 
 const TOOLS_RESOURCE: &str = "ghidra-bridge://contracts/mcp-tools";
+const SUPPORTED_VERSIONS: [&str; 3] = [PROTOCOL_VERSION, "2025-11-25", "2025-06-18"];
 
 pub fn cases() -> Vec<Case> {
     vec![
         Case::new("protocol.server_discover", server_discover),
+        Case::new("protocol.initialize", initialize),
         Case::new("protocol.ping", ping),
         Case::new("protocol.resources", resources),
         Case::new("protocol.unknown_method", unknown_method),
@@ -32,7 +34,7 @@ pub fn cases() -> Vec<Case> {
 fn server_discover(ctx: &mut TestContext) -> Result<()> {
     let result = ctx.client.rpc("server/discover", json!({}))?;
     ensure!(
-        result["supportedVersions"] == json!([PROTOCOL_VERSION]),
+        result["supportedVersions"] == json!(SUPPORTED_VERSIONS),
         "unexpected supportedVersions: {result}"
     );
     ensure!(
@@ -54,6 +56,175 @@ fn server_discover(ctx: &mut TestContext) -> Result<()> {
         server["version"].as_str().is_some(),
         "server version is missing"
     );
+    ensure!(
+        result["ttlMs"] == 0 && result["cacheScope"] == "private",
+        "unexpected discovery cache policy: {result}"
+    );
+    Ok(())
+}
+
+/// Initialize-based clients send neither stateless metadata nor method/name headers.
+fn initialize(ctx: &mut TestContext) -> Result<()> {
+    let mut headers = auth_header(ctx);
+    headers.push(("Content-Type".into(), "application/json".into()));
+    headers.push((
+        "Accept".into(),
+        "application/json, text/event-stream".into(),
+    ));
+    for (requested, header, negotiated) in [
+        ("2025-06-18", None, "2025-06-18"),
+        ("2025-11-25", None, "2025-11-25"),
+        ("2025-06-18", Some("2025-06-18"), "2025-06-18"),
+        ("2025-11-25", Some("2025-11-25"), "2025-11-25"),
+        ("2025-03-26", None, "2025-11-25"),
+        ("1900-01-01", None, "2025-11-25"),
+        ("unknown", None, "2025-11-25"),
+        ("", None, "2025-11-25"),
+        (PROTOCOL_VERSION, Some(PROTOCOL_VERSION), "2025-11-25"),
+    ] {
+        let body = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": requested, "capabilities": {},
+            "clientInfo": {"name": "initialize-test", "version": "1"}
+        }});
+        let request_headers = replace_header(headers.clone(), "MCP-Protocol-Version", header);
+        let reply = ctx
+            .client
+            .send("POST", "", &request_headers, Some(&body.to_string()))?;
+        expect_http(&reply, 200, None)?;
+        let result = reply.json()?["result"].clone();
+        ensure!(
+            result["protocolVersion"] == negotiated,
+            "wrong negotiated version: {result}"
+        );
+        ensure!(
+            result["serverInfo"]["name"] == "ghidra-bridge",
+            "missing server info: {result}"
+        );
+        ensure!(
+            result["capabilities"]["tools"].is_object()
+                && result["capabilities"]["resources"].is_object(),
+            "missing capabilities: {result}"
+        );
+    }
+
+    let params = json!({
+        "protocolVersion": "2025-11-25", "capabilities": {},
+        "clientInfo": {"name": "", "version": " "}
+    });
+    let body = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": params});
+    let reply = ctx
+        .client
+        .send("POST", "", &headers, Some(&body.to_string()))?;
+    expect_http(&reply, 200, None)?;
+
+    for (object, field) in [
+        ("", "protocolVersion"),
+        ("/clientInfo", "name"),
+        ("/clientInfo", "version"),
+    ] {
+        for value in [None, Some(json!(1)), Some(Value::Null)] {
+            let mut invalid = params.clone();
+            let target = invalid
+                .pointer_mut(object)
+                .and_then(Value::as_object_mut)
+                .context("initialize params")?;
+            if let Some(value) = value {
+                target.insert(field.into(), value);
+            } else {
+                target.remove(field);
+            }
+            let body =
+                json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": invalid});
+            let reply = ctx
+                .client
+                .send("POST", "", &headers, Some(&body.to_string()))?;
+            expect_http(&reply, 400, Some(-32602))
+                .with_context(|| format!("invalid initialize {object}/{field}"))?;
+        }
+    }
+
+    let request_headers =
+        replace_header(headers.clone(), "MCP-Protocol-Version", Some("1900-01-01"));
+    let reply = ctx
+        .client
+        .send("POST", "", &request_headers, Some(&body.to_string()))?;
+    expect_http(&reply, 400, Some(-32600))?;
+
+    for version in ["2025-06-18", "2025-11-25"] {
+        let request_headers =
+            replace_header(headers.clone(), "MCP-Protocol-Version", Some(version));
+        let body = json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
+        let reply = ctx
+            .client
+            .send("POST", "", &request_headers, Some(&body.to_string()))?;
+        expect_http(&reply, 202, None)?;
+        ensure!(
+            reply.body.is_empty(),
+            "initialized notification returned a body"
+        );
+
+        for (method, params) in [
+            ("ping", json!({})),
+            ("tools/list", json!({})),
+            (
+                "tools/call",
+                json!({"name": ctx.client.wire_name("ghidra.help"), "arguments": {}}),
+            ),
+            ("resources/read", json!({"uri": TOOLS_RESOURCE})),
+        ] {
+            let body = json!({"jsonrpc": "2.0", "id": 2, "method": method, "params": params});
+            let reply = ctx
+                .client
+                .send("POST", "", &request_headers, Some(&body.to_string()))?;
+            expect_http(&reply, 200, None).with_context(|| format!("{version} {method}"))?;
+            let result = reply.json()?["result"].clone();
+            match method {
+                "ping" => ensure!(result == json!({}), "unexpected ping result: {result}"),
+                "tools/list" => ensure!(
+                    result["tools"].as_array().is_some_and(|v| !v.is_empty()),
+                    "missing tools: {result}"
+                ),
+                "tools/call" => ensure!(
+                    result["isError"] == false && result["structuredContent"].is_object(),
+                    "help call failed: {result}"
+                ),
+                _ => ensure!(
+                    result["contents"][0]["uri"] == TOOLS_RESOURCE,
+                    "missing contract resource: {result}"
+                ),
+            }
+        }
+
+        let body = json!({"jsonrpc": "2.0", "id": 2, "method": "resources/read",
+            "params": {"uri": "ghidra-bridge://missing"}});
+        let reply = ctx
+            .client
+            .send("POST", "", &request_headers, Some(&body.to_string()))?;
+        expect_http(&reply, 404, Some(-32002))?;
+
+        let body = json!({"jsonrpc": "2.0", "id": null, "method": "ping"});
+        let reply = ctx
+            .client
+            .send("POST", "", &request_headers, Some(&body.to_string()))?;
+        expect_http(&reply, 400, Some(-32600))?;
+        let error = reply.json()?;
+        let expected_id = if version == "2025-06-18" {
+            Some(&Value::Null)
+        } else {
+            None
+        };
+        ensure!(
+            error.get("id") == expected_id,
+            "wrong unidentifiable error ID: {error}"
+        );
+    }
+
+    let body = json!({"jsonrpc": "2.0", "id": 3, "method": "ping"}).to_string();
+    for version in [None, Some("2025-03-26"), Some("1900-01-01")] {
+        let request_headers = replace_header(headers.clone(), "MCP-Protocol-Version", version);
+        let reply = ctx.client.send("POST", "", &request_headers, Some(&body))?;
+        expect_http(&reply, 400, Some(-32600))?;
+    }
     Ok(())
 }
 
@@ -103,11 +274,22 @@ fn resources(ctx: &mut TestContext) -> Result<()> {
         templates["resourceTemplates"] == json!([]),
         "templates are not empty: {templates}"
     );
+    for (method, result) in [
+        ("resources/list", &listed),
+        ("resources/read", &read),
+        ("tools/list", &tools),
+        ("resources/templates/list", &templates),
+    ] {
+        ensure!(
+            result["ttlMs"] == 0 && result["cacheScope"] == "private",
+            "unexpected {method} cache policy: {result}"
+        );
+    }
 
     let reply = ctx
         .client
         .rpc_raw("resources/read", json!({"uri": "ghidra-bridge://missing"}))?;
-    expect_http(&reply, 404, Some(-32002))
+    expect_http(&reply, 400, Some(-32602))
 }
 
 /// `prompts/list` and other methods that the server does not implement.
@@ -195,7 +377,22 @@ fn invalid_json(ctx: &mut TestContext) -> Result<()> {
     let reply = ctx
         .client
         .send("POST", "", &headers, Some(&envelope.to_string()))?;
-    expect_http(&reply, 400, Some(-32600))
+    expect_http(&reply, 400, Some(-32600))?;
+
+    for id in [Value::Null, json!(true), json!(1.5), json!([]), json!({})] {
+        let mut envelope = ctx.client.envelope("ping", json!({}));
+        envelope["id"] = id;
+        let reply = ctx
+            .client
+            .send("POST", "", &headers, Some(&envelope.to_string()))?;
+        expect_http(&reply, 400, Some(-32600))?;
+        ensure!(
+            reply.json()?.get("id").is_none(),
+            "an invalid request ID was echoed: {}",
+            reply.body
+        );
+    }
+    Ok(())
 }
 
 /// Browsers may call the server only from a loopback origin.
@@ -270,6 +467,40 @@ fn metadata(ctx: &mut TestContext) -> Result<()> {
         .send("POST", "", &headers, Some(&envelope.to_string()))?;
     expect_http(&reply, 400, Some(-32602))?;
 
+    // The protocol version is required even when the other metadata is present.
+    let mut envelope = ctx.client.envelope("ping", json!({}));
+    envelope["params"]["_meta"]
+        .as_object_mut()
+        .context("_meta")?
+        .remove("io.modelcontextprotocol/protocolVersion");
+    let reply = ctx
+        .client
+        .send("POST", "", &headers, Some(&envelope.to_string()))?;
+    expect_http(&reply, 400, Some(-32602))?;
+
+    // Client information is optional, but it must be an object when supplied.
+    let mut envelope = ctx.client.envelope("ping", json!({}));
+    envelope["params"]["_meta"]
+        .as_object_mut()
+        .context("_meta")?
+        .remove("io.modelcontextprotocol/clientInfo");
+    let reply = ctx
+        .client
+        .send("POST", "", &headers, Some(&envelope.to_string()))?;
+    expect_http(&reply, 200, None)?;
+    ensure!(
+        reply.json()?["result"] == json!({"resultType": "complete"}),
+        "ping without clientInfo failed: {}",
+        reply.body
+    );
+    for info in [Value::Null, json!("invalid")] {
+        envelope["params"]["_meta"]["io.modelcontextprotocol/clientInfo"] = info;
+        let reply = ctx
+            .client
+            .send("POST", "", &headers, Some(&envelope.to_string()))?;
+        expect_http(&reply, 400, Some(-32602))?;
+    }
+
     // An unsupported protocol version lists the supported ones.
     let mut envelope = ctx.client.envelope("ping", json!({}));
     envelope["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"] = json!("2024-11-05");
@@ -280,7 +511,7 @@ fn metadata(ctx: &mut TestContext) -> Result<()> {
     expect_http(&reply, 400, Some(-32022))?;
     let data = reply.json()?["error"]["data"].clone();
     ensure!(
-        data == json!({"requested": "2024-11-05", "supported": [PROTOCOL_VERSION]}),
+        data == json!({"requested": "2024-11-05", "supported": SUPPORTED_VERSIONS}),
         "unexpected version error data: {data}"
     );
     Ok(())
