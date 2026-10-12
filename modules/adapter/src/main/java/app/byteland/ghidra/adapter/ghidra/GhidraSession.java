@@ -48,6 +48,11 @@ public final class GhidraSession {
         monitor.clearCancelled();
       }
       try {
+        try {
+          ghidraScript.end(true);
+        } catch (Exception ignored) {
+          // No ambient transaction or already ended
+        }
         ghidraScript.saveProgram(currentProgram());
       } catch (Exception error) {
         String detail = error.getMessage();

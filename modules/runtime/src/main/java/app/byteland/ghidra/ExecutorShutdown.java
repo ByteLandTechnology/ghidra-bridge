@@ -23,12 +23,16 @@ public final class ExecutorShutdown {
   private static void awaitTermination(ExecutorService executor) {
     boolean interrupted = Thread.interrupted();
     try {
-      while (!executor.isTerminated()) {
-        try {
-          executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-        } catch (InterruptedException ignored) {
-          interrupted = true;
+      try {
+        if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+          executor.shutdownNow();
+          if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+            // Forcefully terminate stuck tasks
+          }
         }
+      } catch (InterruptedException ex) {
+        interrupted = true;
+        executor.shutdownNow();
       }
     } finally {
       if (interrupted) {

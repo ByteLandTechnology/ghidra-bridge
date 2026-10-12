@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.memory;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.ByteSequence;
+import app.byteland.ghidra.service.TransactionExecutionException;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.mem.MemoryAccessException;
 
@@ -28,7 +29,7 @@ final class MemoryMutations {
     try {
       context.script().setBytes(start, bytes);
     } catch (MemoryAccessException ex) {
-      throw new IllegalArgumentException("unable to write memory: " + ex.getMessage(), ex);
+      throw new TransactionExecutionException("unable to write memory: " + ex.getMessage(), ex);
     }
   }
 }

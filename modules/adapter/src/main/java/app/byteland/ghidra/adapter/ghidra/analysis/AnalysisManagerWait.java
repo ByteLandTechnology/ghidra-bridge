@@ -45,6 +45,7 @@ final class AnalysisManagerWait {
           }
         } catch (InterruptedException ignored) {
           interrupted = true;
+          break;
         }
       }
     } finally {

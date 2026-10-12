@@ -23,16 +23,23 @@ final class WebSocketHandshake {
   private static final String ACCEPT_DIGEST_ALGORITHM = "SHA-1";
   private static final int MIN_REQUEST_LINE_FIELDS = 2;
   private static final int INITIAL_HTTP_RESPONSE_CAPACITY = 128;
+  private static final int MAX_HANDSHAKE_BYTES = 64 * 1024;
 
   private WebSocketHandshake() {}
 
   static HandshakeRequest readHandshake(InputStream input) throws IOException {
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     int matched = 0;
+    int totalBytes = 0;
     while (matched < 4) {
       int b = input.read();
       if (b < 0) {
         throw new EOFException("EOF during handshake");
+      }
+      totalBytes++;
+      if (totalBytes > MAX_HANDSHAKE_BYTES) {
+        throw new HttpHandshakeException(
+            431, "Request Header Fields Too Large", "Handshake header exceeds maximum size");
       }
       buffer.write(b);
       matched =

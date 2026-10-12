@@ -26,6 +26,7 @@ final class WebSocketFrames {
   private static final int MAX_UNSIGNED_SHORT = 0xFFFF;
   private static final int MASK_KEY_LENGTH = 4;
   private static final int NORMAL_CLOSE_STATUS = 1000;
+  private static final long MAX_FRAME_PAYLOAD_BYTES = 16L * 1024 * 1024; // 16 MiB
 
   private WebSocketFrames() {}
 
@@ -45,8 +46,8 @@ final class WebSocketFrames {
     } else if (payloadLength == LONG_LENGTH_MARKER) {
       payloadLength = ByteBuffer.wrap(readFully(input, Long.BYTES)).getLong();
     }
-    if (payloadLength < 0 || payloadLength > Integer.MAX_VALUE) {
-      throw new IOException("Unsupported payload length: " + payloadLength);
+    if (payloadLength < 0 || payloadLength > MAX_FRAME_PAYLOAD_BYTES) {
+      throw new IOException("WebSocket frame payload exceeds limit: " + payloadLength);
     }
     if (!masked) {
       throw new IOException("Client frames must be masked");

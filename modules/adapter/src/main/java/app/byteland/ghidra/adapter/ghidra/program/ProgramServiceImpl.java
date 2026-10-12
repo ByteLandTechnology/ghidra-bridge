@@ -111,32 +111,10 @@ public final class ProgramServiceImpl implements ProgramService {
   }
 
   private int functionCount() {
-    int count = 0;
-    for (Function function = context.script().getFirstFunction();
-        function != null;
-        function = context.script().getFunctionAfter(function)) {
-      count++;
-    }
-    return count;
+    return program.getFunctionManager().getFunctionCount();
   }
 
   private int symbolCount() {
-    int count = 0;
-    for (Symbol symbol = firstSymbol();
-        symbol != null;
-        symbol = context.script().getSymbolAfter(symbol)) {
-      count++;
-    }
-    return count;
-  }
-
-  private Symbol firstSymbol() {
-    AddressSpace addressSpace = context.script().getAddressFactory().getDefaultAddressSpace();
-    if (addressSpace == null) {
-      return null;
-    }
-    Address start = addressSpace.getMinAddress();
-    Symbol symbol = context.script().getSymbolAt(start);
-    return symbol == null ? context.script().getSymbolAfter(start) : symbol;
+    return program.getSymbolTable().getNumSymbols();
   }
 }

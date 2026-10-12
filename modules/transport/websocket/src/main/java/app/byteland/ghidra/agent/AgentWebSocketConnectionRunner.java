@@ -38,9 +38,11 @@ final class AgentWebSocketConnectionRunner {
     CloseState closeState = new CloseState(NORMAL_CLOSE_CODE, NORMAL_CLOSE_REASON);
     try (socket) {
       socket.setTcpNoDelay(true);
+      socket.setSoTimeout(10_000);
       WebSocketHandshake.HandshakeRequest request =
           WebSocketHandshake.readHandshake(socket.getInputStream());
       WebSocketHandshakeValidator.validate(config, request);
+      socket.setSoTimeout(0);
       connection = new AgentServerConnection(socket);
       if (!activeConnection.compareAndSet(
           AgentWebSocketServer.RESERVED_CONNECTION_SLOT, connection)) {
