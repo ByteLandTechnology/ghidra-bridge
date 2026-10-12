@@ -24,6 +24,14 @@ subprojects {
         }
     }
     repositories { mavenCentral() }
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:6.1.2')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+    }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
     }
@@ -44,6 +52,7 @@ project(':adapter') {
         implementation project(':runtime')
         compileOnly ghidraJars
         compileOnly 'com.github.spotbugs:spotbugs-annotations:4.9.8'
+        testImplementation ghidraJars
     }
 }
 project(':transport:websocket') {

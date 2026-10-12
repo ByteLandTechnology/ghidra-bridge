@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.listing;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.service.TransactionExecutionException;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import ghidra.app.cmd.disassemble.SetFlowOverrideCmd;
@@ -69,7 +70,7 @@ final class ListingFlowOverrideMutations {
     try {
       context.runCommand(
           new SetFlowOverrideCmd(address, target), "unable to set instruction flow override");
-    } catch (IllegalArgumentException exception) {
+    } catch (TransactionExecutionException | IllegalArgumentException exception) {
       throw ListingFlowOverrideErrors.updateFailed(exception.getMessage(), exception);
     }
     instruction = context.currentProgram().getListing().getInstructionAt(address);

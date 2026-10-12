@@ -109,7 +109,8 @@ Release 包含两个附件：
 - `ghidra-bridge-<版本号>.zip.sha256`：压缩包的 SHA-256 校验和。
 
 发布过程不会向仓库提交文件。
-构建从 Gradle 属性 `releaseVersion` 获取版本号，本地构建使用版本号 `0.0.0-dev`。
+构建从 Gradle 属性 `releaseVersion` 获取版本号。
+本地构建使用版本号 `0.0.0-dev`。
 
 在本地构建发布压缩包：
 

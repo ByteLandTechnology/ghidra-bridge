@@ -31,7 +31,7 @@ modules/domain (サービスインターフェースとデータモデル)
 ドメインモジュールは、コアサービスインターフェースとデータ転送モデルを定義します:
 - サービスインターフェース: `ProgramService`, `MemoryService`, `ListingService`, `FunctionService`, `DataTypeService` など。
 - モデルレコード: `AddressResource`, `InstructionResource`, `FunctionResource`, `Page` など。
-- 例外定義: `DomainException`, `GlobalVariableConflictException` など。
+- 例外定義: `DomainException`, `GlobalVariableConflictException`, `TransactionExecutionException` など。
 - **制約**: このモジュールは Ghidra API クラスを一切インポートしてはなりません。
 
 ### 2. `modules/wire`

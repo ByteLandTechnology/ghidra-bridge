@@ -1,5 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra;
 
+import app.byteland.ghidra.service.TransactionExecutionException;
+
 import ghidra.program.model.address.Address;
 import ghidra.program.model.symbol.Namespace;
 import ghidra.program.model.symbol.SourceType;
@@ -57,7 +59,7 @@ public final class ScriptSymbolRenamer {
             true,
             "unable to rename function symbol");
     if (!SymbolType.FUNCTION.equals(replacement.getSymbolType())) {
-      throw new IllegalArgumentException("script rename did not return a function symbol");
+      throw new TransactionExecutionException("script rename did not return a function symbol");
     }
     return replacement;
   }
@@ -77,10 +79,12 @@ public final class ScriptSymbolRenamer {
       return context
           .script()
           .createLabel(address, name, namespace, makePrimary, SourceType.USER_DEFINED);
+    } catch (InvalidInputException ex) {
+      throw new IllegalArgumentException(failurePrefix + ": " + ex.getMessage(), ex);
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
-      throw new IllegalArgumentException(failurePrefix + ": " + ex.getMessage(), ex);
+      throw new TransactionExecutionException(failurePrefix + ": " + ex.getMessage(), ex);
     }
   }
 }

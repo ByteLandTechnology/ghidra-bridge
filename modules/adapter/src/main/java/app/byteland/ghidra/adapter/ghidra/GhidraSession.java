@@ -1,5 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra;
 
+import app.byteland.ghidra.service.TransactionExecutionException;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
@@ -120,7 +121,7 @@ public final class GhidraSession {
     if (status == null || status.isBlank()) {
       status = "command failed";
     }
-    throw new IllegalArgumentException(failurePrefix + ": " + status);
+    throw new TransactionExecutionException(failurePrefix + ": " + status);
   }
 
   @FunctionalInterface
@@ -135,7 +136,7 @@ public final class GhidraSession {
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
-      throw new IllegalArgumentException(ex.getMessage(), ex);
+      throw new TransactionExecutionException(ex.getMessage(), ex);
     }
   }
 }

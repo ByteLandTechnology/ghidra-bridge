@@ -31,7 +31,7 @@ modules/domain (领域服务接口与数据模型)
 领域模块定义核心服务接口与数据传输模型：
 - 服务接口包括 `ProgramService`、`MemoryService`、`ListingService`、`FunctionService` 及 `DataTypeService` 等。
 - 模型记录包括 `AddressResource`、`InstructionResource`、`FunctionResource` 以及 `Page` 分页模型。
-- 定义领域异常，如 `DomainException` 与 `GlobalVariableConflictException`。
+- 定义领域异常，如 `DomainException`、`GlobalVariableConflictException` 与 `TransactionExecutionException`。
 - **架构约束**：该模块严禁引入任何 Ghidra 专有 API 类。
 
 ### 2. `modules/wire`

@@ -31,7 +31,7 @@ The architecture guarantees clear separation between domain logic, wire protocol
 The domain module defines the core service interfaces and data transfer models:
 - Service interfaces include `ProgramService`, `MemoryService`, `ListingService`, `FunctionService`, and `DataTypeService`.
 - Model records include `AddressResource`, `InstructionResource`, `FunctionResource`, and `Page`.
-- It defines domain exceptions like `DomainException` and `GlobalVariableConflictException`.
+- It defines domain exceptions like `DomainException`, `GlobalVariableConflictException`, and `TransactionExecutionException`.
 - **Constraint**: This module must not import any Ghidra API classes.
 
 ### 2. `modules/wire`

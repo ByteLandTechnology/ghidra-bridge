@@ -83,7 +83,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 検証タスクは以下を厳格に検査します:
 - **アーキテクチャ境界**: `verifyArchitecture` により、adapter と launcher 以外での Ghidra クラスのインポートが禁止されます。
 - **規約ドリフト検出**: `verifyApiContracts` により、ドキュメント規約とコードの一致が確認されます。
-- **スクリプトコンパイル**: 生成された起動スクリプトが正常にコンパイルできることを確認します。
+- **スクリプトコンパイル**: `compileGeneratedScripts` により、生成された起動スクリプトが正常にコンパイルできることを確認します。
 - **配布物**: `verifyDistribution` が `build/ghidra-script/` の内容を検証します。
 
 ## MCP テスト
