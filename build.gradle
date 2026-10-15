@@ -3,8 +3,8 @@ plugins {
 }
 
 group = 'app.byteland'
-// The release workflow sets releaseVersion from the git tag. Local builds use a dev version.
-version = providers.gradleProperty('releaseVersion').getOrElse('0.0.0-dev')
+// Release PRs update version.txt. CI sets the same value with releaseVersion.
+version = providers.gradleProperty('releaseVersion').getOrElse(file('version.txt').text.trim())
 
 apply from: 'gradle/ghidra-detect.gradle'
 

@@ -88,33 +88,39 @@ bash .github/scripts/verify-repository-hygiene.sh
 
 ## 版本发布
 
-CI 工作流使用 semantic-release 自动发布版本。
-只有推送到 `main` 且 `verify` 任务通过后，才会开始发布。
+CI 工作流使用 release-please 管理版本和发布说明。
+推送到 `main` 且 `verify` 任务通过后，release-please 会创建或更新版本 PR。
+该 PR 更新 `version.txt`、`.release-please-manifest.json` 和 `CHANGELOG.md`。
+在 PR 中检查版本号和变更说明，将其合并到 `main` 后开始发布。
+验证通过后，release-please 创建 `v<版本号>` 标签和 GitHub Release。
 
-semantic-release 读取上一个 `v*` 标签之后的 Conventional Commit 提交消息：
-- `fix`：发布补丁版本，例如 `0.3.1`。
-- `feat`：发布次版本，例如 `0.4.0`。
-- 类型后带 `!` 或包含 `BREAKING CHANGE:` 脚注：发布主版本。
-- 其他类型（例如 `docs`、`ci`、`test`）：不发布版本。
+release-please 根据 Conventional Commit 提交消息计算版本号：
 
-每次发布都会创建 `v<版本号>` 标签，以及附带自动生成说明的 GitHub Release。
-Release 包含两个附件：
-- `ghidra-bridge-<版本号>.zip`：包含 `Bridge.java`、`GhidraMcp.java`、`ghidra-bridge.jar`、`LICENSE` 与 `README.md`。
+- `fix`：递增补丁版本，例如 `1.2.1`。
+- `feat`：递增次版本，例如 `1.3.0`。
+- 类型后带 `!` 或包含 `BREAKING CHANGE:` 脚注：递增主版本。
+- 其他类型（例如 `docs`、`ci`、`test`）：不会单独触发版本发布。
+
+`publish` 任务检出发布对应的提交，验证构建并上传两个附件：
+
+- `ghidra-bridge-<版本号>.zip`：包含 `Bridge.java`、`GhidraMcp.java`、`ghidra-bridge.jar`、
+  `LICENSE` 与 `README.md`。
 - `ghidra-bridge-<版本号>.zip.sha256`：压缩包的 SHA-256 校验和。
 
-发布过程不会向仓库提交文件。
-构建从 Gradle 属性 `releaseVersion` 获取版本号。
-本地构建使用版本号 `0.0.0-dev`。
-
-在本地构建发布压缩包：
+Gradle 默认从 `version.txt` 读取版本号，`releaseVersion` 属性可以覆盖该值。
+打包脚本会检查发布版本与 `version.txt` 和 JAR 清单中的版本一致。
+在本地构建并验证发布压缩包：
 
 ```bash
-bash .github/scripts/package-release.sh 0.3.0
+bash .github/scripts/package-release.sh
 ```
 
-在不发布的情况下预览下一个版本号：
+在 Settings > Actions > General 中启用
+“Allow GitHub Actions to create and approve pull requests”。
+工作流默认使用 `GITHUB_TOKEN`，该令牌创建的 PR 不会自动触发 CI。
+如需在版本 PR 上运行 CI，设置仓库 secret `RELEASE_PLEASE_TOKEN`，使用个人访问令牌。
+为该令牌授予此仓库的 Contents、Issues 和 Pull requests 写权限。
+详见 [release-please Action 文档](https://github.com/googleapis/release-please-action)。
 
-```bash
-npm ci
-npx semantic-release --dry-run --no-ci
-```
+如果 `publish` 任务失败，可在 GitHub Actions 中选择 “Re-run failed jobs”。
+上传步骤可以覆盖上一次未完成发布中的附件。

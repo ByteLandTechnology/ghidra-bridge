@@ -88,33 +88,40 @@ bash .github/scripts/verify-repository-hygiene.sh
 
 ## リリース
 
-CI ワークフローは semantic-release でリリースを公開します。
-リリースは `main` へのプッシュが `verify` ジョブに合格した後にのみ開始されます。
+CI ワークフローは release-please でバージョンとリリースノートを管理します。
+`main` へのプッシュが `verify` ジョブに合格すると、release-please がリリース PR を作成または更新します。
+PR は `version.txt`、`.release-please-manifest.json`、`CHANGELOG.md` を更新します。
+PR でバージョンと変更内容を確認し、`main` にマージするとリリースを開始します。
+検証後に、release-please が `v<バージョン>` タグと GitHub リリースを作成します。
 
-semantic-release は直前の `v*` タグ以降の Conventional Commit メッセージを読み取ります:
-- `fix`: パッチリリース（`0.3.1` など）を公開します。
-- `feat`: マイナーリリース（`0.4.0` など）を公開します。
-- タイプの後の `!` または `BREAKING CHANGE:` フッター: メジャーリリースを公開します。
-- その他のタイプ（`docs`、`ci`、`test` など）: リリースを公開しません。
+release-please は Conventional Commit メッセージからバージョンを決定します:
 
-各リリースは `v<バージョン>` タグと、生成されたノート付きの GitHub リリースを作成します。
-リリースには 2 つのアセットがあります:
-- `ghidra-bridge-<バージョン>.zip`: `Bridge.java`、`GhidraMcp.java`、`ghidra-bridge.jar`、`LICENSE`、`README.md`。
+- `fix`: パッチバージョンを上げます（`1.2.1` など）。
+- `feat`: マイナーバージョンを上げます（`1.3.0` など）。
+- タイプの後の `!` または `BREAKING CHANGE:` フッター: メジャーバージョンを上げます。
+- その他のタイプ（`docs`、`ci`、`test` など）: それだけではリリースを開始しません。
+
+`publish` ジョブはリリースのコミットを取得し、ビルドを検証して 2 つのアセットをアップロードします:
+
+- `ghidra-bridge-<バージョン>.zip`: `Bridge.java`、`GhidraMcp.java`、`ghidra-bridge.jar`、
+  `LICENSE`、`README.md` を含みます。
 - `ghidra-bridge-<バージョン>.zip.sha256`: アーカイブの SHA-256 チェックサム。
 
-リリースはリポジトリにファイルをコミットしません。
-ビルドは Gradle プロパティ `releaseVersion` からバージョンを取得します。
-ローカルビルドのバージョンは `0.0.0-dev` です。
-
-リリースアーカイブをローカルでビルドするには、次を実行します:
+Gradle は `version.txt` からバージョンを読み取ります。`releaseVersion` プロパティで上書きできます。
+パッケージスクリプトは、リリースのバージョンが `version.txt` と JAR マニフェストに一致することを確認します。
+リリースアーカイブをローカルでビルドして検証するには、次を実行します:
 
 ```bash
-bash .github/scripts/package-release.sh 0.3.0
+bash .github/scripts/package-release.sh
 ```
 
-リリースせずに次のバージョンを確認するには、次を実行します:
+Settings > Actions > General で
+「Allow GitHub Actions to create and approve pull requests」を有効にします。
+ワークフローは既定で `GITHUB_TOKEN` を使用します。このトークンで作成した PR は CI を自動実行しません。
+リリース PR で CI を実行するには、個人アクセストークンをリポジトリの secret
+`RELEASE_PLEASE_TOKEN` に設定します。
+トークンに、このリポジトリの Contents、Issues、Pull requests の書き込み権限を付与します。
+詳細は [release-please Action のドキュメント](https://github.com/googleapis/release-please-action) を参照してください。
 
-```bash
-npm ci
-npx semantic-release --dry-run --no-ci
-```
+`publish` ジョブが失敗した場合は、GitHub Actions で「Re-run failed jobs」を選択します。
+アップロード処理は、前回の未完了の処理で作成したアセットを置き換えることができます。

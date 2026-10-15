@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# Builds the release archive for one version. semantic-release runs this script in its
-# prepare step with the next version as the only argument.
+# Build the release archive for the version in version.txt.
 set -euo pipefail
 
-version="${1:?usage: package-release.sh <version>}"
 repository_root="$(git rev-parse --show-toplevel)"
 cd "$repository_root"
 
-./gradlew --no-daemon -PreleaseVersion="$version" clean buildGhidraScript
+file_version="$(cat version.txt)"
+version="${1:-$file_version}"
+if [[ "$version" != "$file_version" ]]; then
+  echo "package-release: version.txt has '$file_version', expected '$version'" >&2
+  exit 1
+fi
+
+./gradlew --no-daemon -PreleaseVersion="$version" clean verify
 
 jar="build/ghidra-script/ghidra-bridge.jar"
 manifest_version="$(unzip -p "$jar" META-INF/MANIFEST.MF | tr -d '\r' | sed -n 's/^Implementation-Version: //p')"

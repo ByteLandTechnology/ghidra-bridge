@@ -88,33 +88,39 @@ The verification tasks check:
 
 ## Releases
 
-The CI workflow publishes releases with semantic-release.
-A release starts only after a push to `main` passes the `verify` job.
+The CI workflow uses release-please to manage versions and release notes.
+After a push to `main` passes the `verify` job, release-please creates or updates a release PR.
+The PR updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
+Review the proposed version and notes in the PR. Merge it into `main` to start the release.
+After verification, release-please creates a `v<version>` tag and a GitHub release.
 
-semantic-release reads the Conventional Commit messages since the last `v*` tag:
-- `fix`: Publishes a patch release, such as `0.3.1`.
-- `feat`: Publishes a minor release, such as `0.4.0`.
-- A `!` after the type or a `BREAKING CHANGE:` footer: Publishes a major release.
-- Other types, such as `docs`, `ci`, and `test`: Do not publish a release.
+release-please reads Conventional Commit messages to select the version:
 
-Each release creates a `v<version>` tag and a GitHub release with generated notes.
-The release has two assets:
-- `ghidra-bridge-<version>.zip`: `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`, `LICENSE`, and `README.md`.
+- `fix`: Increases the patch version, such as `1.2.1`.
+- `feat`: Increases the minor version, such as `1.3.0`.
+- A `!` after the type or a `BREAKING CHANGE:` footer: Increases the major version.
+- Other types, such as `docs`, `ci`, and `test`: Do not start a release on their own.
+
+The `publish` job checks out the release commit, verifies the build, and uploads two assets:
+
+- `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
+  `LICENSE`, and `README.md`.
 - `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
 
-The release does not commit files to the repository.
-The build gets the version from the `releaseVersion` Gradle property.
-Local builds use the version `0.0.0-dev`.
-
-To build a release archive locally, run:
+Gradle reads the version from `version.txt` unless the `releaseVersion` property is set.
+The package script checks that the release version matches `version.txt` and the JAR manifest.
+To build and verify the release archive locally, run:
 
 ```bash
-bash .github/scripts/package-release.sh 0.3.0
+bash .github/scripts/package-release.sh
 ```
 
-To preview the next version without a release, run:
+In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests".
+The workflow uses `GITHUB_TOKEN` by default.
+PRs created with this token do not start CI automatically.
+For CI on release PRs, set the `RELEASE_PLEASE_TOKEN` secret to a personal access token.
+Give that token Contents, Issues, and Pull requests write access to this repository.
+See the [release-please Action documentation](https://github.com/googleapis/release-please-action).
 
-```bash
-npm ci
-npx semantic-release --dry-run --no-ci
-```
+If the `publish` job fails, use "Re-run failed jobs" in GitHub Actions.
+The upload step can replace assets from an incomplete attempt.

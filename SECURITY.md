@@ -2,7 +2,7 @@
 
 ## Supported code
 
-Security fixes apply to the current `next` branch.
+Security fixes apply to the `main` branch.
 
 ## Run the server
 
