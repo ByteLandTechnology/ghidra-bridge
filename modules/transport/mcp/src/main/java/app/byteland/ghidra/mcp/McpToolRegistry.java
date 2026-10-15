@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Groups the API methods into MCP tools named {@code <prefix>.<domain>}, plus
- * {@code <prefix>.help}.
+ * Groups the API methods into MCP tools named {@code <prefix>_<domain>}, plus
+ * {@code <prefix>_help}.
  */
 final class McpToolRegistry {
   private final String prefix;
@@ -60,21 +60,24 @@ final class McpToolRegistry {
 
   private Map<String, Object> groupTool(
       String domain, Map<String, MethodDescriptor> operations) {
-    List<Map<String, Object>> inputs = new ArrayList<>();
-    List<Map<String, Object>> outputs = new ArrayList<>();
-    for (var entry : operations.entrySet()) {
-      inputs.add(Map.of("type", "object", "properties", Map.of(
-          "operation", Map.of("const", entry.getKey()), "params", entry.getValue().inputSchema()),
-          "required", List.of("operation"), "additionalProperties", false));
-      outputs.add(Map.of("type", "object", "properties", Map.of(
-          "operation", Map.of("const", entry.getKey()), "result", entry.getValue().outputSchema()),
-          "required", List.of("operation", "result"), "additionalProperties", false));
-    }
+    Map<String, Object> properties = new LinkedHashMap<>();
+    properties.put("operation", Map.of(
+        "type", "string",
+        "description", "The operation to perform",
+        "enum", List.copyOf(operations.keySet())));
+    properties.put("params", Map.of(
+        "type", "object",
+        "description", "Parameters for the operation"));
+
+    Map<String, Object> inputSchema = Map.of(
+        "type", "object",
+        "properties", properties,
+        "required", List.of("operation"));
+
     return Map.of("name", toolName(domain),
         "description", "Use this tool for " + domain + " data. Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
-        "inputSchema", Map.of("type", "object", "oneOf", inputs),
-        "outputSchema", Map.of("type", "object", "oneOf", outputs),
+        "inputSchema", inputSchema,
         "annotations", Map.of("readOnlyHint", false, "destructiveHint", true,
             "idempotentHint", false, "openWorldHint", false));
   }
@@ -119,7 +122,7 @@ final class McpToolRegistry {
   }
 
   boolean isHelpTool(String name) {
-    return helpToolName().equals(name);
+    return "help".equals(domainOf(name));
   }
 
   private String helpToolName() {
@@ -127,16 +130,24 @@ final class McpToolRegistry {
   }
 
   private String toolName(String domain) {
-    return prefix + "." + domain;
+    return prefix + "_" + domain;
   }
 
   /** Returns the domain of a tool name with this prefix, or null for any other name. */
   private String domainOf(String name) {
-    String start = prefix + ".";
-    return name.startsWith(start) ? name.substring(start.length()) : null;
+    if (name == null) {
+      return null;
+    }
+    if (name.startsWith(prefix + "_")) {
+      return name.substring(prefix.length() + 1);
+    }
+    if (name.startsWith(prefix + ".")) {
+      return name.substring(prefix.length() + 1);
+    }
+    return null;
   }
 
-  /** Accepts a domain in {@code ghidra.help} as a full tool name or as a bare domain name. */
+  /** Accepts a domain in {@code ghidra_help} as a full tool name or as a bare domain name. */
   private String helpDomain(String value) {
     String domain = domainOf(value);
     return domain == null ? value : domain;
