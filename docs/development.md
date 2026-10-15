@@ -5,7 +5,7 @@ This guide describes how to build, extend, and verify the Ghidra Bridge codebase
 ## Prerequisites
 
 - **Java Development Kit**: JDK 21 is required.
-- **Ghidra**: Ghidra 12.1 or newer is required to compile adapters and run the MCP tests.
+- **Ghidra**: Ghidra 12.1 or newer is required to compile adapters.
 - **Environment**: Set `GHIDRA_INSTALL_DIR` to the Ghidra installation path.
 
 Gradle resolves Ghidra from:
@@ -85,12 +85,6 @@ The verification tasks check:
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
-
-## MCP Tests
-
-The `tests/` directory holds an MCP test suite.
-It runs every MCP tool against a sample C/C++ binary in Ghidra headless mode.
-See [tests/README.md](../tests/README.md) for instructions.
 
 ## Releases
 

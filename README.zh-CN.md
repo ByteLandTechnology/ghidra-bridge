@@ -172,5 +172,3 @@ MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映
 - 架构隔离规则检查。
 - 生成的 API 契约无任何偏移漂移。
 - 生成脚本的构建与编译。
-
-[tests/](tests/README.md) 中的 MCP 测试套件在 Ghidra Headless 模式下测试全部 MCP 工具。

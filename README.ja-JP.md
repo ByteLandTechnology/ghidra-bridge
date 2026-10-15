@@ -172,5 +172,3 @@ MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 
 - アーキテクチャ分離ルールの遵守。
 - 生成された API コントラクトとの差分チェック。
 - 生成スクリプトのビルドとコンパイル。
-
-[tests/](tests/README.md) の MCP テストスイートは、Ghidra ヘッドレスモードですべての MCP ツールを実行します。

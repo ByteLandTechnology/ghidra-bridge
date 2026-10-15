@@ -5,7 +5,7 @@
 ## 环境准备
 
 - **JDK 开发包**：必须安装 Java 21 (JDK 21)。
-- **Ghidra 逆向分析工具**：编译适配器与运行 MCP 测试需要 Ghidra 12.1 或更新版本。
+- **Ghidra 逆向分析工具**：编译适配器需要 Ghidra 12.1 或更新版本。
 - **环境变量**：将 `GHIDRA_INSTALL_DIR` 设置为 Ghidra 的本地安装路径。
 
 Gradle 按以下优先级解析 Ghidra 安装路径：
@@ -83,14 +83,8 @@ bash .github/scripts/verify-repository-hygiene.sh
 验证套件执行以下检查：
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。
-- **生成脚本测试**：`compileGeneratedScripts` 确保生成的启动脚本编译通过。
+- **生成脚本编译**：`compileGeneratedScripts` 确保生成的启动脚本编译通过。
 - **分发产物**：`verifyDistribution` 校验 `build/ghidra-script/` 的内容。
-
-## MCP 测试
-
-`tests/` 目录包含 MCP 测试套件。
-它在 Ghidra Headless 模式下，针对 C/C++ 示例二进制测试全部 MCP 工具。
-运行方法见 [tests/README.md](../../tests/README.md)。
 
 ## 版本发布
 

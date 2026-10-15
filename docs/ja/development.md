@@ -5,7 +5,7 @@
 ## 前提条件
 
 - **Java Development Kit**: JDK 21 が必須です。
-- **Ghidra**: アダプターのコンパイルと MCP テストの実行には、Ghidra 12.1 以降が必要です。
+- **Ghidra**: アダプターのコンパイルには、Ghidra 12.1 以降が必要です。
 - **環境設定**: `GHIDRA_INSTALL_DIR` 環境変数に Ghidra のインストールパスを設定してください。
 
 Gradle は次の優先順序で Ghidra のインストールパスを解決します:
@@ -85,12 +85,6 @@ bash .github/scripts/verify-repository-hygiene.sh
 - **規約ドリフト検出**: `verifyApiContracts` により、ドキュメント規約とコードの一致が確認されます。
 - **スクリプトコンパイル**: `compileGeneratedScripts` により、生成された起動スクリプトが正常にコンパイルできることを確認します。
 - **配布物**: `verifyDistribution` が `build/ghidra-script/` の内容を検証します。
-
-## MCP テスト
-
-`tests/` ディレクトリには MCP テストスイートがあります。
-Ghidra ヘッドレスモードで、C/C++ サンプルバイナリに対してすべての MCP ツールを実行します。
-実行方法は [tests/README.md](../../tests/README.md) を参照してください。
 
 ## リリース
 

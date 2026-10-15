@@ -172,5 +172,3 @@ The `verify` task checks:
 - Architecture boundary rules.
 - Generated API contract drift.
 - Generated script build and compilation.
-
-The MCP test suite in [tests/](tests/README.md) runs every MCP tool against Ghidra in headless mode.
