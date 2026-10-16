@@ -16,7 +16,7 @@ Gradle は次の優先順序で Ghidra のインストールパスを解決し�
 5. システム `PATH` に存在する `analyzeHeadless` 実行可能ファイル。
 6. ローカルマシンの標準的なインストールディレクトリ。
 
-## Gradle ワークフロー
+## Gradle の使用
 
 常にリポジトリに含まれる Gradle Wrapper を使用してください:
 
@@ -71,7 +71,7 @@ Ghidra の内部データ構造を型付けされたドメインレコードに�
 これらのファイルを手動で編集しないでください。
 生成された内容と差分がある場合、ビルド検証タスクが失敗します。
 
-## 品質ゲート
+## 品質チェック
 
 変更をコミットする前に、必ず検証スイートを実行してください:
 
@@ -89,9 +89,10 @@ bash .github/scripts/verify-repository-hygiene.sh
 ## リリース
 
 CI ワークフローは release-please でバージョンとリリースノートを管理します。
-`main` へのプッシュが `verify` ジョブに合格すると、release-please がリリース PR を作成または更新します。
-PR は `version.txt`、`.release-please-manifest.json`、`CHANGELOG.md` を更新します。
-PR でバージョンと変更内容を確認し、`main` にマージするとリリースを開始します。
+`main` へのプッシュが `verify` ジョブに合格すると、release-please がリリースプルリクエストを作成または更新します。
+プルリクエストは `version.txt`、`.release-please-manifest.json`、`CHANGELOG.md` を更新します。
+プルリクエストでバージョンと変更内容を確認します。
+プルリクエストを `main` にマージしてリリースを開始します。
 検証後に、release-please が `v<バージョン>` タグと GitHub リリースを作成します。
 
 release-please は Conventional Commit メッセージからバージョンを決定します:
@@ -101,7 +102,8 @@ release-please は Conventional Commit メッセージからバージョンを�
 - タイプの後の `!` または `BREAKING CHANGE:` フッター: メジャーバージョンを上げます。
 - その他のタイプ（`docs`、`ci`、`test` など）: それだけではリリースを開始しません。
 
-`publish` ジョブはリリースのコミットを取得し、ビルドを検証して 2 つのアセットをアップロードします:
+`publish` ジョブはリリースのコミットを取得し、ビルドを検証します。
+次に、2 つのアセットをアップロードします:
 
 - `ghidra-bridge-<バージョン>.zip`: `Bridge.java`、`GhidraMcp.java`、`ghidra-bridge.jar`、
   `LICENSE`、`README.md` を含みます。
@@ -117,11 +119,11 @@ bash .github/scripts/package-release.sh
 
 Settings > Actions > General で
 「Allow GitHub Actions to create and approve pull requests」を有効にします。
-ワークフローは既定で `GITHUB_TOKEN` を使用します。このトークンで作成した PR は CI を自動実行しません。
-リリース PR で CI を実行するには、個人アクセストークンをリポジトリの secret
+ワークフローは既定で `GITHUB_TOKEN` を使用します。このトークンで作成したプルリクエストは、新しいイベントなしでは CI を実行しません。
+リリースプルリクエストで CI を実行するには、個人アクセストークンをリポジトリの secret
 `RELEASE_PLEASE_TOKEN` に設定します。
 トークンに、このリポジトリの Contents、Issues、Pull requests の書き込み権限を付与します。
 詳細は [release-please Action のドキュメント](https://github.com/googleapis/release-please-action) を参照してください。
 
 `publish` ジョブが失敗した場合は、GitHub Actions で「Re-run failed jobs」を選択します。
-アップロード処理は、前回の未完了の処理で作成したアセットを置き換えることができます。
+アップロード処理は、完了しなかった前回の処理で作成したアセットを置き換えることができます。

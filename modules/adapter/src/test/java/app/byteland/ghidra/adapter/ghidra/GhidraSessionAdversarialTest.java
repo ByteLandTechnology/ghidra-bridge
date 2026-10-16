@@ -62,7 +62,7 @@ class GhidraSessionAdversarialTest {
   void testRunCommandFailure() {
     var session = new GhidraSession(new TestScript());
 
-    // Normal failure with status message
+    // A normal failure has a status message.
     var cmd = new TestCommand(false, "address out of bounds");
     var ex = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmd, "unable to write memory"));
@@ -76,19 +76,19 @@ class GhidraSessionAdversarialTest {
   void testRunCommandBlankStatusMsg() {
     var session = new GhidraSession(new TestScript());
 
-    // Null statusMsg
+    // The statusMsg is null.
     var cmdNull = new TestCommand(false, null);
     var exNull = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmdNull, "patch failed"));
     assertEquals("patch failed: command failed", exNull.getMessage());
 
-    // Empty statusMsg
+    // The statusMsg is empty.
     var cmdEmpty = new TestCommand(false, "");
     var exEmpty = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmdEmpty, "patch failed"));
     assertEquals("patch failed: command failed", exEmpty.getMessage());
 
-    // Blank whitespace statusMsg
+    // The statusMsg contains only white space.
     var cmdBlank = new TestCommand(false, "   \t\n  ");
     var exBlank = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmdBlank, "patch failed"));
@@ -112,28 +112,28 @@ class GhidraSessionAdversarialTest {
   void testRunCommandSuccess() {
     var session = new GhidraSession(new TestScript());
     var cmd = new TestCommand(true, "ok");
-    // Should not throw
+    // This call must not throw an exception.
     session.runCommand(cmd, "prefix");
   }
 
   @Test
-  @DisplayName("Adversarial: withTransaction propagates RuntimeException directly (no double-wrapping)")
+  @DisplayName("Adversarial: withTransaction propagates RuntimeException without a second wrap")
   void testWithTransactionPropagatesRuntimeException() {
     var session = new GhidraSession(new TestScript());
 
-    // Client parameter error (IllegalArgumentException) must NOT become TransactionExecutionException
+    // The client parameter error must stay an IllegalArgumentException.
     var clientEx = new IllegalArgumentException("invalid register name: R99");
     var thrownClient = assertThrows(IllegalArgumentException.class, () ->
         session.withTransaction(() -> { throw clientEx; }));
     assertSame(clientEx, thrownClient);
 
-    // IllegalStateException
+    // This case uses an IllegalStateException.
     var stateEx = new IllegalStateException("program not initialized");
     var thrownState = assertThrows(IllegalStateException.class, () ->
         session.withTransaction(() -> { throw stateEx; }));
     assertSame(stateEx, thrownState);
 
-    // Existing TransactionExecutionException
+    // Current TransactionExecutionException.
     var txEx = new TransactionExecutionException("already tx ex");
     var thrownTx = assertThrows(TransactionExecutionException.class, () ->
         session.withTransaction(() -> { throw txEx; }));
@@ -170,8 +170,8 @@ class GhidraSessionAdversarialTest {
             session.withTransaction(() -> { throw new IOException("io err " + iteration); }));
       }
 
-      // Invariant check: withTemporaryChanges requires transactionDepth == 0
-      // If transactionDepth leaked, this would throw IllegalStateException!
+      // Check the invariant: withTemporaryChanges requires transactionDepth == 0.
+      // A leaked transactionDepth causes an IllegalStateException here.
       String testResult = session.withTemporaryChanges(() -> "depth_is_zero");
       assertEquals("depth_is_zero", testResult);
     }
@@ -184,18 +184,18 @@ class GhidraSessionAdversarialTest {
 
     assertThrows(IllegalStateException.class, () ->
         session.withTransaction(() -> {
-          // Inner temporary changes are forbidden inside outer transaction
+          // The outer transaction prohibits inner temporary changes.
           session.withTemporaryChanges(() -> "illegal");
           return null;
         }));
 
-    // Verify outer depth was restored to 0
+    // Verify that the outer depth is 0 again.
     String result = session.withTemporaryChanges(() -> "clean");
     assertEquals("clean", result);
   }
 
   @Test
-  @DisplayName("Adversarial: High concurrency stress (20 threads, 2000 total ops) ensures thread safety and no deadlock")
+  @DisplayName("Adversarial: high-concurrency test confirms thread safety without deadlock")
   void testConcurrentTransactionsNoDeadlock() throws Exception {
     var session = new GhidraSession(new TestScript());
     int threads = 20;
@@ -246,7 +246,7 @@ class GhidraSessionAdversarialTest {
     executor.shutdown();
     assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
 
-    // Verify final state: session remains fully operational and unlocked
+    // Verify that the session remains operational and unlocked.
     String finalCheck = session.withTemporaryChanges(() -> "verified_operational");
     assertEquals("verified_operational", finalCheck);
   }

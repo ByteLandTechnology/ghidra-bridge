@@ -1,11 +1,11 @@
 package app.byteland.ghidra.service;
 
 /**
- * Encapsulates range bounds and timeout budgets for address scans.
+ * Contains range limits and time limits for address scans.
  *
- * @param start optional starting memory address
- * @param end optional ending memory address
- * @param timeoutMs maximum execution budget in milliseconds
+ * @param start optional first memory address
+ * @param end optional last memory address
+ * @param timeoutMs maximum time in milliseconds
  */
 public record AddressScanOptions(String start, String end, Integer timeoutMs) {
   public static final int DEFAULT_TIMEOUT_MS = 1000;

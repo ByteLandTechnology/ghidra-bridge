@@ -121,7 +121,7 @@ final class AnalysisTask {
     return status == AnalysisResource.Status.RUNNING;
   }
 
-  /** Asks the analysis to stop. A running task then ends with the cancelled status. */
+  /** Asks the analysis to stop. An active task then ends with the cancelled status. */
   void cancel() {
     monitor.cancel();
   }

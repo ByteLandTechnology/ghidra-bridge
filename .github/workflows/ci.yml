@@ -9,7 +9,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  # Never cancel a run on main. It can be publishing a release.
+  # Never cancel a run on main. It can publish a release.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java and Ghidra
+      - name: Install Java and Ghidra
         uses: ./.github/actions/setup-ghidra
         with:
           ghidra-version: ${{ env.GHIDRA_VERSION }}
@@ -80,7 +80,7 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.sha }}
 
-      - name: Set up Java and Ghidra
+      - name: Install Java and Ghidra
         uses: ./.github/actions/setup-ghidra
         with:
           ghidra-version: ${{ env.GHIDRA_VERSION }}

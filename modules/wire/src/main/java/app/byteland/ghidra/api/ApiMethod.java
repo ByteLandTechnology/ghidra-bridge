@@ -13,13 +13,12 @@ import java.util.Set;
  * @param name public dotted method name
  * @param description technical description of the operation
  * @param effects execution effects and transaction requirements
- * @param requestCodec codec for parsing and validating requests
- * @param responseCodec codec for serializing responses
+ * @param requestCodec codec that parses and validates requests
+ * @param responseCodec codec that serializes responses
  * @param fields set of selectable field projection paths
- * @param identityFields minimum fields always included in projections
+ * @param identityFields minimum fields in all projections
  * @param handler execution delegate for the operation
- * @param mcpAnnotations per-method hint metadata recorded in the catalog; grouped MCP tools do not
- *     publish it
+ * @param mcpAnnotations hint metadata for each method in the catalog
  */
 public record ApiMethod<Request, Response>(
     String name,
@@ -67,7 +66,7 @@ public record ApiMethod<Request, Response>(
   }
 
   /**
-   * Defines runtime effects and concurrency constraints for a method.
+   * Defines runtime effects and concurrency limits for a method.
    *
    * @param readOnly true if method does not modify program state
    * @param mutatesProgram true if method alters the program database
@@ -121,9 +120,9 @@ public record ApiMethod<Request, Response>(
    * Metadata annotations for Model Context Protocol discovery.
    *
    * @param title human-readable tool title
-   * @param readOnlyHint hint indicating operation is read-only
-   * @param destructiveHint hint indicating operation is destructive
-   * @param idempotentHint hint indicating operation is idempotent
+   * @param readOnlyHint hint that indicates a read-only operation
+   * @param destructiveHint hint that indicates a destructive operation
+   * @param idempotentHint hint that indicates an idempotent operation
    */
   public record McpAnnotations(
       String title, boolean readOnlyHint, boolean destructiveHint, boolean idempotentHint) {

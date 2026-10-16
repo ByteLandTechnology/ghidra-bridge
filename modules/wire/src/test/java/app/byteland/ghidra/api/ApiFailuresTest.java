@@ -36,7 +36,7 @@ class ApiFailuresTest {
   }
 
   @Test
-  @DisplayName("TransactionExecutionException preserves cause chaining")
+  @DisplayName("TransactionExecutionException preserves the cause chain")
   void testTransactionExecutionExceptionWithCause() {
     var cause = new IOException("database lock timeout");
     var ex = new TransactionExecutionException("transaction aborted", cause);
@@ -157,7 +157,7 @@ class ApiFailuresTest {
   }
 
   @Test
-  @DisplayName("ApiException maps directly using its status and BridgeError")
+  @DisplayName("ApiException maps directly with its status and BridgeError")
   void testApiExceptionNormalization() {
     var bridgeError = new BridgeError(409, "batch_rolled_back", "atomic batch failed", null, Map.of());
     var apiException = new ApiException(409, bridgeError);

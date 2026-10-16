@@ -30,7 +30,7 @@ import ghidra.app.script.GhidraScript;
 import java.util.Objects;
 
 /**
- * Creates bridge service implementations bound to a Ghidra script session.
+ * Creates bridge service implementations for a Ghidra script session.
  */
 public final class GhidraServiceFactory {
   private GhidraServiceFactory() {}
@@ -38,7 +38,7 @@ public final class GhidraServiceFactory {
   /**
    * Creates a service bundle for the active script session.
    *
-   * @param script running Ghidra script
+   * @param script active Ghidra script
    * @return bridge services instance
    */
   public static BridgeServices create(GhidraScript script) {

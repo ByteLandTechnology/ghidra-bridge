@@ -18,8 +18,8 @@ import java.util.Map;
 import java.util.function.BooleanSupplier;
 
 /**
- * Entry point called by the generated Bridge and GhidraMcp scripts. Starts the WebSocket or MCP
- * transport.
+ * The generated Bridge and GhidraMcp scripts call this entry point.
+ * It starts the WebSocket or MCP transport.
  */
 @SuppressWarnings("try")
 public final class Bootstrap {
@@ -100,7 +100,8 @@ public final class Bootstrap {
         try {
           client.connect(scriptCancelRequested(script));
         } finally {
-          // Start the deadline however the session ends. The close, the save and the exit follow.
+          // Start the deadline for all session end conditions.
+          // The close, the save, and the exit follow.
           if (config.exitDeadlineSeconds() != null) {
             gracefulExit.startExitDeadline(
                 Duration.ofSeconds(config.exitDeadlineSeconds()), script::printerr);

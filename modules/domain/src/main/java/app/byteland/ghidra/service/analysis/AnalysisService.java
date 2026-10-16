@@ -9,8 +9,8 @@ public interface AnalysisService extends AutoCloseable {
   /**
    * Starts background analysis with selected analyzers.
    *
-   * @param analyzers analyzer names to run, or null for the default analyzers; must not be empty
-   * @return active analysis task snapshot
+   * @param analyzers analyzer names to run, or null for the default analyzers. The list must not be empty
+   * @return snapshot of the active analysis task
    */
   AnalysisResource startAnalysis(List<String> analyzers);
 
@@ -22,7 +22,7 @@ public interface AnalysisService extends AutoCloseable {
   AnalysisResource getStatus();
 
   /**
-   * Rejects new analysis requests and waits until running analysis finishes.
+   * Rejects new analysis requests and waits until the active analysis finishes.
    */
   @Override
   void close();

@@ -78,7 +78,7 @@ class WireStressTest {
   }
 
   @Test
-  @DisplayName("Stress: Deeply nested cause chain (10 levels)")
+  @DisplayName("Stress: cause chain with 10 levels")
   void testDeeplyNestedCauseChain() {
     Throwable current = new IOException("root socket closed");
     for (int i = 0; i < 9; i++) {
@@ -94,33 +94,33 @@ class WireStressTest {
   }
 
   @Test
-  @DisplayName("Stress: Target pointer conversions across diverse syntactic forms")
+  @DisplayName("Stress: target pointer conversions across different syntax forms")
   void testTargetPointerConversions() {
-    // Plain property
+    // The path has a plain property.
     var ex1 = new TransactionExecutionException("err", "paramName");
     assertEquals("/param_name", ApiFailures.normalize(ex1).error().target());
 
-    // CamelCase property
+    // The path has a camelCase property.
     var ex2 = new TransactionExecutionException("err", "symbolAddress");
     assertEquals("/symbol_address", ApiFailures.normalize(ex2).error().target());
 
-    // Nested dot property
+    // The path has a nested dot property.
     var ex3 = new TransactionExecutionException("err", "parent.child.subProperty");
     assertEquals("/parent/child/sub_property", ApiFailures.normalize(ex3).error().target());
 
-    // Array index notation
+    // The path has array index notation.
     var ex4 = new TransactionExecutionException("err", "items[0]");
     assertEquals("/items/0", ApiFailures.normalize(ex4).error().target());
 
-    // Mixed nested and array
+    // The path has nested properties and an array.
     var ex5 = new TransactionExecutionException("err", "function.parameters[2].storage");
     assertEquals("/function/parameters/2/storage", ApiFailures.normalize(ex5).error().target());
 
-    // Already leading slash pointer
+    // The pointer already has a slash at the start.
     var ex6 = new TransactionExecutionException("err", "/already/pointer/format");
     assertEquals("/already/pointer/format", ApiFailures.normalize(ex6).error().target());
 
-    // Null or blank target
+    // The target is null or blank.
     var ex7 = new TransactionExecutionException("err", (String) null);
     assertNull(ApiFailures.normalize(ex7).error().target());
 
@@ -129,7 +129,7 @@ class WireStressTest {
   }
 
   @Test
-  @DisplayName("Stress: Complex structured details preservation and immutability")
+  @DisplayName("Stress: retains complex structured details and prevents changes")
   void testComplexDetailsPreservation() {
     Map<String, Object> details = new LinkedHashMap<>();
     details.put("command", "UpdateFunctionCmd");
@@ -151,27 +151,27 @@ class WireStressTest {
   }
 
   @Test
-  @DisplayName("Stress: Strict segregation between client 400 and internal 500")
+  @DisplayName("Stress: strict separation between client 400 and internal 500")
   void testStrictSegregationClientVsInternal() {
-    // Client parameter failures -> 400 invalid_request
+    // Client parameter failures become 400 invalid_request errors.
     var clientErr = new IllegalArgumentException("invalid hex address: 0xINVALID");
     var clientNorm = ApiFailures.normalize(clientErr);
     assertEquals(400, clientNorm.status());
     assertEquals("invalid_request", clientNorm.error().code());
 
-    // Ghidra transaction abort -> 500 transaction_failed
+    // Ghidra transaction aborts become 500 transaction_failed errors.
     var dbErr = new TransactionExecutionException("transaction rolled back: lock timeout");
     var dbNorm = ApiFailures.normalize(dbErr);
     assertEquals(500, dbNorm.status());
     assertEquals("transaction_failed", dbNorm.error().code());
 
-    // Internal state failure -> 500 internal_error
+    // Internal state failures become 500 internal_error errors.
     var stateErr = new IllegalStateException("Program is closed");
     var stateNorm = ApiFailures.normalize(stateErr);
     assertEquals(500, stateNorm.status());
     assertEquals("internal_error", stateNorm.error().code());
 
-    // Null pointer failure -> 500 internal_error
+    // Null pointer failures become 500 internal_error errors.
     var npeErr = new NullPointerException("memory address space null");
     var npeNorm = ApiFailures.normalize(npeErr);
     assertEquals(500, npeNorm.status());
@@ -179,7 +179,7 @@ class WireStressTest {
   }
 
   @Test
-  @DisplayName("Stress: Wire JSON-RPC envelope generation matches protocol specification")
+  @DisplayName("Stress: generated wire JSON-RPC envelope matches the protocol")
   void testJsonRpcEnvelopeCompatibility() {
     var ex = new TransactionExecutionException("symbol conflict at address", "symbol.name");
     var failure = ApiFailures.normalize(ex);

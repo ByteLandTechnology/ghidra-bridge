@@ -68,9 +68,9 @@ public final class AnalysisServiceImpl implements AnalysisService {
   }
 
   /**
-   * Cancels the running analysis and waits until it stops.
+   * Cancels the active analysis and waits until it stops.
    *
-   * <p>The session ends when its connection closes, also when the host process stopped. An
+   * <p>The session ends when its connection closes or the host process stops. An
    * analysis can run for hours, so close must not wait for it to complete. The program keeps the
    * analysis results that exist when the analysis stops.
    */

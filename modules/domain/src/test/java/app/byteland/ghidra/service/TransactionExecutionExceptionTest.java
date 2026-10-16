@@ -78,7 +78,7 @@ class TransactionExecutionExceptionTest {
     assertNull(ex.target());
     assertNull(ex.getCause());
 
-    // Verify defensive copy and immutability
+    // Verify the defensive copy and immutability.
     map.put("key2", "value2");
     assertNull(ex.details().get("key2"));
     assertThrows(UnsupportedOperationException.class, () -> ex.details().put("x", "y"));
@@ -112,7 +112,7 @@ class TransactionExecutionExceptionTest {
   }
 
   @Test
-  @DisplayName("Null details safely produces empty map")
+  @DisplayName("Null details produce an empty map")
   void testNullDetailsSafety() {
     var ex = new TransactionExecutionException("failed", "t", null, null);
     assertNotNull(ex.details());

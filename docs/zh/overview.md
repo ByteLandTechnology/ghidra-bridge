@@ -3,7 +3,8 @@
 Ghidra Bridge 为正在运行的 Ghidra 程序提供网络访问。
 该桥接支持两种网络传输协议：WebSocket JSON-RPC 2.0 与 MCP Streamable HTTP `2026-07-28`。
 注册表定义 53 个公共点分方法，从 `interface.get` 到 `batch.execute`。
-WebSocket 发布全部 53 个方法；MCP 发布 52 个方法，`interface.get` 仅限 WebSocket。
+WebSocket 发布全部 53 个方法。
+MCP 发布 52 个方法，且不发布 `interface.get`。
 运行时 JAR 包不包含任何第三方依赖。
 
 ## 设计目标
@@ -23,7 +24,7 @@ Ghidra 的后台自动分析在独立线程中运行。
 在后台分析运行期间：
 - 读取操作保持可用。
 - 修改操作将返回 HTTP 状态码 `409` 及错误码 `analysis_in_progress`。
-- 启动新分析将返回状态码 `409` 及错误码 `analysis_already_running`。
+- 新分析请求将返回状态码 `409` 及错误码 `analysis_already_running`。
 
 ## 通用请求模式
 
@@ -79,9 +80,10 @@ Ghidra 的后台自动分析在独立线程中运行。
 ## 全局变量与数据协调
 
 `global_variable` 系列方法统一协调顶层定义数据与其主标签。
-创建或更新全局变量需要提供地址、名称与结构化数据类型引用。
+要创建或更新全局变量，请提供地址、名称与数据类型引用。
 变更操作绝不会覆盖指令或无关的已定义数据。
-删除全局变量会清除数据定义，但默认保留其符号标签。
+客户端删除全局变量时，桥接会清除其数据定义。
+除非客户端请求删除标签，否则桥接会保留标签。
 
 ## 后续阅读
 

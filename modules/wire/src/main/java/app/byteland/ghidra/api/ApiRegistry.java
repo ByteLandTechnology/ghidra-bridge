@@ -341,7 +341,7 @@ public final class ApiRegistry {
   }
 
   private static String scanDescription(String name) {
-    return "List "
+    return "List each "
         + name.substring(0, name.indexOf('.')).replace('_', ' ')
         + " in address order. Set a range or time limit if necessary."
         + " Use next_cursor to get the next page.";
@@ -481,8 +481,8 @@ public final class ApiRegistry {
     registerWithCodec(
         BatchMethod.NAME,
         registration.effects(),
-        "Check and run a batch in order. Use per_item to keep item errors."
-            + " Use all_or_none to roll back the batch after an error.",
+        "Check a batch. Run its items in order. Use per_item to keep item errors."
+            + " Use all_or_none to revert the batch after an error.",
         registration.requestCodec(),
         registration.responseSchema(),
         Set.of(),
@@ -584,8 +584,8 @@ public final class ApiRegistry {
         return "Write hex or base64 bytes at an address.";
       }
       case "address.resolve" -> {
-        return "Resolve an address and report its memory block, containing function,"
-            + " and primary symbol.";
+        return "Resolve an address and report its memory block, the function that contains it,"
+            + " and its primary symbol.";
       }
       case "function_call.list" -> {
         return "List the callers or callees of a function. The default direction is callees.";

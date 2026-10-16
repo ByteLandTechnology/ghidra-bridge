@@ -10,7 +10,7 @@ public interface MemoryService {
   int MAX_RANGE_LENGTH = 65_536;
 
   /**
-   * Query parameters for filtering memory blocks.
+   * Query parameters for memory block filters.
    */
   record MemoryBlockQuery(
       int limit, String cursor, Boolean execute, Boolean write, Boolean read, String name) {
@@ -35,7 +35,7 @@ public interface MemoryService {
   MemoryResource readMemoryRange(String startRaw, int length, ByteSequence.Encoding encoding);
 
   /**
-   * Patches program memory with specified byte sequence.
+   * Patches program memory with the specified byte sequence.
    */
   void patchMemory(String startRaw, ByteSequence bytes);
 }

@@ -51,8 +51,8 @@ final class AgentClientChannels {
     }
 
     /**
-     * Sends a ping and waits a maximum of {@code timeout} for the send. A send fails on a connection
-     * that the peer closed, also when the WebSocket did not report the close.
+     * Sends a ping and waits a maximum of {@code timeout} for the send. A send fails if the peer
+     * closed the connection. This also occurs when the WebSocket did not report the close.
      */
     synchronized void ping(Duration timeout) {
       await(webSocket.sendPing(ByteBuffer.allocate(0)), "sendPing", timeout);

@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 class AgentErrorMapperAdversarialTest {
 
   @Test
-  @DisplayName("Adversarial: errorResponse maps null and blank exception messages without throwing")
+  @DisplayName("Adversarial: errorResponse maps null and blank messages and does not throw")
   void testErrorResponseBlankMessageSafety() {
     var exNull = new RuntimeException((String) null);
     var resNull = AgentErrorMapper.errorResponse("req-null", exNull);
@@ -69,7 +69,7 @@ class AgentErrorMapperAdversarialTest {
     assertEquals(false, detailsOut.get("retryable"));
     assertEquals(0x1000L, detailsOut.get("offset"));
 
-    // Check JSON-RPC toMap serialization
+    // Check the JSON-RPC toMap serialization.
     Map<String, Object> rpcMap = res.toMap();
     assertEquals("2.0", rpcMap.get("jsonrpc"));
     assertEquals("tx-req-1", rpcMap.get("id"));
@@ -82,7 +82,7 @@ class AgentErrorMapperAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: High concurrency errorResponse mapping (50 threads, 5000 ops)")
+  @DisplayName("Adversarial: high-concurrency errorResponse test (50 threads, 5,000 operations)")
   void testConcurrentErrorMapping() throws Exception {
     int threads = 50;
     int opsPerThread = 100;

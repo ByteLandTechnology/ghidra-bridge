@@ -1,6 +1,6 @@
 # Contribute to Ghidra Bridge
 
-## Set up the build
+## Configure the build
 
 Use Java 21 and Ghidra 12.1. Set `GHIDRA_INSTALL_DIR` to the Ghidra installation directory.
 

@@ -4,8 +4,8 @@ This guide describes how to build, extend, and verify the Ghidra Bridge codebase
 
 ## Prerequisites
 
-- **Java Development Kit**: JDK 21 is required.
-- **Ghidra**: Ghidra 12.1 or newer is required to compile adapters.
+- **Java Development Kit**: Use JDK 21.
+- **Ghidra**: Use Ghidra 12.1 or newer to compile adapters.
 - **Environment**: Set `GHIDRA_INSTALL_DIR` to the Ghidra installation path.
 
 Gradle resolves Ghidra from:
@@ -16,9 +16,9 @@ Gradle resolves Ghidra from:
 5. The `analyzeHeadless` executable on your system `PATH`.
 6. Standard installation directories on your machine.
 
-## Working with Gradle
+## Use Gradle
 
-Always use the checked-in Gradle Wrapper:
+Always use the Gradle Wrapper in this repository:
 
 ```bash
 # Build the user distribution
@@ -46,11 +46,11 @@ Keep domain interfaces independent of Ghidra APIs.
 
 Implement the service method in `modules/adapter`.
 Convert Ghidra data structures into typed domain records.
-Use `GhidraSession` to manage transactions for mutating operations.
+Use `GhidraSession` to manage transactions for mutation operations.
 
 ### Step 3: Register the Method in Wire
 
-Register the new operation in `modules/wire` using `ApiRegistry`:
+Register the new operation in `modules/wire` with `ApiRegistry`:
 - Assign a public dotted name, such as `program.get`.
 - Define the input and output schemas.
 - Connect the handler to the domain service interface.
@@ -68,12 +68,12 @@ This task regenerates:
 - `docs/asyncapi.yaml`
 - `docs/mcp-tools.json`
 
-Do not edit these files manually.
-The build fails if checked-in files differ from the generator output.
+Do not edit these files by hand.
+The build fails if repository files differ from the generator output.
 
-## Quality Gates
+## Quality Checks
 
-Before submitting a change, run the verification suite:
+Before you submit a change, run the verification suite:
 
 ```bash
 ./gradlew --no-daemon clean verify
@@ -89,9 +89,10 @@ The verification tasks check:
 ## Releases
 
 The CI workflow uses release-please to manage versions and release notes.
-After a push to `main` passes the `verify` job, release-please creates or updates a release PR.
-The PR updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
-Review the proposed version and notes in the PR. Merge it into `main` to start the release.
+After a push to `main` passes the `verify` job, release-please creates or updates a release pull request.
+The pull request updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
+Review the proposed version and notes in the pull request.
+Merge the pull request into `main` to start the release.
 After verification, release-please creates a `v<version>` tag and a GitHub release.
 
 release-please reads Conventional Commit messages to select the version:
@@ -101,13 +102,14 @@ release-please reads Conventional Commit messages to select the version:
 - A `!` after the type or a `BREAKING CHANGE:` footer: Increases the major version.
 - Other types, such as `docs`, `ci`, and `test`: Do not start a release on their own.
 
-The `publish` job checks out the release commit, verifies the build, and uploads two assets:
+The `publish` job gets the release commit and verifies the build.
+Then it uploads two assets:
 
 - `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
   `LICENSE`, and `README.md`.
 - `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
 
-Gradle reads the version from `version.txt` unless the `releaseVersion` property is set.
+Gradle reads the version from `version.txt` unless you set the `releaseVersion` property.
 The package script checks that the release version matches `version.txt` and the JAR manifest.
 To build and verify the release archive locally, run:
 
@@ -117,10 +119,10 @@ bash .github/scripts/package-release.sh
 
 In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests".
 The workflow uses `GITHUB_TOKEN` by default.
-PRs created with this token do not start CI automatically.
-For CI on release PRs, set the `RELEASE_PLEASE_TOKEN` secret to a personal access token.
+Pull requests created with this token do not start CI without a new event.
+For CI on release pull requests, set the `RELEASE_PLEASE_TOKEN` secret to a personal access token.
 Give that token Contents, Issues, and Pull requests write access to this repository.
 See the [release-please Action documentation](https://github.com/googleapis/release-please-action).
 
 If the `publish` job fails, use "Re-run failed jobs" in GitHub Actions.
-The upload step can replace assets from an incomplete attempt.
+The upload step can replace assets from an earlier attempt that did not complete.

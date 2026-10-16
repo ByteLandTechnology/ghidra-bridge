@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'app.byteland'
-// Release PRs update version.txt. CI sets the same value with releaseVersion.
+// Release pull requests update version.txt. CI sets the same value with releaseVersion.
 version = providers.gradleProperty('releaseVersion').getOrElse(file('version.txt').text.trim())
 
 apply from: 'gradle/ghidra-detect.gradle'

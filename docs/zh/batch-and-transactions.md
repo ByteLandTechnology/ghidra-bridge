@@ -49,7 +49,7 @@
 - 使用目标方法的编解码器提前解码每个条目的 `arguments` 参数。
 - 发现任何格式或参数校验错误时，将直接以 HTTP 状态码 `400` 及 `code=validation_failed` 拒绝整个请求。
 - `details.violations` 数组列出每个问题的 `target`、`code` 与 `message`。
-- 预校验失败时，没有任何条目会被执行。
+- 预校验失败时，服务端不执行任何条目。
 
 ### 禁用嵌套的方法
 
@@ -70,10 +70,10 @@
 
 - 所有条目在同一个共享的 Ghidra 事务中执行。
 - 若所有条目均成功执行，事务统一提交。
-- 若任一条目执行失败，整个事务立即回滚。
+- 若任一条目执行失败，Ghidra 会立即回滚事务。
 - 服务端返回顶层错误，HTTP 状态码为 `409`，错误码为 `code=batch_rolled_back`。
-- `details.failed_item` 指明失败的条目，`details.cause` 携带其错误。
-- 临时的修改绝不会持久化到程序数据库中。
+- `details.failed_item` 指明执行失败的条目，`details.cause` 携带其错误。
+- 临时变更绝不会持久化到程序数据库中。
 
 ### 2. `per_item`（尽力而为模式）
 

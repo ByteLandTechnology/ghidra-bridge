@@ -4,11 +4,11 @@ import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 
 /**
- * Manages listing comments across memory addresses.
+ * Manages comments at memory addresses.
  */
 public interface CommentService {
   /**
-   * Search criteria and bounds for comment queries.
+   * Search criteria and limits for comment queries.
    */
   record CommentQuery(
       AddressScanOptions scan, CommentResource.Type type, String text, int limit, String cursor) {
@@ -19,7 +19,7 @@ public interface CommentService {
   }
 
   /**
-   * Returns one page of matching comments.
+   * Returns one page of comments that match the query.
    *
    * @param query the search query criteria
    * @return a page of comment resources
@@ -31,7 +31,7 @@ public interface CommentService {
    *
    * @param addressRaw target memory address
    * @param type comment classification type
-   * @param text new comment text content
+   * @param text new comment text
    */
   void setComment(String addressRaw, CommentResource.Type type, String text);
 

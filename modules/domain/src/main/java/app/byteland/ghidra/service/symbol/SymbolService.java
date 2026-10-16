@@ -27,7 +27,7 @@ public interface SymbolService {
   }
 
   /**
-   * Returns one page of matching symbols.
+   * Returns one page of symbols that match the query.
    */
   Page<SymbolResource> listSymbols(SymbolQuery query);
 

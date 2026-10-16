@@ -7,7 +7,7 @@ import java.time.Instant;
  *
  * @param kind source origin of the analysis task
  * @param status current lifecycle status of the task
- * @param analyzed true if program has been analyzed
+ * @param analyzed true after analysis of the program
  * @param taskId identifier for the active task
  * @param startedAt timestamp when task started
  * @param finishedAt timestamp when task finished

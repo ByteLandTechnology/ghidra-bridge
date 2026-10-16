@@ -25,27 +25,27 @@ public interface DataTypeService {
   DataTypeResource getDataType(String path);
 
   /**
-   * Searches data types matching query filters.
+   * Searches for data types that match query filters.
    *
    * @param query text filter for name search
    * @param categoryPath optional parent category filter
    * @param kind optional data type kind filter
    * @param limit maximum items to return
    * @param cursor optional continuation token
-   * @return a page of matching data type resources
+   * @return a page of data type resources that match the query
    */
   Page<DataTypeResource> searchDataTypes(
       String query, String categoryPath, String kind, int limit, String cursor);
 
   /**
-   * Creates a data type in the program data manager. A function definition at the same path is
-   * overwritten.
+   * Creates a data type in the program data manager.
+   * The operation replaces a function definition at the same path.
    *
    * @param categoryPath destination category folder
    * @param kind data type classification kind
    * @param name name of the new data type
-   * @param baseType underlying referenced type
-   * @param size initial struct length or enum byte width; 0 or less selects the default
+   * @param baseType referenced base type
+   * @param size initial struct length or enum byte width. A value of 0 or less selects the default
    * @param signature optional function signature definition
    */
   void createDataType(
@@ -57,7 +57,7 @@ public interface DataTypeService {
       FunctionSignature signature);
 
   /**
-   * Updates an existing data type definition.
+   * Updates a data type definition that exists.
    *
    * @param path full path of data type to modify
    * @param patch modification instructions and fields
@@ -68,7 +68,7 @@ public interface DataTypeService {
    * Deletes a data type by its full path.
    *
    * @param path full path of data type to delete
-   * @return true if data type was removed
+   * @return true if the method removes the data type
    */
   boolean deleteDataType(String path);
 }

@@ -21,7 +21,7 @@ public interface ListingService {
       AddressScanOptions scan, int limit, String direction, String cursor);
 
   /**
-   * Returns single instruction metadata by address.
+   * Returns the metadata for one instruction by address.
    */
   InstructionResource getInstruction(String rawAddress);
 

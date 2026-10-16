@@ -5,13 +5,13 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * Holds one page of items and continuation metadata.
+ * Holds one page of items and metadata for the next page.
  *
  * @param <T> resource item type
  * @param items list of elements in this page
  * @param count total item count in this page
  * @param limit maximum item limit requested
- * @param nextCursor continuation token for next page
+ * @param nextCursor token for the next page
  * @param scanProgress optional scan progress metadata
  */
 public record Page<T>(

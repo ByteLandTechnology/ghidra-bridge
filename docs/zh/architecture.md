@@ -22,7 +22,7 @@ modules/domain (领域服务接口与数据模型)
 适配器模块还直接依赖 `modules/domain` 与 `modules/wire`。
 启动器模块依赖适配器模块及两个传输模块。
 
-该架构确保了领域逻辑、网络通信协议与 Ghidra 原生 API 之间的清晰解耦。
+该架构分离领域逻辑、网络通信协议与 Ghidra 原生 API。
 
 ## 模块职责划分
 
@@ -38,14 +38,14 @@ modules/domain (领域服务接口与数据模型)
 
 通信协议模块维护统一的方法元数据目录：
 - `ApiRegistry` 统一注册全部 53 个点分方法及其请求/响应 Schema。
-- 通过 `JsonParser`、`JsonWriter` 与 `JsonUtil` 提供轻量级 JSON 解析与格式化工具。
+- `JsonParser`、`JsonWriter` 与 `JsonUtil` 负责解析和格式化 JSON。
 - `ApiContractGenerator` 负责输出 `docs/api.md`、`docs/asyncapi.yaml` 及 `docs/mcp-tools.json`。
 - **架构约束**：无类型的原始 JSON 数据在此边界完全终结。
 
 ### 3. `modules/runtime`
 
 运行时模块管理请求调度与会话生命周期：
-- `AgentDispatcher` 将入站请求分发至目标方法处理器。
+- `AgentDispatcher` 将每个请求分发至目标方法处理器。
 - 每次只执行一个请求。`DispatchBarrier` 跟踪进行中的请求，并在停机期间拒绝新请求。
 - 维护会话状态并协调安全平滑停机。
 - **架构约束**：该模块不依赖任何 Ghidra 类。
@@ -55,8 +55,8 @@ modules/domain (领域服务接口与数据模型)
 适配器模块负责将领域服务接口连接至 Ghidra 原生实现：
 - `GhidraSession` 管理活跃程序引用与事务生命周期。
 - 具体的服务实现类负责将领域操作转换为 Ghidra 专有 API 调用。
-- `GhidraServiceFactory` 作为全量服务实现的装配工厂。
-- **架构约束**：除启动器外，对 Ghidra 类的引用仅限该模块内部。
+- `GhidraServiceFactory` 创建所有服务实现。
+- **架构约束**：只有该模块和启动器可以导入 Ghidra 包。
 
 ### 5. `modules/transport/websocket`
 
@@ -68,22 +68,32 @@ modules/domain (领域服务接口与数据模型)
 ### 6. `modules/transport/mcp`
 
 该模块实现 Model Context Protocol 传输通道：
-- `McpHttpServer` 实现符合 `2026-07-28` 规范的 Streamable HTTP 服务。
-- `McpToolRegistry` 将 52 个点分方法投影为 14 个领域工具及 `ghidra.help`，不发布 `interface.get`。
+- `McpHttpServer` 实现符合 `2026-07-28` 协议的 Streamable HTTP 服务。
+- `McpToolRegistry` 将 52 个点分方法映射为 14 个领域工具及 `ghidra.help`。
+  它不发布 `interface.get`。
 - 在 `ghidra-bridge://contracts/mcp-tools` 提供静态工具契约资源。
 
 ### 7. `modules/launcher`
 
-启动器模块负责运行时引导与 Ghidra 脚本打包：
+启动器模块启动桥接并生成 Ghidra 脚本：
 - `Bootstrap` 读取启动参数并拉起所选的网络传输通道。
 - 构建系统根据 `GhidraLauncher.java.template` 生成 `Bridge.java` 与 `GhidraMcp.java`。
-- 打包编译产物并输出独立的 `ghidra-bridge.jar`。
-- 出站模式下，连接关闭（包括宿主进程已停止）时会话结束。JDK WebSocket 并不总能报告宿主已关闭的连接，因此客户端每 5 秒发送一次保活 ping，ping 失败即结束会话。随后桥接取消正在运行的分析、保存程序，脚本返回，headless Ghidra 随之退出。宿主可通过 `exit_deadline_sec` 让 `GracefulExit` 在会话结束后的这段时间内 Ghidra 仍未退出时强制停止 JVM。到期时正在进行的保存会先完成。宿主不需要另外的看门狗进程。
+- 将运行时类打包到 `ghidra-bridge.jar` 中。
+- 在出站模式中，连接关闭或宿主进程停止时，会话结束。
+  JDK WebSocket 并不总能报告宿主已关闭的连接。
+  因此，客户端每 5 秒发送一次保活 ping。
+  ping 失败会结束会话。
+  然后桥接取消活动分析并保存程序。
+  脚本返回，headless Ghidra 随之退出。
+  `exit_deadline_sec` 值设置退出时间限制。
+  如果 Ghidra 未在限制时间前退出，`GracefulExit` 会强制停止 JVM。
+  在限制时间到达时处于活动状态的保存操作会先完成。
+  宿主不需要另外的看门狗进程。
 
-## 架构边界检验
+## 架构规则与检查
 
-本项目通过自动化工具机械化校验架构边界：
+本项目使用以下检查来保护架构边界：
 - Gradle `verifyArchitecture` 任务扫描并验证所有模块的包引用规则。
-- 仅 `modules/adapter` 与 `modules/launcher` 允许引入 `ghidra.` 前缀的类库。
-- `verifyApiContracts` 任务在临时沙箱中重新生成契约，发现任何偏移即阻断构建。
-- 执行 `./gradlew clean verify` 可执行完整的合规性验证。
+- 只有 `modules/adapter` 与 `modules/launcher` 可以导入名称以 `ghidra.` 开头的包。
+- `verifyApiContracts` 任务在构建沙箱中生成契约，并在发现差异时使构建失败。
+- 运行 `./gradlew clean verify` 以检查这些规则。

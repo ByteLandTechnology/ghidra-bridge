@@ -27,7 +27,7 @@ public final class ExecutorShutdown {
         if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
           executor.shutdownNow();
           if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-            // Forcefully terminate stuck tasks
+    // Stop tasks that do not finish.
           }
         }
       } catch (InterruptedException ex) {

@@ -32,7 +32,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
- * HTTP server that exposes the bridge API as grouped MCP tools via Streamable HTTP and SSE.
+ * HTTP server that exposes the bridge API as grouped MCP tools through Streamable HTTP and SSE.
  */
 public final class McpHttpServer implements AutoCloseable {
   private static final int JSONRPC_PARSE_ERROR = -32700;
@@ -311,7 +311,7 @@ public final class McpHttpServer implements AutoCloseable {
           }
         }
       } catch (IOException clientDisconnected) {
-        // SSE client disconnected
+        // The SSE client disconnected.
       } finally {
         sseSessions.remove(sessionId);
         session.close();
@@ -578,7 +578,7 @@ public final class McpHttpServer implements AutoCloseable {
             || meta.containsKey("io.modelcontextprotocol/clientCapabilities"))) {
       return true;
     }
-    // Initialization negotiates its version in params, before HTTP headers are authoritative.
+    // Initialization negotiates its version in params before the HTTP headers control it.
     return !"initialize".equals(request.get("method"))
         && (MCP_PROTOCOL_VERSION.equals(firstHeader(exchange, "MCP-Protocol-Version"))
             || "server/discover".equals(request.get("method")));
@@ -735,7 +735,8 @@ public final class McpHttpServer implements AutoCloseable {
         ? JsonRpc.errorResponse(id, code, message)
         : JsonRpc.errorResponse(id, code, message, data);
     if (!isRequestId(id)) {
-      // June's error schema cannot express an unknown ID; follow JSON-RPC's null ID rule.
+      // The June error schema cannot express an unknown ID.
+      // Follow the JSON-RPC null ID rule.
       if ("2025-06-18".equals(firstHeader(exchange, "MCP-Protocol-Version"))) {
         response.put("id", null);
       } else {

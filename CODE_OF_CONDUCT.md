@@ -16,4 +16,7 @@ Send a report to `github@byteland.app`. Give the facts that the maintainers need
 
 ## How maintainers respond
 
-Maintainers review each report and decide what action to take. They can ask for a correction, give a warning, limit participation, or remove a person from the project. They will state the reason to the person when possible.
+Maintainers review each report and select an action.
+They can ask for a correction or give a formal notice.
+They can also limit participation or remove a person from the project.
+They will state the reason to the person when possible.

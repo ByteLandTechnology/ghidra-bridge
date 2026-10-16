@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Embedded WebSocket server handling inbound JSON-RPC 2.0 connections.
+ * Embedded WebSocket server for inbound JSON-RPC 2.0 connections.
  */
 public final class AgentWebSocketServer implements AutoCloseable {
   public static final String DEFAULT_PATH = "/ws/agent";

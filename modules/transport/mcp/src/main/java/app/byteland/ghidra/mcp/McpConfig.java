@@ -11,9 +11,9 @@ import java.util.regex.Pattern;
 /**
  * Configuration parameters for the MCP Streamable HTTP server.
  *
- * <p>{@code toolPrefix} is the first part of every tool name, such as {@code ghidra} in
- * {@code ghidra.program}. Give each server a different prefix to connect one client to several
- * servers without tool name conflicts.
+ * <p>{@code toolPrefix} is the first part of every tool name. An example is {@code ghidra} in
+ * {@code ghidra.program}. Give each server a different prefix. Then one client can connect to
+ * several servers without tool name conflicts.
  */
 public record McpConfig(
     String host, int port, String path, String token, String sessionId, String toolPrefix) {
@@ -57,8 +57,8 @@ public record McpConfig(
   }
 
   /**
-   * Checks a tool prefix. It starts with a letter and has 1 to 64 letters, digits, underscores,
-   * or hyphens. A dot is not allowed because it separates the prefix from the domain.
+   * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores,
+   * or hyphens. A dot is not permitted because it separates the prefix from the domain.
    */
   public static String requireToolPrefix(String prefix) {
     if (prefix == null || !TOOL_PREFIX.matcher(prefix).matches()) {

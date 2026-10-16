@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 final class JsonParser {
-  // Limit nesting depth to prevent call stack overflow.
+  // Limit the JSON structure depth to prevent call stack overflow.
   private static final int MAX_NESTING_DEPTH = 500;
 
   private static final char STRING_QUOTE = '"';

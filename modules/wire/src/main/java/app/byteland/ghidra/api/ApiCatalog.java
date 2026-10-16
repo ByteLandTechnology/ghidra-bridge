@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Immutable catalog of registered API methods and their metadata.
+ * Immutable catalog of API methods and their metadata.
  */
 public final class ApiCatalog {
   private final String apiInterfaceVersion;

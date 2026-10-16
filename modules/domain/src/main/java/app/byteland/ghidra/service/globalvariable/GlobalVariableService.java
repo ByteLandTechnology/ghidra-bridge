@@ -25,7 +25,7 @@ public interface GlobalVariableService {
   }
 
   /**
-   * Mutation payload for creating or patching a global variable.
+   * Mutation data to create or patch a global variable.
    */
   record Mutation(String address, String name, DataTypeReference dataType) {
     public Mutation {
@@ -55,12 +55,12 @@ public interface GlobalVariableService {
   GlobalVariableResource getGlobalVariable(String address);
 
   /**
-   * Returns one page of matching global variables.
+   * Returns one page of global variables that match the query.
    */
   Page<GlobalVariableResource> listGlobalVariables(Query query);
 
   /**
-   * Writes global variable definitions according to the write mode.
+   * Writes global variable definitions as specified by the write mode.
    */
   void writeGlobalVariable(Mutation mutation, WriteMode mode);
 

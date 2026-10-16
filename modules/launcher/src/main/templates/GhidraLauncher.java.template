@@ -148,7 +148,7 @@ public class __CLASS__ extends GhidraScript {
       try {
         snapshot.toFile().deleteOnExit();
       } catch (SecurityException ignored) {
-        // Ignore: deleteOnExit is best effort. The message below reports the failure.
+        // deleteOnExit does not guarantee deletion. The message below reports the failure.
       }
       if (reportFailure) {
         printerr(
@@ -231,7 +231,7 @@ public class __CLASS__ extends GhidraScript {
     return message == null || message.isBlank() ? current.getClass().getName() : message;
   }
 
-  /** Loads bridge classes from the checked snapshot jar. Uses the parent class loader for host classes. */
+  /** Loads bridge classes from the snapshot JAR after validation. Uses the parent loader for host classes. */
   private static final class BridgeClassLoader extends URLClassLoader {
     private static final String BRIDGE_PACKAGE_PREFIX = "app.byteland.ghidra.";
 

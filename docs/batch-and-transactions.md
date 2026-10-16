@@ -37,19 +37,19 @@ A batch request supplies `transaction_mode` and an array of `items`:
 The `transaction_mode` property is optional. The default is `per_item`.
 
 Every item requires:
-- `id`: A unique, non-blank string within the batch.
+- `id`: A unique string that is not blank in the batch.
 - `method`: A valid public dotted method name.
-- `arguments`: An object matching the target method schema.
+- `arguments`: An object that matches the target method schema.
 
 ## Prevalidation Rules
 
-The server validates the entire batch before executing any operation:
+The server validates the entire batch before it executes an operation:
 - It checks batch size limits between 1 and 1000 items.
-- It validates that every `id` is unique.
+- It checks that every `id` is unique.
 - It decodes the arguments of every item with its target codec.
 - Any validation failure rejects the entire request with HTTP status `400` and `code=validation_failed`.
 - The `details.violations` array lists each problem with `target`, `code`, and `message`.
-- Zero items execute if prevalidation fails.
+- The server executes no item if prevalidation fails.
 
 ### Prohibited Methods
 
@@ -60,7 +60,7 @@ Batches cannot nest these operations:
 - `session.shutdown`
 - `batch.execute`
 
-Including any of these methods causes a prevalidation failure.
+A batch that includes one of these methods fails prevalidation.
 
 ## Transaction Modes
 
@@ -70,22 +70,22 @@ The caller selects one of two transaction modes.
 
 - All items run inside one shared transaction.
 - If all items succeed, the transaction commits.
-- If any item fails, the transaction rolls back immediately.
+- If any item fails, Ghidra reverts the transaction at once.
 - The server returns a top-level error with HTTP status `409` and `code=batch_rolled_back`.
-- The `details.failed_item` property names the failed item. The `details.cause` property holds its error.
-- Temporary modifications never persist to the program database.
+- The `details.failed_item` property names the item that failed. The `details.cause` property holds its error.
+- Temporary mutations never persist to the program database.
 
 ### 2. `per_item` (Best-Effort Execution)
 
-- Items execute sequentially in order.
-- Each mutating item runs in its own transaction.
+- Items execute in sequence.
+- Each mutation item runs in its own transaction.
 - Execution continues when an item fails.
 - The response returns `{id, result}` rows and `{id, error}` rows.
 
 ## Analysis Concurrency
 
 Batch requests inspect the active program state:
-- If Ghidra background analysis runs, mutating batches fail immediately.
+- If Ghidra background analysis runs, mutation batches fail immediately.
 - The server returns HTTP status `409` with code `analysis_in_progress`.
 - Read-only batches run normally during background analysis.
 

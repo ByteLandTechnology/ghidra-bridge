@@ -13,7 +13,7 @@ public interface DecompilationService extends AutoCloseable {
    *
    * @param rawAddress function entry point address
    * @param format output representation format
-   * @param timeoutMs maximum execution budget in milliseconds
+   * @param timeoutMs maximum time in milliseconds
    * @return decompilation output resource
    */
   DecompilationResource decompileFunction(

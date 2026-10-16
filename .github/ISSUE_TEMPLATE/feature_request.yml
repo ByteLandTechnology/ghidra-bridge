@@ -27,5 +27,5 @@ body:
       label: Can you prepare a pull request?
       options:
         - "Yes"
-        - "Maybe, with help"
+        - "Not sure. I need help"
         - "No"

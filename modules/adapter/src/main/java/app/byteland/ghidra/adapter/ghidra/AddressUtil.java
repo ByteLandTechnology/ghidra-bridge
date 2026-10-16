@@ -8,7 +8,7 @@ import ghidra.program.model.address.AddressSpace;
 import java.util.Locale;
 
 /**
- * Utility methods for parsing and formatting Ghidra addresses.
+ * Utility methods that parse and format Ghidra addresses.
  */
 public final class AddressUtil {
   private AddressUtil() {}

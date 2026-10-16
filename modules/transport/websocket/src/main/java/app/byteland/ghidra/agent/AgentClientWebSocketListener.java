@@ -33,8 +33,8 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
       try {
         messageHandler.handleMessage(channelRef.get(), message);
       } catch (RuntimeException failure) {
-        // The reply could not be sent, so the connection is lost. An aborted WebSocket calls
-        // neither onClose nor onError, so end the session here.
+        // The reply did not transmit, so the connection is lost.
+        // An aborted WebSocket calls neither onClose nor onError. Thus, end the session here.
         AgentClient.logTransportError("WebSocket client message failed", failure);
         disconnected();
         return null;

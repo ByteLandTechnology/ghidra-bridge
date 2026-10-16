@@ -156,12 +156,12 @@ def runCommand = { List<String> command ->
         process = new ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .start()
-        // Read output on another thread so the timeout can stop a blocked command.
+        // Read output on another thread so the timeout can stop a command that does not finish.
         def outputRef = new StringBuilder()
         def readerThread = new Thread({
             outputRef.append(process.inputStream.getText('UTF-8'))
         } as Runnable, 'ghidra-detect-brew-output-reader')
-        // Let the JVM stop even if the output reader stays blocked.
+        // Let the JVM stop even if the output reader does not finish.
         readerThread.daemon = true
         readerThread.start()
         def exited = process.waitFor(RUN_COMMAND_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)

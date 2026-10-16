@@ -60,11 +60,10 @@ final class GracefulExit implements AutoCloseable {
 
   /**
    * Halts the JVM if it does not exit within {@code delay}. The host that started this Ghidra
-   * asks for the deadline, so that no orphan process stays when a close step blocks.
+   * asks for the deadline. Thus, no orphan process stays when a close step blocks.
    *
-   * <p>The deadline never stops a save: if the save runs at the deadline, the JVM gets {@link
-   * #AFTER_SAVE_GRACE} after the save to exit. The thread is a daemon thread, so a normal exit
-   * stops it.
+   * <p>The deadline never stops a save. If a save runs at the deadline, the JVM gets {@link
+   * #AFTER_SAVE_GRACE} after the save to exit. A normal exit stops the daemon thread.
    */
   void startExitDeadline(Duration delay, java.util.function.Consumer<String> log) {
     Thread.ofPlatform()

@@ -2,12 +2,13 @@
 
 Ghidra Bridge supports two transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
 The unified registry defines 53 public dotted methods.
-WebSocket publishes all 53 methods. MCP publishes 52 methods; `interface.get` is WebSocket only.
+WebSocket publishes all 53 methods.
+MCP publishes 52 methods, and does not publish `interface.get`.
 
 ## WebSocket JSON-RPC 2.0
 
 WebSocket messages follow the JSON-RPC 2.0 specification.
-Clients communicate with the bridge over full-duplex socket connections.
+Clients communicate with the bridge through full-duplex socket connections.
 
 ### Request Envelope
 
@@ -26,7 +27,7 @@ The server validates every field:
 - `jsonrpc` must equal `"2.0"`.
 - `id` must be a string or integer identifier.
 - `method` must match one of the 53 public dotted methods.
-- `params` must be a JSON object matching the method schema.
+- `params` must be a JSON object that matches the method schema.
 - The server rejects unknown fields and invalid data types.
 
 ### Ready Notification
@@ -95,8 +96,8 @@ The server replies with an error envelope for a bad message and keeps the socket
 ### Handshake Errors
 
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
-- `400`: Missing upgrade headers, an unsupported WebSocket version, or a token in the query string.
-- `401`: Missing or invalid bearer token.
+- `400`: Absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
+- `401`: Absent or invalid bearer token.
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
@@ -105,7 +106,7 @@ The server rejects a bad upgrade request with an HTTP status before the socket o
 
 The server closes the socket with these status codes:
 - `1000`: Normal closure.
-- `1001`: The server shuts down.
+- `1001`: The server stops.
 - `1003`: The client sent a fragmented text message or an unsupported frame.
 
 ## Model Context Protocol (MCP)
@@ -115,8 +116,8 @@ The server does not use MCP sessions and does not send server-sent events.
 
 ### HTTP Request Rules
 
-The MCP HTTP server handles incoming requests:
-- **POST**: Dispatches incoming JSON-RPC 2.0 requests.
+The MCP HTTP server handles requests:
+- **POST**: Dispatches JSON-RPC 2.0 requests.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
 - **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
 - **Other methods**: The server returns status `405`.
@@ -126,13 +127,22 @@ The MCP HTTP server handles incoming requests:
 
 ### Initialization Compatibility
 
-Clients can also use `initialize` with `2025-06-18` or `2025-11-25`. The response includes `protocolVersion`, `serverInfo`, and `capabilities`; an unsupported requested version negotiates `2025-11-25`.
-Initialization without modern per-request metadata selects this compatibility path. Its version header is optional, but an explicitly unsupported header returns HTTP `400`. Subsequent requests must send the negotiated `MCP-Protocol-Version`; a missing or unsupported version returns HTTP `400`.
+Clients can also use `initialize` with `2025-06-18` or `2025-11-25`.
+The response includes `protocolVersion`, `serverInfo`, and `capabilities`.
+An unsupported requested version negotiates `2025-11-25`.
+Initialization without modern request metadata selects this compatibility path.
+The version header is optional.
+An unsupported header returns HTTP `400`.
+
+Subsequent requests must send the negotiated `MCP-Protocol-Version`.
+An absent or unsupported version returns HTTP `400`.
 These requests do not require the modern `_meta` fields or `Mcp-Method`/`Mcp-Name` headers. `notifications/initialized` returns `202` without a body.
 
 ### Request Metadata (`2026-07-28`)
 
-Every `2026-07-28` POST request must include protocol version and client capabilities in `params._meta`; client information is optional:
+Every `2026-07-28` POST request must include protocol data in `params._meta`.
+This data must contain the version and client capabilities.
+Client information is optional:
 
 ```json
 {
@@ -157,7 +167,7 @@ These requests must also send these HTTP headers:
 A header value can use the form `=?base64?<base64 text>?=` for text that is not plain ASCII.
 
 The server returns these errors for bad metadata:
-- Missing required `_meta` fields: HTTP `400`, code `-32602`.
+- Absent required `_meta` fields: HTTP `400`, code `-32602`.
 - An unsupported protocol version: HTTP `400`, code `-32022`. The `data` property lists the supported versions.
 - A header that does not match the request body: HTTP `400`, code `-32020`.
 
@@ -166,22 +176,28 @@ The server returns these errors for bad metadata:
 The server handles these MCP methods:
 - `initialize`: Negotiates a version for initialization-based clients, as described above.
 - `server/discover`: Returns server identification and capabilities.
-- `ping`: Standard health check in initialization-based versions; retained as a bridge compatibility method in `2026-07-28`.
+- `ping`: Checks server health in initialization-based versions.
+  The bridge keeps this compatibility method in `2026-07-28`.
 - `tools/list`: Returns tool schemas for all 15 bridge tools.
 - `tools/call`: Executes a tool operation and returns structured content.
-- `resources/list`: Lists available resources, including `ghidra-bridge://contracts/mcp-tools`.
+- `resources/list`: Lists available resources, such as `ghidra-bridge://contracts/mcp-tools`.
 - `resources/read`: Reads contract resource content.
 - `resources/templates/list`: Returns an empty template list.
 
 Other methods return HTTP `404` with code `-32601`.
 Every successful `2026-07-28` result includes `"resultType": "complete"`. Initialization-based `ping` returns `{}`.
-Modern discovery, tool lists, resource lists, resource template lists, and resource reads also include `ttlMs: 0` and `cacheScope: "private"`. Unknown resource URIs return HTTP `400` / `-32602` in `2026-07-28`, and HTTP `404` / `-32002` in initialization-based versions.
-Errors without an identifiable request ID omit `id` from `2025-11-25` onward. For `2025-06-18`, the bridge follows JSON-RPC's `id: null` rule; that version's published MCP error schema cannot represent this case.
+Modern list, discovery, and read results include `ttlMs: 0` and `cacheScope: "private"`.
+In `2026-07-28`, an unknown resource URI returns HTTP `400` and code `-32602`.
+In initialization-based versions, it returns HTTP `404` and code `-32002`.
+
+Errors without an identifiable request ID omit `id` from `2025-11-25` onward.
+For `2025-06-18`, the bridge follows the JSON-RPC `id: null` rule.
+The MCP error schema for that version cannot represent this case.
 
 ### Tool Call Convention
 
 MCP organizes operations into 15 tools:
-- `ghidra.help`: Discovers domains, lists operations, and shows schemas.
+- `ghidra.help`: Finds domains, lists operations, and shows schemas.
 - 14 Domain Tools: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`.
 
 The domain tools expose 52 methods. `interface.get` is available only through WebSocket.
@@ -190,7 +206,7 @@ The domain tools expose 52 methods. `interface.get` is available only through We
 
 Every tool name starts with a prefix and a dot. The default prefix is `ghidra`.
 Set the `tool_prefix` startup argument to change it, for example `tool_prefix=sample`.
-Then the tools are `sample.help`, `sample.program`, and so on.
+Then the tool names include `sample.help` and `sample.program`.
 Use a different prefix for each bridge when one MCP client connects to more than one bridge.
 
 The prefix starts with a letter and has 1 to 64 letters, digits, `_`, or `-`.
@@ -230,7 +246,7 @@ For example, the `memory.read` method is the `read` operation of `ghidra.memory`
 }
 ```
 
-The response returns both text and structured content:
+The server returns both text and structured content:
 
 ```json
 {
@@ -264,20 +280,20 @@ An unknown operation, or an argument other than `operation` and `params`, return
 ## Authentication and Security
 
 - **Loopback Default**: Listeners bind to `127.0.0.1` by default. A loopback listener without `token` does not require authentication.
-- **Remote Binding**: Binding to any external network interface requires `token`.
-- **Authorization Header**: Send credentials via `Authorization: Bearer <token>`.
-- **Query Tokens Rejected**: The server rejects tokens in query strings with HTTP 400.
-- **Log Masking**: Secret tokens never appear in server log files.
+- **External Listener**: A listener on an external network interface requires `token`.
+- **Authorization Header**: Send credentials through `Authorization: Bearer <token>`.
+- **Query Token Rejection**: The server rejects tokens in query strings with HTTP 400.
+- **Log Redaction**: Secret tokens never appear in server log files.
 
 ## Bounded Address Scans and Cursors
 
-Listing methods support bounded scanning over memory addresses:
+List methods support bounded scans across memory addresses:
 - `scan.range`: Supplies `start` and `end` address bounds.
-- `scan.timeout_ms`: Sets a maximum execution budget from 100 to 60000 milliseconds. The default is 1000.
-- `page.limit`: Sets the maximum items per page up to 1000 items.
+- `scan.timeout_ms`: Sets a time limit from 100 to 60000 milliseconds. The default is 1000.
+- `page.limit`: Sets a maximum of 1000 items on each page.
 
 When a query stops before completion:
-- The response returns collected items.
+- The response returns the items that the server collected.
 - The `scan.complete` property reports `false`.
 - The `scan.stop_reason` property reports `limit` or `timeout`.
 - The `next_cursor` property holds the resumption token.

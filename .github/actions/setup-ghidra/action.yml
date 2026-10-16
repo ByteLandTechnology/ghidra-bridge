@@ -1,5 +1,8 @@
-name: Set up Java and Ghidra
-description: Install JDK 21, restore or download the pinned Ghidra release, and set GHIDRA_INSTALL_DIR.
+name: Install Java and Ghidra
+description: >-
+  This action installs JDK 21.
+  It restores or downloads the specified Ghidra release.
+  It sets GHIDRA_INSTALL_DIR.
 
 inputs:
   ghidra-version:
@@ -15,7 +18,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Set up JDK 21
+    - name: Install JDK 21
       uses: actions/setup-java@v4
       with:
         distribution: temurin
@@ -52,7 +55,7 @@ runs:
         set -euo pipefail
         install_dir="$(find ghidra-dist -maxdepth 1 -mindepth 1 -type d | head -n 1)"
         if [ -z "$install_dir" ]; then
-          echo "Could not locate an extracted Ghidra directory under ghidra-dist/" >&2
+          echo "Cannot find an extracted Ghidra directory under ghidra-dist/" >&2
           exit 1
         fi
         echo "GHIDRA_INSTALL_DIR=$(cd "$install_dir" && pwd)" >> "$GITHUB_ENV"

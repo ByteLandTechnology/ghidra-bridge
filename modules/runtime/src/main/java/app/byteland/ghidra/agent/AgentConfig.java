@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Configuration settings for a bridge runtime session.
+ * Configuration values for a bridge runtime session.
  */
 public record AgentConfig(
     String wsUrl,

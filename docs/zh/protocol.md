@@ -2,7 +2,8 @@
 
 Ghidra Bridge 支持两种网络传输协议：WebSocket JSON-RPC 2.0 与 MCP Streamable HTTP `2026-07-28`。
 统一注册表定义 53 个点分公共方法。
-WebSocket 发布全部 53 个方法；MCP 发布 52 个方法，`interface.get` 仅限 WebSocket。
+WebSocket 发布全部 53 个方法。
+MCP 发布 52 个方法，且不发布 `interface.get`。
 
 ## WebSocket JSON-RPC 2.0
 
@@ -105,7 +106,7 @@ WebSocket 消息严格遵循 JSON-RPC 2.0 协议规范。
 
 服务端使用以下状态码关闭连接：
 - `1000`：正常关闭。
-- `1001`：服务端停机。
+- `1001`：服务端停止。
 - `1003`：客户端发送了分片文本消息或不受支持的帧。
 
 ## Model Context Protocol (MCP)
@@ -115,8 +116,8 @@ WebSocket 消息严格遵循 JSON-RPC 2.0 协议规范。
 
 ### HTTP 交互规范
 
-MCP HTTP 服务端按以下规则处理入站请求：
-- **POST**：分发处理入站 JSON-RPC 2.0 请求。
+MCP HTTP 服务端按以下规则处理请求：
+- **POST**：分发处理 JSON-RPC 2.0 请求。
 - **OPTIONS**：处理 CORS 预检请求并返回状态码 `204`。
 - **GET**：服务端直接返回状态码 `405` 并附带 `Allow: POST, OPTIONS` 响应头。
 - **其他方法**：服务端返回状态码 `405`。
@@ -126,13 +127,22 @@ MCP HTTP 服务端按以下规则处理入站请求：
 
 ### 初始化兼容
 
-客户端也可以通过 `initialize` 使用 `2025-06-18` 或 `2025-11-25`。响应包含 `protocolVersion`、`serverInfo` 和 `capabilities`；不支持的请求版本会协商为 `2025-11-25`。
-不带新版逐请求元数据的初始化请求进入此兼容流程。初始化可省略版本头部，但显式携带不支持的版本头部会返回 HTTP `400`。后续请求必须携带协商后的 `MCP-Protocol-Version`；缺少或不支持的版本返回 HTTP `400`。
+客户端也可以通过 `initialize` 使用 `2025-06-18` 或 `2025-11-25`。
+响应包含 `protocolVersion`、`serverInfo` 和 `capabilities`。
+不支持的请求版本会协商为 `2025-11-25`。
+不带新版请求元数据的初始化请求进入此兼容流程。
+版本头部是可选的。
+不支持的头部会返回 HTTP `400`。
+
+后续请求必须携带协商后的 `MCP-Protocol-Version`。
+不存在或不支持的版本返回 HTTP `400`。
 这些请求不要求新版 `_meta` 字段或 `Mcp-Method`/`Mcp-Name` 头部。`notifications/initialized` 返回 `202`，不含响应体。
 
 ### 请求元数据（`2026-07-28`）
 
-每个 `2026-07-28` POST 请求都必须在 `params._meta` 中携带协议版本和客户端能力；客户端信息为可选字段：
+每个 `2026-07-28` POST 请求都必须在 `params._meta` 中携带协议数据。
+该数据必须包含版本和客户端能力。
+客户端信息为可选字段：
 
 ```json
 {
@@ -157,7 +167,7 @@ MCP HTTP 服务端按以下规则处理入站请求：
 对于非纯 ASCII 文本，头部值可以使用 `=?base64?<base64 文本>?=` 形式。
 
 元数据不合法时，服务端返回以下错误：
-- 缺少必需的 `_meta` 字段：HTTP `400`，错误码 `-32602`。
+- 不存在必需的 `_meta` 字段：HTTP `400`，错误码 `-32602`。
 - 协议版本不受支持：HTTP `400`，错误码 `-32022`，`data` 字段列出支持的版本。
 - 头部与请求体不一致：HTTP `400`，错误码 `-32020`。
 
@@ -166,22 +176,29 @@ MCP HTTP 服务端按以下规则处理入站请求：
 服务端实现以下 MCP 方法：
 - `initialize`：为使用初始化流程的客户端协商版本，详见上文。
 - `server/discover`：返回服务端标识与支持的能力特性。
-- `ping`：使用初始化流程的旧版标准健康检查；在 `2026-07-28` 中作为桥接服务兼容方法保留。
+- `ping`：在使用初始化流程的版本中检查服务端健康状态。
+  桥接在 `2026-07-28` 中保留此兼容方法。
 - `tools/list`：返回全部 15 个工具的 Schema 定义。
 - `tools/call`：执行具体的工具操作并返回结构化内容。
-- `resources/list`：列出可用资源，包括 `ghidra-bridge://contracts/mcp-tools`。
+- `resources/list`：列出可用资源，例如 `ghidra-bridge://contracts/mcp-tools`。
 - `resources/read`：读取资源内容。
 - `resources/templates/list`：返回空模板列表。
 
 其他方法返回 HTTP `404`，错误码 `-32601`。
-所有 `2026-07-28` 成功结果均包含 `"resultType": "complete"`；使用初始化流程的旧版 `ping` 返回 `{}`。
-新版的服务发现、工具列表、资源列表、资源模板列表和资源读取还包含 `ttlMs: 0` 与 `cacheScope: "private"`。未知资源 URI 在 `2026-07-28` 下返回 HTTP `400` / `-32602`，在使用初始化流程的旧版下返回 HTTP `404` / `-32002`。
-无法识别请求 ID 的错误在 `2025-11-25` 及之后版本省略 `id`；`2025-06-18` 遵循 JSON-RPC 的 `id: null` 规则，该版已发布的 MCP 错误 schema 无法表示此情形。
+所有 `2026-07-28` 成功结果均包含 `"resultType": "complete"`。
+使用初始化流程的 `ping` 返回 `{}`。
+新版列表、发现和读取结果还包含 `ttlMs: 0` 与 `cacheScope: "private"`。
+在 `2026-07-28` 中，未知资源 URI 返回 HTTP `400` 和错误码 `-32602`。
+在使用初始化流程的版本中，它返回 HTTP `404` 和错误码 `-32002`。
+
+无法识别请求 ID 的错误在 `2025-11-25` 及之后版本省略 `id`。
+对于 `2025-06-18`，桥接遵循 JSON-RPC 的 `id: null` 规则。
+该版本的 MCP 错误 schema 无法表示此情形。
 
 ### 工具调用规范
 
 MCP 将操作组织为 15 个工具：
-- `ghidra.help`：发现领域、列出可用操作及查看操作 Schema。
+- `ghidra.help`：查找领域、列出可用操作及查看操作 Schema。
 - 14 个领域工具：`ghidra.bridge`、`ghidra.program`、`ghidra.address`、`ghidra.memory`、`ghidra.listing`、`ghidra.global_variable`、`ghidra.function`、`ghidra.analysis`、`ghidra.decompilation`、`ghidra.symbol`、`ghidra.reference`、`ghidra.comment`、`ghidra.data_type`、`ghidra.batch`。
 
 领域工具共公开 52 个方法。`interface.get` 仅通过 WebSocket 提供。
@@ -190,7 +207,7 @@ MCP 将操作组织为 15 个工具：
 
 所有工具名都以前缀和一个点开头，默认前缀为 `ghidra`。
 通过 `tool_prefix` 启动参数可以修改前缀，例如 `tool_prefix=sample`。
-此时工具名为 `sample.help`、`sample.program` 等。
+此时工具名包括 `sample.help` 和 `sample.program`。
 当一个 MCP 客户端接入多个桥接服务时，为每个桥接服务设置不同的前缀。
 
 前缀以字母开头，由 1 至 64 个字母、数字、`_` 或 `-` 组成。
@@ -230,7 +247,7 @@ MCP 将操作组织为 15 个工具：
 }
 ```
 
-响应同时包含纯文本内容与结构化内容：
+服务端同时返回纯文本内容与结构化内容：
 
 ```json
 {
@@ -264,20 +281,20 @@ MCP 将操作组织为 15 个工具：
 ## 认证与网络安全
 
 - **默认回环**：监听器默认绑定 `127.0.0.1`。未设置 `token` 的回环监听器不需要认证。
-- **外部绑定**：绑定至任何非回环网卡时必须提供 `token` 参数。
+- **外部监听器**：外部网络接口上的监听器必须提供 `token` 参数。
 - **认证头部**：通过 `Authorization: Bearer <token>` 头部传递凭据。
 - **拒绝 URL Token**：URL 查询参数中携带的 Token 会直接被 HTTP 400 拒绝。
 - **日志脱敏**：安全 Token 绝不会在服务日志中打印。
 
 ## 有界地址扫描与分页游标
 
-列表查询支持基于内存地址的有界扫描：
+列表查询支持跨内存地址的有界扫描：
 - `scan.range`：指定 `start` 和 `end` 地址范围。
-- `scan.timeout_ms`：指定最大执行耗时预算（100 至 60000 毫秒），默认 1000。
-- `page.limit`：单页最大条目限制（最高支持 1000 条）。
+- `scan.timeout_ms`：指定 100 至 60000 毫秒的时间限制，默认 1000。
+- `page.limit`：指定每页最多 1000 个条目。
 
 当查询在扫描完成前停止：
-- 响应返回已匹配的条目。
+- 响应返回服务端收集的条目。
 - `scan.complete` 返回 `false`。
 - `scan.stop_reason` 返回 `limit` 或 `timeout`。
 - `next_cursor` 携带恢复游标。

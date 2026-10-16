@@ -16,9 +16,9 @@ Gradle 按以下优先级解析 Ghidra 安装路径：
 5. 系统 `PATH` 中的 `analyzeHeadless` 可执行文件。
 6. 本地机器上的标准安装目录。
 
-## Gradle 常用工作流
+## 使用 Gradle
 
-请始终使用仓库内建的 Gradle Wrapper：
+请始终使用此仓库中的 Gradle Wrapper：
 
 ```bash
 # 构建用于分发的脚本与 JAR 包
@@ -68,10 +68,10 @@ Gradle 按以下优先级解析 Ghidra 安装路径：
 - `docs/asyncapi.yaml`
 - `docs/mcp-tools.json`
 
-请勿手动修改上述生成的文件。
-若提交的文件与生成器输出存在差异，构建校验将会失败。
+请勿直接修改上述生成的文件。
+若仓库文件与生成器输出存在差异，构建校验将会失败。
 
-## 质量门禁
+## 质量检查
 
 在提交代码更改之前，必须运行全量验证套件：
 
@@ -89,9 +89,10 @@ bash .github/scripts/verify-repository-hygiene.sh
 ## 版本发布
 
 CI 工作流使用 release-please 管理版本和发布说明。
-推送到 `main` 且 `verify` 任务通过后，release-please 会创建或更新版本 PR。
-该 PR 更新 `version.txt`、`.release-please-manifest.json` 和 `CHANGELOG.md`。
-在 PR 中检查版本号和变更说明，将其合并到 `main` 后开始发布。
+推送到 `main` 且 `verify` 任务通过后，release-please 会创建或更新发布拉取请求。
+该拉取请求更新 `version.txt`、`.release-please-manifest.json` 和 `CHANGELOG.md`。
+请在拉取请求中检查版本号和变更说明。
+将该拉取请求合并到 `main` 以开始发布。
 验证通过后，release-please 创建 `v<版本号>` 标签和 GitHub Release。
 
 release-please 根据 Conventional Commit 提交消息计算版本号：
@@ -101,7 +102,8 @@ release-please 根据 Conventional Commit 提交消息计算版本号：
 - 类型后带 `!` 或包含 `BREAKING CHANGE:` 脚注：递增主版本。
 - 其他类型（例如 `docs`、`ci`、`test`）：不会单独触发版本发布。
 
-`publish` 任务检出发布对应的提交，验证构建并上传两个附件：
+`publish` 任务获取发布对应的提交并验证构建。
+然后它上传两个附件：
 
 - `ghidra-bridge-<版本号>.zip`：包含 `Bridge.java`、`GhidraMcp.java`、`ghidra-bridge.jar`、
   `LICENSE` 与 `README.md`。
@@ -117,10 +119,10 @@ bash .github/scripts/package-release.sh
 
 在 Settings > Actions > General 中启用
 “Allow GitHub Actions to create and approve pull requests”。
-工作流默认使用 `GITHUB_TOKEN`，该令牌创建的 PR 不会自动触发 CI。
-如需在版本 PR 上运行 CI，设置仓库 secret `RELEASE_PLEASE_TOKEN`，使用个人访问令牌。
+工作流默认使用 `GITHUB_TOKEN`，该令牌创建的拉取请求不会在没有新事件时启动 CI。
+如需在发布拉取请求上运行 CI，设置仓库 secret `RELEASE_PLEASE_TOKEN`，使用个人访问令牌。
 为该令牌授予此仓库的 Contents、Issues 和 Pull requests 写权限。
 详见 [release-please Action 文档](https://github.com/googleapis/release-please-action)。
 
 如果 `publish` 任务失败，可在 GitHub Actions 中选择 “Re-run failed jobs”。
-上传步骤可以覆盖上一次未完成发布中的附件。
+上传步骤可以覆盖先前未完成尝试中的附件。

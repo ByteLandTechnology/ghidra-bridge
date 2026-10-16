@@ -10,10 +10,12 @@ WebSocket JSON-RPC 2.0 と MCP Streamable HTTP `2026-07-28` の 2 つのトラ�
 ## 主な機能
 
 - **デュアルトランスポート**: WebSocket JSON-RPC 2.0 または MCP Streamable HTTP 経由で Ghidra にアクセスできます。
-- **統一されたメソッドカタログ**: 型定義された単一のレジストリが 53 個のドット記法メソッドを定義します。WebSocket は 53 個すべてを公開し、MCP はそのうち 52 個を公開します（`interface.get` は WebSocket 専用）。
-- **有界アドレススキャン**: アドレス順のリスト取得において、協調的なタイムアウト処理とカーソルベースのページネーションをサポートします。
-- **アトミックトランザクション**: バッチ処理をサポートし、エラー発生時は自動的にロールバックします。
-- **ヘッドレスモード**: GUI を起動することなく、Ghidra のヘッドレスモードで実行できます。
+- **統一されたメソッドカタログ**: 型定義された単一のレジストリが 53 個のドット記法メソッドを定義します。
+  WebSocket は 53 個すべてを公開します。MCP は 52 個を公開し、`interface.get` は公開しません。
+- **有界アドレススキャン**: アドレス順のリスト結果は、協調的なキャンセルとカーソルページネーションをサポートします。
+- **アトミックトランザクション**: ブリッジはバッチ処理を実行します。
+  エラー発生後にトランザクションをロールバックします。
+- **ヘッドレスモード**: ブリッジは GUI を使用せず、Ghidra のヘッドレススクリプトで実行します。
 
 ## スクリプトのビルド
 
@@ -48,7 +50,8 @@ ghidra-bridge.jar
 ### Ghidra ヘッドレスモードでの実行
 
 `GhidraMcp.java` または `Bridge.java` をヘッドレスモードのポストスクリプトとして実行できます。
-プロジェクトディレクトリを作成し、対象のバイナリをインポートして解析を実行します。
+プロジェクトディレクトリを作成します。
+次に、対象のバイナリをインポートして自動解析を実行します。
 `.cache` などのドットで始まるディレクトリ名をプロジェクトパスに使用しないでください。
 
 ```bash
@@ -60,7 +63,7 @@ mkdir -p /path/to/projects
 ```
 
 ポストスクリプトは、プロセスが停止されるまでリクエストの処理を継続します。
-既存のプロジェクトファイルを再解析なしで開くには、`-process` と `-noanalysis` を使用します:
+保存済みプロジェクトファイルを新しい解析なしで開くには、`-process` と `-noanalysis` を使用します:
 
 ```bash
 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" /path/to/projects demo \
@@ -97,20 +100,20 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | リクエストディスパッチ用の URL パスエンドポイント。 |
 | `session_id` | プログラム名 | 現在のアクティブセッションを一意に識別する文字列。 |
 | `token` | *(なし)* | Bearer 認証用の共有シークレットトークン。 |
-| `ws_url` | *(なし)* | 送信型クライアントとして接続する際のリモート WebSocket URL。 |
+| `ws_url` | *(なし)* | 送信型クライアントモードのリモート WebSocket URL。 |
 | `tool_prefix` | `ghidra` | MCP 専用。すべてのツール名の先頭部分（`ghidra.program` の `ghidra` など）。1 つのクライアントが複数のサーバーに接続する場合、サーバーごとに異なる値を指定します。 |
-| `jar` | *(自動)* | `ghidra-bridge.jar` をスクリプトと別ディレクトリに配置した場合のパス。 |
-| `exit_deadline_sec` | *(なし)* | 送信型のみ。セッション終了後、この秒数以内に Ghidra が終了しない場合に JVM を強制停止します。その時点で実行中の保存は先に完了します。ホストが起動するヘッドレスの Ghidra にのみ使用してください。 |
+| `jar` | *(自動)* | `ghidra-bridge.jar` がスクリプトファイルの隣にない場合のパス。 |
+| `exit_deadline_sec` | *(なし)* | 送信型のみ。セッション終了後、この秒数以内に Ghidra が終了しない場合に JVM を強制停止します。アクティブな保存は先に完了します。ホストが起動するヘッドレスの Ghidra にのみ使用してください。 |
 
 ## セキュリティ規定
 
 ブリッジは厳格なセキュリティ境界を適用します:
 
 - **ループバック既定**: リスナーはデフォルトで `127.0.0.1` にバインドされます。
-- **トークン必須**: ループバック以外のインターフェースにバインドする場合、`token` の指定が必須です。
+- **トークン必須**: ループバック以外のネットワークインターフェース上のリスナーには `token` が必要です。
 - **Bearer ヘッダー**: 受信リクエストは `Authorization: Bearer <token>` を送信する必要があります。
 - **URL トークンの拒否**: URL クエリ文字列に含まれるトークンは HTTP 400 で拒否されます。
-- **ログの機密保護**: シークレットトークンがログファイルやコンソールに出力されることはありません。
+- **ログの機密保護**: サーバーはシークレットトークンをログファイルやコンソールに出力しません。
 
 ## API とトランスポート仕様
 
@@ -124,15 +127,15 @@ WebSocket では標準的な JSON-RPC 2.0 形式でリクエストを送信し�
 {"jsonrpc":"2.0","id":"r1","method":"program.get","params":{}}
 ```
 
-`interface.get` を呼び出すことで、サポートされている全メソッドとスキーマを取得できます。
+`interface.get` を呼び出すことで、サーバーがサポートする全メソッドとスキーマを取得できます。
 
 ### Model Context Protocol (MCP)
 
 MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 15 個のツールとして公開します:
 - `ghidra.help`: ドメインの探索、操作一覧の取得、スキーマの確認。
-- 14 個のドメインツール: `ghidra.program`, `ghidra.memory`, `ghidra.function`, `ghidra.listing` など。
+- 14 個のドメインツール: `ghidra.program`、`ghidra.memory`、`ghidra.function`、および他のドメインツール。
 
-操作を呼び出すには、ドメインツール内の操作名とパラメータを渡します。
+操作名とパラメータを指定してドメインツールを呼び出します。
 たとえば、`program.get` メソッドは `ghidra.program` の `get` 操作です:
 
 ```json
@@ -145,7 +148,9 @@ MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 
 }
 ```
 
-`2026-07-28` のリクエストには MCP メタデータとヘッダーも必要です。`initialize` を使用する `2025-06-18` と `2025-11-25` のクライアントにも対応しています。詳細は[プロトコル仕様](docs/ja/protocol.md)を参照してください。
+`2026-07-28` のリクエストには MCP メタデータとヘッダーも必要です。
+サーバーはバージョン `2025-06-18` と `2025-11-25` の `initialize` クライアントをサポートします。
+詳細は[プロトコル仕様](docs/ja/protocol.md)を参照してください。
 
 完全な MCP ツールスキーマは `ghidra-bridge://contracts/mcp-tools` リソースからも取得可能です。
 
@@ -155,7 +160,7 @@ MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 
 - [アーキテクチャ (Architecture)](docs/ja/architecture.md): モジュール境界と依存関係グラフ。
 - [プロトコル仕様 (Protocol)](docs/ja/protocol.md): JSON-RPC エンベロープ、MCP エンドポイント、エラー形式。
 - [バッチとトランザクション (Batch and Transactions)](docs/ja/batch-and-transactions.md): アトミックバッチ処理とトランザクション制御。
-- [開発ガイド (Development)](docs/ja/development.md): 開発環境構築、ワークフロー、品質ゲート。
+- [開発ガイド (Development)](docs/ja/development.md): 開発環境設定、ワークフロー、品質チェック。
 - [メソッドリファレンス (Method Reference)](docs/api.md): 全 53 メソッドの一覧とスキーマ。
 - [AsyncAPI 規約 (AsyncAPI)](docs/asyncapi.yaml): WebSocket の正式な規約。
 - [MCP ツール定義 (MCP Tools)](docs/mcp-tools.json): MCP ツールの正式な定義。

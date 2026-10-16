@@ -1,16 +1,16 @@
 package app.byteland.ghidra.service;
 
 /**
- * Tracks cooperative execution progress across memory scans.
+ * Tracks the progress of cooperative memory scans.
  *
  * @param kind scan classification
  * @param requestedStart lower address bound of query
  * @param requestedEnd upper address bound of query
  * @param scannedStart first address visited in this page, in scan direction
  * @param scannedEnd last address visited in this page, in scan direction
- * @param complete true if entire requested range was scanned
+ * @param complete true after the scan covers the full requested range
  * @param stopReason termination cause
- * @param elapsedMs scan execution duration in milliseconds
+ * @param elapsedMs scan time in milliseconds
  */
 public record ScanProgress(
     Kind kind,

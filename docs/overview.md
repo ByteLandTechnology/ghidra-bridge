@@ -3,7 +3,8 @@
 Ghidra Bridge gives network access to one active Ghidra program.
 The bridge supports two network transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
 The registry defines 53 public dotted methods, from `interface.get` to `batch.execute`.
-WebSocket publishes all 53 methods. MCP publishes 52 methods; `interface.get` is WebSocket only.
+WebSocket publishes all 53 methods.
+MCP publishes 52 methods, and does not publish `interface.get`.
 The runtime JAR has zero third-party dependencies.
 
 ## Design Goals
@@ -16,21 +17,21 @@ The runtime JAR has zero third-party dependencies.
 ## Concurrency and Session Model
 
 The bridge binds to one active Ghidra program per session.
-Requests run sequentially in a single dispatch queue.
+Requests run in sequence in a single dispatch queue.
 The dispatcher executes only one operation at a time.
 
 Ghidra background analysis runs in a separate thread.
 While analysis runs:
 - Read operations remain available.
 - Mutation operations return an error with HTTP status `409` and code `analysis_in_progress`.
-- Starting another analysis returns status `409` and code `analysis_already_running`.
+- A request for another analysis returns status `409` and code `analysis_already_running`.
 
 ## Common Request Patterns
 
 Methods follow standard resource patterns across both transports:
 
 - **Get and Delete**: Requests supply a `selector` object, such as an address or identifier.
-- **Update**: Requests supply a `selector` object and a `patch` object with modified fields.
+- **Update**: Requests supply a `selector` object and a `patch` object with fields to change.
 - **Create**: Requests supply a `resource` object with the initial attributes.
 - **List**: Requests accept an optional `filter` object and an optional `page` object with a `limit` integer and an opaque `cursor` string.
 - **Field Projection**: List and get operations accept an optional `projection.fields` array to select output properties.
@@ -38,7 +39,7 @@ Methods follow standard resource patterns across both transports:
 ## Bounded Address Scans
 
 Address-ordered scan operations inspect memory items cooperatively.
-Applicable listing operations include:
+Applicable list operations are:
 - `code_unit.list`.
 - `data_unit.list`.
 - `instruction.list`.
@@ -74,18 +75,19 @@ The response object includes a `scan` metadata block:
 
 The `stop_reason` property reports `completed`, `limit`, or `timeout`.
 An incomplete scan returns a `next_cursor` value even when zero items match.
-The caller passes this value as `page.cursor` to continue the scan from the last visited location.
+The caller passes this value as `page.cursor` to continue the scan from the last location examined.
 
 ## Global Variables and Data Coordination
 
 The `global_variable` methods coordinate defined data items and primary labels.
-Creating or upserting a variable requires an address, a name, and a structured data-type reference.
+To create or upsert a variable, supply an address, a name, and a data-type reference.
 Mutations do not overwrite instructions or unrelated data items.
-Deleting a global variable clears the data definition and preserves the label unless requested.
+When a client deletes a global variable, the bridge clears its data definition.
+The bridge preserves the label unless the client requests its deletion.
 
 ## Next Steps
 
-- Consult the [Architecture Guide](architecture.md) for module decomposition.
+- Read the [Architecture Guide](architecture.md) for the module structure.
 - Read the [Protocol Specification](protocol.md) for envelope details and error formats.
-- Review [Batch and Transactions](batch-and-transactions.md) for atomic execution semantics.
-- See the [Method Reference](api.md) for the complete list of 53 methods.
+- Read [Batch and Transactions](batch-and-transactions.md) for atomic execution behavior.
+- Read the [Method Reference](api.md) for the complete list of 53 methods.

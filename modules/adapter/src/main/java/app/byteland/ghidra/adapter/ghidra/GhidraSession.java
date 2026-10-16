@@ -51,7 +51,7 @@ public final class GhidraSession {
         try {
           ghidraScript.end(true);
         } catch (Exception ignored) {
-          // No ambient transaction or already ended
+          // There is no ambient transaction, or the transaction ended.
         }
         ghidraScript.saveProgram(currentProgram());
       } catch (Exception error) {

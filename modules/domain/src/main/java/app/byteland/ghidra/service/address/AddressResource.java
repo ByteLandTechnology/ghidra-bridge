@@ -4,10 +4,10 @@ package app.byteland.ghidra.service.address;
  * Represents address metadata and associated program components.
  *
  * @param address formatted address string
- * @param valid always true; the address expression parsed successfully
+ * @param valid always true because the address parser succeeded
  * @param inMemory true if the address is inside any program memory block
- * @param memoryBlock summary of the containing memory block
- * @param function summary of the enclosing function
+ * @param memoryBlock summary of the memory block that contains the address
+ * @param function summary of the function that contains the address
  * @param symbol summary of the primary symbol at this address
  */
 public record AddressResource(
@@ -30,7 +30,7 @@ public record AddressResource(
       boolean execute) {}
 
   /**
-   * Summarizes the enclosing function for an address.
+   * Summarizes the function that contains an address.
    */
   public record FunctionSummary(String entry, String name) {}
 

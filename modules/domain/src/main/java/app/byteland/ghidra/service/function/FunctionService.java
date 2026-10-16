@@ -10,7 +10,7 @@ import java.util.Set;
  */
 public interface FunctionService {
   /**
-   * Modification patch for boolean and integer function attributes.
+   * Patch for Boolean and integer function attributes.
    */
   record FunctionAttributePatch(
       Boolean isInline,
@@ -24,7 +24,7 @@ public interface FunctionService {
   }
 
   /**
-   * Search criteria and filters for function listing queries.
+   * Search criteria and filters for function list queries.
    */
   record FunctionQuery(
       AddressScanOptions scan,
@@ -44,7 +44,7 @@ public interface FunctionService {
   }
 
   /**
-   * Returns one page of matching functions.
+   * Returns one page of functions that match the query.
    *
    * @param query search query filters
    * @return a page of function resources
@@ -84,7 +84,7 @@ public interface FunctionService {
   Page<FunctionCallResource> getCallees(String rawAddress, int limit, String cursor);
 
   /**
-   * Updates an existing function parameter.
+   * Updates a function parameter that exists.
    */
   void patchParameter(
       String rawAddress,

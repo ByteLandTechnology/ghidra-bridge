@@ -27,23 +27,23 @@ import org.junit.jupiter.api.Test;
 class ApiFailuresAdversarialTest {
 
   @Test
-  @DisplayName("Adversarial: Null, empty, and blank messages safely default to class name")
+  @DisplayName("Adversarial: null, empty, and blank messages use the class name")
   void testNullEmptyBlankMessageHandling() {
-    // Null message
+    // The message is null.
     var exNull = new RuntimeException((String) null);
     var failureNull = ApiFailures.normalize(exNull);
     assertEquals(500, failureNull.status());
     assertEquals("internal_error", failureNull.error().code());
     assertEquals("Internal error", failureNull.error().message());
 
-    // Empty message
+    // The message is empty.
     var exEmpty = new IllegalArgumentException("");
     var failureEmpty = ApiFailures.normalize(exEmpty);
     assertEquals(400, failureEmpty.status());
     assertEquals("invalid_request", failureEmpty.error().code());
     assertEquals("java.lang.IllegalArgumentException", failureEmpty.error().message());
 
-    // Whitespace only message
+    // The message contains only white space.
     var exBlank = new TransactionExecutionException("   \t\n  ");
     var failureBlank = ApiFailures.normalize(exBlank);
     assertEquals(500, failureBlank.status());
@@ -52,7 +52,7 @@ class ApiFailuresAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: Extremely long status message (500k chars) handled without overflow")
+  @DisplayName("Adversarial: a 500,000-character status message does not cause an overflow")
   void testExtremelyLongMessage() {
     String hugeMessage = "A".repeat(500_000);
     var ex = new TransactionExecutionException(hugeMessage);
@@ -83,7 +83,7 @@ class ApiFailuresAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: Deep nested causes chain (depth 500) preserves root and normalizes cleanly")
+  @DisplayName("Adversarial: a cause chain with depth 500 preserves and normalizes the root")
   void testDeepNestedCausesChain() {
     Throwable current = new SQLException("root db error");
     for (int i = 0; i < 500; i++) {
@@ -99,30 +99,30 @@ class ApiFailuresAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: Complex pointer conversion for deeply nested and array targets")
+  @DisplayName("Adversarial: complex pointer conversion for deep targets and array targets")
   void testPointerConversionEdgeCases() {
-    // Already pointer
+    // The target is already a pointer.
     var ex1 = new TransactionExecutionException("err", "/already/a/pointer");
     assertEquals("/already/a/pointer", ApiFailures.normalize(ex1).error().target());
 
-    // Null and blank targets
+    // The targets are null or blank.
     var ex2 = new TransactionExecutionException("err", (String) null);
     assertNull(ApiFailures.normalize(ex2).error().target());
 
     var ex3 = new TransactionExecutionException("err", "   ");
     assertEquals("   ", ApiFailures.normalize(ex3).error().target());
 
-    // Deep nested array indexing and CamelCase
+    // Deep nested array indexes and CamelCase.
     var ex4 = new TransactionExecutionException("err", "deeplyNestedObject.subFieldList[12].itemProperty");
     assertEquals("/deeply_nested_object/sub_field_list/12/item_property", ApiFailures.normalize(ex4).error().target());
 
-    // Multiple consecutive separators
+    // The path has multiple adjacent separators.
     var ex5 = new TransactionExecutionException("err", "foo..bar[[3]]");
     assertEquals("/foo/bar/3", ApiFailures.normalize(ex5).error().target());
   }
 
   @Test
-  @DisplayName("Adversarial: Complex structured details preservation in TransactionExecutionException")
+  @DisplayName("Adversarial: TransactionExecutionException preserves complex structured details")
   void testStructuredDetailsPreservation() {
     Map<String, Object> details = new HashMap<>();
     details.put("stringValue", "failed_step");
@@ -143,20 +143,20 @@ class ApiFailuresAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: Null value in details triggers NullPointerException due to BridgeError Map.copyOf")
+  @DisplayName("Adversarial: a null detail causes NullPointerException in BridgeError Map.copyOf")
   void testNullValueInDetailsFailsInBridgeError() {
     Map<String, Object> details = new HashMap<>();
     details.put("nullableKey", null);
     var ex = new TransactionExecutionException("failure with null detail value", details);
 
-    // BridgeError constructor uses Map.copyOf(details), which does not permit null values
+    // The BridgeError constructor uses Map.copyOf(details), which prohibits null values.
     org.junit.jupiter.api.Assertions.assertThrows(
         NullPointerException.class,
         () -> ApiFailures.normalize(ex));
   }
 
   @Test
-  @DisplayName("Adversarial: Custom DomainException implementations map status and code cleanly")
+  @DisplayName("Adversarial: custom DomainException implementations map status and code")
   void testCustomDomainExceptions() {
     class CustomDomainException extends RuntimeException implements DomainException {
       private final int status;
@@ -190,7 +190,7 @@ class ApiFailuresAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: Strict segregation of 400 invalid_request vs 500 transaction_failed")
+  @DisplayName("Adversarial: strict separation of 400 invalid_request and 500 transaction_failed")
   void testStrictSegregationClientVsTransaction() {
     Throwable[] clientErrors = {
       new IllegalArgumentException("invalid argument: null pointer"),

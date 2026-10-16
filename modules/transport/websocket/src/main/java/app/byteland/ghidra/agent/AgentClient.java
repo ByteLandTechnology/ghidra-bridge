@@ -15,7 +15,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
- * Runs the WebSocket transport as an embedded server or as an outbound client to ws_url.
+ * Runs the WebSocket transport as an embedded server or an outbound client to ws_url.
  */
 public final class AgentClient {
   private static final System.Logger LOGGER = System.getLogger(AgentClient.class.getName());
@@ -182,8 +182,9 @@ public final class AgentClient {
 
   /**
    * Waits until the session ends. With an outbound {@code channel}, it also sends keepalive pings.
-   * The JDK WebSocket does not always report a connection that the host closed, for example when
-   * the host process stopped. A ping to such a connection fails, and the session then ends.
+   * The JDK WebSocket does not always report a connection that the host closed. For example, this
+   * can occur after the host process stops. A ping to such a connection fails. Then the session
+   * ends.
    */
   @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void awaitDisconnect(

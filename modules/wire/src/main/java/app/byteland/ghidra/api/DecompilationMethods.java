@@ -25,7 +25,7 @@ final class DecompilationMethods implements ApiMethodProvider {
     registry.read(
         "decompilation.get",
         "Decompile the function at an entry point. Set scan.timeout_ms between 100 and 300000."
-            + " The default is 30000 milliseconds. Ghidra rounds the time up to whole seconds.",
+            + " The default is 30000 milliseconds. Ghidra increases fractions to whole seconds.",
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
                 ApiVocabulary.SELECTOR,

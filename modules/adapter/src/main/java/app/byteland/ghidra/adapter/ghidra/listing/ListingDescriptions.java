@@ -83,7 +83,7 @@ final class ListingDescriptions {
   }
 
   /**
-   * Returns the bytes of a code unit, or null when the code unit is in uninitialized memory
+   * Returns the bytes of a code unit. Returns null for a code unit in uninitialized memory,
    * such as {@code .bss}. That memory has no bytes, so the response omits the field.
    */
   private static ByteSequence bytes(CodeUnit codeUnit, GhidraSession context) {
