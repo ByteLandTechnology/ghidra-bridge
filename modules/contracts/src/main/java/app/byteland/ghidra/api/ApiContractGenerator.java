@@ -1,6 +1,5 @@
 package app.byteland.ghidra.api;
 
-import app.byteland.ghidra.JsonUtil;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -10,6 +9,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import org.snakeyaml.engine.v2.api.Dump;
+import org.snakeyaml.engine.v2.api.DumpSettings;
+import org.snakeyaml.engine.v2.common.FlowStyle;
+import org.snakeyaml.engine.v2.common.ScalarStyle;
 
 public final class ApiContractGenerator {
   private static final String JSONRPC_FIELD = "jsonrpc";
@@ -21,17 +24,19 @@ public final class ApiContractGenerator {
   private static final String JSONRPC_VERSION = "2.0";
   private static final int MARKDOWN_BASE_CAPACITY = 256;
   private static final int MARKDOWN_METHOD_CAPACITY = 128;
+  private static final int YAML_PREFERRED_WIDTH = 70;
+  private static final int YAML_MAX_WIDTH = 100;
 
   private ApiContractGenerator() {}
 
   public static void main(String[] args) throws IOException {
     Path root = Path.of(args.length == 0 ? "." : args[0]).toAbsolutePath().normalize();
     ApiCatalog catalog = ApiRegistry.catalog();
-    write(root.resolve("docs/asyncapi.yaml"), JsonUtil.toJson(canonical(asyncApi(catalog))) + "\n");
+    write(root.resolve("docs/asyncapi.yaml"), formattedYaml(asyncApi(catalog)));
     write(root.resolve("docs/api.md"), markdown(catalog));
   }
 
-  private static Map<String, Object> asyncApi(ApiCatalog catalog) {
+  static Map<String, Object> asyncApi(ApiCatalog catalog) {
     List<ApiCatalog.MethodDescriptor> methods = catalog.methods();
     List<Map<String, Object>> requests =
         methods.stream().map(ApiContractGenerator::request).toList();
@@ -156,7 +161,8 @@ public final class ApiContractGenerator {
           .append(method.description())
           .append(" |\n");
     }
-    output.append("\nUse the input schema for each method. The bridge rejects unknown fields and type conversions.\n");
+    output.append("\nUse the input schema for each method. "
+        + "The bridge rejects unknown fields and type conversions.\n");
     return output.toString();
   }
 
@@ -164,6 +170,23 @@ public final class ApiContractGenerator {
     Path parent = path.getParent();
     if (parent != null) Files.createDirectories(parent);
     Files.writeString(path, content, StandardCharsets.UTF_8);
+  }
+
+  static String formattedYaml(Object value) {
+    DumpSettings settings =
+        DumpSettings.builder()
+            .setDefaultFlowStyle(FlowStyle.BLOCK)
+            .setDefaultScalarStyle(ScalarStyle.DOUBLE_QUOTED)
+            .setWidth(YAML_PREFERRED_WIDTH)
+            .setSplitLines(true)
+            .setBestLineBreak("\n")
+            .setDereferenceAliases(true)
+            .build();
+    String output = new Dump(settings).dumpToString(canonical(value));
+    if (output.lines().anyMatch(line -> line.codePointCount(0, line.length()) > YAML_MAX_WIDTH)) {
+      throw new IllegalArgumentException("A YAML line exceeds 100 characters");
+    }
+    return output;
   }
 
   private static Object canonical(Object value) {

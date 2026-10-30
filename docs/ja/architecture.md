@@ -19,6 +19,7 @@ modules/domain (サービスインターフェースとデータモデル)
                                      └── modules/launcher (ブートストラップとスクリプト)
 ```
 
+ビルド専用の `modules/contracts` モジュールは `modules/wire` に依存します。
 アダプターモジュールは `modules/domain` と `modules/wire` にも直接依存します。
 ランチャーモジュールはアダプターと 2 つのトランスポートモジュールに依存します。
 
@@ -39,7 +40,8 @@ modules/domain (サービスインターフェースとデータモデル)
 通信層モジュールは、統合されたメソッドカタログを管理します:
 - `ApiRegistry` が全 55 個の公開ドット記法メソッドとその入出力スキーマを一元管理します。
 - `JsonParser`、`JsonWriter`、`JsonUtil` が JSON を解析して整形します。
-- `ApiContractGenerator` が `docs/api.md`, `docs/asyncapi.yaml`, `docs/mcp-tools.json` を生成します。
+- `modules/contracts` がビルド時に `docs/api.md` と `docs/asyncapi.yaml` を生成します。
+- `modules/transport/mcp` がビルド時に `docs/mcp-tools.json` を生成します。
 - **制約**: 型のない生の JSON マップはこの境界で完全に停止します。
 
 ### 3. `modules/runtime`

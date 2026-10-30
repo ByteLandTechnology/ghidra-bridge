@@ -19,6 +19,7 @@ modules/domain (Service interfaces and data models)
                                      └── modules/launcher (Bootstrap and scripts)
 ```
 
+The build-only `modules/contracts` module depends on `modules/wire`.
 The adapter module also depends directly on `modules/domain` and `modules/wire`.
 The launcher module depends on the adapter and on both transport modules.
 
@@ -39,7 +40,8 @@ The domain module defines the core service interfaces and data transfer models:
 The wire module maintains the unified method catalog:
 - `ApiRegistry` defines all 55 public dotted methods and their input and output schemas.
 - `JsonParser`, `JsonWriter`, and `JsonUtil` parse and format JSON.
-- `ApiContractGenerator` generates `docs/api.md`, `docs/asyncapi.yaml`, and `docs/mcp-tools.json`.
+- `modules/contracts` generates `docs/api.md` and `docs/asyncapi.yaml` at build time.
+- `modules/transport/mcp` generates `docs/mcp-tools.json` at build time.
 - **Constraint**: Untyped JSON values stop at this boundary.
 
 ### 3. `modules/runtime`

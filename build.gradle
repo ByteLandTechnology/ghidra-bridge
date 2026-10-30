@@ -42,6 +42,12 @@ def ghidraJars = ghidraInstallDir == null ? files() : fileTree(dir: ghidraInstal
 project(':wire') {
     dependencies { api project(':domain') }
 }
+project(':contracts') {
+    dependencies {
+        implementation project(':wire')
+        implementation 'org.snakeyaml:snakeyaml-engine:2.10'
+    }
+}
 project(':runtime') {
     dependencies { api project(':wire') }
 }
@@ -124,7 +130,8 @@ tasks.register('buildGhidraScript') {
 
 def contractOutputs = ['docs/asyncapi.yaml', 'docs/mcp-tools.json', 'docs/api.md']
 def contractGenerators = [
-    [name: 'Api', projectPath: ':wire', mainClass: 'app.byteland.ghidra.api.ApiContractGenerator'],
+    [name: 'Api', projectPath: ':contracts',
+        mainClass: 'app.byteland.ghidra.api.ApiContractGenerator'],
     [name: 'Mcp', projectPath: ':transport:mcp', mainClass: 'app.byteland.ghidra.mcp.McpContractGenerator']
 ]
 contractGenerators.each { generator ->
@@ -174,6 +181,9 @@ tasks.register('verifyDistribution') {
             if (jar.getJarEntry('app/byteland/ghidra/Bootstrap.class') == null) {
                 throw new GradleException('Runtime jar is missing Bootstrap.class')
             }
+            if (jar.entries().find { it.name.startsWith('org/snakeyaml/') } != null) {
+                throw new GradleException('Runtime jar contains the contract YAML library')
+            }
         }
     }
 }
@@ -192,7 +202,8 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
 tasks.register('verifyArchitecture') {
     group = 'verification'
     doLast {
-        ['domain', 'wire', 'runtime', 'transport/websocket', 'transport/mcp'].each { module ->
+        ['domain', 'wire', 'contracts', 'runtime', 'transport/websocket', 'transport/mcp']
+            .each { module ->
             fileTree("modules/${module}/src/main/java") { include '**/*.java' }.each { source ->
                 if (source.readLines().any { it ==~ /^import ghidra\..*/ }) {
                     throw new GradleException("Ghidra API import outside adapter/launcher: ${source}")

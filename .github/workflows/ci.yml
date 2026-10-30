@@ -44,7 +44,7 @@ jobs:
 
       - name: Test function mutations
         run: |
-          ./gradlew --no-daemon :wire:test
+          ./gradlew --no-daemon :wire:test :contracts:test
           python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
   release:

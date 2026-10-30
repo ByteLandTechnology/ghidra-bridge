@@ -19,6 +19,7 @@ modules/domain (领域服务接口与数据模型)
                                      └── modules/launcher (启动引导与脚本生成)
 ```
 
+仅用于构建的 `modules/contracts` 模块依赖 `modules/wire`。
 适配器模块还直接依赖 `modules/domain` 与 `modules/wire`。
 启动器模块依赖适配器模块及两个传输模块。
 
@@ -39,7 +40,8 @@ modules/domain (领域服务接口与数据模型)
 通信协议模块维护统一的方法元数据目录：
 - `ApiRegistry` 统一注册全部 55 个点分方法及其请求/响应 Schema。
 - `JsonParser`、`JsonWriter` 与 `JsonUtil` 负责解析和格式化 JSON。
-- `ApiContractGenerator` 负责输出 `docs/api.md`、`docs/asyncapi.yaml` 及 `docs/mcp-tools.json`。
+- `modules/contracts` 在构建时生成 `docs/api.md` 和 `docs/asyncapi.yaml`。
+- `modules/transport/mcp` 在构建时生成 `docs/mcp-tools.json`。
 - **架构约束**：无类型的原始 JSON 数据在此边界完全终结。
 
 ### 3. `modules/runtime`
