@@ -71,6 +71,15 @@ This task regenerates:
 Do not edit these files by hand.
 The build fails if repository files differ from the generator output.
 
+To test function mutations in an isolated Ghidra project on Linux x86-64, run:
+
+```bash
+./gradlew buildGhidraScript
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+```
+
+The test requires `gcc` and `nm`.
+
 ## Quality Checks
 
 Before you submit a change, run the verification suite:

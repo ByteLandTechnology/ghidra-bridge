@@ -87,6 +87,6 @@ duplicate_files="$(
 [[ -z "$duplicate_files" ]] || fail "exact duplicate files are candidates for commit" "$duplicate_files"
 
 method_count="$(grep -Ec '^\| `[^`]+` \|' docs/api.md || true)"
-[[ "$method_count" == "53" ]] || fail "docs/api.md documents $method_count methods; expected 53"
+[[ "$method_count" == "55" ]] || fail "docs/api.md documents $method_count methods; expected 55"
 
 echo "repository hygiene check passed"

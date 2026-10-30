@@ -10,8 +10,8 @@ The runtime JAR has zero third-party dependencies.
 ## Key Features
 
 - **Dual Transports**: Access Ghidra through WebSocket JSON-RPC 2.0 or MCP Streamable HTTP.
-- **Unified Catalog**: One typed registry defines 53 public dotted methods.
-  WebSocket exposes all 53. MCP exposes 52 and does not expose `interface.get`.
+- **Unified Catalog**: One typed registry defines 55 public dotted methods.
+  WebSocket exposes all 55. MCP exposes 54 and does not expose `interface.get`.
 - **Bounded Scans**: Address-ordered list results support cooperative cancellation and cursor pagination.
 - **Atomic Transactions**: The bridge executes batch operations.
   It reverts a transaction after an error.
@@ -117,7 +117,7 @@ The bridge enforces strict security boundaries:
 
 ## API and Transports
 
-The public API has 53 dotted methods, from `interface.get` to `batch.execute`.
+The public API has 55 dotted methods, from `interface.get` to `batch.execute`.
 
 ### WebSocket JSON-RPC 2.0
 
@@ -161,7 +161,7 @@ The MCP tool schema is also available at `ghidra-bridge://contracts/mcp-tools`.
 - [Protocol Specification](docs/protocol.md): JSON-RPC envelopes, MCP endpoints, and error formats.
 - [Batch and Transactions](docs/batch-and-transactions.md): Atomic execution and transaction boundaries.
 - [Development Guide](docs/development.md): Environment configuration, workflows, and quality checks.
-- [Method Reference](docs/api.md): Full 53-method catalog and schemas.
+- [Method Reference](docs/api.md): Full 55-method catalog and schemas.
 - [AsyncAPI Contract](docs/asyncapi.yaml): Formal WebSocket contract.
 - [MCP Tools Contract](docs/mcp-tools.json): Formal MCP tool definitions.
 

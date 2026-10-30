@@ -10,8 +10,8 @@ Ghidra Bridge 为正在运行的 Ghidra 程序提供网络访问接口。
 ## 主要特性
 
 - **双传输通道**：支持通过 WebSocket JSON-RPC 2.0 或 MCP Streamable HTTP 访问 Ghidra。
-- **统一方法目录**：一个类型严格的注册表定义 53 个点分方法。
-  WebSocket 暴露全部 53 个。MCP 暴露 52 个，且不暴露 `interface.get`。
+- **统一方法目录**：一个类型严格的注册表定义 55 个点分方法。
+  WebSocket 暴露全部 55 个。MCP 暴露 54 个，且不暴露 `interface.get`。
 - **有界地址扫描**：按地址排序的列表结果支持协作取消与游标分页。
 - **原子事务控制**：桥接执行批量操作。
   它在发生错误后回滚事务。
@@ -117,7 +117,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 
 ## API 与传输协议
 
-公共 API 包含 53 个严格的点分方法，从 `interface.get` 到 `batch.execute`。
+公共 API 包含 55 个严格的点分方法，从 `interface.get` 到 `batch.execute`。
 
 ### WebSocket JSON-RPC 2.0
 
@@ -161,7 +161,7 @@ MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映
 - [协议规范 (Protocol)](docs/zh/protocol.md)：JSON-RPC 信封、MCP 端点与错误响应格式。
 - [批处理与事务 (Batch and Transactions)](docs/zh/batch-and-transactions.md)：原子批处理与事务边界机制。
 - [开发指南 (Development)](docs/zh/development.md)：开发环境配置、工作流与质量检查。
-- [方法参考 (Method Reference)](docs/api.md)：全量 53 个方法的详细目录与 Schema。
+- [方法参考 (Method Reference)](docs/api.md)：全量 55 个方法的详细目录与 Schema。
 - [AsyncAPI 契约 (AsyncAPI)](docs/asyncapi.yaml)：WebSocket 形式化契约。
 - [MCP 工具契约 (MCP Tools)](docs/mcp-tools.json)：MCP 工具形式化定义。
 

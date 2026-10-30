@@ -82,6 +82,30 @@ final class FunctionMethods implements ApiMethodProvider {
                       bool(filter, "thunk").orElse(null),
                       requestedIncludes(request)));
         });
+    Map<String, Object> functionResource =
+        WireSchema.object(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.ENTRY, WireSchema.nonBlankString(),
+                ApiVocabulary.NAME, WireSchema.nonBlankString()),
+            ApiVocabulary.ENTRY);
+    registry.writeResource(
+        "function.create",
+        MethodEffects.mutation(false, false),
+        "Create a function at its entry. Set disassemble to decode code.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.RESOURCE, functionResource,
+                "disassemble", WireSchema.bool()),
+            ApiVocabulary.RESOURCE),
+        ApiSchemaCatalog.functionFields(),
+        List.of(ApiVocabulary.ENTRY),
+        request -> {
+          Map<String, Object> resource = resource(request);
+          return registry.services().functionService().createFunction(
+              text(resource, ApiVocabulary.ENTRY),
+              optionalText(resource, ApiVocabulary.NAME),
+              bool(request, "disassemble").orElse(false));
+        });
     registry.writeResource(
         "function.patch",
         MethodEffects.mutation(true, true),
@@ -102,6 +126,17 @@ final class FunctionMethods implements ApiMethodProvider {
               .services()
               .functionService()
               .getFunction(entry, Set.of(ApiVocabulary.PARAMETERS, ApiVocabulary.LOCALS));
+        });
+    registry.writeResult(
+        "function.delete",
+        MethodEffects.mutation(true, true),
+        "Delete a function. Keep instructions and data.",
+        ApiSchemaCatalog.selectorOnlyInput(entrySelector),
+        ApiSchemaCatalog.DELETED_RECEIPT_SCHEMA,
+        request -> {
+          registry.services().functionService().deleteFunction(
+              text(selector(request), ApiVocabulary.ENTRY));
+          return Map.of(ApiVocabulary.DELETED, true);
         });
     registerFunctionVariableMethods(entrySelector);
     registry.list(

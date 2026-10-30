@@ -2,9 +2,9 @@
 
 Ghidra Bridge gives network access to one active Ghidra program.
 The bridge supports two network transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
-The registry defines 53 public dotted methods, from `interface.get` to `batch.execute`.
-WebSocket publishes all 53 methods.
-MCP publishes 52 methods, and does not publish `interface.get`.
+The registry defines 55 public dotted methods, from `interface.get` to `batch.execute`.
+WebSocket publishes all 55 methods.
+MCP publishes 54 methods, and does not publish `interface.get`.
 The runtime JAR has zero third-party dependencies.
 
 ## Design Goals
@@ -77,6 +77,12 @@ The `stop_reason` property reports `completed`, `limit`, or `timeout`.
 An incomplete scan returns a `next_cursor` value even when zero items match.
 The caller passes this value as `page.cursor` to continue the scan from the last location examined.
 
+## Function Mutations
+
+`function.create` fails if the new body overlaps a function.
+It creates a regular function and does not identify a thunk.
+`function.delete` removes the function definition and keeps instructions and data.
+
 ## Global Variables and Data Coordination
 
 The `global_variable` methods coordinate defined data items and primary labels.
@@ -90,4 +96,4 @@ The bridge preserves the label unless the client requests its deletion.
 - Read the [Architecture Guide](architecture.md) for the module structure.
 - Read the [Protocol Specification](protocol.md) for envelope details and error formats.
 - Read [Batch and Transactions](batch-and-transactions.md) for atomic execution behavior.
-- Read the [Method Reference](api.md) for the complete list of 53 methods.
+- Read the [Method Reference](api.md) for the complete list of 55 methods.

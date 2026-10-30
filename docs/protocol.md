@@ -1,9 +1,9 @@
 # Protocol Specification
 
 Ghidra Bridge supports two transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
-The unified registry defines 53 public dotted methods.
-WebSocket publishes all 53 methods.
-MCP publishes 52 methods, and does not publish `interface.get`.
+The unified registry defines 55 public dotted methods.
+WebSocket publishes all 55 methods.
+MCP publishes 54 methods, and does not publish `interface.get`.
 
 ## WebSocket JSON-RPC 2.0
 
@@ -26,7 +26,7 @@ Clients send requests as JSON objects:
 The server validates every field:
 - `jsonrpc` must equal `"2.0"`.
 - `id` must be a string or integer identifier.
-- `method` must match one of the 53 public dotted methods.
+- `method` must match one of the 55 public dotted methods.
 - `params` must be a JSON object that matches the method schema.
 - The server rejects unknown fields and invalid data types.
 
@@ -200,7 +200,7 @@ MCP organizes operations into 15 tools:
 - `ghidra.help`: Finds domains, lists operations, and shows schemas.
 - 14 Domain Tools: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`.
 
-The domain tools expose 52 methods. `interface.get` is available only through WebSocket.
+The domain tools expose 54 methods. `interface.get` is available only through WebSocket.
 
 ### Tool Name Prefix
 

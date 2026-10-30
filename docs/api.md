@@ -30,7 +30,9 @@
 | `flow_override.patch` | `destructive mutation` | Set or clear flow overrides. Select an address, function, or range. |
 | `function.get` | `read-only` | Get function data from the active program. |
 | `function.list` | `read-only` | List each function in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
+| `function.create` | `mutation` | Create a function at its entry. Set disassemble to decode code. |
 | `function.patch` | `destructive mutation` | Change function data in the active program. |
+| `function.delete` | `destructive mutation` | Delete a function. Keep instructions and data. |
 | `function_parameter.create` | `mutation` | Create function parameter data in the active program. |
 | `function_parameter.patch` | `destructive mutation` | Change function parameter data in the active program. |
 | `function_parameter.delete` | `destructive mutation` | Delete function parameter data from the active program. |

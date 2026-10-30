@@ -60,6 +60,12 @@ public interface FunctionService {
    */
   FunctionResource getFunction(String rawAddress, Set<String> includes);
 
+  /** Creates a function at an entry address. */
+  FunctionResource createFunction(String rawAddress, String name, boolean disassemble);
+
+  /** Deletes a function at its entry address. */
+  void deleteFunction(String rawAddress);
+
   /**
    * Updates function name, comments, signature, and attributes.
    */

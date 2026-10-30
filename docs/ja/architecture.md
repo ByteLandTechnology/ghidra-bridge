@@ -37,7 +37,7 @@ modules/domain (サービスインターフェースとデータモデル)
 ### 2. `modules/wire`
 
 通信層モジュールは、統合されたメソッドカタログを管理します:
-- `ApiRegistry` が全 53 個の公開ドット記法メソッドとその入出力スキーマを一元管理します。
+- `ApiRegistry` が全 55 個の公開ドット記法メソッドとその入出力スキーマを一元管理します。
 - `JsonParser`、`JsonWriter`、`JsonUtil` が JSON を解析して整形します。
 - `ApiContractGenerator` が `docs/api.md`, `docs/asyncapi.yaml`, `docs/mcp-tools.json` を生成します。
 - **制約**: 型のない生の JSON マップはこの境界で完全に停止します。
@@ -69,7 +69,7 @@ modules/domain (サービスインターフェースとデータモデル)
 
 このモジュールは Model Context Protocol を実装します:
 - `McpHttpServer` がプロトコル `2026-07-28` に準拠する Streamable HTTP サーバーを実装します。
-- `McpToolRegistry` が 52 個の公開メソッドを 14 個のドメインツールおよび `ghidra.help` にマッピングします。
+- `McpToolRegistry` が 54 個の公開メソッドを 14 個のドメインツールおよび `ghidra.help` にマッピングします。
   `interface.get` は公開しません。
 - `ghidra-bridge://contracts/mcp-tools` にてツール規約リソースを提供します。
 

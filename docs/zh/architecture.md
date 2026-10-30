@@ -37,7 +37,7 @@ modules/domain (领域服务接口与数据模型)
 ### 2. `modules/wire`
 
 通信协议模块维护统一的方法元数据目录：
-- `ApiRegistry` 统一注册全部 53 个点分方法及其请求/响应 Schema。
+- `ApiRegistry` 统一注册全部 55 个点分方法及其请求/响应 Schema。
 - `JsonParser`、`JsonWriter` 与 `JsonUtil` 负责解析和格式化 JSON。
 - `ApiContractGenerator` 负责输出 `docs/api.md`、`docs/asyncapi.yaml` 及 `docs/mcp-tools.json`。
 - **架构约束**：无类型的原始 JSON 数据在此边界完全终结。
@@ -69,7 +69,7 @@ modules/domain (领域服务接口与数据模型)
 
 该模块实现 Model Context Protocol 传输通道：
 - `McpHttpServer` 实现符合 `2026-07-28` 协议的 Streamable HTTP 服务。
-- `McpToolRegistry` 将 52 个点分方法映射为 14 个领域工具及 `ghidra.help`。
+- `McpToolRegistry` 将 54 个点分方法映射为 14 个领域工具及 `ghidra.help`。
   它不发布 `interface.get`。
 - 在 `ghidra-bridge://contracts/mcp-tools` 提供静态工具契约资源。
 
