@@ -41,6 +41,7 @@
 | `analysis.get` | `read-only` | Get analysis data from the active program. |
 | `analysis.start` | `mutation` | Start automatic analysis of the active program. |
 | `decompilation.get` | `read-only` | Decompile the function at an entry point. Set scan.timeout_ms between 100 and 300000. The default is 30000 milliseconds. Ghidra increases fractions to whole seconds. |
+| `symbol.demangle` | `mutation` | Apply native C++ names to primary symbols. Keep other names and current types. |
 | `symbol.get` | `read-only` | Get symbol data from the active program. |
 | `symbol.list` | `read-only` | List each symbol in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `symbol.patch` | `destructive mutation` | Change symbol data in the active program. |

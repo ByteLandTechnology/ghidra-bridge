@@ -2,9 +2,9 @@
 
 Ghidra Bridge 为正在运行的 Ghidra 程序提供网络访问。
 该桥接支持两种网络传输协议：WebSocket JSON-RPC 2.0 与 MCP Streamable HTTP `2026-07-28`。
-注册表定义 55 个公共点分方法，从 `interface.get` 到 `batch.execute`。
-WebSocket 发布全部 55 个方法。
-MCP 发布 54 个方法，且不发布 `interface.get`。
+注册表定义 56 个公共点分方法，从 `interface.get` 到 `batch.execute`。
+WebSocket 发布全部 56 个方法。
+MCP 发布 55 个方法，且不发布 `interface.get`。
 运行时 JAR 包不包含任何第三方依赖。
 
 ## 设计目标
@@ -83,6 +83,17 @@ Ghidra 的后台自动分析在独立线程中运行。
 该操作创建普通函数，不会自动识别 thunk。
 `function.delete` 删除函数定义，但保留指令和数据。
 
+## C++ 名称
+
+当名称是经过修饰（mangled）的 C++ 名称时，函数、符号与调用结果会包含 `demangled_name`。
+桥接只读取该值，不修改程序。
+
+符号的 `namespace` 属性包含完整命名空间路径，例如 `std::vector`。
+`symbol.list` 的 namespace 过滤器也按同样的完整路径比较。
+`symbol.demangle` 在一个事务中为所有经过修饰的主符号应用 C++ 名称。
+它不修改函数签名或数据类型。
+修饰后的原名称会保留为次要标签。
+
 ## 全局变量与数据协调
 
 `global_variable` 系列方法统一协调顶层定义数据与其主标签。
@@ -96,4 +107,4 @@ Ghidra 的后台自动分析在独立线程中运行。
 - 查阅[体系架构指南](architecture.md)了解模块划分。
 - 阅读[协议规范](protocol.md)掌握信封格式与错误定义。
 - 查阅[批处理与事务](batch-and-transactions.md)了解原子执行机制。
-- 查阅[方法参考](../api.md)获取 55 个方法的完整列表。
+- 查阅[方法参考](../api.md)获取 56 个方法的完整列表。

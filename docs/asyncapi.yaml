@@ -51,8 +51,8 @@
                           - "output_schema"
                           - "effects"
                           "type": "object"
-                        "maxItems": !!int "55"
-                        "minItems": !!int "55"
+                        "maxItems": !!int "56"
+                        "minItems": !!int "56"
                         "type": "array"
                     "required":
                     - "interface_version"
@@ -2495,6 +2495,8 @@
                         "type": "string"
                       "comment":
                         "type": "string"
+                      "demangled_name":
+                        "type": "string"
                       "entry":
                         "type": "string"
                       "external":
@@ -2824,6 +2826,8 @@
                               "type": "string"
                             "comment":
                               "type": "string"
+                            "demangled_name":
+                              "type": "string"
                             "entry":
                               "type": "string"
                             "external":
@@ -3137,6 +3141,8 @@
                         "type": "string"
                       "comment":
                         "type": "string"
+                      "demangled_name":
+                        "type": "string"
                       "entry":
                         "type": "string"
                       "external":
@@ -3407,6 +3413,8 @@
                       "calling_convention":
                         "type": "string"
                       "comment":
+                        "type": "string"
+                      "demangled_name":
                         "type": "string"
                       "entry":
                         "type": "string"
@@ -4014,11 +4022,15 @@
                           "properties":
                             "call_site":
                               "type": "string"
+                            "demangled_name":
+                              "type": "string"
                             "direction":
                               "type": "string"
                             "entry":
                               "type": "string"
                             "name":
+                              "type": "string"
+                            "namespace":
                               "type": "string"
                           "required":
                           - "entry"
@@ -4290,6 +4302,27 @@
                     "required":
                     - "entry"
                     "type": "object"
+                  - "additionalProperties": !!bool "false"
+                    "properties":
+                      "failed":
+                        "maximum": !!int "2147483647"
+                        "minimum": !!int "0"
+                        "type": "integer"
+                      "failures":
+                        "items":
+                          "type": "string"
+                        "maxItems": !!int "20"
+                        "minItems": !!int "0"
+                        "type": "array"
+                      "renamed":
+                        "maximum": !!int "2147483647"
+                        "minimum": !!int "0"
+                        "type": "integer"
+                    "required":
+                    - "renamed"
+                    - "failed"
+                    - "failures"
+                    "type": "object"
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
@@ -4347,6 +4380,8 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
+                        "type": "string"
+                      "demangled_name":
                         "type": "string"
                       "id":
                         "type": "string"
@@ -4479,6 +4514,8 @@
                           "properties":
                             "address":
                               "type": "string"
+                            "demangled_name":
+                              "type": "string"
                             "id":
                               "type": "string"
                             "name":
@@ -4594,6 +4631,8 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
+                        "type": "string"
+                      "demangled_name":
                         "type": "string"
                       "id":
                         "type": "string"
@@ -9135,6 +9174,7 @@
                           - "body.start"
                           - "calling_convention"
                           - "comment"
+                          - "demangled_name"
                           - "entry"
                           - "external"
                           - "has_custom_variable_storage"
@@ -9291,6 +9331,7 @@
                           - "body.start"
                           - "calling_convention"
                           - "comment"
+                          - "demangled_name"
                           - "entry"
                           - "external"
                           - "has_custom_variable_storage"
@@ -10236,9 +10277,11 @@
                         "items":
                           "enum":
                           - "call_site"
+                          - "demangled_name"
                           - "direction"
                           - "entry"
                           - "name"
+                          - "namespace"
                           "type": "string"
                         "maxItems": !!int "256"
                         "minItems": !!int "1"
@@ -10567,6 +10610,83 @@
                 "const": "2.0"
                 "type": "string"
               "method":
+                "const": "symbol.demangle"
+                "type": "string"
+              "params":
+                "$defs":
+                  "data_type_reference":
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "named"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "pointer"
+                          "type": "string"
+                        "target":
+                          "$ref": "#/$defs/data_type_reference"
+                      "required":
+                      - "kind"
+                      - "target"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "count":
+                          "maximum": !!int "2147483647"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                        "element":
+                          "$ref": "#/$defs/data_type_reference"
+                        "kind":
+                          "enum":
+                          - "array"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "element"
+                      - "count"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "untyped_pointer"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      "type": "object"
+                "additionalProperties": !!bool "false"
+                "properties": {}
+                "type": "object"
+            "required":
+            - "jsonrpc"
+            - "id"
+            - "method"
+            - "params"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "id":
+                "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
+                - "type": "number"
+              "jsonrpc":
+                "const": "2.0"
+                "type": "string"
+              "method":
                 "const": "symbol.get"
                 "type": "string"
               "params":
@@ -10633,6 +10753,7 @@
                         "items":
                           "enum":
                           - "address"
+                          - "demangled_name"
                           - "id"
                           - "name"
                           - "namespace"
@@ -10767,6 +10888,7 @@
                         "items":
                           "enum":
                           - "address"
+                          - "demangled_name"
                           - "id"
                           - "name"
                           - "namespace"
@@ -14075,6 +14197,7 @@
                                       - "body.start"
                                       - "calling_convention"
                                       - "comment"
+                                      - "demangled_name"
                                       - "entry"
                                       - "external"
                                       - "has_custom_variable_storage"
@@ -14172,6 +14295,7 @@
                                       - "body.start"
                                       - "calling_convention"
                                       - "comment"
+                                      - "demangled_name"
                                       - "entry"
                                       - "external"
                                       - "has_custom_variable_storage"
@@ -14645,9 +14769,11 @@
                                     "items":
                                       "enum":
                                       - "call_site"
+                                      - "demangled_name"
                                       - "direction"
                                       - "entry"
                                       - "name"
+                                      - "namespace"
                                       "type": "string"
                                     "maxItems": !!int "256"
                                     "minItems": !!int "1"
@@ -14773,6 +14899,24 @@
                         "properties":
                           "arguments":
                             "additionalProperties": !!bool "false"
+                            "properties": {}
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "symbol.demangle"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
                             "properties":
                               "projection":
                                 "additionalProperties": !!bool "false"
@@ -14781,6 +14925,7 @@
                                     "items":
                                       "enum":
                                       - "address"
+                                      - "demangled_name"
                                       - "id"
                                       - "name"
                                       - "namespace"
@@ -14856,6 +15001,7 @@
                                     "items":
                                       "enum":
                                       - "address"
+                                      - "demangled_name"
                                       - "id"
                                       - "name"
                                       - "namespace"
@@ -18072,6 +18218,7 @@
                             - "body.start"
                             - "calling_convention"
                             - "comment"
+                            - "demangled_name"
                             - "entry"
                             - "external"
                             - "has_custom_variable_storage"
@@ -18169,6 +18316,7 @@
                             - "body.start"
                             - "calling_convention"
                             - "comment"
+                            - "demangled_name"
                             - "entry"
                             - "external"
                             - "has_custom_variable_storage"
@@ -18642,9 +18790,11 @@
                           "items":
                             "enum":
                             - "call_site"
+                            - "demangled_name"
                             - "direction"
                             - "entry"
                             - "name"
+                            - "namespace"
                             "type": "string"
                           "maxItems": !!int "256"
                           "minItems": !!int "1"
@@ -18770,6 +18920,24 @@
               "properties":
                 "arguments":
                   "additionalProperties": !!bool "false"
+                  "properties": {}
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "symbol.demangle"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
                   "properties":
                     "projection":
                       "additionalProperties": !!bool "false"
@@ -18778,6 +18946,7 @@
                           "items":
                             "enum":
                             - "address"
+                            - "demangled_name"
                             - "id"
                             - "name"
                             - "namespace"
@@ -18853,6 +19022,7 @@
                           "items":
                             "enum":
                             - "address"
+                            - "demangled_name"
                             - "id"
                             - "name"
                             - "namespace"
@@ -24970,6 +25140,8 @@
           "type": "string"
         "comment":
           "type": "string"
+        "demangled_name":
+          "type": "string"
         "entry":
           "type": "string"
         "external":
@@ -25329,6 +25501,7 @@
                 - "body.start"
                 - "calling_convention"
                 - "comment"
+                - "demangled_name"
                 - "entry"
                 - "external"
                 - "has_custom_variable_storage"
@@ -25448,6 +25621,8 @@
         "calling_convention":
           "type": "string"
         "comment":
+          "type": "string"
+        "demangled_name":
           "type": "string"
         "entry":
           "type": "string"
@@ -25748,6 +25923,7 @@
                 - "body.start"
                 - "calling_convention"
                 - "comment"
+                - "demangled_name"
                 - "entry"
                 - "external"
                 - "has_custom_variable_storage"
@@ -25931,6 +26107,8 @@
               "calling_convention":
                 "type": "string"
               "comment":
+                "type": "string"
+              "demangled_name":
                 "type": "string"
               "entry":
                 "type": "string"
@@ -26381,6 +26559,8 @@
           "type": "string"
         "comment":
           "type": "string"
+        "demangled_name":
+          "type": "string"
         "entry":
           "type": "string"
         "external":
@@ -26675,9 +26855,11 @@
               "items":
                 "enum":
                 - "call_site"
+                - "demangled_name"
                 - "direction"
                 - "entry"
                 - "name"
+                - "namespace"
                 "type": "string"
               "maxItems": !!int "256"
               "minItems": !!int "1"
@@ -26804,11 +26986,15 @@
             "properties":
               "call_site":
                 "type": "string"
+              "demangled_name":
+                "type": "string"
               "direction":
                 "type": "string"
               "entry":
                 "type": "string"
               "name":
+                "type": "string"
+              "namespace":
                 "type": "string"
             "required":
             - "entry"
@@ -29221,8 +29407,8 @@
             - "output_schema"
             - "effects"
             "type": "object"
-          "maxItems": !!int "55"
-          "minItems": !!int "55"
+          "maxItems": !!int "56"
+          "minItems": !!int "56"
           "type": "array"
       "required":
       - "interface_version"
@@ -30877,6 +31063,96 @@
       "required":
       - "shutdown"
       "type": "object"
+  "symbol.demangle":
+    "description": "Apply native C++ names to primary symbols. Keep other\
+      \ names and current types."
+    "effects":
+      "allowed_during_analysis": !!bool "false"
+      "destructive": !!bool "false"
+      "idempotent": !!bool "true"
+      "mutates_program": !!bool "true"
+      "read_only": !!bool "false"
+      "requires_transaction": !!bool "true"
+    "input_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties": {}
+      "type": "object"
+    "output_schema":
+      "additionalProperties": !!bool "false"
+      "properties":
+        "failed":
+          "maximum": !!int "2147483647"
+          "minimum": !!int "0"
+          "type": "integer"
+        "failures":
+          "items":
+            "type": "string"
+          "maxItems": !!int "20"
+          "minItems": !!int "0"
+          "type": "array"
+        "renamed":
+          "maximum": !!int "2147483647"
+          "minimum": !!int "0"
+          "type": "integer"
+      "required":
+      - "renamed"
+      - "failed"
+      - "failures"
+      "type": "object"
   "symbol.get":
     "description": "Get symbol data from the active program."
     "effects":
@@ -30950,6 +31226,7 @@
               "items":
                 "enum":
                 - "address"
+                - "demangled_name"
                 - "id"
                 - "name"
                 - "namespace"
@@ -31032,6 +31309,8 @@
       "additionalProperties": !!bool "false"
       "properties":
         "address":
+          "type": "string"
+        "demangled_name":
           "type": "string"
         "id":
           "type": "string"
@@ -31149,6 +31428,7 @@
               "items":
                 "enum":
                 - "address"
+                - "demangled_name"
                 - "id"
                 - "name"
                 - "namespace"
@@ -31295,6 +31575,8 @@
             "additionalProperties": !!bool "false"
             "properties":
               "address":
+                "type": "string"
+              "demangled_name":
                 "type": "string"
               "id":
                 "type": "string"
@@ -31500,6 +31782,8 @@
       "additionalProperties": !!bool "false"
       "properties":
         "address":
+          "type": "string"
+        "demangled_name":
           "type": "string"
         "id":
           "type": "string"

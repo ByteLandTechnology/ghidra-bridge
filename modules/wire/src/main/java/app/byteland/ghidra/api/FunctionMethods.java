@@ -147,7 +147,8 @@ final class FunctionMethods implements ApiMethodProvider {
                     ApiVocabulary.ENTRY, WireSchema.nonBlankString(),
                     ApiVocabulary.DIRECTION, WireSchema.stringEnum("callers", "callees")),
                 ApiVocabulary.ENTRY)),
-        Set.of(ApiVocabulary.ENTRY, ApiVocabulary.NAME, "call_site", ApiVocabulary.DIRECTION),
+        Set.of(ApiVocabulary.ENTRY, ApiVocabulary.NAME, "call_site", ApiVocabulary.DIRECTION,
+            ApiVocabulary.NAMESPACE, "demangled_name"),
         List.of(ApiVocabulary.ENTRY),
         (request, page) -> {
           Map<String, Object> filter = filter(request);

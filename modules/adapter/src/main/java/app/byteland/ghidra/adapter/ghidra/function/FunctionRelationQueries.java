@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra.function;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.program.model.listing.Function;
@@ -40,7 +41,11 @@ final class FunctionRelationQueries {
               null,
               callers
                   ? FunctionCallResource.Direction.CALLERS
-                  : FunctionCallResource.Direction.CALLEES));
+                  : FunctionCallResource.Direction.CALLEES,
+              relatedFunction.getParentNamespace().getName(true),
+              CppSymbolNames.demangled(
+                  relatedFunction.getProgram(), relatedFunction.getName(),
+                  relatedFunction.getEntryPoint())));
     }
     rows.sort(Comparator.comparing(FunctionCallResource::entry));
     return Page.paginate(rows, limit, cursor, FunctionCallResource::entry);

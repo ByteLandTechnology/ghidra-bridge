@@ -2,6 +2,7 @@ package app.byteland.ghidra.service.symbol;
 
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
+import java.util.List;
 
 /**
  * Lists, reads, and renames program symbols.
@@ -40,4 +41,13 @@ public interface SymbolService {
    * Renames a symbol by its unique identifier.
    */
   void renameSymbol(long symbolId, String newName);
+
+  /** Applies native C++ names without function or data type changes. */
+  DemangleResult demangleSymbols();
+
+  record DemangleResult(int renamed, int failed, List<String> failures) {
+    public DemangleResult {
+      failures = List.copyOf(failures);
+    }
+  }
 }

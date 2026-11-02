@@ -24,6 +24,18 @@ final class SymbolMethods implements ApiMethodProvider {
   @Override
   public void register() {
     Map<String, Object> idSelector = ApiRegistry.selectorSchema("id");
+    registry.writeResult(
+        "symbol.demangle",
+        MethodEffects.mutation(false, true),
+        "Apply native C++ names to primary symbols. Keep other names and current types.",
+        ApiSchemaCatalog.input(Map.of()),
+        WireSchema.object(
+            ApiSchemaCatalog.props(
+                "renamed", WireSchema.integer(0, Integer.MAX_VALUE),
+                "failed", WireSchema.integer(0, Integer.MAX_VALUE),
+                "failures", WireSchema.array(WireSchema.string(), 0, 20)),
+            "renamed", "failed", "failures"),
+        request -> registry.services().symbolService().demangleSymbols());
     registry.read(
         "symbol.get",
         ApiSchemaCatalog.selectorInput(idSelector),

@@ -65,7 +65,7 @@ final class SymbolListQueries {
     }
     if (query.namespace() != null
         && (symbol.getParentNamespace() == null
-            || !query.namespace().equals(symbol.getParentNamespace().getName()))) {
+            || !query.namespace().equals(symbol.getParentNamespace().getName(true)))) {
       return false;
     }
     if (query.sourceType() != null

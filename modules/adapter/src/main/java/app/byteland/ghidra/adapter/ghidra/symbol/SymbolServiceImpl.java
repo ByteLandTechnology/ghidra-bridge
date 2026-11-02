@@ -27,4 +27,9 @@ public final class SymbolServiceImpl implements SymbolService {
   public void renameSymbol(long symbolId, String newName) {
     SymbolMutations.renameSymbol(context, SymbolQueries.getSymbolById(context, symbolId), newName);
   }
+
+  @Override
+  public DemangleResult demangleSymbols() {
+    return SymbolDemangling.apply(context);
+  }
 }

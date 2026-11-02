@@ -40,7 +40,7 @@ class FunctionMutationTest {
       assertEquals("createFunction", method);
       return new FunctionResource(
           "ram:00100000", "test_function", null, null, null, null, null, 0, null,
-          null, null, null, false, false, false, false, null, false, false, null, null);
+          null, null, null, false, false, false, false, null, false, false, null, null, null);
     });
     AnalysisService analysis = proxy(AnalysisService.class, (method, args) ->
         new AnalysisResource(AnalysisResource.Kind.GHIDRA, AnalysisResource.Status.IDLE,

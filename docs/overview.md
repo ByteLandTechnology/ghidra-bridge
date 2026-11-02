@@ -2,9 +2,9 @@
 
 Ghidra Bridge gives network access to one active Ghidra program.
 The bridge supports two network transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
-The registry defines 55 public dotted methods, from `interface.get` to `batch.execute`.
-WebSocket publishes all 55 methods.
-MCP publishes 54 methods, and does not publish `interface.get`.
+The registry defines 56 public dotted methods, from `interface.get` to `batch.execute`.
+WebSocket publishes all 56 methods.
+MCP publishes 55 methods, and does not publish `interface.get`.
 The runtime JAR has zero third-party dependencies.
 
 ## Design Goals
@@ -83,6 +83,17 @@ The caller passes this value as `page.cursor` to continue the scan from the last
 It creates a regular function and does not identify a thunk.
 `function.delete` removes the function definition and keeps instructions and data.
 
+## C++ Names
+
+Function, symbol, and call results include `demangled_name` when the name is a mangled C++ name.
+The bridge reads this value and does not change the program.
+
+The symbol `namespace` property contains the full namespace path, such as `std::vector`.
+The `symbol.list` namespace filter compares the same full path.
+`symbol.demangle` applies C++ names to all mangled primary symbols in one transaction.
+It does not change function signatures or data types.
+The mangled name stays as a secondary label.
+
 ## Global Variables and Data Coordination
 
 The `global_variable` methods coordinate defined data items and primary labels.
@@ -96,4 +107,4 @@ The bridge preserves the label unless the client requests its deletion.
 - Read the [Architecture Guide](architecture.md) for the module structure.
 - Read the [Protocol Specification](protocol.md) for envelope details and error formats.
 - Read [Batch and Transactions](batch-and-transactions.md) for atomic execution behavior.
-- Read the [Method Reference](api.md) for the complete list of 55 methods.
+- Read the [Method Reference](api.md) for the complete list of 56 methods.

@@ -7,4 +7,5 @@ public record SymbolResource(
     String namespace,
     String type,
     String sourceType,
-    boolean primary) {}
+    boolean primary,
+    String demangledName) {}

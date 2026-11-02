@@ -24,7 +24,8 @@ public record FunctionResource(
     boolean external,
     boolean thunk,
     String repeatableComment,
-    List<String> tags) {
+    List<String> tags,
+    String demangledName) {
   public FunctionResource {
     parameters = immutableCopyOrNull(parameters);
     localVariables = immutableCopyOrNull(localVariables);

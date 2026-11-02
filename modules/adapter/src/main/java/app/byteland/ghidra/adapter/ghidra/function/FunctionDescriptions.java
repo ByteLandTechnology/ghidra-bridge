@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra.function;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.VariableStorageReference;
@@ -44,7 +45,9 @@ final class FunctionDescriptions {
         function.isExternal(),
         function.isThunk(),
         function.getRepeatableComment(),
-        describeTags(function));
+        describeTags(function),
+        CppSymbolNames.demangled(
+            function.getProgram(), function.getName(), function.getEntryPoint()));
   }
 
   static List<FunctionResource.ParameterResource> describeParameters(Function function) {
