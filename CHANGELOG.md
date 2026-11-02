@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.3.0...v1.4.0) (2026-11-02)
+
+
+### Features
+
+* add C++ names to symbol and function data ([2d58efa](https://github.com/ByteLandTechnology/ghidra-bridge/commit/2d58efa3bd4147c7d12c09b7d266b276a5ff0a94))
+* add document decompilation with comments ([7898f49](https://github.com/ByteLandTechnology/ghidra-bridge/commit/7898f4925552ca7589b78179e15b41a5cbebaa61))
+
+
+### Bug Fixes
+
+* mark the program as analyzed after analysis completes ([73b8847](https://github.com/ByteLandTechnology/ghidra-bridge/commit/73b884792d29e4bd86c9dd38f92b32174758da58))
+
 ## [1.3.0](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.2.0...v1.3.0) (2026-10-30)
 
 
