@@ -114,6 +114,16 @@ final class AnalysisTask {
         terminalError = appendError(terminalError, restoreError);
       }
     }
+    if (terminalStatus == AnalysisResource.Status.COMPLETED) {
+      if (monitor.isCancelled()) {
+        return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
+      }
+      context.withTransaction(
+          () -> {
+            GhidraProgramUtilities.markProgramAnalyzed(program);
+            return null;
+          });
+    }
     return new TaskOutcome(terminalStatus, terminalError);
   }
 
