@@ -17,7 +17,8 @@ public interface DecompilationService extends AutoCloseable {
    * @return decompilation output resource
    */
   DecompilationResource decompileFunction(
-      String rawAddress, DecompilationResource.Format format, Integer timeoutMs);
+      String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
+      boolean includeComments);
 
   /**
    * Closes active decompiler resources.

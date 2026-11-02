@@ -94,6 +94,18 @@ Ghidra 的后台自动分析在独立线程中运行。
 它不修改函数签名或数据类型。
 修饰后的原名称会保留为次要标签。
 
+## 反编译文档
+
+format 为 `document` 的 `decompilation.get` 会从一次反编译返回 C 文本及其 `lines`。
+每行包含从 0 开始的 `number`、`indent` 以及其 token。
+token 的 `start` 与 `end` 是从 0 开始、包含缩进的 UTF-16 列。
+
+token 的 `address` 是 token 本身的地址。
+token 的 `location_address` 是 Ghidra GUI 为该 token 选择的地址。
+`code_unit_address` 是 `location_address` 处代码单元的起始地址。
+设置 `include_comments` 会显示所有原生注释类型，并返回可重复注释。
+如果 `comments_complete` 为 false，注释列表不完整，请查看警告。
+
 ## 全局变量与数据协调
 
 `global_variable` 系列方法统一协调顶层定义数据与其主标签。

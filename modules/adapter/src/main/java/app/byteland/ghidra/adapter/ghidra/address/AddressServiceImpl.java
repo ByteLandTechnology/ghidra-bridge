@@ -5,6 +5,7 @@ import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.address.AddressService;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.symbol.Symbol;
@@ -23,6 +24,7 @@ public final class AddressServiceImpl implements AddressService {
     MemoryBlock block = context.script().getMemoryBlock(address);
     Function function = context.script().getFunctionContaining(address);
     Symbol symbol = context.script().getSymbolAt(address);
+    CodeUnit unit = context.currentProgram().getListing().getCodeUnitContaining(address);
     return new AddressResource(
         AddressUtil.canonicalAddress(address),
         true,
@@ -46,6 +48,9 @@ public final class AddressServiceImpl implements AddressService {
             : new AddressResource.SymbolSummary(
                 String.valueOf(symbol.getID()),
                 symbol.getName(),
-                symbol.getSymbolType().toString()));
+                symbol.getSymbolType().toString()),
+        unit == null ? null : new AddressResource.CodeUnitSummary(
+            AddressUtil.canonicalAddress(unit.getMinAddress()),
+            AddressUtil.canonicalAddress(unit.getMaxAddress())));
   }
 }

@@ -16,7 +16,9 @@ public record AddressResource(
     boolean inMemory,
     MemoryBlockSummary memoryBlock,
     FunctionSummary function,
-    SymbolSummary symbol) {
+    SymbolSummary symbol,
+    CodeUnitSummary codeUnit) {
+  public record CodeUnitSummary(String address, String end) {}
   /**
    * Summarizes memory block attributes for an address.
    */

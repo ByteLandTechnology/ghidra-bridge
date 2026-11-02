@@ -94,6 +94,18 @@ The `symbol.list` namespace filter compares the same full path.
 It does not change function signatures or data types.
 The mangled name stays as a secondary label.
 
+## Decompilation Documents
+
+`decompilation.get` with format `document` returns the C text and its `lines` from one decompilation.
+Each line has a zero-based `number`, an `indent`, and its tokens.
+Token `start` and `end` are zero-based UTF-16 columns that include the indentation.
+
+The token `address` is the address of the token.
+The token `location_address` is the address that the Ghidra GUI selects for the token.
+`code_unit_address` is the start of the code unit at `location_address`.
+Set `include_comments` to show all native comment types and to return the repeatable comments.
+If `comments_complete` is false, the comment list is not complete. Read the warnings.
+
 ## Global Variables and Data Coordination
 
 The `global_variable` methods coordinate defined data items and primary labels.

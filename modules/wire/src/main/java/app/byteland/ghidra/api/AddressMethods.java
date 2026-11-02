@@ -25,6 +25,7 @@ final class AddressMethods implements ApiMethodProvider {
             "valid",
             "in_memory",
             "memory_block",
+            "code_unit",
             ApiVocabulary.FUNCTION,
             "symbol"),
         List.of(ApiVocabulary.ADDRESS),

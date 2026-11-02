@@ -485,6 +485,7 @@ final class ApiSchemaCatalog {
             "thunk",
             "primary",
             "completed",
+            "comments_complete",
             "analyzed")
         .contains(field)) {
       return WireSchema.bool();
@@ -609,6 +610,15 @@ final class ApiSchemaCatalog {
               ApiVocabulary.TEXT),
           0,
           Integer.MAX_VALUE);
+    }
+    if ("lines".equals(field)) return DecompilationSchemas.lines();
+    if ("comments".equals(field)) {
+      return WireSchema.array(
+          resourceSchema(commentFields(), List.of(ADDRESS, TYPE)), 0, Integer.MAX_VALUE);
+    }
+    if ("code_unit".equals(field)) {
+      return WireSchema.object(
+          props(ADDRESS, WireSchema.string(), END, WireSchema.string()), ADDRESS, END);
     }
     if (MEMORY_BLOCKS.equals(field)) {
       return WireSchema.array(memoryBlockSummarySchema(), 0, Integer.MAX_VALUE);

@@ -1,5 +1,6 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 import static app.byteland.ghidra.api.ApiRegistry.selector;
@@ -25,13 +26,19 @@ final class DecompilationMethods implements ApiMethodProvider {
     registry.read(
         "decompilation.get",
         "Decompile the function at an entry point. Set scan.timeout_ms between 100 and 300000."
-            + " The default is 30000 milliseconds. Ghidra increases fractions to whole seconds.",
+            + " The default is 30000 milliseconds; Ghidra rounds up to whole seconds."
+            + " Format document returns GUI lines and cursor addresses from one decompilation."
+            + " By default, only pre comments and the plate comment at the entry show."
+            + " Set include_comments to show all comments and to return repeatable comments;"
+            + " then check comments_complete and warnings.",
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
                 ApiVocabulary.SELECTOR,
                 entrySelector,
                 "format",
-                WireSchema.stringEnum(ApiVocabulary.TEXT, "tokens"),
+                WireSchema.stringEnum(ApiVocabulary.TEXT, "tokens", "document"),
+                "include_comments",
+                WireSchema.bool(),
                 "timeout_ms",
                 ApiSchemaCatalog.integerWithDefault(
                     DecompilationService.MIN_TIMEOUT_MS,
@@ -47,6 +54,9 @@ final class DecompilationMethods implements ApiMethodProvider {
             "completed",
             "c",
             "tokens",
+            "lines",
+            "comments",
+            "comments_complete",
             "warnings",
             "elapsed_ms"),
         List.of(ApiVocabulary.ENTRY),
@@ -56,9 +66,12 @@ final class DecompilationMethods implements ApiMethodProvider {
                 .decompilationService()
                 .decompileFunction(
                     text(selector(request), ApiVocabulary.ENTRY),
-                    "tokens".equals(optionalText(request, "format", ApiVocabulary.TEXT))
-                        ? DecompilationResource.Format.TOKENS
-                        : DecompilationResource.Format.TEXT,
-                    integer(request, "timeout_ms", DecompilationService.DEFAULT_TIMEOUT_MS)));
+                    switch (optionalText(request, "format", ApiVocabulary.TEXT)) {
+                      case "tokens" -> DecompilationResource.Format.TOKENS;
+                      case "document" -> DecompilationResource.Format.DOCUMENT;
+                      default -> DecompilationResource.Format.TEXT;
+                    },
+                    integer(request, "timeout_ms", DecompilationService.DEFAULT_TIMEOUT_MS),
+                    bool(request, "include_comments").orElse(false)));
   }
 }

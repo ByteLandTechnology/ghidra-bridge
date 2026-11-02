@@ -10,13 +10,18 @@ import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.WeakHashMap;
 
 public final class DecompilationServiceImpl implements DecompilationService {
   private final GhidraSession context;
   private final LeasePool<DecompInterface> decompilerPool;
+  private final Map<DecompInterface, Boolean> commentModes =
+      Collections.synchronizedMap(new WeakHashMap<>());
 
   public DecompilationServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
@@ -25,7 +30,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
 
   @Override
   public DecompilationResource decompileFunction(
-      String rawAddress, DecompilationResource.Format format, Integer timeoutMs) {
+      String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
+      boolean includeComments) {
     int timeout = timeoutMs == null ? DEFAULT_TIMEOUT_MS : timeoutMs;
     if (timeout < MIN_TIMEOUT_MS || timeout > MAX_TIMEOUT_MS) {
       throw new IllegalArgumentException(
@@ -35,16 +41,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
     if (function == null) {
       throw new NoSuchElementException("function not found");
     }
-    DecompilationPayload result = decompile(function, timeout, format);
-    return new DecompilationResource(
-        AddressUtil.canonicalAddress(function.getEntryPoint()),
-        function.getName(),
-        format == null ? DecompilationResource.Format.TEXT : format,
-        result.completed,
-        result.elapsedMs,
-        result.code,
-        result.tokens,
-        result.warnings);
+    return decompile(function, timeout, format, includeComments);
   }
 
   @Override
@@ -54,13 +51,17 @@ public final class DecompilationServiceImpl implements DecompilationService {
     }
   }
 
-  private DecompilationPayload decompile(
-      Function function, int timeoutMs, DecompilationResource.Format format) {
+  private DecompilationResource decompile(
+      Function function, int timeoutMs, DecompilationResource.Format format,
+      boolean includeComments) {
     try (LeasePool.Lease<DecompInterface> lease = decompilerPool.acquire()) {
       long startedAt = System.nanoTime();
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
-      DecompileResults results = lease.value().decompileFunction(function, timeoutSeconds, null);
-      long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L;
+      DecompInterface decompiler = lease.value();
+      applyCommentMode(decompiler, includeComments);
+      // The native process keeps program data. Clear it to show the current names and comments.
+      decompiler.flushCache();
+      DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
       boolean completed = results.decompileCompleted();
       List<String> warnings = new ArrayList<>();
       if (!completed && results.getErrorMessage() != null && !results.getErrorMessage().isBlank()) {
@@ -73,7 +74,21 @@ public final class DecompilationServiceImpl implements DecompilationService {
           effectiveFormat == DecompilationResource.Format.TEXT ? renderCode(results) : null;
       List<DecompilationResource.Token> tokens =
           effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
-      return new DecompilationPayload(completed, elapsedMs, code, tokens, warnings);
+      List<DecompilationResource.Line> lines = null;
+      if (effectiveFormat == DecompilationResource.Format.DOCUMENT) {
+        GuiDocument document = GuiDocument.render(function, markup);
+        code = document.code();
+        lines = document.lines();
+      }
+      FunctionComments comments = includeComments
+          ? FunctionComments.read(function, startedAt, timeoutMs, warnings) : null;
+      return new DecompilationResource(
+          AddressUtil.canonicalAddress(function.getEntryPoint()),
+          function.getName(), effectiveFormat, completed,
+          (System.nanoTime() - startedAt) / 1_000_000L,
+          code, tokens, lines,
+          comments == null ? null : comments.items(),
+          comments == null ? null : comments.complete(), warnings);
     }
   }
 
@@ -101,7 +116,17 @@ public final class DecompilationServiceImpl implements DecompilationService {
     return List.copyOf(tokens);
   }
 
-  private static DecompilationResource.Token.Kind tokenKind(ClangToken token) {
+  /** Sends display options only when the comment mode of the pooled decompiler changes. */
+  private void applyCommentMode(DecompInterface decompiler, boolean includeComments) {
+    if (Boolean.valueOf(includeComments).equals(commentModes.get(decompiler))) return;
+    commentModes.remove(decompiler);
+    if (!decompiler.setOptions(DecompilerPoolFactory.options(includeComments))) {
+      throw new IllegalStateException("unable to set decompiler display options");
+    }
+    commentModes.put(decompiler, includeComments);
+  }
+
+  static DecompilationResource.Token.Kind tokenKind(ClangToken token) {
     return switch (token.getSyntaxType()) {
       case ClangToken.KEYWORD_COLOR -> DecompilationResource.Token.Kind.KEYWORD;
       case ClangToken.COMMENT_COLOR -> DecompilationResource.Token.Kind.COMMENT;

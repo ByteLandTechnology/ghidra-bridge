@@ -14,12 +14,22 @@ final class DecompilerPoolFactory {
 
   private static DecompInterface createDecompiler(Program program) {
     DecompInterface decomp = new DecompInterface();
-    DecompileOptions options = new DecompileOptions();
-    decomp.setOptions(options);
+    decomp.setOptions(options(false));
     if (!decomp.openProgram(program)) {
       throw new IllegalStateException("unable to open program for decompilation");
     }
     return decomp;
+  }
+
+  static DecompileOptions options(boolean includeComments) {
+    DecompileOptions options = new DecompileOptions();
+    if (includeComments) {
+      options.setPLATECommentIncluded(true);
+      options.setPRECommentIncluded(true);
+      options.setEOLCommentIncluded(true);
+      options.setPOSTCommentIncluded(true);
+    }
+    return options;
   }
 
   @SuppressWarnings("PMD.AvoidCatchingGenericException")
