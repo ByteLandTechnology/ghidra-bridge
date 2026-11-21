@@ -69,11 +69,36 @@ public interface FunctionService {
   /**
    * Updates function name, comments, signature, and attributes.
    */
+  default void patchFunction(
+      String rawAddress,
+      String newName,
+      String newComment,
+      boolean commentPresent,
+      DataTypeReference returnType,
+      VariableStorageReference returnStorage,
+      String callingConvention,
+      FunctionAttributePatch attributes) {
+    patchFunction(
+        rawAddress,
+        newName,
+        newComment,
+        commentPresent,
+        null,
+        returnType,
+        returnStorage,
+        callingConvention,
+        attributes);
+  }
+
+  /**
+   * Updates function name, comments, C signature or structured signature fields, and attributes.
+   */
   void patchFunction(
       String rawAddress,
       String newName,
       String newComment,
       boolean commentPresent,
+      String signature,
       DataTypeReference returnType,
       VariableStorageReference returnStorage,
       String callingConvention,

@@ -17,9 +17,12 @@ import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -129,6 +132,24 @@ final class DataTypeMethods implements ApiMethodProvider {
           upsertFunctionDataType(request);
           return registry.services().dataTypeService().getDataType(dataTypePath(resource(request)));
         });
+    registry.writeListResult(
+        "data_type.parse_c",
+        MethodEffects.mutation(true, false),
+        "Parse C declarations and create data types in the active program.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.DECLARATIONS,
+                WireSchema.nonBlankString(),
+                ApiVocabulary.CATEGORY_PATH,
+                WireSchema.string(),
+                ApiVocabulary.CONFLICT_MODE,
+                WireSchema.stringEnum("keep", "rename", "replace"),
+                ApiVocabulary.FIELDS,
+                ApiRegistry.fieldsSchema()),
+            ApiVocabulary.DECLARATIONS),
+        ApiSchemaCatalog.dataTypeFields(),
+        List.of(ApiVocabulary.PATH),
+        this::parseCDeclarations);
     registry.writeResult(
         "data_type.delete",
         MethodEffects.mutation(true, true),
@@ -144,6 +165,31 @@ final class DataTypeMethods implements ApiMethodProvider {
           }
           return Map.of(ApiVocabulary.DELETED, true);
         });
+  }
+
+  private List<DataTypeResource> parseCDeclarations(Map<String, Object> request) {
+    String declarations = text(request, ApiVocabulary.DECLARATIONS);
+    if (declarations.isBlank()) {
+      throw ApiException.badRequest(
+          ApiVocabulary.INVALID_VALUE, "/declarations must not be blank", "/declarations");
+    }
+    if (declarations.getBytes(StandardCharsets.UTF_8).length
+        > DataTypeService.MAX_DECLARATIONS_BYTES) {
+      throw ApiException.badRequest(
+          ApiVocabulary.INVALID_VALUE,
+          "/declarations exceeds maximum size of "
+              + DataTypeService.MAX_DECLARATIONS_BYTES
+              + " UTF-8 bytes",
+          "/declarations");
+    }
+    String categoryPath = optionalText(request, ApiVocabulary.CATEGORY_PATH, "/");
+    String rawConflictMode = optionalText(request, ApiVocabulary.CONFLICT_MODE, "replace");
+    DataTypeService.ConflictMode conflictMode =
+        DataTypeService.ConflictMode.valueOf(rawConflictMode.toUpperCase(Locale.ROOT));
+    return registry
+        .services()
+        .dataTypeService()
+        .parseCDeclarations(declarations, categoryPath, conflictMode);
   }
 
   private void createDataType(Map<String, Object> request) {

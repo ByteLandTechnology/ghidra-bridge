@@ -6,7 +6,8 @@ public sealed interface DataTypeReference
     permits DataTypeReference.Named,
         DataTypeReference.Pointer,
         DataTypeReference.Array,
-        DataTypeReference.UntypedPointer {
+        DataTypeReference.UntypedPointer,
+        DataTypeReference.CExpression {
 
   String kind();
 
@@ -53,6 +54,17 @@ public sealed interface DataTypeReference
     }
   }
 
+  record CExpression(String expression) implements DataTypeReference {
+    public CExpression {
+      expression = requiredText(expression, "expression");
+    }
+
+    @Override
+    public String kind() {
+      return "c_expression";
+    }
+  }
+
   static DataTypeReference named(String name) {
     return new Named(name);
   }
@@ -67,6 +79,10 @@ public sealed interface DataTypeReference
 
   static DataTypeReference untypedPointer() {
     return new UntypedPointer();
+  }
+
+  static DataTypeReference cExpression(String expression) {
+    return new CExpression(expression);
   }
 
   private static String requiredText(String value, String field) {

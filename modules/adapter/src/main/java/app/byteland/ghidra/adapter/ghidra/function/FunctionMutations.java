@@ -35,6 +35,7 @@ final class FunctionMutations {
       String newName,
       String newComment,
       boolean commentPresent,
+      String signature,
       DataTypeReference returnType,
       VariableStorageReference returnStorage,
       String callingConvention,
@@ -44,13 +45,21 @@ final class FunctionMutations {
         attributes == null ? FunctionAttributePatch.empty() : attributes;
     Function updated = function;
 
-    if (newName != null && !newName.isBlank() && !function.getName().equals(newName)) {
-      Symbol symbol = context.script().getSymbolAt(function.getEntryPoint());
+    if (signature != null) {
+      if (returnType != null || callingConvention != null) {
+        throw new IllegalArgumentException(
+            "signature cannot be combined with returnType or callingConvention");
+      }
+      updated = FunctionSignaturePatchSupport.applySignature(context, updated, signature);
+    }
+
+    if (newName != null && !newName.isBlank() && !updated.getName().equals(newName)) {
+      Symbol symbol = context.script().getSymbolAt(updated.getEntryPoint());
       if (symbol == null) {
         throw new IllegalArgumentException("function symbol not found");
       }
       ScriptSymbolRenamer.rename(context, symbol, newName);
-      updated = context.script().getFunctionAt(function.getEntryPoint());
+      updated = context.script().getFunctionAt(updated.getEntryPoint());
       if (updated == null) {
         throw new IllegalArgumentException("function not found after rename");
       }

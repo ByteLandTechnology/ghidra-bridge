@@ -887,6 +887,13 @@ public final class ApiRegistry {
 
   static DataTypeReference dataType(Object raw, String target) {
     if (raw == null) return null;
+    if (raw instanceof String expression) {
+      if (expression.isBlank()) {
+        throw ApiException.badRequest(
+            "invalid_data_type_reference", target + " must be a non-empty C type string", target);
+      }
+      return DataTypeReference.cExpression(expression);
+    }
     Map<String, Object> value = objectAt(raw, target);
     String kind = text(value, ApiVocabulary.KIND);
     return switch (kind) {

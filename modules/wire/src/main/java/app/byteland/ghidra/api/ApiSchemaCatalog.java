@@ -231,6 +231,8 @@ final class ApiSchemaCatalog {
             WireSchema.nonBlankString(),
             COMMENT,
             WireSchema.nullable(WireSchema.string()),
+            SIGNATURE,
+            WireSchema.nonBlankString(),
             RETURN_TYPE,
             WireSchema.dataTypeReference(),
             "return_storage",

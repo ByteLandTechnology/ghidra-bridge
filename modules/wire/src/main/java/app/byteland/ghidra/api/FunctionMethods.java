@@ -301,6 +301,25 @@ final class FunctionMethods implements ApiMethodProvider {
   private void patchFunction(Map<String, Object> request) {
     String entry = text(selector(request), ApiVocabulary.ENTRY);
     Map<String, Object> patch = patch(request);
+    String signature = optionalText(patch, ApiVocabulary.SIGNATURE);
+    if (signature != null) {
+      if (signature.isBlank()) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE, "/patch/signature must not be blank", "/patch/signature");
+      }
+      if (patch.containsKey(ApiVocabulary.RETURN_TYPE)) {
+        throw ApiException.badRequest(
+            "conflicting_fields",
+            "/patch/signature cannot be combined with /patch/return_type",
+            "/patch/signature");
+      }
+      if (patch.containsKey(ApiVocabulary.CALLING_CONVENTION)) {
+        throw ApiException.badRequest(
+            "conflicting_fields",
+            "/patch/signature cannot be combined with /patch/calling_convention",
+            "/patch/signature");
+      }
+    }
     DataTypeReference returnType = dataType(patch.get("return_type"), "/patch/return_type");
     registry
         .services()
@@ -310,6 +329,7 @@ final class FunctionMethods implements ApiMethodProvider {
             nullableText(patch, ApiVocabulary.NAME),
             nullableText(patch, "comment"),
             patch.containsKey("comment"),
+            signature,
             returnType,
             storage(patch.get("return_storage")),
             optionalText(patch, "calling_convention"),

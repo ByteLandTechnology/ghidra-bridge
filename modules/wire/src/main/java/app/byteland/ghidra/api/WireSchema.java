@@ -166,7 +166,7 @@ public final class WireSchema {
     array.put(ApiVocabulary.PROPERTIES, arrayProperties);
     Map<String, Object> untyped =
         object(Map.of(ApiVocabulary.KIND, stringEnum("untyped_pointer")), ApiVocabulary.KIND);
-    return oneOf(named, pointer, array, untyped);
+    return oneOf(named, pointer, array, untyped, nonBlankString());
   }
 
   public static void validate(Object value, Map<String, Object> schema, String target) {

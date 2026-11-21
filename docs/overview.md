@@ -2,9 +2,9 @@
 
 Ghidra Bridge gives network access to one active Ghidra program.
 The bridge supports two network transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
-The registry defines 56 public dotted methods, from `interface.get` to `batch.execute`.
-WebSocket publishes all 56 methods.
-MCP publishes 55 methods, and does not publish `interface.get`.
+The registry defines 57 public dotted methods, from `interface.get` to `batch.execute`.
+WebSocket publishes all 57 methods.
+MCP publishes 56 methods, and does not publish `interface.get`.
 The runtime JAR has zero third-party dependencies.
 
 ## Design Goals
@@ -114,9 +114,18 @@ Mutations do not overwrite instructions or unrelated data items.
 When a client deletes a global variable, the bridge clears its data definition.
 The bridge preserves the label unless the client requests its deletion.
 
+## C Declarations and Prototypes
+
+Data-type write fields accept either a structured `data_type_reference` object or a C type string, such as `const uint8_t *` or `int (*)(void *)`.
+Read results always return canonical structured `data_type_reference` objects.
+
+`data_type.parse_c` parses C declarations (`struct`, `union`, `enum`, and `typedef`) in one transaction and stores the created types in a target category.
+`function.patch` accepts an optional `patch.signature` string to apply a C function prototype in one step.
+The prototype sets the return type, name, calling convention, varargs flag, and parameter list.
+
 ## Next Steps
 
 - Read the [Architecture Guide](architecture.md) for the module structure.
 - Read the [Protocol Specification](protocol.md) for envelope details and error formats.
 - Read [Batch and Transactions](batch-and-transactions.md) for atomic execution behavior.
-- Read the [Method Reference](api.md) for the complete list of 56 methods.
+- Read the [Method Reference](api.md) for the complete list of 57 methods.

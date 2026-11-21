@@ -1,0 +1,420 @@
+#!/usr/bin/env python3
+
+"""Check C declarations, C type strings, and C function prototypes in headless Ghidra."""
+
+import argparse
+import json
+import os
+import pathlib
+import shutil
+import signal
+import socket
+import subprocess
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+
+FIXTURE = """
+.section .text
+.global _start
+_start:
+ ret
+.global recv_packet
+recv_packet:
+ push %rbp
+ mov %rsp, %rbp
+ xor %eax, %eax
+ pop %rbp
+ ret
+.global log_packet
+log_packet:
+ xor %eax, %eax
+ ret
+
+.section .data
+.global packet_ring
+packet_ring:
+ .zero 32
+"""
+
+
+def run_test(headless, root):
+    project = root / "project"
+    project.mkdir()
+    source = root / "fixture.s"
+    source.write_text(FIXTURE)
+    binary = root / "fixture"
+    subprocess.run(
+        ["gcc", "-nostdlib", "-no-pie", "-Wl,-e,_start", "-o", str(binary), str(source)],
+        check=True,
+    )
+    symbols = {}
+    for line in subprocess.check_output(["nm", str(binary)], text=True).splitlines():
+        parts = line.split()
+        if len(parts) == 3:
+            symbols[parts[2]] = "0x" + parts[0]
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    url = f"http://127.0.0.1:{port}/mcp"
+    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+
+    def call(message):
+        request = urllib.request.Request(url, json.dumps(message).encode(), headers, method="POST")
+        with urllib.request.urlopen(request, timeout=10) as response:
+            body = response.read().decode()
+        if not body:
+            return {}
+        if body.startswith(("event:", "data:")):
+            body = next(line[5:].strip() for line in body.splitlines() if line.startswith("data:"))
+        return json.loads(body)
+
+    def tool(call_id, name, arguments, success=True):
+        message = {
+            "jsonrpc": "2.0",
+            "id": call_id,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+        result = call(message)["result"]
+        if bool(result.get("isError", False)) == success:
+            raise AssertionError(f"Unexpected result for {name} ({arguments}): {result}")
+        return result.get("structuredContent", {})
+
+    scripts = pathlib.Path(__file__).resolve().parents[1] / "build" / "ghidra-script"
+    command = [
+        str(headless), str(project), "test", "-import", str(binary), "-noanalysis",
+        "-scriptPath", str(scripts), "-postScript", "GhidraMcp.java",
+        "host=127.0.0.1", f"port={port}",
+    ]
+    log_path = root / "headless.log"
+    with log_path.open("w") as log:
+        process = subprocess.Popen(
+            command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+        )
+        ready = False
+        try:
+            initialize = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "c-declaration-test", "version": "1"},
+                },
+            }
+            for _ in range(120):
+                if process.poll() is not None:
+                    raise RuntimeError("Ghidra stopped: " + log_path.read_text()[-2000:])
+                try:
+                    if call(initialize).get("result"):
+                        ready = True
+                        break
+                except (OSError, TimeoutError, urllib.error.URLError):
+                    time.sleep(0.5)
+            if not ready:
+                raise RuntimeError("Ghidra did not start")
+            call({"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+            # 1. Verify ghidra_help exposes data_type.parse_c and function.patch signature
+            help_dt = tool(2, "ghidra_help", {"domain": "data_type", "operation": "parse_c"})
+            assert help_dt["method"] == "data_type.parse_c"
+            help_fn = tool(3, "ghidra_help", {"domain": "function", "operation": "patch"})
+            assert "signature" in help_fn["inputSchema"]["properties"]["patch"]["properties"]
+
+            # 2. Parse multi-type C header declarations in one transaction
+            declarations = """
+            enum SocketState { SOCK_CLOSED = 0, SOCK_OPEN = 1 };
+            union AddrValue { uint32_t ipv4; uint8_t octets[4]; };
+            struct Socket {
+                int fd;
+                uint8_t flags : 4;
+                uint8_t version : 4;
+                enum SocketState state;
+                union AddrValue addr;
+            };
+            typedef struct Socket Socket;
+            typedef int (*packet_hook_t)(Socket *sock, const uint8_t *buf, size_t len);
+            """
+            parsed = tool(
+                4,
+                "ghidra_data_type",
+                {
+                    "operation": "parse_c",
+                    "params": {
+                        "declarations": declarations,
+                        "category_path": "/net",
+                        "conflict_mode": "replace",
+                    },
+                },
+            )["result"]["items"]
+            names = {item["name"] for item in parsed}
+            assert {"SocketState", "AddrValue", "Socket", "packet_hook_t"}.issubset(names)
+
+            # Read back data_type.get and verify canonical structured references
+            socket_dt = tool(
+                5,
+                "ghidra_data_type",
+                {"operation": "get", "params": {"selector": {"path": "/net/Socket"}}},
+            )["result"]
+            assert socket_dt["kind"] == "struct"
+            assert all(isinstance(field["data_type"], dict) for field in socket_dt["fields"])
+
+            # 3. Conflict modes: keep and rename
+            kept = tool(
+                6,
+                "ghidra_data_type",
+                {
+                    "operation": "parse_c",
+                    "params": {
+                        "declarations": "struct Socket { uint64_t replaced; };",
+                        "category_path": "/net",
+                        "conflict_mode": "keep",
+                    },
+                },
+            )["result"]["items"]
+            assert kept[0]["length"] == socket_dt["length"]
+
+            renamed = tool(
+                7,
+                "ghidra_data_type",
+                {
+                    "operation": "parse_c",
+                    "params": {
+                        "declarations": "struct Socket { uint64_t replaced; };",
+                        "category_path": "/net",
+                        "conflict_mode": "rename",
+                    },
+                },
+            )["result"]["items"]
+            assert renamed[0]["name"].startswith("Socket.conflict")
+
+            # 4. Invalid C declarations abort cleanly with 400 and leave program intact
+            bad_decl = tool(
+                8,
+                "ghidra_data_type",
+                {
+                    "operation": "parse_c",
+                    "params": {
+                        "declarations": "struct PartialOk { int x; }; struct Bad { UnknownT y; };",
+                        "category_path": "/net",
+                    },
+                },
+                success=False,
+            )
+            assert bad_decl["status"] == 400
+            assert bad_decl["target"] == "/declarations"
+            assert "<html>" not in bad_decl["message"]
+            tool(
+                9,
+                "ghidra_data_type",
+                {"operation": "get", "params": {"selector": {"path": "/net/PartialOk"}}},
+                success=False,
+            )
+
+            # 5. Create functions and apply full C prototypes via function.patch signature
+            tool(
+                10,
+                "ghidra_function",
+                {
+                    "operation": "create",
+                    "params": {
+                        "resource": {"entry": symbols["recv_packet"], "name": "orig_recv"},
+                        "disassemble": True,
+                    },
+                },
+            )
+            patched_fn = tool(
+                11,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["recv_packet"]},
+                        "patch": {
+                            "signature": (
+                                "int recv_packet(Socket *sock, const uint8_t *buf, size_t len)"
+                            ),
+                            "comment": "Receive one packet.",
+                        },
+                    },
+                },
+            )["result"]
+            assert patched_fn["name"] == "recv_packet"
+            assert patched_fn["comment"] == "Receive one packet."
+            assert patched_fn["return_type"]["kind"] == "named"
+            assert patched_fn["parameter_count"] == 3
+            params = patched_fn["parameters"]
+            assert [p["name"] for p in params] == ["sock", "buf", "len"]
+            assert params[0]["data_type"]["kind"] == "pointer"
+            assert params[0]["data_type"]["target"]["name"] == "/net/Socket"
+            assert params[1]["data_type"]["kind"] == "pointer"
+
+            # Verify function.get also returns canonical structured data_type_reference objects
+            fetched_fn = tool(
+                12,
+                "ghidra_function",
+                {"operation": "get", "params": {"selector": {"entry": symbols["recv_packet"]}}},
+            )["result"]
+            assert isinstance(fetched_fn["return_type"], dict)
+            assert all(isinstance(p["data_type"], dict) for p in fetched_fn["parameters"])
+
+            # Varargs prototype via function.patch
+            tool(
+                13,
+                "ghidra_function",
+                {
+                    "operation": "create",
+                    "params": {
+                        "resource": {"entry": symbols["log_packet"], "name": "log_packet"},
+                        "disassemble": True,
+                    },
+                },
+            )
+            varargs_fn = tool(
+                14,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["log_packet"]},
+                        "patch": {"signature": "int log_packet(const char *fmt, ...)"},
+                    },
+                },
+            )["result"]
+            assert varargs_fn["has_var_args"] is True
+            assert varargs_fn["parameter_count"] == 1
+            assert varargs_fn["parameters"][0]["name"] == "fmt"
+
+            # 6. Conflicting signature + return_type or calling_convention returns 400
+            conflict_err = tool(
+                15,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["recv_packet"]},
+                        "patch": {
+                            "signature": "int recv_packet(void)",
+                            "return_type": "int",
+                        },
+                    },
+                },
+                success=False,
+            )
+            assert conflict_err["status"] == 400
+            assert conflict_err["code"] == "conflicting_fields"
+            assert conflict_err["target"] == "/patch/signature"
+
+            # Invalid signature aborts transaction cleanly and preserves recv_packet
+            bad_sig_err = tool(
+                16,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["recv_packet"]},
+                        "patch": {"signature": "MissingReturn recv_packet(UnknownParam x)"},
+                    },
+                },
+                success=False,
+            )
+            assert bad_sig_err["status"] == 400
+            assert bad_sig_err["target"] == "/patch/signature"
+
+            still_valid_fn = tool(
+                17,
+                "ghidra_function",
+                {"operation": "get", "params": {"selector": {"entry": symbols["recv_packet"]}}},
+            )["result"]
+            assert still_valid_fn["parameter_count"] == 3
+
+            # 7. C type strings in parameter.patch, global_variable.upsert, and data_type.patch
+            patched_param = tool(
+                18,
+                "ghidra_function",
+                {
+                    "operation": "parameter.patch",
+                    "params": {
+                        "selector": {"entry": symbols["recv_packet"], "ordinal": 1},
+                        "patch": {"name": "handler", "data_type": "int (*)(void *)"},
+                    },
+                },
+            )["result"]
+            assert patched_param["name"] == "handler"
+            assert patched_param["data_type"]["kind"] == "pointer"
+
+            created_global = tool(
+                19,
+                "ghidra_global_variable",
+                {
+                    "operation": "upsert",
+                    "params": {
+                        "resource": {
+                            "address": symbols["packet_ring"],
+                            "name": "packet_ring_words",
+                            "data_type": "const uint32_t[4]",
+                        }
+                    },
+                },
+            )["result"]
+            assert created_global["data_type"]["kind"] == "array"
+            assert created_global["data_type"]["count"] == 4
+
+            fetched_global = tool(
+                20,
+                "ghidra_global_variable",
+                {"operation": "get", "params": {"selector": {"address": symbols["packet_ring"]}}},
+            )["result"]
+            assert isinstance(fetched_global["data_type"], dict)
+
+            patched_dt = tool(
+                21,
+                "ghidra_data_type",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"path": "/net/Socket"},
+                        "patch": {
+                            "kind": "struct",
+                            "add_fields": [
+                                {"name": "rx_buf", "data_type": "volatile uint8_t *"},
+                            ],
+                        },
+                    },
+                },
+            )["result"]
+            rx_fields = [f for f in patched_dt["fields"] if f["name"] == "rx_buf"]
+            assert len(rx_fields) == 1
+            assert rx_fields[0]["data_type"]["kind"] == "pointer"
+
+            print("C declaration and prototype regression checks passed")
+        finally:
+            if ready:
+                try:
+                    tool(99, "ghidra_bridge", {"operation": "shutdown"})
+                except (OSError, TimeoutError, urllib.error.URLError):
+                    pass
+            try:
+                process.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGTERM)
+                process.wait(timeout=10)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("headless", type=pathlib.Path, help="path to analyzeHeadless")
+    args = parser.parse_args()
+    if shutil.which("gcc") is None or shutil.which("nm") is None:
+        parser.error("gcc and nm are required")
+    with tempfile.TemporaryDirectory(prefix="ghidra-c-decl-test-") as directory:
+        run_test(args.headless.resolve(), pathlib.Path(directory))
+
+
+if __name__ == "__main__":
+    main()
