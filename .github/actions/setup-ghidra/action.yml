@@ -19,7 +19,7 @@ runs:
   using: composite
   steps:
     - name: Install JDK 21
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v6
       with:
         distribution: temurin
         java-version: "21"
@@ -28,8 +28,8 @@ runs:
       id: cache-ghidra
       uses: actions/cache@v4
       with:
-        path: ghidra-dist
-        key: ghidra-${{ inputs.ghidra-version }}-${{ inputs.ghidra-build-date }}
+        path: ${{ runner.temp }}/ghidra-dist
+        key: ghidra-${{ inputs.ghidra-version }}-${{ inputs.ghidra-build-date }}-${{ runner.os }}
 
     - name: Download Ghidra
       if: steps.cache-ghidra.outputs.cache-hit != 'true'
@@ -38,24 +38,28 @@ runs:
         GHIDRA_VERSION: ${{ inputs.ghidra-version }}
         GHIDRA_BUILD_DATE: ${{ inputs.ghidra-build-date }}
         GHIDRA_ZIP_SHA256: ${{ inputs.ghidra-zip-sha256 }}
+        GHIDRA_DIST_DIR: ${{ runner.temp }}/ghidra-dist
       run: |
         set -euo pipefail
         zip_name="ghidra_${GHIDRA_VERSION}_PUBLIC_${GHIDRA_BUILD_DATE}.zip"
+        zip_path="${RUNNER_TEMP}/${zip_name}"
         tag="Ghidra_${GHIDRA_VERSION}_build"
         url="https://github.com/NationalSecurityAgency/ghidra/releases/download/${tag}/${zip_name}"
-        curl -sL --fail -o "$zip_name" "$url"
-        echo "${GHIDRA_ZIP_SHA256}  ${zip_name}" | sha256sum -c -
-        mkdir -p ghidra-dist
-        unzip -q "$zip_name" -d ghidra-dist
-        rm "$zip_name"
+        curl -sL --fail -o "$zip_path" "$url"
+        echo "${GHIDRA_ZIP_SHA256}  ${zip_path}" | sha256sum -c -
+        mkdir -p "$GHIDRA_DIST_DIR"
+        unzip -q "$zip_path" -d "$GHIDRA_DIST_DIR"
+        rm "$zip_path"
 
     - name: Resolve GHIDRA_INSTALL_DIR
       shell: bash
+      env:
+        GHIDRA_DIST_DIR: ${{ runner.temp }}/ghidra-dist
       run: |
         set -euo pipefail
-        install_dir="$(find ghidra-dist -maxdepth 1 -mindepth 1 -type d | head -n 1)"
+        install_dir="$(find "$GHIDRA_DIST_DIR" -maxdepth 1 -mindepth 1 -type d | head -n 1)"
         if [ -z "$install_dir" ]; then
-          echo "Cannot find an extracted Ghidra directory under ghidra-dist/" >&2
+          echo "Cannot find an extracted Ghidra directory under ${GHIDRA_DIST_DIR}/" >&2
           exit 1
         fi
         echo "GHIDRA_INSTALL_DIR=$(cd "$install_dir" && pwd)" >> "$GITHUB_ENV"

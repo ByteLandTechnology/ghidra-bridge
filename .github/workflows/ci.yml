@@ -33,19 +33,17 @@ jobs:
           ghidra-build-date: ${{ env.GHIDRA_BUILD_DATE }}
           ghidra-zip-sha256: ${{ env.GHIDRA_ZIP_SHA256 }}
 
-      - name: Verify Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v6
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
 
-      - name: Run clean repository verification
-        run: ./gradlew --no-daemon clean verify
+      - name: Verify build and unit tests
+        run: ./gradlew --no-daemon verify :wire:test :contracts:test
 
       - name: Test function mutations
-        run: |
-          ./gradlew --no-daemon :wire:test :contracts:test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
   release:
     # Update the release PR or create a release after main passes verification.
@@ -91,6 +89,9 @@ jobs:
           ghidra-version: ${{ env.GHIDRA_VERSION }}
           ghidra-build-date: ${{ env.GHIDRA_BUILD_DATE }}
           ghidra-zip-sha256: ${{ env.GHIDRA_ZIP_SHA256 }}
+
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Build release archive
         env:
