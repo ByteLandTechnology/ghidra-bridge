@@ -16,11 +16,13 @@ import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.symbol.Namespace;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolType;
 import ghidra.util.exception.InvalidInputException;
+import java.util.Objects;
 import java.util.Set;
 
 public final class FunctionServiceImpl implements FunctionService {
@@ -29,9 +31,15 @@ public final class FunctionServiceImpl implements FunctionService {
   private final FunctionListQueries listQueries;
   private final FunctionRelationQueries relationQueries;
   private final FunctionMutations.ParameterDataTypeResolver dataTypeResolver;
+  private final HighFunctionReader highFunctionReader;
 
   public FunctionServiceImpl(GhidraSession context) {
+    this(context, function -> null);
+  }
+
+  public FunctionServiceImpl(GhidraSession context, HighFunctionReader highFunctionReader) {
     this.context = context;
+    this.highFunctionReader = Objects.requireNonNull(highFunctionReader, "highFunctionReader");
     this.lookupQueries = new FunctionLookupQueries(context);
     this.listQueries = new FunctionListQueries(context, lookupQueries);
     this.relationQueries = new FunctionRelationQueries(lookupQueries);
@@ -47,8 +55,18 @@ public final class FunctionServiceImpl implements FunctionService {
 
   @Override
   public FunctionResource getFunction(String rawAddress, Set<String> includes) {
-    return FunctionDescriptions.describe(
-        lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes));
+    Function function = lookupQueries.resolveFunction(rawAddress);
+    Set<String> normalized = FunctionIncludes.normalize(includes);
+    HighFunction highFunction =
+        shouldReadHighFunction(function, normalized) ? highFunctionReader.read(function) : null;
+    return FunctionDescriptions.describe(function, normalized, highFunction);
+  }
+
+  static boolean shouldReadHighFunction(Function function, Set<String> normalizedIncludes) {
+    return function != null
+        && !function.isExternal()
+        && !function.isThunk()
+        && (normalizedIncludes.contains("parameters") || normalizedIncludes.contains("locals"));
   }
 
   @Override
@@ -160,7 +178,8 @@ public final class FunctionServiceImpl implements FunctionService {
         newName,
         newDataType,
         storage,
-        dataTypeResolver);
+        dataTypeResolver,
+        highFunctionReader);
   }
 
   @Override
@@ -195,6 +214,7 @@ public final class FunctionServiceImpl implements FunctionService {
         variableName,
         newName,
         newDataType,
-        dataTypeResolver);
+        dataTypeResolver,
+        highFunctionReader);
   }
 }

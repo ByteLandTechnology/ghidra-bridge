@@ -46,11 +46,12 @@ public final class GhidraServiceFactory {
     GhidraSession context = new GhidraSession(script);
 
     ProgramService programService = new ProgramServiceImpl(context);
-    FunctionService functionService = new FunctionServiceImpl(context);
+    DecompilationServiceImpl decompilationService = new DecompilationServiceImpl(context);
+    FunctionService functionService =
+        new FunctionServiceImpl(context, decompilationService::readHighFunction);
     GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
     MemoryService memoryService = new MemoryServiceImpl(context);
     ListingService listingService = new ListingServiceImpl(context);
-    DecompilationService decompilationService = new DecompilationServiceImpl(context);
     AnalysisService analysisService = new AnalysisServiceImpl(context);
     SymbolService symbolService = new SymbolServiceImpl(context);
     ReferenceService referenceService = new ReferenceServiceImpl(context);

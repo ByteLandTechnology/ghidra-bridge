@@ -9,6 +9,7 @@ import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.pcode.HighFunction;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -51,6 +52,20 @@ public final class DecompilationServiceImpl implements DecompilationService {
     }
   }
 
+  public HighFunction readHighFunction(Function function) {
+    if (function == null || function.isExternal() || function.isThunk()) {
+      return null;
+    }
+    try (LeasePool.Lease<DecompInterface> lease = decompilerPool.acquire()) {
+      int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(DEFAULT_TIMEOUT_MS);
+      DecompInterface decompiler = lease.value();
+      applyCommentMode(decompiler, false);
+      decompiler.flushCache();
+      DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
+      return results != null && results.decompileCompleted() ? results.getHighFunction() : null;
+    }
+  }
+
   private DecompilationResource decompile(
       Function function, int timeoutMs, DecompilationResource.Format format,
       boolean includeComments) {
@@ -76,7 +91,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
           effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
       List<DecompilationResource.Line> lines = null;
       if (effectiveFormat == DecompilationResource.Format.DOCUMENT) {
-        GuiDocument document = GuiDocument.render(function, markup);
+        GuiDocument document = GuiDocument.render(function, results.getHighFunction(), markup);
         code = document.code();
         lines = document.lines();
       }

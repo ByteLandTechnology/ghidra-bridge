@@ -16,6 +16,8 @@ import ghidra.program.model.listing.Parameter;
 import ghidra.program.model.listing.ParameterImpl;
 import ghidra.program.model.listing.ReturnParameterImpl;
 import ghidra.program.model.listing.Variable;
+import ghidra.program.model.pcode.HighFunction;
+import ghidra.program.model.pcode.LocalSymbolMap;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.util.exception.InvalidInputException;
 import java.util.ArrayList;
@@ -34,12 +36,27 @@ final class FunctionParameterMutations {
       DataTypeReference newDataType,
       VariableStorageReference storage,
       FunctionMutations.ParameterDataTypeResolver dataTypeResolver) {
+    patchParameter(
+        context, function, ordinal, newName, newDataType, storage, dataTypeResolver, fn -> null);
+  }
+
+  static void patchParameter(
+      GhidraSession context,
+      Function function,
+      int ordinal,
+      String newName,
+      DataTypeReference newDataType,
+      VariableStorageReference storage,
+      FunctionMutations.ParameterDataTypeResolver dataTypeResolver,
+      HighFunctionReader highFunctionReader) {
+    Function currentFunction =
+        commitInferredParametersIfNeeded(
+            context, function, ordinal, newDataType, storage, dataTypeResolver, highFunctionReader);
     if (storage != null) {
       patchParameterWithStorage(
-          context, function, ordinal, newName, newDataType, storage, dataTypeResolver);
+          context, currentFunction, ordinal, newName, newDataType, storage, dataTypeResolver);
       return;
     }
-    Function currentFunction = function;
     Parameter parameter =
         FunctionVariableMutationSupport.requireParameter(currentFunction, ordinal);
     if (newName != null && !newName.isBlank()) {
@@ -69,6 +86,36 @@ final class FunctionParameterMutations {
         FunctionVariableMutationSupport.requireParameter(refreshed, ordinal);
       }
     }
+  }
+
+  private static Function commitInferredParametersIfNeeded(
+      GhidraSession context,
+      Function function,
+      int ordinal,
+      DataTypeReference newDataType,
+      VariableStorageReference storage,
+      FunctionMutations.ParameterDataTypeResolver dataTypeResolver,
+      HighFunctionReader highFunctionReader) {
+    if (function == null
+        || ordinal < 0
+        || ordinal < function.getParameterCount()
+        || function.isExternal()
+        || function.isThunk()) {
+      return function;
+    }
+    HighFunction highFunction = highFunctionReader.read(function);
+    LocalSymbolMap symbolMap = highFunction == null ? null : highFunction.getLocalSymbolMap();
+    if (symbolMap == null || ordinal >= symbolMap.getNumParams()) {
+      return function;
+    }
+    if (newDataType != null) {
+      FunctionMutationSupport.requireParameterDataType(dataTypeResolver, newDataType);
+    }
+    if (storage != null) {
+      FunctionStorageSupport.parseExplicit(context.currentProgram(), storage, STORAGE_FIELD);
+    }
+    FunctionVariableMutationSupport.commitParameters(function, highFunction);
+    return FunctionMutationSupport.refreshFunction(context, function, "parameter commit");
   }
 
   @SuppressWarnings({"deprecation", "removal"})

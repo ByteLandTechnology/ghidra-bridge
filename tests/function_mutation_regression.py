@@ -42,14 +42,40 @@ label_only: nop
 """
 
 
+FIXTURE_C = """
+__attribute__((noinline)) int helper_val(int v) {
+    return (v * 5) ^ 0x1234;
+}
+
+int compute_temp(int x) {
+    int temp = helper_val(x);
+    if (temp > 10) {
+        return temp * temp + (temp ^ 0x55aa);
+    }
+    return temp - x;
+}
+
+int forward_param(int y) {
+    int box = helper_val(y);
+    return box + y;
+}
+"""
+
+
 def run_test(headless, root):
     project = root / "project"
     project.mkdir()
     source = root / "fixture.s"
     source.write_text(FIXTURE)
+    c_source = root / "fixture_temp.c"
+    c_source.write_text(FIXTURE_C)
     binary = root / "fixture"
     subprocess.run(
-        ["gcc", "-nostdlib", "-no-pie", "-Wl,-e,_start", "-o", str(binary), str(source)],
+        [
+            "gcc", "-O1", "-fno-inline", "-fno-stack-protector",
+            "-nostdlib", "-no-pie", "-Wl,-e,_start",
+            "-o", str(binary), str(source), str(c_source),
+        ],
         check=True,
     )
     symbols = {}
@@ -167,6 +193,82 @@ def run_test(headless, root):
                 "resource": {"entry": symbols["label_only"]}, "disassemble": True,
             })["result"]
             assert label["name"] == "label_only"
+
+            listed = function(31, "list", {
+                "filter": {"name": "compute_temp"},
+            })["result"]["items"]
+            assert len(listed) == 1
+            assert listed[0]["parameters"] == []
+            assert listed[0]["local_variables"] == []
+
+            doc = tool(32, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {
+                    "selector": {"entry": symbols["compute_temp"]},
+                    "format": "document",
+                },
+            })["result"]
+            doc_tokens = [tok for line in doc["lines"] for tok in line["tokens"]]
+            param_tokens = [
+                tok for tok in doc_tokens
+                if tok.get("symbol", {}).get("type") == "Parameter"
+            ]
+            local_tokens = [
+                tok for tok in doc_tokens
+                if tok.get("symbol", {}).get("type") == "Local Var"
+            ]
+            assert param_tokens, f"Expected parameter symbol tokens in {doc_tokens}"
+            assert local_tokens, f"Expected local variable symbol tokens in {doc_tokens}"
+
+            fetched = function(33, "get", selector("compute_temp"))["result"]
+            assert len(fetched["parameters"]) >= 1, fetched
+            assert len(fetched["local_variables"]) >= 1, fetched
+            inferred_param = fetched["parameters"][0]
+            temp_local = next(
+                (v for v in fetched["local_variables"] if v["name"].startswith(("uVar", "iVar"))),
+                fetched["local_variables"][0],
+            )
+
+            patched_local = function(34, "local_variable.patch", {
+                "selector": {"entry": symbols["compute_temp"], "name": temp_local["name"]},
+                "patch": {
+                    "name": "masked_temp",
+                    "data_type": {"kind": "named", "name": "uint"},
+                },
+            })["result"]
+            assert patched_local["name"] == "masked_temp"
+            assert patched_local["data_type"] == {"kind": "named", "name": "/uint"}
+
+            patched_param = function(35, "parameter.patch", {
+                "selector": {
+                    "entry": symbols["compute_temp"],
+                    "ordinal": inferred_param["ordinal"],
+                },
+                "patch": {
+                    "name": "seed_arg",
+                    "data_type": {"kind": "named", "name": "uint"},
+                },
+            })["result"]
+            assert patched_param["name"] == "seed_arg"
+            assert patched_param["data_type"] == {"kind": "named", "name": "/uint"}
+
+            function(36, "local_variable.patch", {
+                "selector": {"entry": symbols["compute_temp"], "name": "masked_temp"},
+                "patch": {"name": "seed_arg"},
+            }, success=False)
+
+            forward_info = function(38, "get", selector("forward_param"))["result"]
+            assert len(forward_info["parameters"]) >= 1, forward_info
+            forward_param_name = forward_info["parameters"][0]["name"]
+            patched_via_local = function(39, "local_variable.patch", {
+                "selector": {"entry": symbols["forward_param"], "name": forward_param_name},
+                "patch": {
+                    "name": "forwarded_value",
+                    "data_type": {"kind": "named", "name": "int"},
+                },
+            })["result"]
+            assert patched_via_local["name"] == "forwarded_value"
+
             print("Function mutation regression checks passed")
         finally:
             if ready:

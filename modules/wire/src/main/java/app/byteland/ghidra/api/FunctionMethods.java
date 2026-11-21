@@ -341,6 +341,16 @@ final class FunctionMethods implements ApiMethodProvider {
         if (name.equals(variable.name())) return variable;
       }
     }
+    FunctionResource withParameters =
+        registry.services().functionService().getFunction(entry, Set.of(ApiVocabulary.PARAMETERS));
+    if (withParameters.parameters() != null) {
+      for (FunctionResource.ParameterResource parameter : withParameters.parameters()) {
+        if (name.equals(parameter.name())) {
+          return new FunctionResource.LocalVariableResource(
+              parameter.name(), parameter.dataType(), parameter.storage());
+        }
+      }
+    }
     throw new NoSuchElementException("function local variable was not found after mutation");
   }
 }
