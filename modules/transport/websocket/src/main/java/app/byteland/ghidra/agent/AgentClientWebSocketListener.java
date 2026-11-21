@@ -6,10 +6,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
 final class AgentClientWebSocketListener implements WebSocket.Listener {
+  static final int MAX_RETAINED_BUFFER_CAPACITY = 64 * 1024;
+  private static final int INITIAL_BUFFER_CAPACITY = 16;
+
   private final AtomicReference<AgentClientChannels.MessageChannel> channelRef;
   private final CountDownLatch disconnectLatch;
   private final AgentMessageHandler messageHandler;
-  private String pendingText = "";
+  private StringBuilder pendingText = new StringBuilder(INITIAL_BUFFER_CAPACITY);
 
   AgentClientWebSocketListener(
       AtomicReference<AgentClientChannels.MessageChannel> channelRef,
@@ -28,8 +31,7 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
   @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
     if (last) {
-      String message = pendingText + data;
-      pendingText = "";
+      String message = consumeCompleteMessage(data);
       try {
         messageHandler.handleMessage(channelRef.get(), message);
       } catch (RuntimeException failure) {
@@ -40,7 +42,7 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
         return null;
       }
     } else {
-      pendingText += data;
+      pendingText.append(data);
     }
     webSocket.request(1);
     return null;
@@ -58,7 +60,31 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
     disconnected();
   }
 
+  int pendingBufferLength() {
+    return pendingText.length();
+  }
+
+  int pendingBufferCapacity() {
+    return pendingText.capacity();
+  }
+
+  private String consumeCompleteMessage(CharSequence data) {
+    StringBuilder buffer = pendingText;
+    if (buffer.isEmpty()) {
+      return data.toString();
+    }
+    buffer.append(data);
+    String message = buffer.toString();
+    if (buffer.capacity() > MAX_RETAINED_BUFFER_CAPACITY) {
+      pendingText = new StringBuilder(INITIAL_BUFFER_CAPACITY);
+    } else {
+      buffer.setLength(0);
+    }
+    return message;
+  }
+
   private void disconnected() {
+    pendingText = new StringBuilder(INITIAL_BUFFER_CAPACITY);
     channelRef.set(null);
     disconnectLatch.countDown();
   }
