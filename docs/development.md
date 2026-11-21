@@ -109,10 +109,10 @@ To run individual static checks locally during development:
 ```
 
 `gradle.properties` sets `org.gradle.dependency.verification=strict`.
-When you add or update a Gradle plugin, static analyzer, or test dependency, refresh the SHA-256 checksums in `gradle/verification-metadata.xml`:
+When you add or update a Gradle plugin, static analyzer, or test dependency, refresh the SHA-256 checksums in `gradle/verification-metadata.xml` with an empty Gradle cache so all POM and module metadata files are recorded:
 
 ```bash
-./gradlew --no-daemon --write-verification-metadata sha256 verify test
+GRADLE_USER_HOME="$(mktemp -d)" ./gradlew --no-daemon --write-verification-metadata sha256 clean verify test
 ```
 
 ## Releases

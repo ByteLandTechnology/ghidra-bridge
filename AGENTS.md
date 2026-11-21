@@ -91,6 +91,6 @@ Run these commands from the repository root:
   modules.
 - `bash .github/scripts/verify-repository-hygiene.sh`: Checks tracked
   files, generated script exclusions, duplicates, and API method counts.
-- `./gradlew --no-daemon --write-verification-metadata sha256 verify test`:
-  Refreshes `gradle/verification-metadata.xml` when Gradle plugins or
-  tool dependencies change.
+- `GRADLE_USER_HOME="$(mktemp -d)" ./gradlew --no-daemon --write-verification-metadata sha256 clean verify test`:
+  Refreshes `gradle/verification-metadata.xml` from a clean Gradle cache
+  when Gradle plugins or tool dependencies change.
