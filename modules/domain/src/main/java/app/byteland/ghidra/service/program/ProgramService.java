@@ -2,9 +2,7 @@ package app.byteland.ghidra.service.program;
 
 import app.byteland.ghidra.service.Page;
 
-/**
- * Gives access to program metadata, address spaces, and export operations.
- */
+/** Gives access to program metadata, address spaces, and export operations. */
 public interface ProgramService {
   /** Returns metadata for the active Ghidra program. */
   ProgramResource getProgram();

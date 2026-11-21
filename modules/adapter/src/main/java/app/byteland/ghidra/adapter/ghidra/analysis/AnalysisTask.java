@@ -118,11 +118,10 @@ final class AnalysisTask {
       if (monitor.isCancelled()) {
         return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
       }
-      context.withTransaction(
-          () -> {
-            GhidraProgramUtilities.markProgramAnalyzed(program);
-            return null;
-          });
+      context.withTransaction(() -> {
+        GhidraProgramUtilities.markProgramAnalyzed(program);
+        return null;
+      });
     }
     return new TaskOutcome(terminalStatus, terminalError);
   }

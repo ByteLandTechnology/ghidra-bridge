@@ -2,7 +2,6 @@ package app.byteland.ghidra.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
@@ -39,17 +38,16 @@ class AgentErrorMapperAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: errorResponse maps TransactionExecutionException with target and details map")
+  @DisplayName(
+      "Adversarial: errorResponse maps TransactionExecutionException with target and details map")
   void testErrorResponseTransactionExecutionExceptionComplete() {
-    Map<String, Object> details = Map.of(
-        "opcode", "CALL",
-        "retryable", false,
-        "offset", 0x1000L);
-    var ex = new TransactionExecutionException(
-        "failed to patch instruction",
-        "instructions[4].bytes",
-        details,
-        new IOException("storage read only"));
+    Map<String, Object> details = Map.of("opcode", "CALL", "retryable", false, "offset", 0x1000L);
+    var ex =
+        new TransactionExecutionException(
+            "failed to patch instruction",
+            "instructions[4].bytes",
+            details,
+            new IOException("storage read only"));
 
     var res = AgentErrorMapper.errorResponse("tx-req-1", ex);
     assertEquals("tx-req-1", res.id());
@@ -92,24 +90,26 @@ class AgentErrorMapperAdversarialTest {
 
     for (int t = 0; t < threads; t++) {
       final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            Exception ex = (i % 2 == 0)
-                ? new TransactionExecutionException("tx failure " + i)
-                : new IllegalArgumentException("arg failure " + i);
-            var res = AgentErrorMapper.errorResponse("id-" + threadId + "-" + i, ex);
-            assertNotNull(res);
-            assertEquals("id-" + threadId + "-" + i, res.id());
-            assertEquals(-32000, res.error().code());
-            assertNotNull(res.error().data().get("status"));
-            assertNotNull(res.error().data().get("code"));
-          }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
+      futures.add(
+          executor.submit(() -> {
+            try {
+              startLatch.await();
+              for (int i = 0; i < opsPerThread; i++) {
+                Exception ex =
+                    (i % 2 == 0)
+                        ? new TransactionExecutionException("tx failure " + i)
+                        : new IllegalArgumentException("arg failure " + i);
+                var res = AgentErrorMapper.errorResponse("id-" + threadId + "-" + i, ex);
+                assertNotNull(res);
+                assertEquals("id-" + threadId + "-" + i, res.id());
+                assertEquals(-32000, res.error().code());
+                assertNotNull(res.error().data().get("status"));
+                assertNotNull(res.error().data().get("code"));
+              }
+            } catch (Exception e) {
+              throw new RuntimeException(e);
+            }
+          }));
     }
 
     startLatch.countDown();

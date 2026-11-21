@@ -26,9 +26,8 @@ final class MemoryBlockQueries {
     String normalizedName = MemoryPageSupport.normalizeNameFilter(nameFilterRaw);
     List<MemoryBlock> ordered =
         java.util.Arrays.stream(memoryBlocks())
-            .filter(
-                block ->
-                    MemoryPageSupport.matchesFilters(block, execute, write, read, normalizedName))
+            .filter(block ->
+                MemoryPageSupport.matchesFilters(block, execute, write, read, normalizedName))
             .sorted(java.util.Comparator.comparing(MemoryBlock::getName))
             .toList();
     Page<MemoryBlock> page = Page.paginate(ordered, limit, cursor, MemoryBlock::getName);

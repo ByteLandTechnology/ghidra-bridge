@@ -764,8 +764,7 @@ final class ApiSchemaCatalog {
   }
 
   static Set<String> symbolFields() {
-    return Set.of(
-        "id", NAME, ADDRESS, TYPE, NAMESPACE, SOURCE_TYPE, "primary", "demangled_name");
+    return Set.of("id", NAME, ADDRESS, TYPE, NAMESPACE, SOURCE_TYPE, "primary", "demangled_name");
   }
 
   static Set<String> commentFields() {

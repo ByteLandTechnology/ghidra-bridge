@@ -59,8 +59,8 @@ final class SymbolDemangling {
   /**
    * Uses the native name operation without data, type, comment, or disassembly changes.
    *
-   * <p>The subclass gives access to the protected applyDemangledName method. Ghidra then
-   * creates the namespaces and keeps the mangled name as a secondary label.
+   * <p>The subclass gives access to the protected applyDemangledName method. Ghidra then creates
+   * the namespaces and keeps the mangled name as a secondary label.
    */
   private static final class NameOnly extends DemangledVariable {
     NameOnly(DemangledObject decoded) {

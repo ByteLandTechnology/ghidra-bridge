@@ -82,14 +82,23 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
+To format Java and Python files in place before verification, run:
+
+```bash
+bash .github/scripts/verify-formatting.sh --fix
+```
+
 Before you submit a change, run the verification suite:
 
 ```bash
-./gradlew --no-daemon clean verify
 bash .github/scripts/verify-repository-hygiene.sh
+bash .github/scripts/verify-formatting.sh
+./gradlew --no-daemon clean verify
 ```
 
 The verification tasks check:
+- **Formatting**: `verify-formatting.sh` verifies `google-java-format` style, the 100-character
+  Java line limit, and `ruff` checks on `tests/`.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.

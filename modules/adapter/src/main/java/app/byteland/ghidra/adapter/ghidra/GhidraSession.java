@@ -8,9 +8,7 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
 import java.util.Objects;
 
-/**
- * Coordinates Ghidra program access, commands, and transaction lifecycles.
- */
+/** Coordinates Ghidra program access, commands, and transaction lifecycles. */
 public final class GhidraSession {
   private final GhidraScript ghidraScript;
   private final Object executionLock = new Object();

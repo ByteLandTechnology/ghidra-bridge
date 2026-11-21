@@ -30,7 +30,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
 
   @Override
   public DecompilationResource decompileFunction(
-      String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
+      String rawAddress,
+      DecompilationResource.Format format,
+      Integer timeoutMs,
       boolean includeComments) {
     int timeout = timeoutMs == null ? DEFAULT_TIMEOUT_MS : timeoutMs;
     if (timeout < MIN_TIMEOUT_MS || timeout > MAX_TIMEOUT_MS) {
@@ -52,7 +54,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
   }
 
   private DecompilationResource decompile(
-      Function function, int timeoutMs, DecompilationResource.Format format,
+      Function function,
+      int timeoutMs,
+      DecompilationResource.Format format,
       boolean includeComments) {
     try (LeasePool.Lease<DecompInterface> lease = decompilerPool.acquire()) {
       long startedAt = System.nanoTime();
@@ -80,15 +84,20 @@ public final class DecompilationServiceImpl implements DecompilationService {
         code = document.code();
         lines = document.lines();
       }
-      FunctionComments comments = includeComments
-          ? FunctionComments.read(function, startedAt, timeoutMs, warnings) : null;
+      FunctionComments comments =
+          includeComments ? FunctionComments.read(function, startedAt, timeoutMs, warnings) : null;
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
-          function.getName(), effectiveFormat, completed,
+          function.getName(),
+          effectiveFormat,
+          completed,
           (System.nanoTime() - startedAt) / 1_000_000L,
-          code, tokens, lines,
+          code,
+          tokens,
+          lines,
           comments == null ? null : comments.items(),
-          comments == null ? null : comments.complete(), warnings);
+          comments == null ? null : comments.complete(),
+          warnings);
     }
   }
 

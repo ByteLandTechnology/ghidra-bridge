@@ -57,8 +57,8 @@ public record McpConfig(
   }
 
   /**
-   * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores,
-   * or hyphens. A dot is not permitted because it separates the prefix from the domain.
+   * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores, or
+   * hyphens. A dot is not permitted because it separates the prefix from the domain.
    */
   public static String requireToolPrefix(String prefix) {
     if (prefix == null || !TOOL_PREFIX.matcher(prefix).matches()) {

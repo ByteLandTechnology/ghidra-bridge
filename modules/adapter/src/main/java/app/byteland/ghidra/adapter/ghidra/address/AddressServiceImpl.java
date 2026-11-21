@@ -49,8 +49,10 @@ public final class AddressServiceImpl implements AddressService {
                 String.valueOf(symbol.getID()),
                 symbol.getName(),
                 symbol.getSymbolType().toString()),
-        unit == null ? null : new AddressResource.CodeUnitSummary(
-            AddressUtil.canonicalAddress(unit.getMinAddress()),
-            AddressUtil.canonicalAddress(unit.getMaxAddress())));
+        unit == null
+            ? null
+            : new AddressResource.CodeUnitSummary(
+                AddressUtil.canonicalAddress(unit.getMinAddress()),
+                AddressUtil.canonicalAddress(unit.getMaxAddress())));
   }
 }

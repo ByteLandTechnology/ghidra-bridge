@@ -20,9 +20,8 @@ final class ReferenceDescriptions {
   }
 
   static Comparator<Reference> referenceComparator(boolean fromBody) {
-    return Comparator.comparing(
-            (Reference reference) ->
-                fromBody ? reference.getToAddress() : reference.getFromAddress())
+    return Comparator.comparing((Reference reference) ->
+            fromBody ? reference.getToAddress() : reference.getFromAddress())
         .thenComparing(Reference::getToAddress)
         .thenComparingInt(Reference::getOperandIndex)
         .thenComparing(reference -> reference.getReferenceType().getName());

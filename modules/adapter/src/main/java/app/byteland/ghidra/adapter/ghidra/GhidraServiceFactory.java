@@ -29,9 +29,7 @@ import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.app.script.GhidraScript;
 import java.util.Objects;
 
-/**
- * Creates bridge service implementations for a Ghidra script session.
- */
+/** Creates bridge service implementations for a Ghidra script session. */
 public final class GhidraServiceFactory {
   private GhidraServiceFactory() {}
 

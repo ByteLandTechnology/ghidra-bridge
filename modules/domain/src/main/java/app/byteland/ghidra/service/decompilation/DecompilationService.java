@@ -1,8 +1,6 @@
 package app.byteland.ghidra.service.decompilation;
 
-/**
- * Decompiles machine code to high-level representations.
- */
+/** Decompiles machine code to high-level representations. */
 public interface DecompilationService extends AutoCloseable {
   int DEFAULT_TIMEOUT_MS = 30_000;
   int MIN_TIMEOUT_MS = 100;
@@ -17,12 +15,12 @@ public interface DecompilationService extends AutoCloseable {
    * @return decompilation output resource
    */
   DecompilationResource decompileFunction(
-      String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
+      String rawAddress,
+      DecompilationResource.Format format,
+      Integer timeoutMs,
       boolean includeComments);
 
-  /**
-   * Closes active decompiler resources.
-   */
+  /** Closes active decompiler resources. */
   @Override
   void close();
 }

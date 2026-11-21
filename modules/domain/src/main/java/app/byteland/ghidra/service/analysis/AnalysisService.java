@@ -2,14 +2,13 @@ package app.byteland.ghidra.service.analysis;
 
 import java.util.List;
 
-/**
- * Controls Ghidra background auto-analysis tasks.
- */
+/** Controls Ghidra background auto-analysis tasks. */
 public interface AnalysisService extends AutoCloseable {
   /**
    * Starts background analysis with selected analyzers.
    *
-   * @param analyzers analyzer names to run, or null for the default analyzers. The list must not be empty
+   * @param analyzers analyzer names to run, or null for the default analyzers. The list must not be
+   *     empty
    * @return snapshot of the active analysis task
    */
   AnalysisResource startAnalysis(List<String> analyzers);
@@ -21,9 +20,7 @@ public interface AnalysisService extends AutoCloseable {
    */
   AnalysisResource getStatus();
 
-  /**
-   * Rejects new analysis requests and waits until the active analysis finishes.
-   */
+  /** Rejects new analysis requests and waits until the active analysis finishes. */
   @Override
   void close();
 }

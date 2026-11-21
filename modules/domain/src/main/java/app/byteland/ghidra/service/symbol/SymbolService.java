@@ -4,13 +4,9 @@ import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 import java.util.List;
 
-/**
- * Lists, reads, and renames program symbols.
- */
+/** Lists, reads, and renames program symbols. */
 public interface SymbolService {
-  /**
-   * Search criteria and filters for symbol queries.
-   */
+  /** Search criteria and filters for symbol queries. */
   record SymbolQuery(
       AddressScanOptions scan,
       String name,
@@ -27,19 +23,13 @@ public interface SymbolService {
     }
   }
 
-  /**
-   * Returns one page of symbols that match the query.
-   */
+  /** Returns one page of symbols that match the query. */
   Page<SymbolResource> listSymbols(SymbolQuery query);
 
-  /**
-   * Returns symbol details by unique symbol identifier.
-   */
+  /** Returns symbol details by unique symbol identifier. */
   SymbolResource getSymbol(long symbolId);
 
-  /**
-   * Renames a symbol by its unique identifier.
-   */
+  /** Renames a symbol by its unique identifier. */
   void renameSymbol(long symbolId, String newName);
 
   /** Applies native C++ names without function or data type changes. */

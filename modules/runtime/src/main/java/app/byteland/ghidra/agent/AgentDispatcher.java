@@ -36,15 +36,14 @@ public final class AgentDispatcher implements AutoCloseable {
   }
 
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
-    return dispatchBarrier.run(
-        () -> {
-          if (method == null || method.isBlank()) {
-            throw ApiException.badRequest("missing_method", "method is required", "/method");
-          }
-          synchronized (sequenceLock) {
-            return apiRegistry.dispatch(method, params);
-          }
-        });
+    return dispatchBarrier.run(() -> {
+      if (method == null || method.isBlank()) {
+        throw ApiException.badRequest("missing_method", "method is required", "/method");
+      }
+      synchronized (sequenceLock) {
+        return apiRegistry.dispatch(method, params);
+      }
+    });
   }
 
   public ApiCatalog methodCatalog() {

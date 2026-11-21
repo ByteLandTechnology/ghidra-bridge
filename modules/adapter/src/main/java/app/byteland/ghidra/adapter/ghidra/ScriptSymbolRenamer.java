@@ -1,7 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
-
 import ghidra.program.model.address.Address;
 import ghidra.program.model.symbol.Namespace;
 import ghidra.program.model.symbol.SourceType;
@@ -37,8 +36,8 @@ public final class ScriptSymbolRenamer {
   }
 
   /**
-   * Renames a label in place. The symbol keeps its id, namespace, primary state, and
-   * references, so callers can read it again by id.
+   * Renames a label in place. The symbol keeps its id, namespace, primary state, and references, so
+   * callers can read it again by id.
    */
   private static Symbol renameLabelSymbol(Symbol symbol, String newName) {
     try {

@@ -39,6 +39,21 @@ jobs:
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
 
+      - name: Cache formatting tools
+        uses: actions/cache@v4
+        with:
+          path: .cache/google-java-format
+          key: google-java-format-2.0.0
+
+      - name: Install Ruff
+        uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.17.2"
+          args: "--version"
+
+      - name: Verify formatting
+        run: bash .github/scripts/verify-formatting.sh
+
       - name: Run clean repository verification
         run: ./gradlew --no-daemon clean verify
 

@@ -25,7 +25,9 @@ class ListingFlowOverrideErrorsTest {
   }
 
   @Test
-  @DisplayName("ListingFlowOverrideErrors.updateFailed creates TransactionExecutionException with 500 transaction_failed")
+  @DisplayName(
+      "ListingFlowOverrideErrors.updateFailed creates TransactionExecutionException with 500"
+          + " transaction_failed")
   void testUpdateFailedError() {
     var ex = ListingFlowOverrideErrors.updateFailed("unable to set flow override");
     assertTrue(ex instanceof TransactionExecutionException);

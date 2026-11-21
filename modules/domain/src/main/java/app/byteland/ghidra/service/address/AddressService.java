@@ -1,8 +1,6 @@
 package app.byteland.ghidra.service.address;
 
-/**
- * Resolves address strings to program address metadata.
- */
+/** Resolves address strings to program address metadata. */
 @FunctionalInterface
 public interface AddressService {
   /**

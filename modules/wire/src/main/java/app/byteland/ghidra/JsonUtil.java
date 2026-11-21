@@ -3,9 +3,7 @@ package app.byteland.ghidra;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Serializes objects to compact JSON and parses JSON text.
- */
+/** Serializes objects to compact JSON and parses JSON text. */
 public final class JsonUtil {
   private JsonUtil() {}
 

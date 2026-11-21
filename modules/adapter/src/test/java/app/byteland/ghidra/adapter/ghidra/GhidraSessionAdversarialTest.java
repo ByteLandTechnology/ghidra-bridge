@@ -1,10 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,8 +61,10 @@ class GhidraSessionAdversarialTest {
 
     // A normal failure has a status message.
     var cmd = new TestCommand(false, "address out of bounds");
-    var ex = assertThrows(TransactionExecutionException.class, () ->
-        session.runCommand(cmd, "unable to write memory"));
+    var ex =
+        assertThrows(
+            TransactionExecutionException.class,
+            () -> session.runCommand(cmd, "unable to write memory"));
     assertEquals("unable to write memory: address out of bounds", ex.getMessage());
     assertEquals(500, ex.status());
     assertEquals("transaction_failed", ex.code());
@@ -78,20 +77,25 @@ class GhidraSessionAdversarialTest {
 
     // The statusMsg is null.
     var cmdNull = new TestCommand(false, null);
-    var exNull = assertThrows(TransactionExecutionException.class, () ->
-        session.runCommand(cmdNull, "patch failed"));
+    var exNull =
+        assertThrows(
+            TransactionExecutionException.class, () -> session.runCommand(cmdNull, "patch failed"));
     assertEquals("patch failed: command failed", exNull.getMessage());
 
     // The statusMsg is empty.
     var cmdEmpty = new TestCommand(false, "");
-    var exEmpty = assertThrows(TransactionExecutionException.class, () ->
-        session.runCommand(cmdEmpty, "patch failed"));
+    var exEmpty =
+        assertThrows(
+            TransactionExecutionException.class,
+            () -> session.runCommand(cmdEmpty, "patch failed"));
     assertEquals("patch failed: command failed", exEmpty.getMessage());
 
     // The statusMsg contains only white space.
     var cmdBlank = new TestCommand(false, "   \t\n  ");
-    var exBlank = assertThrows(TransactionExecutionException.class, () ->
-        session.runCommand(cmdBlank, "patch failed"));
+    var exBlank =
+        assertThrows(
+            TransactionExecutionException.class,
+            () -> session.runCommand(cmdBlank, "patch failed"));
     assertEquals("patch failed: command failed", exBlank.getMessage());
   }
 
@@ -102,8 +106,8 @@ class GhidraSessionAdversarialTest {
     String hugeStatus = "X".repeat(100_000);
     var cmd = new TestCommand(false, hugeStatus);
 
-    var ex = assertThrows(TransactionExecutionException.class, () ->
-        session.runCommand(cmd, "prefix"));
+    var ex =
+        assertThrows(TransactionExecutionException.class, () -> session.runCommand(cmd, "prefix"));
     assertEquals("prefix: " + hugeStatus, ex.getMessage());
   }
 
@@ -123,31 +127,52 @@ class GhidraSessionAdversarialTest {
 
     // The client parameter error must stay an IllegalArgumentException.
     var clientEx = new IllegalArgumentException("invalid register name: R99");
-    var thrownClient = assertThrows(IllegalArgumentException.class, () ->
-        session.withTransaction(() -> { throw clientEx; }));
+    var thrownClient =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                session.withTransaction(() -> {
+                  throw clientEx;
+                }));
     assertSame(clientEx, thrownClient);
 
     // This case uses an IllegalStateException.
     var stateEx = new IllegalStateException("program not initialized");
-    var thrownState = assertThrows(IllegalStateException.class, () ->
-        session.withTransaction(() -> { throw stateEx; }));
+    var thrownState =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                session.withTransaction(() -> {
+                  throw stateEx;
+                }));
     assertSame(stateEx, thrownState);
 
     // Current TransactionExecutionException.
     var txEx = new TransactionExecutionException("already tx ex");
-    var thrownTx = assertThrows(TransactionExecutionException.class, () ->
-        session.withTransaction(() -> { throw txEx; }));
+    var thrownTx =
+        assertThrows(
+            TransactionExecutionException.class,
+            () ->
+                session.withTransaction(() -> {
+                  throw txEx;
+                }));
     assertSame(txEx, thrownTx);
   }
 
   @Test
-  @DisplayName("Adversarial: withTransaction wraps checked Exception into TransactionExecutionException")
+  @DisplayName(
+      "Adversarial: withTransaction wraps checked Exception into TransactionExecutionException")
   void testWithTransactionWrapsCheckedException() {
     var session = new GhidraSession(new TestScript());
 
     var ioEx = new IOException("corrupt program database file");
-    var thrown = assertThrows(TransactionExecutionException.class, () ->
-        session.withTransaction(() -> { throw ioEx; }));
+    var thrown =
+        assertThrows(
+            TransactionExecutionException.class,
+            () ->
+                session.withTransaction(() -> {
+                  throw ioEx;
+                }));
 
     assertEquals("corrupt program database file", thrown.getMessage());
     assertSame(ioEx, thrown.getCause());
@@ -163,11 +188,19 @@ class GhidraSessionAdversarialTest {
     for (int i = 0; i < 2_000; i++) {
       final int iteration = i;
       if (iteration % 2 == 0) {
-        assertThrows(IllegalArgumentException.class, () ->
-            session.withTransaction(() -> { throw new IllegalArgumentException("client err " + iteration); }));
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                session.withTransaction(() -> {
+                  throw new IllegalArgumentException("client err " + iteration);
+                }));
       } else {
-        assertThrows(TransactionExecutionException.class, () ->
-            session.withTransaction(() -> { throw new IOException("io err " + iteration); }));
+        assertThrows(
+            TransactionExecutionException.class,
+            () ->
+                session.withTransaction(() -> {
+                  throw new IOException("io err " + iteration);
+                }));
       }
 
       // Check the invariant: withTemporaryChanges requires transactionDepth == 0.
@@ -178,16 +211,19 @@ class GhidraSessionAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: Nested transaction rejection for temporary changes does not leak depth")
+  @DisplayName(
+      "Adversarial: Nested transaction rejection for temporary changes does not leak depth")
   void testNestedTransactionDepthHygiene() {
     var session = new GhidraSession(new TestScript());
 
-    assertThrows(IllegalStateException.class, () ->
-        session.withTransaction(() -> {
-          // The outer transaction prohibits inner temporary changes.
-          session.withTemporaryChanges(() -> "illegal");
-          return null;
-        }));
+    assertThrows(
+        IllegalStateException.class,
+        () ->
+            session.withTransaction(() -> {
+              // The outer transaction prohibits inner temporary changes.
+              session.withTemporaryChanges(() -> "illegal");
+              return null;
+            }));
 
     // Verify that the outer depth is 0 again.
     String result = session.withTemporaryChanges(() -> "clean");
@@ -207,36 +243,46 @@ class GhidraSessionAdversarialTest {
 
     for (int t = 0; t < threads; t++) {
       final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            final int opIndex = i;
-            int mode = (threadId + opIndex) % 4;
-            switch (mode) {
-              case 0 -> {
-                String res = session.withTransaction(() -> "success_" + threadId + "_" + opIndex);
-                assertNotNull(res);
-                successfulTransactions.incrementAndGet();
+      futures.add(
+          executor.submit(() -> {
+            try {
+              startLatch.await();
+              for (int i = 0; i < opsPerThread; i++) {
+                final int opIndex = i;
+                int mode = (threadId + opIndex) % 4;
+                switch (mode) {
+                  case 0 -> {
+                    String res =
+                        session.withTransaction(() -> "success_" + threadId + "_" + opIndex);
+                    assertNotNull(res);
+                    successfulTransactions.incrementAndGet();
+                  }
+                  case 1 -> {
+                    assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                            session.withTransaction(() -> {
+                              throw new IllegalArgumentException("fail");
+                            }));
+                  }
+                  case 2 -> {
+                    assertThrows(
+                        TransactionExecutionException.class,
+                        () ->
+                            session.withTransaction(() -> {
+                              throw new IOException("io fail");
+                            }));
+                  }
+                  case 3 -> {
+                    var cmd = new TestCommand(true, "ok");
+                    session.runCommand(cmd, "run");
+                  }
+                }
               }
-              case 1 -> {
-                assertThrows(IllegalArgumentException.class, () ->
-                    session.withTransaction(() -> { throw new IllegalArgumentException("fail"); }));
-              }
-              case 2 -> {
-                assertThrows(TransactionExecutionException.class, () ->
-                    session.withTransaction(() -> { throw new IOException("io fail"); }));
-              }
-              case 3 -> {
-                var cmd = new TestCommand(true, "ok");
-                session.runCommand(cmd, "run");
-              }
+            } catch (Exception e) {
+              throw new RuntimeException(e);
             }
-          }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
+          }));
     }
 
     startLatch.countDown();

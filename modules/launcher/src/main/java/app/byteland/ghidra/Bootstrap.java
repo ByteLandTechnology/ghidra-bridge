@@ -18,8 +18,8 @@ import java.util.Map;
 import java.util.function.BooleanSupplier;
 
 /**
- * The generated Bridge and GhidraMcp scripts call this entry point.
- * It starts the WebSocket or MCP transport.
+ * The generated Bridge and GhidraMcp scripts call this entry point. It starts the WebSocket or MCP
+ * transport.
  */
 @SuppressWarnings("try")
 public final class Bootstrap {

@@ -28,29 +28,27 @@ final class BatchMethod {
     this.runtime = Objects.requireNonNull(runtime, "runtime");
 
     Set<String> allowedMethods = new LinkedHashSet<>();
-    methods.forEach(
-        (methodName, method) -> {
-          if (method.effects().batchable()) allowedMethods.add(methodName);
-        });
+    methods.forEach((methodName, method) -> {
+      if (method.effects().batchable()) allowedMethods.add(methodName);
+    });
     batchableMethods = Collections.unmodifiableSet(allowedMethods);
 
     List<Map<String, Object>> itemAlternatives = new ArrayList<>();
-    batchableMethods.forEach(
-        methodName -> {
-          ApiMethod<Map<String, Object>, Object> target = methods.get(methodName);
-          itemAlternatives.add(
-              WireSchema.object(
-                  ApiSchemaCatalog.props(
-                      "id",
-                      WireSchema.nonBlankString(),
-                      ApiVocabulary.METHOD,
-                      WireSchema.stringEnum(methodName),
-                      ApiVocabulary.ARGUMENTS,
-                      withoutDefinitions(target.requestCodec().schema())),
+    batchableMethods.forEach(methodName -> {
+      ApiMethod<Map<String, Object>, Object> target = methods.get(methodName);
+      itemAlternatives.add(
+          WireSchema.object(
+              ApiSchemaCatalog.props(
                   "id",
+                  WireSchema.nonBlankString(),
                   ApiVocabulary.METHOD,
-                  ApiVocabulary.ARGUMENTS));
-        });
+                  WireSchema.stringEnum(methodName),
+                  ApiVocabulary.ARGUMENTS,
+                  withoutDefinitions(target.requestCodec().schema())),
+              "id",
+              ApiVocabulary.METHOD,
+              ApiVocabulary.ARGUMENTS));
+    });
     requestSchema =
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(

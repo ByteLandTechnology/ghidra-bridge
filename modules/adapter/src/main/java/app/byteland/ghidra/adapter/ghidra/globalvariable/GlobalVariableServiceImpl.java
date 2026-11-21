@@ -28,19 +28,17 @@ public final class GlobalVariableServiceImpl implements GlobalVariableService {
 
   @Override
   public void writeGlobalVariable(Mutation mutation, WriteMode mode) {
-    context.withTransaction(
-        () -> {
-          mutations.writeGlobalVariable(mutation, mode);
-          return null;
-        });
+    context.withTransaction(() -> {
+      mutations.writeGlobalVariable(mutation, mode);
+      return null;
+    });
   }
 
   @Override
   public void deleteGlobalVariable(String address, boolean deleteSymbol) {
-    context.withTransaction(
-        () -> {
-          mutations.deleteGlobalVariable(address, deleteSymbol);
-          return null;
-        });
+    context.withTransaction(() -> {
+      mutations.deleteGlobalVariable(address, deleteSymbol);
+      return null;
+    });
   }
 }

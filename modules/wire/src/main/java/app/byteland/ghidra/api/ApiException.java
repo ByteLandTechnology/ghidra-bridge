@@ -1,8 +1,6 @@
 package app.byteland.ghidra.api;
 
-/**
- * Represents a structured API error with HTTP status and JSON pointer.
- */
+/** Represents a structured API error with HTTP status and JSON pointer. */
 public final class ApiException extends RuntimeException {
   private static final long serialVersionUID = 1L;
   private final int httpStatus;
