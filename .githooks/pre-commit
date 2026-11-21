@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Run fast repository hygiene and architecture checks before commit.
+set -euo pipefail
+
+repository_root="$(git rev-parse --show-toplevel)"
+cd "$repository_root"
+
+bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon verifyArchitecture

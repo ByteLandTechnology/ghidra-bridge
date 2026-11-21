@@ -20,8 +20,19 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 ## Submit a change
 
-Run `./gradlew --no-daemon clean verify`. State the behavior change and its effect on users in the pull request.
+Install the Git hooks and run the local verification suite before you open a pull request:
 
-Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
+```bash
+./gradlew --no-daemon installGitHooks
+./gradlew --no-daemon clean verify
+bash .github/scripts/verify-repository-hygiene.sh
+bash .github/scripts/verify-commit-messages.sh
+```
+
+State the behavior change and its effect on users in the pull request.
+
+## Commit messages
+
+Use the [commit message rules](AGENTS.md#commit-messages). For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
 
 Report a security problem as described in [SECURITY.md](SECURITY.md). Do not put a security report in a public issue.

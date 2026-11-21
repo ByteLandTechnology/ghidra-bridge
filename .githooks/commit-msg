@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Validate the commit message file against repository rules.
+set -euo pipefail
+
+if [[ "$#" -lt 1 ]]; then
+  echo "commit-msg hook requires the commit message file path" >&2
+  exit 1
+fi
+
+commit_file="$1"
+if [[ "$commit_file" != /* ]]; then
+  commit_file="$PWD/$commit_file"
+fi
+
+repository_root="$(git rev-parse --show-toplevel)"
+cd "$repository_root"
+
+bash .github/scripts/verify-commit-messages.sh --file "$commit_file"

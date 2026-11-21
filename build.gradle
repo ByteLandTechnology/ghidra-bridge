@@ -213,7 +213,18 @@ tasks.register('verifyArchitecture') {
     }
 }
 
+tasks.register('installGitHooks', Exec) {
+    group = 'build setup'
+    description = 'Configures Git to use the hooks in .githooks.'
+    onlyIf {
+        def ci = providers.environmentVariable('CI').orNull
+        file('.git').exists() && (ci == null || ci.trim().isEmpty())
+    }
+    workingDir rootDir
+    commandLine 'git', 'config', 'core.hooksPath', '.githooks'
+}
+
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'installGitHooks', 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
 }

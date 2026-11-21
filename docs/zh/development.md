@@ -73,18 +73,23 @@ Gradle 按以下优先级解析 Ghidra 安装路径：
 
 ## 质量检查
 
-在提交代码更改之前，必须运行全量验证套件：
+在提交代码更改之前，请安装 Git 钩子并运行验证套件：
 
 ```bash
+./gradlew --no-daemon installGitHooks
 ./gradlew --no-daemon clean verify
 bash .github/scripts/verify-repository-hygiene.sh
+bash .github/scripts/verify-commit-messages.sh
 ```
 
-验证套件执行以下检查：
+验证任务、钩子与脚本执行以下检查：
+- **Git 钩子**：未设置 `CI` 时，`installGitHooks` 在本地将 `core.hooksPath` 设为 `.githooks`。`.githooks/pre-commit` 运行仓库卫生检查与 `verifyArchitecture`，`.githooks/commit-msg` 校验提交消息。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。
 - **生成脚本编译**：`compileGeneratedScripts` 确保生成的启动脚本编译通过。
 - **分发产物**：`verifyDistribution` 校验 `build/ghidra-script/` 的内容。
+- **仓库卫生**：`verify-repository-hygiene.sh` 拒绝已跟踪的忽略文件、构建产物、零字节文件和重复文件。
+- **提交消息**：`verify-commit-messages.sh` 按 [AGENTS.md](../../AGENTS.md#commit-messages) 检查 Conventional Commit 规则。
 
 ## 版本发布
 

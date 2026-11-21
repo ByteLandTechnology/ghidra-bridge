@@ -82,18 +82,23 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
-Before you submit a change, run the verification suite:
+Before you submit a change, install the Git hooks and run the verification suite:
 
 ```bash
+./gradlew --no-daemon installGitHooks
 ./gradlew --no-daemon clean verify
 bash .github/scripts/verify-repository-hygiene.sh
+bash .github/scripts/verify-commit-messages.sh
 ```
 
-The verification tasks check:
+The verification tasks, hooks, and scripts check:
+- **Git Hooks**: `installGitHooks` sets `core.hooksPath` to `.githooks` locally when `CI` is unset. `.githooks/pre-commit` runs hygiene and `verifyArchitecture`, and `.githooks/commit-msg` checks commit messages.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+- **Repository Hygiene**: `verify-repository-hygiene.sh` rejects tracked ignored files, build files, zero-byte files, and duplicate files.
+- **Commit Messages**: `verify-commit-messages.sh` checks Conventional Commit rules from [AGENTS.md](../AGENTS.md#commit-messages).
 
 ## Releases
 
