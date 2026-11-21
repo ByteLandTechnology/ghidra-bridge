@@ -189,23 +189,7 @@ public final class WireSchema {
       return;
     }
     if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
-      List<ApiException> failures = new ArrayList<>();
-      int matches = 0;
-      for (Object rawAlternative : alternatives) {
-        try {
-          validate(value, (Map<String, Object>) rawAlternative, target, definitions);
-          matches++;
-        } catch (ApiException failure) {
-          failures.add(failure);
-        }
-      }
-      if (matches != EXACT_UNION_MATCHES) {
-        ApiException failure = failures.isEmpty() ? null : failures.getFirst();
-        throw ApiException.badRequest(
-            "invalid_union",
-            failure == null ? target + " must match exactly one schema" : failure.getMessage(),
-            failure == null ? target : failure.error().target());
-      }
+      validateOneOf(value, alternatives, target, definitions);
       return;
     }
     Object type = schema.get(ApiVocabulary.TYPE);
@@ -214,7 +198,8 @@ public final class WireSchema {
     }
     switch (String.valueOf(type)) {
       case ApiVocabulary.NULL -> {
-        if (value != null) fail(ApiVocabulary.INVALID_TYPE, target + " must be null", target);
+        if (value != null)
+          fail(ApiVocabulary.INVALID_TYPE, displayTarget(target) + " must be null", target);
       }
       case ApiVocabulary.OBJECT -> validateObject(value, schema, target, definitions);
       case ApiVocabulary.ARRAY -> validateArray(value, schema, target, definitions);
@@ -223,11 +208,133 @@ public final class WireSchema {
       case ApiVocabulary.NUMBER -> validateNumber(value, schema, target);
       case ApiVocabulary.BOOLEAN -> {
         if (!(value instanceof Boolean))
-          fail(ApiVocabulary.INVALID_TYPE, target + " must be a boolean", target);
+          fail(ApiVocabulary.INVALID_TYPE, displayTarget(target) + " must be a boolean", target);
       }
       default -> throw new IllegalStateException("unsupported schema type: " + type);
     }
   }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static void validateOneOf(
+      Object value,
+      List<?> alternatives,
+      String target,
+      Map<String, Map<String, Object>> definitions) {
+    if (alternatives.size() == 2) {
+      Map<String, Object> first = resolveReference((Map<String, Object>) alternatives.get(0), definitions);
+      Map<String, Object> second = resolveReference((Map<String, Object>) alternatives.get(1), definitions);
+      if (ApiVocabulary.NULL.equals(first.get(ApiVocabulary.TYPE))) {
+        if (value != null) validate(value, second, target, definitions);
+        return;
+      }
+      if (ApiVocabulary.NULL.equals(second.get(ApiVocabulary.TYPE))) {
+        if (value != null) validate(value, first, target, definitions);
+        return;
+      }
+    }
+    DiscriminatedUnion union = discriminatedUnion(alternatives, definitions);
+    if (union != null) {
+      if (!(value instanceof Map<?, ?> object)) {
+        fail(ApiVocabulary.INVALID_TYPE, displayTarget(target) + " must be an object", target);
+        return;
+      }
+      String tagTarget = target + "/" + escapePointer(union.tag());
+      String validOptions = String.join(", ", union.branches().keySet());
+      if (!object.containsKey(union.tag())) {
+        fail(
+            ApiVocabulary.MISSING_FIELD,
+            tagTarget + " is required. Valid options are: " + validOptions + ".",
+            tagTarget);
+      }
+      Object rawTag = object.get(union.tag());
+      if (!(rawTag instanceof String tagValue)) {
+        fail(
+            ApiVocabulary.INVALID_TYPE,
+            tagTarget + " must be a string. Valid options are: " + validOptions + ".",
+            tagTarget);
+        return;
+      }
+      Map<String, Object> branch = union.branches().get(tagValue);
+      if (branch == null) {
+        fail(
+            "invalid_enum",
+            tagTarget + " has unsupported value \"" + tagValue + "\". Valid options are: "
+                + validOptions + ".",
+            tagTarget);
+        return;
+      }
+      validate(value, branch, target, definitions);
+      return;
+    }
+    List<ApiException> failures = new ArrayList<>();
+    int matches = 0;
+    for (Object rawAlternative : alternatives) {
+      try {
+        validate(value, (Map<String, Object>) rawAlternative, target, definitions);
+        matches++;
+      } catch (ApiException failure) {
+        failures.add(failure);
+      }
+    }
+    if (matches != EXACT_UNION_MATCHES) {
+      ApiException failure = failures.isEmpty() ? null : failures.getFirst();
+      throw ApiException.badRequest(
+          "invalid_union",
+          failure == null
+              ? displayTarget(target) + " must match exactly one schema"
+              : failure.getMessage(),
+          failure == null ? target : failure.error().target());
+    }
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static DiscriminatedUnion discriminatedUnion(
+      List<?> alternatives, Map<String, Map<String, Object>> definitions) {
+    if (alternatives.isEmpty()) return null;
+    for (String tag : List.of(ApiVocabulary.KIND, ApiVocabulary.METHOD)) {
+      Map<String, Map<String, Object>> branches = new LinkedHashMap<>();
+      boolean matchedAll = true;
+      for (Object rawAlternative : alternatives) {
+        if (!(rawAlternative instanceof Map<?, ?> rawMap)) {
+          matchedAll = false;
+          break;
+        }
+        Map<String, Object> resolved = resolveReference((Map<String, Object>) rawMap, definitions);
+        if (!ApiVocabulary.OBJECT.equals(resolved.get(ApiVocabulary.TYPE))
+            || !(resolved.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties)
+            || !(properties.get(tag) instanceof Map<?, ?> tagSchema)
+            || !ApiVocabulary.STRING.equals(tagSchema.get(ApiVocabulary.TYPE))
+            || !(tagSchema.get(ApiVocabulary.ENUM) instanceof List<?> enumValues)
+            || enumValues.size() != 1
+            || !(enumValues.getFirst() instanceof String tagValue)
+            || branches.containsKey(tagValue)) {
+          matchedAll = false;
+          break;
+        }
+        branches.put(tagValue, resolved);
+      }
+      if (matchedAll && !branches.isEmpty()) {
+        return new DiscriminatedUnion(tag, branches);
+      }
+    }
+    return null;
+  }
+
+  private static Map<String, Object> resolveReference(
+      Map<String, Object> schema, Map<String, Map<String, Object>> definitions) {
+    Object ref = schema.get(ApiVocabulary.REFERENCE);
+    if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
+      Map<String, Object> resolved = definitions.get(reference.substring("#/$defs/".length()));
+      if (resolved == null) {
+        throw new IllegalStateException("unresolved schema reference: " + reference);
+      }
+      return resolved;
+    }
+    return schema;
+  }
+
+  private record DiscriminatedUnion(
+      String tag, Map<String, Map<String, Object>> branches) {}
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
   private static void validateObject(
@@ -236,7 +343,7 @@ public final class WireSchema {
       String target,
       Map<String, Map<String, Object>> definitions) {
     if (!(value instanceof Map<?, ?>)) {
-      fail(ApiVocabulary.INVALID_TYPE, target + " must be an object", target);
+      fail(ApiVocabulary.INVALID_TYPE, displayTarget(target) + " must be an object", target);
     }
     Map<?, ?> object = (Map<?, ?>) value;
     int minimumProperties =
@@ -246,12 +353,18 @@ public final class WireSchema {
     if (object.size() < minimumProperties || object.size() > maximumProperties) {
       fail(
           "invalid_count",
-          target + " must contain " + minimumProperties + ".." + maximumProperties + " fields",
+          displayTarget(target)
+              + " must contain "
+              + minimumProperties
+              + ".."
+              + maximumProperties
+              + " fields",
           target);
     }
     for (Object required : (List<?>) schema.getOrDefault(ApiVocabulary.REQUIRED, List.of())) {
       if (!object.containsKey(required)) {
-        fail("missing_field", target + "/" + required + " is required", target + "/" + required);
+        String fieldTarget = target + "/" + escapePointer(String.valueOf(required));
+        fail("missing_field", fieldTarget + " is required", fieldTarget);
       }
     }
     Map<String, Object> properties =
@@ -259,13 +372,14 @@ public final class WireSchema {
     boolean additional = !Boolean.FALSE.equals(schema.get(ApiVocabulary.ADDITIONAL_PROPERTIES));
     for (Map.Entry<?, ?> entry : object.entrySet()) {
       if (!(entry.getKey() instanceof String)) {
-        fail("invalid_field", target + " field names must be strings", target);
+        fail("invalid_field", displayTarget(target) + " field names must be strings", target);
       }
       String key = (String) entry.getKey();
       Object propertySchema = properties.get(key);
       if (propertySchema == null) {
         if (!additional) {
-          fail("unknown_field", target + "/" + key + " is not allowed", target + "/" + key);
+          String fieldTarget = target + "/" + escapePointer(key);
+          fail("unknown_field", fieldTarget + " is not allowed", fieldTarget);
         }
       } else {
         validate(
@@ -284,7 +398,7 @@ public final class WireSchema {
       String target,
       Map<String, Map<String, Object>> definitions) {
     if (!(value instanceof List<?>)) {
-      fail(ApiVocabulary.INVALID_TYPE, target + " must be an array", target);
+      fail(ApiVocabulary.INVALID_TYPE, displayTarget(target) + " must be an array", target);
     }
     List<?> items = (List<?>) value;
     int minimum = ((Number) schema.getOrDefault(ApiVocabulary.MIN_ITEMS, 0)).intValue();
@@ -292,7 +406,9 @@ public final class WireSchema {
         ((Number) schema.getOrDefault(ApiVocabulary.MAX_ITEMS, Integer.MAX_VALUE)).intValue();
     if (items.size() < minimum || items.size() > maximum) {
       fail(
-          "invalid_count", target + " must contain " + minimum + ".." + maximum + " items", target);
+          "invalid_count",
+          displayTarget(target) + " must contain " + minimum + ".." + maximum + " items",
+          target);
     }
     Map<String, Object> itemSchema =
         (Map<String, Object>) schema.getOrDefault(ApiVocabulary.ITEMS, Map.of());
@@ -303,15 +419,20 @@ public final class WireSchema {
 
   private static void validateString(Object value, Map<String, Object> schema, String target) {
     if (!(value instanceof String)) {
-      fail(ApiVocabulary.INVALID_TYPE, target + " must be a string", target);
+      fail(ApiVocabulary.INVALID_TYPE, displayTarget(target) + " must be a string", target);
     }
     String text = (String) value;
     int minimum = ((Number) schema.getOrDefault(ApiVocabulary.MIN_LENGTH, 0)).intValue();
     if (text.length() < minimum) {
-      fail(ApiVocabulary.INVALID_VALUE, target + " must not be empty", target);
+      fail(ApiVocabulary.INVALID_VALUE, displayTarget(target) + " must not be empty", target);
     }
     if (schema.get(ApiVocabulary.ENUM) instanceof List<?> values && !values.contains(text)) {
-      fail("invalid_enum", target + " has an unsupported value", target);
+      List<String> options = values.stream().map(String::valueOf).toList();
+      fail(
+          "invalid_enum",
+          displayTarget(target) + " has unsupported value \"" + text
+              + "\". Valid options are: " + String.join(", ", options) + ".",
+          target);
     }
   }
 
@@ -320,7 +441,7 @@ public final class WireSchema {
         || value instanceof Short
         || value instanceof Integer
         || value instanceof Long)) {
-      fail(ApiVocabulary.INVALID_TYPE, target + " must be an integer", target);
+      fail(ApiVocabulary.INVALID_TYPE, displayTarget(target) + " must be an integer", target);
     }
     long number = ((Number) value).longValue();
     long minimum =
@@ -328,24 +449,30 @@ public final class WireSchema {
     long maximum =
         ((Number) schema.getOrDefault(ApiVocabulary.MAXIMUM, Long.MAX_VALUE)).longValue();
     if (number < minimum || number > maximum) {
-      fail(ApiVocabulary.INVALID_VALUE, target + " must be in " + minimum + ".." + maximum, target);
+      fail(
+          ApiVocabulary.INVALID_VALUE,
+          displayTarget(target) + " must be in " + minimum + ".." + maximum,
+          target);
     }
   }
 
   private static void validateNumber(Object value, Map<String, Object> schema, String target) {
     if (!(value instanceof Number)) {
-      fail(ApiVocabulary.INVALID_TYPE, target + " must be a number", target);
+      fail(ApiVocabulary.INVALID_TYPE, displayTarget(target) + " must be a number", target);
     }
     double actual = ((Number) value).doubleValue();
     if (!Double.isFinite(actual)) {
-      fail(ApiVocabulary.INVALID_VALUE, target + " must be finite", target);
+      fail(ApiVocabulary.INVALID_VALUE, displayTarget(target) + " must be finite", target);
     }
     double minimum =
         ((Number) schema.getOrDefault(ApiVocabulary.MINIMUM, -Double.MAX_VALUE)).doubleValue();
     double maximum =
         ((Number) schema.getOrDefault(ApiVocabulary.MAXIMUM, Double.MAX_VALUE)).doubleValue();
     if (actual < minimum || actual > maximum) {
-      fail(ApiVocabulary.INVALID_VALUE, target + " must be in " + minimum + ".." + maximum, target);
+      fail(
+          ApiVocabulary.INVALID_VALUE,
+          displayTarget(target) + " must be in " + minimum + ".." + maximum,
+          target);
     }
   }
 
@@ -355,6 +482,10 @@ public final class WireSchema {
     return definitions instanceof Map<?, ?> map
         ? (Map<String, Map<String, Object>>) map
         : DEFAULT_DEFINITIONS;
+  }
+
+  private static String displayTarget(String target) {
+    return target == null || target.isEmpty() ? "request" : target;
   }
 
   private static String escapePointer(String value) {

@@ -12,6 +12,7 @@ import static app.byteland.ghidra.api.ApiRegistry.patch;
 import static app.byteland.ghidra.api.ApiRegistry.resource;
 import static app.byteland.ghidra.api.ApiRegistry.selector;
 import static app.byteland.ghidra.api.ApiRegistry.text;
+import static app.byteland.ghidra.api.ApiRegistry.withFilterDefaults;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
@@ -19,6 +20,8 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -40,6 +43,7 @@ final class DataTypeMethods implements ApiMethodProvider {
             WireSchema.object(ApiSchemaCatalog.props(ApiVocabulary.PATH, WireSchema.string()))),
         Set.of(ApiVocabulary.PATH, ApiVocabulary.NAME, "category_count", "data_type_count"),
         List.of(ApiVocabulary.PATH),
+        DataTypeMethods::normalizeCategoryListRequest,
         (request, page) ->
             registry
                 .services()
@@ -71,6 +75,7 @@ final class DataTypeMethods implements ApiMethodProvider {
                     WireSchema.string()))),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
+        withFilterDefaults(Map.of("query", "")),
         (request, page) -> {
           Map<String, Object> filter = filter(request);
           return registry
@@ -199,13 +204,28 @@ final class DataTypeMethods implements ApiMethodProvider {
                   convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields"));
           case "enum" ->
               new DataTypePatch.EnumPatch(
-                  convertedEnumValues(patch.get("add_values")),
-                  convertedEnumValues(patch.get("remove_values")),
-                  convertedEnumValues(patch.get("rename_values")),
-                  convertedEnumValues(patch.get("update_values")));
+                  convertedEnumValues(
+                      patch.get("add_values"), "/patch/add_values", EnumValueAction.ADD),
+                  convertedEnumValues(
+                      patch.get("remove_values"), "/patch/remove_values", EnumValueAction.REMOVE),
+                  convertedEnumValues(
+                      patch.get("rename_values"), "/patch/rename_values", EnumValueAction.RENAME),
+                  convertedEnumValues(
+                      patch.get("update_values"), "/patch/update_values", EnumValueAction.UPDATE));
           default -> throw new AssertionError(kind);
         };
     registry.services().dataTypeService().patchDataType(path, typedPatch);
+  }
+
+  private static Map<String, Object> normalizeCategoryListRequest(Map<String, Object> request) {
+    Map<String, Object> normalized = new LinkedHashMap<>(request);
+    Map<String, Object> normalizedFilter = new LinkedHashMap<>(filter(request));
+    String path = optionalText(normalizedFilter, ApiVocabulary.PATH);
+    if (path == null || path.isBlank()) {
+      normalizedFilter.put(ApiVocabulary.PATH, "/");
+    }
+    normalized.put("filter", Collections.unmodifiableMap(normalizedFilter));
+    return Collections.unmodifiableMap(normalized);
   }
 
   @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
@@ -226,17 +246,61 @@ final class DataTypeMethods implements ApiMethodProvider {
   }
 
   @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
-  private List<DataTypePatch.EnumValue> convertedEnumValues(Object raw) {
+  private List<DataTypePatch.EnumValue> convertedEnumValues(
+      Object raw, String target, EnumValueAction action) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.EnumValue> result = new ArrayList<>();
     for (int index = 0; index < list.size(); index++) {
-      Map<String, Object> value = objectAt(list.get(index), "/patch/values/" + index);
-      result.add(
-          new DataTypePatch.EnumValue(
-              optionalText(value, ApiVocabulary.NAME),
-              optionalText(value, "new_name"),
-              value.get("value") instanceof Number number ? number.longValue() : null));
+      String itemTarget = target + "/" + index;
+      Map<String, Object> value = objectAt(list.get(index), itemTarget);
+      String name = optionalText(value, ApiVocabulary.NAME);
+      String newName = optionalText(value, "new_name");
+      Long numericValue = value.get("value") instanceof Number number ? number.longValue() : null;
+      validateEnumValueItem(action, name, newName, numericValue, itemTarget);
+      result.add(new DataTypePatch.EnumValue(name, newName, numericValue));
     }
     return List.copyOf(result);
+  }
+
+  private static void validateEnumValueItem(
+      EnumValueAction action,
+      String name,
+      String newName,
+      Long numericValue,
+      String itemTarget) {
+    switch (action) {
+      case ADD -> {}
+      case REMOVE -> {
+        if ((name == null || name.isBlank()) && numericValue == null) {
+          throw ApiException.badRequest(
+              ApiVocabulary.MISSING_FIELD,
+              itemTarget + " requires a non-empty \"name\" or \"value\".",
+              itemTarget);
+        }
+      }
+      case RENAME -> {
+        requireNonBlankEnumField(name, itemTarget + "/name");
+        requireNonBlankEnumField(newName, itemTarget + "/new_name");
+      }
+      case UPDATE -> requireNonBlankEnumField(name, itemTarget + "/name");
+    }
+  }
+
+  private static void requireNonBlankEnumField(String value, String fieldTarget) {
+    if (value == null) {
+      throw ApiException.badRequest(
+          ApiVocabulary.MISSING_FIELD, fieldTarget + " is required", fieldTarget);
+    }
+    if (value.isBlank()) {
+      throw ApiException.badRequest(
+          ApiVocabulary.INVALID_VALUE, fieldTarget + " must not be empty", fieldTarget);
+    }
+  }
+
+  private enum EnumValueAction {
+    ADD,
+    REMOVE,
+    RENAME,
+    UPDATE
   }
 }

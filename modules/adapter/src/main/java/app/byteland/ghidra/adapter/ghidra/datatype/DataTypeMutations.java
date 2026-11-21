@@ -23,7 +23,11 @@ import java.util.NoSuchElementException;
 import java.util.function.Function;
 
 final class DataTypeMutations {
-  private static final String CALLING_CONVENTION_TARGET = "signature.callingConvention";
+  private static final String BASE_TYPE_TARGET = "/resource/base_type";
+  private static final String NAME_TARGET = "/resource/name";
+  private static final String SIGNATURE_TARGET = "/resource/signature";
+  private static final String CALLING_CONVENTION_TARGET = "/resource/signature/calling_convention";
+  private static final String RETURN_TYPE_TARGET = "/resource/signature/return_type";
 
   private DataTypeMutations() {}
 
@@ -45,13 +49,18 @@ final class DataTypeMutations {
       case ENUM -> candidate = new EnumDataType(path, name, size > 0 ? size : 4, manager);
       case UNION -> candidate = new UnionDataType(path, name, manager);
       case TYPEDEF -> {
-        if (baseType == null) throw new IllegalArgumentException("typedef requires base_type");
-        DataType base = resolver.apply(baseType);
-        if (base == null) throw new NoSuchElementException("base type not found: " + baseType);
+        if (baseType == null) {
+          throw new DataTypeMutationValidationException(
+              BASE_TYPE_TARGET, BASE_TYPE_TARGET + " is required for typedef");
+        }
+        DataType base = resolveTypedefBaseType(resolver, baseType);
         candidate = new TypedefDataType(path, name, base, manager);
       }
       case FUNCTION -> {
-        if (signature == null) throw new IllegalArgumentException("function requires a signature");
+        if (signature == null) {
+          throw new DataTypeMutationValidationException(
+              SIGNATURE_TARGET, SIGNATURE_TARGET + " is required for function");
+        }
         FunctionDefinition prototype =
             buildFunctionDefinition(path, name, signature, manager, resolver);
         String exactPath = path.getPath(name);
@@ -59,19 +68,23 @@ final class DataTypeMutations {
         if (existing instanceof FunctionDefinition existingFunction) {
           overwriteFunctionDefinition(existingFunction, prototype);
         } else if (existing != null) {
-          throw new IllegalArgumentException(
+          throw new DataTypeMutationValidationException(
+              NAME_TARGET,
               "function data type path collides with a non-function data type: " + exactPath);
         } else {
           DataType resolved =
               manager.addDataType(prototype, DataTypeConflictHandler.DEFAULT_HANDLER);
           if (!exactPath.equals(resolved.getPathName())) {
-            throw new IllegalArgumentException(
+            throw new DataTypeMutationValidationException(
+                NAME_TARGET,
                 "unable to create function data type at exact path: " + exactPath);
           }
         }
         return;
       }
-      default -> throw new IllegalArgumentException("unsupported create kind: " + kind);
+      default ->
+          throw new DataTypeMutationValidationException(
+              "/resource/kind", "unsupported create kind: " + kind);
     }
     manager.addDataType(candidate, DataTypeConflictHandler.DEFAULT_HANDLER);
   }
@@ -84,11 +97,11 @@ final class DataTypeMutations {
       Function<DataTypeReference, DataType> resolver) {
     requireKnownCallingConvention(manager, signature.callingConvention());
     DataType returnType =
-        resolveFunctionValueType(resolver, signature.returnType(), "signature.returnType");
+        resolveFunctionValueType(resolver, signature.returnType(), RETURN_TYPE_TARGET);
     ParameterDefinition[] arguments = new ParameterDefinition[signature.parameters().size()];
     for (int index = 0; index < arguments.length; index++) {
       FunctionSignature.Parameter parameter = signature.parameters().get(index);
-      String target = "signature.parameters[" + index + "].dataType";
+      String target = "/resource/signature/parameters/" + index + "/data_type";
       DataType parameterType = resolveFunctionValueType(resolver, parameter.dataType(), target);
       try {
         arguments[index] = new ParameterDefinitionImpl(parameter.name(), parameterType, null);
@@ -103,10 +116,10 @@ final class DataTypeMutations {
       prototype.setArguments(arguments);
       prototype.setCallingConvention(signature.callingConvention());
     } catch (IllegalArgumentException error) {
-      throw validation("signature", error);
+      throw validation(SIGNATURE_TARGET, error);
     } catch (InvalidInputException error) {
       throw new DataTypeMutationValidationException(
-          CALLING_CONVENTION_TARGET, "invalid function callingConvention", error);
+          CALLING_CONVENTION_TARGET, "invalid function calling_convention", error);
     }
     prototype.setVarArgs(signature.hasVarArgs());
     prototype.setNoReturn(signature.hasNoReturn());
@@ -121,7 +134,7 @@ final class DataTypeMutations {
       target.setCallingConvention(prototype.getCallingConventionName());
     } catch (InvalidInputException error) {
       throw new DataTypeMutationValidationException(
-          CALLING_CONVENTION_TARGET, "invalid function callingConvention", error);
+          CALLING_CONVENTION_TARGET, "invalid function calling_convention", error);
     }
     target.setVarArgs(prototype.hasVarArgs());
     target.setNoReturn(prototype.hasNoReturn());
@@ -131,13 +144,29 @@ final class DataTypeMutations {
       DataTypeManager manager, String callingConvention) {
     if (CompilerSpec.CALLING_CONVENTION_unknown.equalsIgnoreCase(callingConvention)) {
       throw new DataTypeMutationValidationException(
-          CALLING_CONVENTION_TARGET, "function callingConvention must not be unknown");
+          CALLING_CONVENTION_TARGET, "function calling_convention must not be unknown");
     }
     if (!CompilerSpec.CALLING_CONVENTION_default.equals(callingConvention)
         && !manager.getKnownCallingConventionNames().contains(callingConvention)) {
       throw new DataTypeMutationValidationException(
           CALLING_CONVENTION_TARGET,
-          "function callingConvention is not known by the target program: " + callingConvention);
+          "function calling_convention is not known by the target program: " + callingConvention);
+    }
+  }
+
+  private static DataType resolveTypedefBaseType(
+      Function<DataTypeReference, DataType> resolver, DataTypeReference reference) {
+    try {
+      DataType dataType = resolver.apply(reference);
+      if (dataType == null) {
+        throw new DataTypeMutationValidationException(
+            BASE_TYPE_TARGET, BASE_TYPE_TARGET + " was not found");
+      }
+      return dataType;
+    } catch (DataTypeMutationValidationException error) {
+      throw error;
+    } catch (IllegalArgumentException | NoSuchElementException error) {
+      throw validation(BASE_TYPE_TARGET, error);
     }
   }
 

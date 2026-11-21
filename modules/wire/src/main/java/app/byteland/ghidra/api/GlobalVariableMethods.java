@@ -65,6 +65,7 @@ final class GlobalVariableMethods implements ApiMethodProvider {
         ApiSchemaCatalog.scanListInput(globalVariableFilter),
         globalVariableFields,
         List.of(ApiVocabulary.ADDRESS),
+        ApiRegistry.withFilterDefaults(Map.of(ApiVocabulary.CASE_SENSITIVE, false)),
         (request, page) -> {
           Map<String, Object> filter = filter(request);
           return registry

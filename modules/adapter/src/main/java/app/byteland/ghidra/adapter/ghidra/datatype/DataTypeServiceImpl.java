@@ -4,6 +4,7 @@ import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeCategoryResource;
+import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
@@ -65,19 +66,22 @@ public final class DataTypeServiceImpl implements DataTypeService {
     switch (patch) {
       case DataTypePatch.Struct structPatch -> {
         if (!(dataType instanceof Structure structure)) {
-          throw new IllegalArgumentException("not a struct: " + dataType.getName());
+          throw new DataTypeMutationValidationException(
+              "/patch/kind", "not a struct: " + dataType.getName());
         }
         StructMutations.edit(structure, structPatch, this::resolveDataTypeReference);
       }
       case DataTypePatch.Union unionPatch -> {
         if (!(dataType instanceof Union union)) {
-          throw new IllegalArgumentException("not a union: " + dataType.getName());
+          throw new DataTypeMutationValidationException(
+              "/patch/kind", "not a union: " + dataType.getName());
         }
         UnionMutations.edit(union, unionPatch, this::resolveDataTypeReference);
       }
       case DataTypePatch.EnumPatch enumPatch -> {
         if (!(dataType instanceof ghidra.program.model.data.Enum enumType)) {
-          throw new IllegalArgumentException("not an enum: " + dataType.getName());
+          throw new DataTypeMutationValidationException(
+              "/patch/kind", "not an enum: " + dataType.getName());
         }
         EnumMutations.edit(enumType, enumPatch);
       }

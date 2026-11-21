@@ -5,6 +5,7 @@ import app.byteland.ghidra.JsonRpc;
 import app.byteland.ghidra.JsonUtil;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
+import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.api.ApiFailures;
 import app.byteland.ghidra.network.NetworkBinding;
 import com.sun.net.httpserver.HttpExchange;
@@ -332,7 +333,12 @@ public final class McpHttpServer implements AutoCloseable {
     return switch (method) {
       case "initialize" -> {
         if (statelessProtocol) {
-          throw new JsonRpcError(404, id, JSONRPC_METHOD_NOT_FOUND, "Method not found: " + method);
+          throw new JsonRpcError(
+              404,
+              id,
+              JSONRPC_METHOD_NOT_FOUND,
+              "Method \"initialize\" is not supported for stateless MCP requests; use"
+                  + " \"server/discover\" or omit stateless \"_meta\" fields.");
         }
         Map<String, Object> result = initializeResult(id, requireParamsMap(params, id));
         log.ok().status(200);
@@ -373,7 +379,13 @@ public final class McpHttpServer implements AutoCloseable {
         yield success(id, handleToolCall(id, requireParamsMap(params, id), log, statelessProtocol));
       }
       default ->
-          throw new JsonRpcError(404, id, JSONRPC_METHOD_NOT_FOUND, "Method not found: " + method);
+          throw new JsonRpcError(
+              404,
+              id,
+              JSONRPC_METHOD_NOT_FOUND,
+              "Unknown JSON-RPC method \"" + method
+                  + "\". Valid methods are: initialize, server/discover, ping, tools/list,"
+                  + " tools/call, resources/list, resources/templates/list, resources/read.");
     };
   }
 
@@ -441,7 +453,8 @@ public final class McpHttpServer implements AutoCloseable {
     if (!MCP_TOOLS_RESOURCE_URI.equals(uri)) {
       throw new JsonRpcError(statelessProtocol ? 400 : 404, id,
           statelessProtocol ? JSONRPC_INVALID_PARAMS : JSONRPC_RESOURCE_NOT_FOUND,
-          "Resource not found: " + uri);
+          "Unknown resource URI \"" + uri + "\". Valid resource URIs are: "
+              + MCP_TOOLS_RESOURCE_URI + ".");
     }
     Map<String, Object> content = new LinkedHashMap<>();
     content.put(URI_FIELD, MCP_TOOLS_RESOURCE_URI);
@@ -458,7 +471,8 @@ public final class McpHttpServer implements AutoCloseable {
     String name = requireString(params.get(NAME_FIELD), NAME_FIELD, id);
     log.tool(name);
     if (!toolRegistry.hasTool(name)) {
-      throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "Unknown tool: " + name);
+      throw new JsonRpcError(
+          400, id, JSONRPC_INVALID_PARAMS, toolRegistry.unknownToolMessage(name));
     }
     Map<String, Object> arguments = requireArguments(params.get("arguments"), id);
     try {
@@ -466,26 +480,80 @@ public final class McpHttpServer implements AutoCloseable {
         log.ok().status(200);
         return toolResult(toolRegistry.help(arguments), false, statelessProtocol);
       }
-      if (!List.of("operation", "params").containsAll(arguments.keySet())) {
-        throw new IllegalArgumentException("Unknown domain tool argument");
-      }
-      String operation = requireString(arguments.get("operation"), "operation", id);
+      validateDomainToolArguments(name, arguments);
+      String operation = requireDomainOperation(name, arguments);
       MethodDescriptor tool = toolRegistry.findTool(name, operation);
       if (tool == null) {
-        throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
-            "Unknown operation " + operation + " for " + name);
+        throw ApiException.badRequest(
+            "invalid_enum", toolRegistry.unknownOperationMessage(name, operation), "/operation");
       }
-      Map<String, Object> operationParams = requireArguments(arguments.get("params"), id);
+      Map<String, Object> operationParams = requireDomainParams(name, arguments.get("params"));
       Object result = dispatcher.dispatch(tool.name(), operationParams);
       if (dispatcher.isShuttingDown()) {
         closeSoon();
       }
       log.ok().status(200);
       return toolResult(Map.of("operation", operation, "result", result), false, statelessProtocol);
+    } catch (JsonRpcError error) {
+      throw error;
     } catch (Exception error) {
       log.error().status(200);
       return toolResult(errorPayload(error), true, statelessProtocol);
     }
+  }
+
+  private static void validateDomainToolArguments(String toolName, Map<String, Object> arguments) {
+    for (String key : arguments.keySet()) {
+      if (!"operation".equals(key) && !"params".equals(key)) {
+        throw ApiException.badRequest(
+            "unknown_field",
+            "Unknown argument \"" + key + "\" for tool \"" + toolName
+                + "\". Valid arguments are: operation, params.",
+            "/" + McpToolRegistry.escapePointer(key));
+      }
+    }
+  }
+
+  private String requireDomainOperation(String toolName, Map<String, Object> arguments) {
+    String validOptions =
+        "Valid operations are: " + String.join(", ", toolRegistry.operationsForTool(toolName)) + ".";
+    if (!arguments.containsKey("operation") || arguments.get("operation") == null) {
+      throw ApiException.badRequest(
+          "missing_field",
+          "Missing required argument \"operation\" for tool \"" + toolName + "\". " + validOptions,
+          "/operation");
+    }
+    Object rawOperation = arguments.get("operation");
+    if (!(rawOperation instanceof String operation)) {
+      throw ApiException.badRequest(
+          "invalid_type",
+          "Argument \"operation\" for tool \"" + toolName + "\" must be a string, got "
+              + describeValueType(rawOperation) + ". " + validOptions,
+          "/operation");
+    }
+    if (operation.isBlank()) {
+      throw ApiException.badRequest(
+          "invalid_value",
+          "Argument \"operation\" for tool \"" + toolName + "\" must not be empty. " + validOptions,
+          "/operation");
+    }
+    return operation;
+  }
+
+  private static Map<String, Object> requireDomainParams(String toolName, Object rawParams) {
+    if (rawParams == null) {
+      return Map.of();
+    }
+    if (rawParams instanceof Map<?, ?> map) {
+      @SuppressWarnings("unchecked")
+      Map<String, Object> cast = (Map<String, Object>) map;
+      return cast;
+    }
+    throw ApiException.badRequest(
+        "invalid_type",
+        "Argument \"params\" for tool \"" + toolName + "\" must be a JSON object, got "
+            + describeValueType(rawParams) + ".",
+        "/params");
   }
 
   private Map<String, Object> toolResult(Object result, boolean isError, boolean statelessProtocol) {
@@ -592,30 +660,64 @@ public final class McpHttpServer implements AutoCloseable {
         || INITIALIZE_PROTOCOL_VERSIONS.contains(version)) {
       return;
     }
-    throw new JsonRpcError(400, request.get("id"), JSONRPC_INVALID_REQUEST,
-        "Missing or unsupported MCP-Protocol-Version: " + version);
+    throw new JsonRpcError(
+        400,
+        request.get("id"),
+        JSONRPC_INVALID_REQUEST,
+        "Unsupported HTTP header \"MCP-Protocol-Version\" value \"" + version
+            + "\". Supported protocol versions are: "
+            + String.join(", ", SUPPORTED_PROTOCOL_VERSIONS) + ".");
   }
 
   private static void validateMetadata(HttpExchange exchange, Map<String, Object> request) {
     Object id = request.get("id");
     Map<String, Object> params = requireParamsMap(request.get("params"), id);
-    if (!(params.get("_meta") instanceof Map<?, ?> meta)
-        || !(meta.get("io.modelcontextprotocol/protocolVersion") instanceof String)
-        || !(meta.get("io.modelcontextprotocol/clientCapabilities") instanceof Map<?, ?>)) {
-      throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "Missing MCP request metadata");
+    if (!(params.get("_meta") instanceof Map<?, ?> meta)) {
+      throw new JsonRpcError(
+          400,
+          id,
+          JSONRPC_INVALID_PARAMS,
+          "Missing or invalid \"_meta\" object in request params. Expected fields:"
+              + " io.modelcontextprotocol/protocolVersion,"
+              + " io.modelcontextprotocol/clientCapabilities.");
+    }
+    if (!(meta.get("io.modelcontextprotocol/protocolVersion") instanceof String version)) {
+      throw new JsonRpcError(
+          400,
+          id,
+          JSONRPC_INVALID_PARAMS,
+          "Missing or invalid \"_meta.io.modelcontextprotocol/protocolVersion\" (got "
+              + describeValueType(meta.get("io.modelcontextprotocol/protocolVersion"))
+              + "). Expected protocol version \"" + MCP_PROTOCOL_VERSION + "\".");
+    }
+    if (!(meta.get("io.modelcontextprotocol/clientCapabilities") instanceof Map<?, ?>)) {
+      throw new JsonRpcError(
+          400,
+          id,
+          JSONRPC_INVALID_PARAMS,
+          "Missing or invalid \"_meta.io.modelcontextprotocol/clientCapabilities\" (got "
+              + describeValueType(meta.get("io.modelcontextprotocol/clientCapabilities"))
+              + "). Expected a JSON object.");
     }
     if (meta.containsKey("io.modelcontextprotocol/clientInfo")) {
       validateImplementation(meta.get("io.modelcontextprotocol/clientInfo"), id);
     }
-    Object version = meta.get("io.modelcontextprotocol/protocolVersion");
     if (!MCP_PROTOCOL_VERSION.equals(version)) {
-      throw new JsonRpcError(400, id, UNSUPPORTED_PROTOCOL_VERSION,
-          "UnsupportedProtocolVersionError", String.valueOf(version));
+      throw new JsonRpcError(
+          400,
+          id,
+          UNSUPPORTED_PROTOCOL_VERSION,
+          "Unsupported protocol version \"" + version
+              + "\" in \"_meta.io.modelcontextprotocol/protocolVersion\". Expected \""
+              + MCP_PROTOCOL_VERSION + "\" for stateless requests (supported server versions: "
+              + String.join(", ", SUPPORTED_PROTOCOL_VERSIONS) + ").",
+          version);
     }
-    requireHeader(exchange, "MCP-Protocol-Version", version.toString(), id);
+    requireHeader(exchange, "MCP-Protocol-Version", version, id);
     Object method = request.get("method");
     if (!(method instanceof String)) {
-      throw new JsonRpcError(400, id, JSONRPC_INVALID_REQUEST, "Missing method");
+      throw new JsonRpcError(
+          400, id, JSONRPC_INVALID_REQUEST, "Missing required JSON-RPC \"method\" string.");
     }
     requireHeader(exchange, "Mcp-Method", method.toString(), id);
     if (method.equals("tools/call") || method.equals("resources/read")) {
@@ -632,8 +734,11 @@ public final class McpHttpServer implements AutoCloseable {
     if (!(value instanceof Map<?, ?> info)
         || !(info.get(NAME_FIELD) instanceof String)
         || !(info.get("version") instanceof String)) {
-      throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
-          "clientInfo must contain string name and version fields");
+      throw new JsonRpcError(
+          400,
+          id,
+          JSONRPC_INVALID_PARAMS,
+          "Invalid \"clientInfo\" object: expected string fields \"name\" and \"version\".");
     }
   }
 
@@ -644,11 +749,28 @@ public final class McpHttpServer implements AutoCloseable {
         actual = new String(java.util.Base64.getDecoder().decode(
             actual.substring(9, actual.length() - 2)), StandardCharsets.UTF_8);
       } catch (IllegalArgumentException invalid) {
-        throw new JsonRpcError(400, id, HEADER_MISMATCH, "Invalid " + header + " encoding");
+        throw new JsonRpcError(
+            400,
+            id,
+            HEADER_MISMATCH,
+            "Invalid Base64 value in HTTP header \"" + header + "\": \"" + actual
+                + "\". Expected \"" + expected + "\".");
       }
     }
+    if (actual == null) {
+      throw new JsonRpcError(
+          400,
+          id,
+          HEADER_MISMATCH,
+          "Missing required HTTP header \"" + header + "\": expected \"" + expected + "\".");
+    }
     if (!expected.equals(actual)) {
-      throw new JsonRpcError(400, id, HEADER_MISMATCH, "HeaderMismatch: " + header);
+      throw new JsonRpcError(
+          400,
+          id,
+          HEADER_MISMATCH,
+          "HTTP header \"" + header + "\" has value \"" + actual + "\", expected \""
+              + expected + "\".");
     }
   }
 
@@ -661,7 +783,11 @@ public final class McpHttpServer implements AutoCloseable {
       Map<String, Object> cast = (Map<String, Object>) map;
       return cast;
     }
-    throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "params must be a JSON object");
+    throw new JsonRpcError(
+        400,
+        id,
+        JSONRPC_INVALID_PARAMS,
+        "Field \"params\" must be a JSON object, got " + describeValueType(params) + ".");
   }
 
   private static Map<String, Object> requireArguments(Object arguments, Object id) {
@@ -674,14 +800,41 @@ public final class McpHttpServer implements AutoCloseable {
       return cast;
     }
     throw new JsonRpcError(
-        400, id, JSONRPC_INVALID_PARAMS, "tools/call arguments must be a JSON object");
+        400,
+        id,
+        JSONRPC_INVALID_PARAMS,
+        "Field \"arguments\" in tools/call params must be a JSON object, got "
+            + describeValueType(arguments) + ".");
   }
 
   private static String requireString(Object value, String field, Object id) {
     if (value instanceof String text && !text.isBlank()) {
       return text;
     }
-    throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, field + " must be a non-empty string");
+    if (value == null) {
+      throw new JsonRpcError(
+          400, id, JSONRPC_INVALID_PARAMS, "Missing required string field \"" + field + "\".");
+    }
+    if (!(value instanceof String)) {
+      throw new JsonRpcError(
+          400,
+          id,
+          JSONRPC_INVALID_PARAMS,
+          "Field \"" + field + "\" must be a non-empty string, got "
+              + describeValueType(value) + ".");
+    }
+    throw new JsonRpcError(
+        400, id, JSONRPC_INVALID_PARAMS, "Field \"" + field + "\" must not be empty.");
+  }
+
+  private static String describeValueType(Object value) {
+    if (value == null) return "null";
+    if (value instanceof Map<?, ?>) return "an object";
+    if (value instanceof List<?>) return "an array";
+    if (value instanceof String) return "a string";
+    if (value instanceof Boolean) return "a boolean";
+    if (value instanceof Number) return "a number";
+    return value.getClass().getSimpleName();
   }
 
   private boolean authorize(HttpExchange exchange) {

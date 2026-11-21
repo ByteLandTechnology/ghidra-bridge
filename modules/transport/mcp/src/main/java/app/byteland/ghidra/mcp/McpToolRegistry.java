@@ -2,6 +2,7 @@ package app.byteland.ghidra.mcp;
 
 import app.byteland.ghidra.api.ApiCatalog;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
+import app.byteland.ghidra.api.ApiException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Map;
 final class McpToolRegistry {
   private final String prefix;
   private final Map<String, Map<String, MethodDescriptor>> domains = new LinkedHashMap<>();
+  private final Map<String, MethodTarget> methodTargets = new LinkedHashMap<>();
   private final List<Map<String, Object>> listedTools;
 
   McpToolRegistry(ApiCatalog catalog) {
@@ -27,6 +29,7 @@ final class McpToolRegistry {
       String[] target = target(method.name());
       domains.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>())
           .put(target[1], method);
+      methodTargets.put(method.name(), new MethodTarget(target[0], target[1]));
     }
     List<Map<String, Object>> tools = new ArrayList<>();
     tools.add(Map.of("name", helpToolName(), "description", "Get domains, operations, schemas, and effects.",
@@ -99,29 +102,202 @@ final class McpToolRegistry {
   }
 
   Map<String, Object> help(Map<String, Object> arguments) {
-    if (!List.of("domain", "operation").containsAll(arguments.keySet())) {
-      throw new IllegalArgumentException("Unknown help argument");
+    for (String key : arguments.keySet()) {
+      if (!"domain".equals(key) && !"operation".equals(key)) {
+        throw ApiException.badRequest(
+            "unknown_field",
+            "Unknown argument \"" + key + "\" for tool \"" + helpToolName()
+                + "\". Valid arguments are: domain, operation.",
+            "/" + escapePointer(key));
+      }
+    }
+    String validDomains = "Valid domains are: " + String.join(", ", domainToolNames()) + ".";
+    if (!arguments.containsKey("domain") || arguments.get("domain") == null) {
+      if (arguments.containsKey("operation") && arguments.get("operation") != null) {
+        Object rawOperation = arguments.get("operation");
+        MethodTarget hint =
+            rawOperation instanceof String opText ? suggestFromDotted(null, opText) : null;
+        String suggestion = hint == null
+            ? ""
+            : " Did you mean domain \"" + toolName(hint.domain())
+                + "\" and operation \"" + hint.operation() + "\"?";
+        throw ApiException.badRequest(
+            "missing_field",
+            "Argument \"domain\" is required when \"operation\" is provided for tool \""
+                + helpToolName() + "\"." + suggestion + " " + validDomains,
+            "/domain");
+      }
+      return Map.of("domains", domainToolNames());
     }
     Object domainValue = arguments.get("domain");
-    if (domainValue == null) {
-      if (arguments.containsKey("operation")) {
-        throw new IllegalArgumentException("operation requires domain");
-      }
-      return Map.of("domains", domains.keySet().stream().map(this::toolName).toList());
+    if (!(domainValue instanceof String rawDomain)) {
+      throw ApiException.badRequest(
+          "invalid_type",
+          "Argument \"domain\" for tool \"" + helpToolName() + "\" must be a string. "
+              + validDomains,
+          "/domain");
     }
-    String domain = helpDomain(domainValue.toString());
+    if (rawDomain.isBlank()) {
+      throw ApiException.badRequest(
+          "invalid_value",
+          "Argument \"domain\" for tool \"" + helpToolName() + "\" must not be empty. "
+              + validDomains,
+          "/domain");
+    }
+    String domain = helpDomain(rawDomain);
     Map<String, MethodDescriptor> operations = domains.get(domain);
-    if (operations == null) throw new IllegalArgumentException("Unknown domain: " + domainValue);
+    if (operations == null) {
+      MethodTarget hint = suggestFromDotted(null, rawDomain);
+      String suggestion = hint == null
+          ? ""
+          : " Did you mean domain \"" + toolName(hint.domain())
+              + "\" and operation \"" + hint.operation() + "\"?";
+      throw ApiException.badRequest(
+          "invalid_enum",
+          "Unknown domain \"" + rawDomain + "\" for tool \"" + helpToolName() + "\"."
+              + suggestion + " " + validDomains,
+          "/domain");
+    }
+    if (!arguments.containsKey("operation") || arguments.get("operation") == null) {
+      return Map.of("domain", toolName(domain), "operations", List.copyOf(operations.keySet()));
+    }
     Object operationValue = arguments.get("operation");
-    if (operationValue == null) return Map.of("domain", toolName(domain),
-        "operations", List.copyOf(operations.keySet()));
-    MethodDescriptor descriptor = operations.get(operationValue.toString());
-    if (descriptor == null) throw new IllegalArgumentException("Unknown operation: " + operationValue);
-    return Map.of("domain", toolName(domain), "operation", operationValue,
+    String validOperations =
+        "Valid operations for \"" + toolName(domain) + "\" are: "
+            + String.join(", ", operations.keySet()) + ".";
+    if (!(operationValue instanceof String rawOperation)) {
+      throw ApiException.badRequest(
+          "invalid_type",
+          "Argument \"operation\" for tool \"" + helpToolName() + "\" must be a string. "
+              + validOperations,
+          "/operation");
+    }
+    if (rawOperation.isBlank()) {
+      throw ApiException.badRequest(
+          "invalid_value",
+          "Argument \"operation\" for tool \"" + helpToolName() + "\" must not be empty. "
+              + validOperations,
+          "/operation");
+    }
+    MethodDescriptor descriptor = operations.get(rawOperation);
+    if (descriptor == null) {
+      throw ApiException.badRequest(
+          "invalid_enum", unknownOperationMessage(toolName(domain), rawOperation), "/operation");
+    }
+    return Map.of("domain", toolName(domain), "operation", rawOperation,
         "method", descriptor.name(), "description", descriptor.description(),
         "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
         "effects", descriptor.contractValue().get("effects"));
   }
+
+  List<String> operationsForTool(String name) {
+    String domain = domainOf(name);
+    Map<String, MethodDescriptor> operations = domain == null ? null : domains.get(domain);
+    return operations == null ? List.of() : List.copyOf(operations.keySet());
+  }
+
+  String unknownToolMessage(String rawName) {
+    List<String> validTools = new ArrayList<>();
+    validTools.add(helpToolName());
+    validTools.addAll(domainToolNames());
+    String suggestion = "";
+    if (rawName != null) {
+      if ("help".equals(rawName)) {
+        suggestion = " Did you mean \"" + helpToolName() + "\"?";
+      } else if (domains.containsKey(rawName)) {
+        suggestion = " Did you mean \"" + toolName(rawName) + "\"?";
+      } else {
+        MethodTarget hint = suggestFromDotted(null, rawName);
+        if (hint != null) {
+          suggestion =
+              " Did you mean tool \"" + toolName(hint.domain())
+                  + "\" with operation \"" + hint.operation() + "\"?";
+        }
+      }
+    }
+    return "Unknown tool \"" + rawName + "\"." + suggestion
+        + " Valid tools are: " + String.join(", ", validTools) + ".";
+  }
+
+  String unknownOperationMessage(String toolName, String rawOperation) {
+    String domain = domainOf(toolName);
+    String canonicalTool = domain == null ? toolName : toolName(domain);
+    List<String> validOperations = operationsForTool(toolName);
+    MethodTarget hint = suggestFromDotted(domain, rawOperation);
+    if (hint != null) {
+      if (hint.domain().equals(domain)) {
+        return "Unknown operation \"" + rawOperation + "\" for tool \"" + canonicalTool
+            + "\". Did you mean \"" + hint.operation() + "\"? Valid operations are: "
+            + String.join(", ", validOperations) + ".";
+      }
+      return "Unknown operation \"" + rawOperation + "\" for tool \"" + canonicalTool
+          + "\". Did you mean operation \"" + hint.operation() + "\" on tool \""
+          + toolName(hint.domain()) + "\"? Valid operations for \"" + canonicalTool + "\" are: "
+          + String.join(", ", validOperations) + ".";
+    }
+    return "Unknown operation \"" + rawOperation + "\" for tool \"" + canonicalTool
+        + "\". Valid operations are: " + String.join(", ", validOperations) + ".";
+  }
+
+  static String escapePointer(String value) {
+    return value.replace("~", "~0").replace("/", "~1");
+  }
+
+  private List<String> domainToolNames() {
+    return domains.keySet().stream().map(this::toolName).toList();
+  }
+
+  private MethodTarget suggestFromDotted(String currentDomain, String rawValue) {
+    if (rawValue == null) return null;
+    String candidate = rawValue.trim();
+    if (!candidate.contains(".")) return null;
+    MethodTarget direct = methodTargets.get(candidate);
+    if (direct != null) return direct;
+    String stripped = stripToolPrefix(candidate);
+    if (stripped != null) {
+      MethodTarget prefixedMethod = methodTargets.get(stripped);
+      if (prefixedMethod != null) return prefixedMethod;
+      MethodTarget prefixedDomainOp = matchDomainPrefix(stripped);
+      if (prefixedDomainOp != null) return prefixedDomainOp;
+    }
+    MethodTarget domainOp = matchDomainPrefix(candidate);
+    if (domainOp != null) return domainOp;
+    if (currentDomain != null && domains.containsKey(currentDomain)) {
+      String bestMatch = null;
+      for (String op : domains.get(currentDomain).keySet()) {
+        if (candidate.endsWith("." + op)
+            && (bestMatch == null || op.length() > bestMatch.length())) {
+          bestMatch = op;
+        }
+      }
+      if (bestMatch != null) {
+        return new MethodTarget(currentDomain, bestMatch);
+      }
+    }
+    return null;
+  }
+
+  private String stripToolPrefix(String value) {
+    if (value.startsWith(prefix + "_") || value.startsWith(prefix + ".")) {
+      return value.substring(prefix.length() + 1);
+    }
+    return null;
+  }
+
+  private MethodTarget matchDomainPrefix(String value) {
+    for (Map.Entry<String, Map<String, MethodDescriptor>> entry : domains.entrySet()) {
+      String domainPrefix = entry.getKey() + ".";
+      if (value.startsWith(domainPrefix)) {
+        String op = value.substring(domainPrefix.length());
+        if (entry.getValue().containsKey(op)) {
+          return new MethodTarget(entry.getKey(), op);
+        }
+      }
+    }
+    return null;
+  }
+
+  private record MethodTarget(String domain, String operation) {}
 
   boolean isHelpTool(String name) {
     return "help".equals(domainOf(name));

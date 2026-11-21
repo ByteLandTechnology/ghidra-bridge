@@ -72,6 +72,8 @@ final class InstructionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.requiredScanListInput(flowFilter),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
+        ApiRegistry.withFilterDefaults(
+            Map.of("flow_overrides", List.of("branch", "call", "call_return", "return"))),
         (request, page) -> {
           Map<String, Object> selected = object(filter(request), ApiVocabulary.SELECTOR);
           return registry

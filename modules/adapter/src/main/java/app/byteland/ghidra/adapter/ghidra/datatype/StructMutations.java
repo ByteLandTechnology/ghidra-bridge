@@ -1,5 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
+import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import ghidra.program.model.data.DataType;
@@ -22,17 +23,22 @@ final class StructMutations {
     CompositeFieldMutations.renameFields(access, patch.renameFields(), resolver);
     CompositeFieldMutations.updateFields(access, patch.updateFields(), resolver);
     if (patch.addFields() != null) {
-      for (DataTypePatch.CompositeField field : patch.addFields()) add(structure, field, resolver);
+      for (int index = 0; index < patch.addFields().size(); index++) {
+        add(structure, patch.addFields().get(index), "/patch/add_fields/" + index, resolver);
+      }
     }
   }
 
   private static void add(
       Structure structure,
       DataTypePatch.CompositeField field,
+      String itemTarget,
       Function<DataTypeReference, DataType> resolver) {
     String name = field.name() == null ? "field" : field.name();
-    DataType dataType = DataTypeMutationSupport.resolveFieldDataType(field.dataType(), resolver);
-    int length = DataTypeMutationSupport.fieldLength(dataType, field.length(), null);
+    DataType dataType =
+        DataTypeMutationSupport.resolveFieldDataType(
+            field.dataType(), resolver, itemTarget + "/data_type");
+    int length = DataTypeMutationSupport.fieldLength(dataType, field.length(), null, itemTarget);
     if (field.offset() == null) structure.add(dataType, length, name, null);
     else structure.insertAtOffset(field.offset(), dataType, length, name, null);
   }
@@ -40,8 +46,9 @@ final class StructMutations {
   private static void remove(Structure structure, List<DataTypePatch.CompositeField> selectors) {
     if (selectors == null) return;
     List<Integer> ordinals = new ArrayList<>();
-    for (DataTypePatch.CompositeField selector : selectors) {
-      ordinals.addAll(resolveOrdinals(structure, selector));
+    for (int index = 0; index < selectors.size(); index++) {
+      ordinals.addAll(
+          resolveOrdinals(structure, selectors.get(index), "/patch/remove_fields/" + index));
     }
     ordinals = ordinals.stream().distinct().sorted(Collections.reverseOrder()).toList();
     for (int ordinal : ordinals) {
@@ -50,7 +57,7 @@ final class StructMutations {
   }
 
   private static List<Integer> resolveOrdinals(
-      Structure structure, DataTypePatch.CompositeField selector) {
+      Structure structure, DataTypePatch.CompositeField selector, String itemTarget) {
     if (selector.offset() != null) {
       DataTypeComponent component = structure.getDefinedComponentAtOrAfterOffset(selector.offset());
       return component != null && component.getOffset() == selector.offset()
@@ -58,7 +65,8 @@ final class StructMutations {
           : List.of();
     }
     if (selector.name() == null) {
-      throw new IllegalArgumentException("struct field selector requires name or offset");
+      throw new DataTypeMutationValidationException(
+          itemTarget, "struct field selector requires name or offset");
     }
     List<Integer> matches = new ArrayList<>();
     for (int index = 0; index < structure.getNumComponents(); index++) {
@@ -76,8 +84,8 @@ final class StructMutations {
     }
 
     @Override
-    public List<Integer> locate(DataTypePatch.CompositeField selector) {
-      return resolveOrdinals(structure, selector);
+    public List<Integer> locate(DataTypePatch.CompositeField selector, String itemTarget) {
+      return resolveOrdinals(structure, selector, itemTarget);
     }
 
     @Override

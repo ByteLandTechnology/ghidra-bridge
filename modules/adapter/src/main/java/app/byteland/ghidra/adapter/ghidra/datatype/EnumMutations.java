@@ -1,5 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
+import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -9,8 +10,8 @@ final class EnumMutations {
 
   static void edit(ghidra.program.model.data.Enum enumType, DataTypePatch.EnumPatch patch) {
     remove(enumType, patch.removeValues());
-    patch(enumType, patch.renameValues(), true);
-    patch(enumType, patch.updateValues(), false);
+    patch(enumType, patch.renameValues(), true, "/patch/rename_values");
+    patch(enumType, patch.updateValues(), false, "/patch/update_values");
     if (patch.addValues() != null) {
       for (DataTypePatch.EnumValue value : patch.addValues()) {
         enumType.add(
@@ -23,7 +24,8 @@ final class EnumMutations {
   private static void remove(
       ghidra.program.model.data.Enum enumType, List<DataTypePatch.EnumValue> selectors) {
     if (selectors == null) return;
-    for (DataTypePatch.EnumValue selector : selectors) {
+    for (int index = 0; index < selectors.size(); index++) {
+      DataTypePatch.EnumValue selector = selectors.get(index);
       if (selector.name() != null) {
         if (selector.value() == null
             || (enumType.contains(selector.name())
@@ -34,7 +36,8 @@ final class EnumMutations {
         String[] names = enumType.getNames(selector.value());
         if (names != null) for (String name : names.clone()) enumType.remove(name);
       } else {
-        throw new IllegalArgumentException("enum selector requires name or value");
+        throw new DataTypeMutationValidationException(
+            "/patch/remove_values/" + index, "enum selector requires name or value");
       }
     }
   }
@@ -42,14 +45,22 @@ final class EnumMutations {
   private static void patch(
       ghidra.program.model.data.Enum enumType,
       List<DataTypePatch.EnumValue> updates,
-      boolean renameOnly) {
+      boolean renameOnly,
+      String targetPrefix) {
     if (updates == null) return;
-    for (DataTypePatch.EnumValue update : updates) {
-      if (update.name() == null || !enumType.contains(update.name())) {
+    for (int index = 0; index < updates.size(); index++) {
+      DataTypePatch.EnumValue update = updates.get(index);
+      String itemTarget = targetPrefix + "/" + index;
+      if (update.name() == null) {
+        throw new DataTypeMutationValidationException(
+            itemTarget + "/name", itemTarget + "/name is required");
+      }
+      if (!enumType.contains(update.name())) {
         throw new NoSuchElementException("enum value not found: " + update.name());
       }
       if (renameOnly && update.newName() == null) {
-        throw new IllegalArgumentException("rename_values item requires new_name");
+        throw new DataTypeMutationValidationException(
+            itemTarget + "/new_name", itemTarget + "/new_name is required");
       }
       String name = update.newName() == null ? update.name() : update.newName();
       long value =

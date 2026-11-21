@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * Central registry that defines and dispatches all public API methods.
@@ -305,7 +306,17 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
-    list(name, null, input, fields, identityFields, handler);
+    list(name, null, input, fields, identityFields, UnaryOperator.identity(), handler);
+  }
+
+  void list(
+      String name,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      UnaryOperator<Map<String, Object>> requestNormalizer,
+      PagedHandler handler) {
+    list(name, null, input, fields, identityFields, requestNormalizer, handler);
   }
 
   void list(
@@ -314,6 +325,17 @@ public final class ApiRegistry {
       Map<String, Object> input,
       Set<String> fields,
       List<String> identityFields,
+      PagedHandler handler) {
+    list(name, description, input, fields, identityFields, UnaryOperator.identity(), handler);
+  }
+
+  void list(
+      String name,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      UnaryOperator<Map<String, Object>> requestNormalizer,
       PagedHandler handler) {
     register(
         name,
@@ -324,10 +346,16 @@ public final class ApiRegistry {
         fields,
         identityFields,
         request -> {
+          Map<String, Object> normalized = requestNormalizer.apply(request);
           String resource = name.substring(0, name.indexOf('.'));
-          PageRequest page = decodePage(request, resource);
+          PageRequest page = decodePage(normalized, resource);
           return canonicalList(
-              resource, request, handler.handle(request, page), page, fields, identityFields);
+              resource,
+              normalized,
+              handler.handle(normalized, page),
+              page,
+              fields,
+              identityFields);
         });
   }
 
@@ -337,7 +365,19 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
-    scanList(name, scanDescription(name), input, fields, identityFields, handler);
+    scanList(
+        name, scanDescription(name), input, fields, identityFields, UnaryOperator.identity(), handler);
+  }
+
+  void scanList(
+      String name,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      UnaryOperator<Map<String, Object>> requestNormalizer,
+      PagedHandler handler) {
+    scanList(
+        name, scanDescription(name), input, fields, identityFields, requestNormalizer, handler);
   }
 
   private static String scanDescription(String name) {
@@ -354,6 +394,17 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
+    scanList(name, description, input, fields, identityFields, UnaryOperator.identity(), handler);
+  }
+
+  void scanList(
+      String name,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      UnaryOperator<Map<String, Object>> requestNormalizer,
+      PagedHandler handler) {
     register(
         name,
         MethodEffects.readOnlyMethod(),
@@ -363,10 +414,16 @@ public final class ApiRegistry {
         fields,
         identityFields,
         request -> {
+          Map<String, Object> normalized = requestNormalizer.apply(request);
           String resource = name.substring(0, name.indexOf('.'));
-          PageRequest page = decodePage(request, resource);
+          PageRequest page = decodePage(normalized, resource);
           return canonicalList(
-              resource, request, handler.handle(request, page), page, fields, identityFields);
+              resource,
+              normalized,
+              handler.handle(normalized, page),
+              page,
+              fields,
+              identityFields);
         });
   }
 
@@ -753,6 +810,20 @@ public final class ApiRegistry {
 
   static Map<String, Object> filter(Map<String, Object> request) {
     return object(request, "filter");
+  }
+
+  static UnaryOperator<Map<String, Object>> withFilterDefaults(Map<String, Object> defaults) {
+    return request -> {
+      Map<String, Object> normalized = new LinkedHashMap<>(request);
+      Map<String, Object> normalizedFilter = new LinkedHashMap<>(filter(request));
+      for (Map.Entry<String, Object> entry : defaults.entrySet()) {
+        if (normalizedFilter.get(entry.getKey()) == null) {
+          normalizedFilter.put(entry.getKey(), entry.getValue());
+        }
+      }
+      normalized.put("filter", Collections.unmodifiableMap(normalizedFilter));
+      return Collections.unmodifiableMap(normalized);
+    };
   }
 
   static Map<String, Object> patch(Map<String, Object> request) {

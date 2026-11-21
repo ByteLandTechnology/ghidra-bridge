@@ -150,6 +150,7 @@ final class FunctionMethods implements ApiMethodProvider {
         Set.of(ApiVocabulary.ENTRY, ApiVocabulary.NAME, "call_site", ApiVocabulary.DIRECTION,
             ApiVocabulary.NAMESPACE, "demangled_name"),
         List.of(ApiVocabulary.ENTRY),
+        ApiRegistry.withFilterDefaults(Map.of(ApiVocabulary.DIRECTION, "callees")),
         (request, page) -> {
           Map<String, Object> filter = filter(request);
           String entry = text(filter, ApiVocabulary.ENTRY);

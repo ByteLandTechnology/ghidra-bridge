@@ -3,6 +3,7 @@ package app.byteland.ghidra.api;
 import static app.byteland.ghidra.api.ApiRegistry.addressScan;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
+import static app.byteland.ghidra.api.ApiRegistry.withFilterDefaults;
 
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,7 @@ final class CodeUnitMethods implements ApiMethodProvider {
             "operands",
             ApiVocabulary.DATA_TYPE),
         List.of(ApiVocabulary.ADDRESS),
+        withFilterDefaults(Map.of(ApiVocabulary.KIND, "all")),
         (request, page) ->
             registry
                 .services()

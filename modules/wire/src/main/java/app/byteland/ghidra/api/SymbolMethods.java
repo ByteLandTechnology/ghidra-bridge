@@ -56,6 +56,7 @@ final class SymbolMethods implements ApiMethodProvider {
         ApiSchemaCatalog.scanListInput(symbolFilter),
         ApiSchemaCatalog.symbolFields(),
         List.of(ApiVocabulary.ADDRESS, "id"),
+        ApiRegistry.withFilterDefaults(Map.of(ApiVocabulary.CASE_SENSITIVE, false)),
         (request, page) -> {
           Map<String, Object> filter = filter(request);
           return registry
