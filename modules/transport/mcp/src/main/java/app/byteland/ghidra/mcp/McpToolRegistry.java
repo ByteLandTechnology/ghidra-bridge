@@ -65,23 +65,25 @@ final class McpToolRegistry {
         "type", "string",
         "description", "The operation to perform",
         "enum", List.copyOf(operations.keySet())));
-    properties.put("params", Map.of(
-        "type", "object",
-        "description", "Parameters for the operation"));
+    properties.put("params", McpParamsSchema.build(domain, operations.values()));
 
-    Map<String, Object> inputSchema = Map.of(
-        "type", "object",
-        "properties", properties,
-        "required", List.of("operation"));
+    Map<String, Object> inputSchema = new LinkedHashMap<>();
+    inputSchema.put("type", "object");
+    inputSchema.put("properties", Map.copyOf(properties));
+    inputSchema.put("required", List.of("operation"));
+    inputSchema.put("additionalProperties", false);
 
     String purpose = "listing".equals(domain)
-        ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
+        ? "for code units, data units, instructions, and flow overrides" : "for " + domain + " data";
+    boolean readOnlyHint = operations.values().stream().allMatch(MethodDescriptor::readOnly);
+    boolean destructiveHint = operations.values().stream().anyMatch(MethodDescriptor::destructive);
+    boolean idempotentHint = operations.values().stream().allMatch(MethodDescriptor::idempotent);
     return Map.of("name", toolName(domain),
         "description", "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
-        "inputSchema", inputSchema,
-        "annotations", Map.of("readOnlyHint", false, "destructiveHint", true,
-            "idempotentHint", false, "openWorldHint", false));
+        "inputSchema", Map.copyOf(inputSchema),
+        "annotations", Map.of("readOnlyHint", readOnlyHint, "destructiveHint", destructiveHint,
+            "idempotentHint", idempotentHint, "openWorldHint", false));
   }
 
   List<Map<String, Object>> listTools() { return listedTools; }
@@ -113,14 +115,30 @@ final class McpToolRegistry {
     Map<String, MethodDescriptor> operations = domains.get(domain);
     if (operations == null) throw new IllegalArgumentException("Unknown domain: " + domainValue);
     Object operationValue = arguments.get("operation");
-    if (operationValue == null) return Map.of("domain", toolName(domain),
-        "operations", List.copyOf(operations.keySet()));
+    if (operationValue == null) {
+      List<Map<String, Object>> operationEntries =
+          operations.entrySet().stream()
+              .map(entry -> domainOperationHelp(entry.getKey(), entry.getValue()))
+              .toList();
+      return Map.of("domain", toolName(domain), "operations", operationEntries);
+    }
     MethodDescriptor descriptor = operations.get(operationValue.toString());
     if (descriptor == null) throw new IllegalArgumentException("Unknown operation: " + operationValue);
     return Map.of("domain", toolName(domain), "operation", operationValue,
         "method", descriptor.name(), "description", descriptor.description(),
         "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
-        "effects", descriptor.contractValue().get("effects"));
+        "effects", descriptor.effects());
+  }
+
+  private static Map<String, Object> domainOperationHelp(
+      String operationName, MethodDescriptor descriptor) {
+    Map<String, Object> info = new LinkedHashMap<>();
+    info.put("name", operationName);
+    info.put("method", descriptor.name());
+    info.put("description", descriptor.description());
+    info.put("effects", descriptor.effects());
+    info.put("inputSchema", descriptor.inputSchema());
+    return Map.copyOf(info);
   }
 
   boolean isHelpTool(String name) {

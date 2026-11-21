@@ -111,16 +111,16 @@ The server closes the socket with these status codes:
 
 ## Model Context Protocol (MCP)
 
-The bridge implements MCP Streamable HTTP protocol version `2026-07-28`.
-The server does not use MCP sessions and does not send server-sent events.
+The bridge implements MCP Streamable HTTP protocol version `2026-07-28` and legacy SSE streams.
 
 ### HTTP Request Rules
 
 The MCP HTTP server handles requests:
-- **POST**: Dispatches JSON-RPC 2.0 requests.
+- **POST**: Dispatches JSON-RPC 2.0 requests. When `sessionId` is set in the query string, the server sends the response on that SSE stream and returns status `202`. An unknown or expired `sessionId` returns status `404`.
+- **GET**: Opens a `text/event-stream` SSE session, sends an `endpoint` event with `<path>?sessionId=<id>`, and sends periodic `keepalive` comments.
+- **HEAD**: Returns status `200` with no body.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
-- **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
-- **Other methods**: The server returns status `405`.
+- **Other methods**: The server returns status `405` with `Allow: POST, GET, OPTIONS`.
 - **Origin**: A request with an `Origin` header that is not a loopback host or the configured `host` returns status `403`.
 - **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.
@@ -180,8 +180,8 @@ The server handles these MCP methods:
   The bridge keeps this compatibility method in `2026-07-28`.
 - `tools/list`: Returns tool schemas for all 15 bridge tools.
 - `tools/call`: Executes a tool operation and returns structured content.
-- `resources/list`: Lists available resources, such as `ghidra-bridge://contracts/mcp-tools`.
-- `resources/read`: Reads contract resource content.
+- `resources/list`: Lists available resources, such as `ghidra-bridge://ghidra/contracts/mcp-tools`.
+- `resources/read`: Reads contract resource content from `ghidra-bridge://<tool_prefix>/contracts/mcp-tools`. For the default `ghidra` prefix, it also reads `ghidra-bridge://contracts/mcp-tools`.
 - `resources/templates/list`: Returns an empty template list.
 
 Other methods return HTTP `404` with code `-32601`.
@@ -197,31 +197,32 @@ The MCP error schema for that version cannot represent this case.
 ### Tool Call Convention
 
 MCP organizes operations into 15 tools:
-- `ghidra.help`: Finds domains, lists operations, and shows schemas.
-- 14 Domain Tools: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`.
+- `ghidra_help`: Finds domains, lists operations with schemas, and shows single operations.
+- 14 Domain Tools: `ghidra_bridge`, `ghidra_program`, `ghidra_address`, `ghidra_memory`, `ghidra_listing`, `ghidra_global_variable`, `ghidra_function`, `ghidra_analysis`, `ghidra_decompilation`, `ghidra_symbol`, `ghidra_reference`, `ghidra_comment`, `ghidra_data_type`, `ghidra_batch`.
 
 The domain tools expose 55 methods. `interface.get` is available only through WebSocket.
 
 ### Tool Name Prefix
 
-Every tool name starts with a prefix and a dot. The default prefix is `ghidra`.
+Every tool name starts with a prefix and an underscore. The default prefix is `ghidra`.
 Set the `tool_prefix` startup argument to change it, for example `tool_prefix=sample`.
-Then the tool names include `sample.help` and `sample.program`.
+Then the tool names include `sample_help` and `sample_program`, and the contract resource URI is `ghidra-bridge://sample/contracts/mcp-tools`.
 Use a different prefix for each bridge when one MCP client connects to more than one bridge.
 
 The prefix starts with a letter and has 1 to 64 letters, digits, `_`, or `-`.
 The server rejects a tool name with a different prefix.
-In `ghidra.help`, the `domain` argument accepts the full tool name or the domain name without the prefix, such as `memory`.
+During `tools/call`, the server still accepts the legacy dotted separator from older local scripts.
+In `ghidra_help`, the `domain` argument accepts the full tool name or the domain name without the prefix, such as `memory`.
 The examples in this document use the default prefix.
 
-`ghidra.help` accepts optional `domain` and `operation` arguments:
+`ghidra_help` accepts optional `domain` and `operation` arguments:
 - No arguments: Returns the list of domain tools.
-- `domain`: Returns the operation names of one domain tool.
+- `domain`: Returns each operation in the domain with its `name`, `method`, `description`, `effects`, and `inputSchema`.
 - `domain` and `operation`: Returns the method name, description, effects, `inputSchema`, and `outputSchema` of one operation.
 
 To execute an operation, call its domain tool with `operation` and `params`.
 The `operation` value is the operation name in the domain tool, not the dotted method name.
-For example, the `memory.read` method is the `read` operation of `ghidra.memory`:
+For example, the `memory.read` method is the `read` operation of `ghidra_memory`:
 
 ```json
 {
@@ -234,7 +235,7 @@ For example, the `memory.read` method is the `read` operation of `ghidra.memory`
       "io.modelcontextprotocol/clientInfo": {"name": "example-client", "version": "1.0.0"},
       "io.modelcontextprotocol/clientCapabilities": {}
     },
-    "name": "ghidra.memory",
+    "name": "ghidra_memory",
     "arguments": {
       "operation": "read",
       "params": {

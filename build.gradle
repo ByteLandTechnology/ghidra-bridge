@@ -213,7 +213,15 @@ tasks.register('verifyArchitecture') {
     }
 }
 
+tasks.register('verifyMcpDocumentation', JavaExec) {
+    group = 'verification'
+    dependsOn project(':transport:mcp').tasks.named('classes'), 'verifyApiContracts'
+    classpath = project(':transport:mcp').sourceSets.main.runtimeClasspath
+    mainClass = 'app.byteland.ghidra.mcp.McpContractGenerator'
+    args '--verify', rootDir.absolutePath
+}
+
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'verifyApiContracts', 'verifyMcpDocumentation', 'verifyDistribution', 'verifyArchitecture'
 }

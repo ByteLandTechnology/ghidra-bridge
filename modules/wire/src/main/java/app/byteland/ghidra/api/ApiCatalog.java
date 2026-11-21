@@ -110,6 +110,22 @@ public final class ApiCatalog {
       return responseSchema;
     }
 
+    public boolean readOnly() {
+      return readOnly;
+    }
+
+    public boolean destructive() {
+      return destructive;
+    }
+
+    public boolean idempotent() {
+      return idempotent;
+    }
+
+    public Map<String, Object> effects() {
+      return effectsValue();
+    }
+
     public Map<String, Object> contractValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put("description", methodDescription);
