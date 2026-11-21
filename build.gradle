@@ -34,6 +34,13 @@ subprojects {
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
+        options.release = 21
+        options.compilerArgs.addAll(['-Xlint:all', '-Werror'])
+    }
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+        options.addBooleanOption('Xdoclint:all', true)
+        options.addBooleanOption('Werror', true)
     }
 }
 
@@ -57,7 +64,6 @@ project(':adapter') {
         implementation project(':wire')
         implementation project(':runtime')
         compileOnly ghidraJars
-        compileOnly 'com.github.spotbugs:spotbugs-annotations:4.9.8'
         testImplementation ghidraJars
     }
 }
@@ -84,7 +90,13 @@ tasks.register('verifyGhidraInstallDir') {
     }
 }
 project(':adapter').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+project(':adapter').tasks.named('javadoc') {
+    dependsOn rootProject.tasks.named('verifyGhidraInstallDir')
+}
 project(':launcher').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+project(':launcher').tasks.named('javadoc') {
+    dependsOn rootProject.tasks.named('verifyGhidraInstallDir')
+}
 
 project(':launcher') {
     tasks.register('runtimeJar', Jar) {
@@ -197,6 +209,8 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     sourceCompatibility = '21'
     targetCompatibility = '21'
     options.encoding = 'UTF-8'
+    options.release = 21
+    options.compilerArgs.addAll(['-Xlint:all', '-Werror'])
 }
 
 tasks.register('verifyArchitecture') {
@@ -213,7 +227,10 @@ tasks.register('verifyArchitecture') {
     }
 }
 
+def javaSubprojects = subprojects.findAll { it.path != ':transport' }
+
 tasks.register('verify') {
     group = 'verification'
     dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn javaSubprojects.collect { [it.tasks.named('testClasses'), it.tasks.named('javadoc')] }
 }

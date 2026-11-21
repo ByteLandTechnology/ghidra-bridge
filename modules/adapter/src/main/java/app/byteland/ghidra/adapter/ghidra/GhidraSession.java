@@ -1,7 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
@@ -16,17 +15,29 @@ public final class GhidraSession {
   private final Object executionLock = new Object();
   private int transactionDepth;
 
+  /**
+   * Creates a session wrapper around an active Ghidra script.
+   *
+   * @param script active Ghidra script instance
+   */
   public GhidraSession(GhidraScript script) {
     this.ghidraScript = Objects.requireNonNull(script, "script");
   }
 
-  @SuppressFBWarnings(
-      value = "EI_EXPOSE_REP",
-      justification = "Adapter collaborators require the live GhidraScript execution context")
+  /**
+   * Returns the live Ghidra script instance.
+   *
+   * @return active Ghidra script
+   */
   public GhidraScript script() {
     return ghidraScript;
   }
 
+  /**
+   * Returns the active Ghidra program or fails when none is open.
+   *
+   * @return active Ghidra program
+   */
   public Program currentProgram() {
     Program program = currentProgramOrNull();
     if (program == null) {
@@ -35,11 +46,18 @@ public final class GhidraSession {
     return program;
   }
 
+  /**
+   * Returns the active Ghidra program, or null when no program is open.
+   *
+   * @return active Ghidra program or null
+   */
   public Program currentProgramOrNull() {
     return ghidraScript.getCurrentProgram();
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
+  /**
+   * Commits any ambient script transaction and saves the active program.
+   */
   public void saveCurrentProgram() {
     synchronized (executionLock) {
       var monitor = ghidraScript.getMonitor();
@@ -68,20 +86,47 @@ public final class GhidraSession {
     }
   }
 
+  /**
+   * Parses a raw address text value against the active program.
+   *
+   * @param rawAddress canonical or hex address text
+   * @return resolved Ghidra address
+   */
   public Address parseAddress(String rawAddress) {
     return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
+  /**
+   * Lists references to or from the given program address.
+   *
+   * @param address target or source address
+   * @param to true for inbound references, false for outbound references
+   * @return list of Ghidra references
+   */
   public java.util.List<ghidra.program.model.symbol.Reference> references(
       Address address, boolean to) {
     return java.util.Arrays.asList(
         to ? ghidraScript.getReferencesTo(address) : ghidraScript.getReferencesFrom(address));
   }
 
+  /**
+   * Runs an operation inside a committed program transaction.
+   *
+   * @param operation transactional operation to run
+   * @param <T> operation result type
+   * @return operation result
+   */
   public <T> T withTransaction(TransactionalOperation<T> operation) {
     return withTransaction(operation, true);
   }
 
+  /**
+   * Runs an operation inside a temporary transaction that reverts on completion.
+   *
+   * @param operation transactional operation to run
+   * @param <T> operation result type
+   * @return operation result
+   */
   public <T> T withTemporaryChanges(TransactionalOperation<T> operation) {
     return withTransaction(operation, false);
   }
@@ -115,6 +160,12 @@ public final class GhidraSession {
     }
   }
 
+  /**
+   * Executes a Ghidra command against the active program or fails on command error.
+   *
+   * @param command Ghidra program command
+   * @param failurePrefix message prefix used when the command fails
+   */
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
     synchronized (executionLock) {
@@ -129,12 +180,22 @@ public final class GhidraSession {
     throw new TransactionExecutionException(failurePrefix + ": " + status);
   }
 
+  /**
+   * Represents a checked operation executed inside a Ghidra transaction.
+   *
+   * @param <T> operation result type
+   */
   @FunctionalInterface
   public interface TransactionalOperation<T> {
+    /**
+     * Runs the transactional work.
+     *
+     * @return operation result
+     * @throws Exception if the operation fails
+     */
     T run() throws Exception;
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static <T> T runOperation(TransactionalOperation<T> operation) {
     try {
       return operation.run();

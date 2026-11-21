@@ -20,9 +20,16 @@ import java.util.function.Supplier;
  * Central registry that defines and dispatches all public API methods.
  */
 public final class ApiRegistry {
+  /** Public semantic version of the wire interface catalog. */
   public static final String INTERFACE_VERSION = "0.2.0";
+
+  /** Default page size for list operations when no limit is given. */
   public static final int DEFAULT_LIMIT = 100;
+
+  /** Maximum page size permitted for list operations. */
   public static final int MAX_LIMIT = app.byteland.ghidra.service.Page.MAX_LIMIT;
+
+  /** Maximum number of sub-requests permitted in one batch call. */
   public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
@@ -38,6 +45,14 @@ public final class ApiRegistry {
   private final ApiCatalog catalogSnapshot;
   private BatchMethod batchMethod;
 
+  /**
+   * Creates a registry bound to active domain services and session callbacks.
+   *
+   * @param services active domain service container
+   * @param sessionId active bridge session identifier
+   * @param sessionSupplier supplier for session metadata fields
+   * @param shutdownAction callback that stops the active session
+   */
   public ApiRegistry(
       BridgeServices services,
       String sessionId,
@@ -52,7 +67,11 @@ public final class ApiRegistry {
     catalogSnapshot = ApiCatalog.from(INTERFACE_VERSION, methodsByName.values());
   }
 
-  /** Builds the method catalog without an open Ghidra program. */
+  /**
+   * Builds the method catalog without an open Ghidra program.
+   *
+   * @return static method catalog snapshot
+   */
   public static ApiCatalog catalog() {
     return new ApiRegistry(metadataServices(), "schema", Map::of, () -> {}).methodCatalog();
   }
@@ -75,11 +94,7 @@ public final class ApiRegistry {
         "metadata");
   }
 
-  @SuppressWarnings({
-    ApiVocabulary.UNCHECKED,
-    "PMD.UseProperClassLoader",
-    "PMD.CompareObjectsWithEquals"
-  })
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
   private static <T> T inertService(Class<T> type) {
     return (T)
         java.lang.reflect.Proxy.newProxyInstance(
@@ -123,22 +138,51 @@ public final class ApiRegistry {
     return bridgeServices;
   }
 
+  /**
+   * Returns the immutable public API catalog snapshot.
+   *
+   * @return public API catalog
+   */
   public ApiCatalog methodCatalog() {
     return catalogSnapshot;
   }
 
+  /**
+   * Returns all registered API method definitions in registration order.
+   *
+   * @return unmodifiable list of API methods
+   */
   public List<ApiMethod<Map<String, Object>, Object>> methods() {
     return List.copyOf(methodsByName.values());
   }
 
+  /**
+   * Returns all registered dotted method names in registration order.
+   *
+   * @return unmodifiable set of dotted method names
+   */
   public Set<String> methodNames() {
     return Collections.unmodifiableSet(methodsByName.keySet());
   }
 
+  /**
+   * Looks up one registered API method by its dotted name.
+   *
+   * @param name dotted method name
+   * @return registered method definition, or null when absent
+   */
   public ApiMethod<Map<String, Object>, Object> method(String name) {
     return methodsByName.get(name);
   }
 
+  /**
+   * Validates parameters and dispatches one public API method call.
+   *
+   * @param name dotted method name
+   * @param params untyped JSON parameter object
+   * @return wire-encoded method result
+   * @throws Exception if validation or service execution fails
+   */
   public Object dispatch(String name, Map<String, Object> params) throws Exception {
     ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
     if (method == null) {
@@ -672,7 +716,6 @@ public final class ApiRegistry {
     return 0;
   }
 
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
   private static boolean sameReference(Object left, Object right) {
     return left == right;
   }
@@ -858,7 +901,6 @@ public final class ApiRegistry {
         .toList();
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   static List<String> stringList(Object value) {
     if (!(value instanceof List<?> list)) return null;
     return list.stream().map(String.class::cast).toList();

@@ -10,9 +10,18 @@ import java.util.Map;
 import java.util.List;
 import java.util.TreeMap;
 
+/**
+ * Generates the MCP tool catalog JSON file from {@link ApiRegistry}.
+ */
 public final class McpContractGenerator {
   private McpContractGenerator() {}
 
+  /**
+   * Writes {@code docs/mcp-tools.json} under the target root directory.
+   *
+   * @param args optional single root directory path
+   * @throws IOException if the contract file write fails
+   */
   public static void main(String[] args) throws IOException {
     Path root = Path.of(args.length == 0 ? "." : args[0]).toAbsolutePath().normalize();
     Path output = root.resolve("docs/mcp-tools.json");

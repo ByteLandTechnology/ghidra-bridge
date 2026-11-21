@@ -23,13 +23,20 @@ import java.util.function.BooleanSupplier;
  */
 @SuppressWarnings("try")
 public final class Bootstrap {
-  @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
   private static final String LOOPBACK_HOST = "127.0.0.1";
 
   private static final String SESSION_ID_ARGUMENT = "session_id";
 
   private Bootstrap() {}
 
+  /**
+   * Starts the WebSocket bridge transport for the active Ghidra script.
+   *
+   * @param script active Ghidra script instance
+   * @param args strict key=value launch arguments
+   * @param onShutdown optional callback invoked during JVM shutdown
+   * @throws Exception if configuration or transport execution fails
+   */
   public static void startFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
     if (script == null) {
@@ -112,6 +119,14 @@ public final class Bootstrap {
     }
   }
 
+  /**
+   * Starts the MCP Streamable HTTP transport for the active Ghidra script.
+   *
+   * @param script active Ghidra script instance
+   * @param args strict key=value launch arguments
+   * @param onShutdown optional callback invoked during JVM shutdown
+   * @throws Exception if configuration or server execution fails
+   */
   public static void startMcpFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
     if (script == null) {
@@ -186,7 +201,6 @@ public final class Bootstrap {
             script.printerr(prefix + " Program save on exit failed: " + errorMessage(failure)));
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static void saveCheckpoint(GhidraScript script, Program program, String prefix) {
     try {
       script.saveProgram(program);

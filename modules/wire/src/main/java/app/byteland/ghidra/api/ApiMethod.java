@@ -31,6 +31,7 @@ public record ApiMethod<Request, Response>(
     Handler<Request, Response> handler,
     McpAnnotations mcpAnnotations) {
 
+  /** Validates method descriptor fields and copies field collections. */
   public ApiMethod {
     Objects.requireNonNull(name, "name");
     if (description == null || description.isBlank()) {
@@ -45,14 +46,34 @@ public record ApiMethod<Request, Response>(
     Objects.requireNonNull(mcpAnnotations, "mcpAnnotations");
   }
 
+  /**
+   * Decodes raw parameters, executes the handler, and projects response fields.
+   *
+   * @param params raw JSON request parameters
+   * @return encoded and projected response value
+   * @throws Exception if validation or handler execution fails
+   */
   public Object invoke(Object params) throws Exception {
     return invokeDecoded(decodeRequest(params));
   }
 
+  /**
+   * Decodes raw request parameters with this method's request codec.
+   *
+   * @param params raw JSON request parameters
+   * @return decoded request value
+   */
   public Request decodeRequest(Object params) {
     return requestCodec.decode(params, "");
   }
 
+  /**
+   * Executes the handler on a decoded request and encodes the projected response.
+   *
+   * @param request decoded request value
+   * @return encoded and projected response value
+   * @throws Exception if field validation or handler execution fails
+   */
   public Object invokeDecoded(Request request) throws Exception {
     FieldProjection.validate(request, fields, identityFields);
     Response response = handler.handle(request);
@@ -60,8 +81,21 @@ public record ApiMethod<Request, Response>(
     return FieldProjection.apply(encoded, request, fields, identityFields);
   }
 
+  /**
+   * Executes a decoded API request and returns a typed response.
+   *
+   * @param <Request> decoded request type
+   * @param <Response> typed response type
+   */
   @FunctionalInterface
   public interface Handler<Request, Response> {
+    /**
+     * Processes a decoded API request.
+     *
+     * @param request decoded request value
+     * @return typed response value
+     * @throws Exception if execution fails
+     */
     Response handle(Request request) throws Exception;
   }
 
@@ -85,6 +119,7 @@ public record ApiMethod<Request, Response>(
       boolean idempotent,
       boolean batchable) {
 
+    /** Validates consistency across effect flags. */
     public MethodEffects {
       if (readOnly && (mutatesProgram || requiresTransaction || destructive)) {
         throw new IllegalArgumentException("read-only methods cannot mutate or be destructive");
@@ -94,23 +129,55 @@ public record ApiMethod<Request, Response>(
       }
     }
 
+    /**
+     * Returns effect metadata for a batchable read-only query method.
+     *
+     * @return read-only method effects
+     */
     public static MethodEffects readOnlyMethod() {
       return new MethodEffects(true, false, false, true, false, true, true);
     }
 
+    /**
+     * Returns effect metadata for a non-batchable metadata inspection method.
+     *
+     * @return metadata method effects
+     */
     public static MethodEffects metadata() {
       return new MethodEffects(true, false, false, true, false, true, false);
     }
 
+    /**
+     * Returns effect metadata for a transactional program mutation method.
+     *
+     * @param destructive {@code true} if the mutation deletes or overwrites data
+     * @param idempotent {@code true} if repeated calls produce the same program state
+     * @return transactional mutation method effects
+     */
     public static MethodEffects mutation(boolean destructive, boolean idempotent) {
       return new MethodEffects(false, true, true, false, destructive, idempotent, true);
     }
 
+    /**
+     * Returns effect metadata for a program mutation that manages its own concurrency outside a
+     * single transaction.
+     *
+     * @param destructive {@code true} if the mutation deletes or overwrites data
+     * @param idempotent {@code true} if repeated calls produce the same program state
+     * @return non-transactional mutation method effects
+     */
     public static MethodEffects mutationWithoutTransaction(
         boolean destructive, boolean idempotent) {
       return new MethodEffects(false, true, false, false, destructive, idempotent, false);
     }
 
+    /**
+     * Returns effect metadata for a session lifecycle control method.
+     *
+     * @param destructive {@code true} if the call terminates session state
+     * @param idempotent {@code true} if repeated calls have the same effect
+     * @return lifecycle method effects
+     */
     public static MethodEffects lifecycle(boolean destructive, boolean idempotent) {
       return new MethodEffects(false, false, false, true, destructive, idempotent, false);
     }
@@ -126,6 +193,13 @@ public record ApiMethod<Request, Response>(
    */
   public record McpAnnotations(
       String title, boolean readOnlyHint, boolean destructiveHint, boolean idempotentHint) {
+    /**
+     * Derives MCP hint annotations from a method name and its {@link MethodEffects}.
+     *
+     * @param name canonical method name
+     * @param effects method effect flags
+     * @return MCP tool hint annotations
+     */
     public static McpAnnotations forMethod(String name, MethodEffects effects) {
       return new McpAnnotations(
           name, effects.readOnly(), effects.destructive(), effects.idempotent());

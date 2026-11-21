@@ -12,6 +12,9 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Ghidra-backed implementation of {@link AnalysisService}.
+ */
 public final class AnalysisServiceImpl implements AnalysisService {
   private final GhidraSession context;
   private final Program program;
@@ -21,6 +24,11 @@ public final class AnalysisServiceImpl implements AnalysisService {
   private AnalysisTask currentTask;
   private boolean closed;
 
+  /**
+   * Creates an analysis service bound to a Ghidra session.
+   *
+   * @param context active Ghidra session
+   */
   public AnalysisServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
     this.program = context.currentProgram();

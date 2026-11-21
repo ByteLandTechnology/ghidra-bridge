@@ -35,14 +35,29 @@ public final class ApiCatalog {
     return new ApiCatalog(interfaceVersion, List.copyOf(ordered.values()));
   }
 
+  /**
+   * Returns the published API interface version.
+   *
+   * @return semantic interface version string
+   */
   public String interfaceVersion() {
     return apiInterfaceVersion;
   }
 
+  /**
+   * Returns all method descriptors in registration order.
+   *
+   * @return immutable list of method descriptors
+   */
   public List<MethodDescriptor> methods() {
     return methodDescriptors;
   }
 
+  /**
+   * Builds the wire payload returned by {@code rpc.describe}.
+   *
+   * @return map with the interface version and method list
+   */
   public Map<String, Object> interfaceDescription() {
     return Map.of(
         "interface_version",
@@ -94,22 +109,47 @@ public final class ApiCatalog {
       return new MethodDescriptor(method);
     }
 
+    /**
+     * Returns the canonical dotted method name.
+     *
+     * @return dotted method name
+     */
     public String name() {
       return methodName;
     }
 
+    /**
+     * Returns the method description text.
+     *
+     * @return technical description
+     */
     public String description() {
       return methodDescription;
     }
 
+    /**
+     * Returns the immutable JSON Schema for method requests.
+     *
+     * @return input JSON Schema map
+     */
     public Map<String, Object> inputSchema() {
       return requestSchema;
     }
 
+    /**
+     * Returns the immutable JSON Schema for method responses.
+     *
+     * @return output JSON Schema map
+     */
     public Map<String, Object> outputSchema() {
       return responseSchema;
     }
 
+    /**
+     * Returns the AsyncAPI extension metadata map for this method.
+     *
+     * @return contract metadata map without the method name key
+     */
     public Map<String, Object> contractValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put("description", methodDescription);
@@ -119,6 +159,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(descriptor);
     }
 
+    /**
+     * Returns the runtime reflection map for this method.
+     *
+     * @return descriptor map with the method name key
+     */
     public Map<String, Object> interfaceValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put(ApiVocabulary.NAME, methodName);
@@ -126,6 +171,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(descriptor);
     }
 
+    /**
+     * Builds the MCP tool definition map with the default method name.
+     *
+     * @return immutable MCP tool descriptor map
+     */
     public Map<String, Object> mcpTool() {
       Map<String, Object> tool = new LinkedHashMap<>();
       tool.put("name", methodName);
@@ -143,6 +193,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(tool);
     }
 
+    /**
+     * Returns a short effect label for Markdown documentation tables.
+     *
+     * @return effect label string
+     */
     public String effectSummary() {
       if (readOnly) return "read-only";
       if (!mutatesProgram) return "lifecycle";

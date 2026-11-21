@@ -20,6 +20,12 @@ public final class AgentDispatcher implements AutoCloseable {
   private final Object sequenceLock = new Object();
   private volatile boolean shuttingDown;
 
+  /**
+   * Creates a dispatcher backed by the given bridge services and session configuration.
+   *
+   * @param services domain services for the active program
+   * @param config runtime session configuration
+   */
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
     Objects.requireNonNull(services, "services");
     this.config = Objects.requireNonNull(config, "config");
@@ -35,6 +41,14 @@ public final class AgentDispatcher implements AutoCloseable {
     services.close();
   }
 
+  /**
+   * Dispatches a single API method call in sequence.
+   *
+   * @param method dotted API method name
+   * @param params decoded request parameters
+   * @return serialized response payload
+   * @throws Exception if validation or method execution fails
+   */
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {
@@ -47,14 +61,29 @@ public final class AgentDispatcher implements AutoCloseable {
         });
   }
 
+  /**
+   * Returns the registered API method catalog.
+   *
+   * @return API method catalog
+   */
   public ApiCatalog methodCatalog() {
     return apiRegistry.methodCatalog();
   }
 
+  /**
+   * Reports whether session shutdown has started.
+   *
+   * @return {@code true} if shutdown was requested
+   */
   public boolean isShuttingDown() {
     return shuttingDown;
   }
 
+  /**
+   * Returns the name of the active Ghidra program.
+   *
+   * @return program name
+   */
   public String getProgramName() {
     return programName;
   }

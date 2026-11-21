@@ -118,4 +118,30 @@ class TransactionExecutionExceptionTest {
     assertNotNull(ex.details());
     assertTrue(ex.details().isEmpty());
   }
+
+  @Test
+  @DisplayName("Serialization preserves message and target and returns an empty details map")
+  void testSerializationRoundTrip() throws Exception {
+    var original =
+        new TransactionExecutionException(
+            "failed", "var1", Map.of("step", 2), new IOException("disk"));
+    byte[] bytes;
+    try (var out = new java.io.ByteArrayOutputStream();
+        var objectOut = new java.io.ObjectOutputStream(out)) {
+      objectOut.writeObject(original);
+      bytes = out.toByteArray();
+    }
+    TransactionExecutionException restored;
+    try (var in = new java.io.ByteArrayInputStream(bytes);
+        var objectIn = new java.io.ObjectInputStream(in)) {
+      restored = (TransactionExecutionException) objectIn.readObject();
+    }
+    assertEquals("failed", restored.getMessage());
+    assertEquals("var1", restored.target());
+    assertEquals(500, restored.status());
+    assertEquals("transaction_failed", restored.code());
+    assertNotNull(restored.getCause());
+    assertNotNull(restored.details());
+    assertTrue(restored.details().isEmpty());
+  }
 }

@@ -30,9 +30,14 @@ public final class AgentClient {
   /** The maximum time for the send of one keepalive ping. */
   private static final Duration KEEPALIVE_TIMEOUT = Duration.ofSeconds(10);
 
+  /**
+   * Receives lifecycle events from the WebSocket transport.
+   */
   public interface LifecycleListener {
+    /** Invoked when the embedded WebSocket server opens its listener socket. */
     default void onListening() {}
 
+    /** Invoked when the outbound WebSocket client connects to the remote host. */
     default void onConnected() {}
   }
 
@@ -45,10 +50,23 @@ public final class AgentClient {
       new AtomicReference<>();
   private final AtomicReference<AgentWebSocketServer> serverRef = new AtomicReference<>();
 
+  /**
+   * Creates a WebSocket transport runner with no-op lifecycle callbacks.
+   *
+   * @param config transport configuration
+   * @param dispatcher bridge request dispatcher
+   */
   public AgentClient(AgentConfig config, AgentDispatcher dispatcher) {
     this(config, dispatcher, new LifecycleListener() {});
   }
 
+  /**
+   * Creates a WebSocket transport runner with custom lifecycle callbacks.
+   *
+   * @param config transport configuration
+   * @param dispatcher bridge request dispatcher
+   * @param lifecycleListener listener notified on listen or connect events
+   */
   public AgentClient(
       AgentConfig config, AgentDispatcher dispatcher, LifecycleListener lifecycleListener) {
     this(config, dispatcher, lifecycleListener, DEFAULT_CONNECT_TIMEOUT);
@@ -65,10 +83,21 @@ public final class AgentClient {
     this.connectTimeout = connectTimeout;
   }
 
+  /**
+   * Runs the WebSocket transport until the session disconnects.
+   *
+   * @throws Exception if startup or connection fails
+   */
   public void connect() throws Exception {
     connect(() -> false);
   }
 
+  /**
+   * Runs the WebSocket transport until the session disconnects or cancellation is requested.
+   *
+   * @param cancellationRequested supplier that reports external cancellation
+   * @throws Exception if startup or connection fails
+   */
   public void connect(BooleanSupplier cancellationRequested) throws Exception {
     try {
       connectUntilDisconnected(cancellationRequested);
@@ -129,11 +158,9 @@ public final class AgentClient {
     LOGGER.log(System.Logger.Level.ERROR, message, error);
   }
 
-  @SuppressWarnings({
-    "PMD.AvoidCatchingGenericException",
-    "PMD.CloseResource",
-    "PMD.CompareObjectsWithEquals"
-  })
+  /**
+   * Closes the active WebSocket channel or server and signals session completion.
+   */
   public void disconnect() {
     RuntimeException failure = null;
     try {
@@ -163,7 +190,6 @@ public final class AgentClient {
     if (failure != null) throw failure;
   }
 
-  @SuppressWarnings("PMD.CloseResource")
   private void serve(BooleanSupplier cancellationRequested) throws Exception {
     AgentMessageHandler messageHandler =
         new AgentMessageHandler(config, dispatcher, this::disconnect);
@@ -186,7 +212,6 @@ public final class AgentClient {
    * can occur after the host process stops. A ping to such a connection fails. Then the session
    * ends.
    */
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void awaitDisconnect(
       BooleanSupplier cancellationRequested, AgentClientChannels.OutboundMessageChannel channel)
       throws InterruptedException {
@@ -208,7 +233,6 @@ public final class AgentClient {
     }
   }
 
-  @SuppressWarnings("PMD.PreserveStackTrace")
   private static WebSocket awaitHandshake(
       CompletableFuture<WebSocket> wsFuture,
       String wsUrl,

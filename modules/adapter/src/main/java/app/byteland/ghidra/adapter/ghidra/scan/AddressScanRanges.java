@@ -6,9 +6,20 @@ import app.byteland.ghidra.service.AddressScanOptions;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 
+/**
+ * Resolves and validates start and end addresses for bounded program scans.
+ */
 public final class AddressScanRanges {
   private AddressScanRanges() {}
 
+  /**
+   * Resolves scan start and end bounds against the active Ghidra session.
+   *
+   * @param context active Ghidra session
+   * @param options requested scan start, end, and timeout options
+   * @param defaultEndToAddressSpace {@code true} to default {@code end} to the program or space end
+   * @return validated scan range
+   */
   public static Resolved resolve(
       GhidraSession context, AddressScanOptions options, boolean defaultEndToAddressSpace) {
     Address start =
@@ -37,6 +48,13 @@ public final class AddressScanRanges {
     return start.getAddressSpace().getMaxAddress();
   }
 
+  /**
+   * Creates a validated scan range from explicit start and optional end addresses.
+   *
+   * @param start inclusive start address
+   * @param end optional inclusive end address in the same address space
+   * @return validated scan range
+   */
   public static Resolved of(Address start, Address end) {
     if (start == null) throw new IllegalArgumentException("start is required");
     if (end != null) {
@@ -50,19 +68,47 @@ public final class AddressScanRanges {
     return new Resolved(start, end);
   }
 
+  /**
+   * Validated inclusive address range within one address space.
+   *
+   * @param start inclusive start address
+   * @param end optional inclusive end address, or {@code null} when unbounded
+   */
   public record Resolved(Address start, Address end) {
+    /**
+     * Returns the canonical string form of {@link #start()}.
+     *
+     * @return canonical start address string
+     */
     public String startText() {
       return AddressUtil.canonicalAddress(start);
     }
 
+    /**
+     * Returns the canonical string form of {@link #end()}.
+     *
+     * @return canonical end address string, or {@code null} when unbounded
+     */
     public String endText() {
       return end == null ? null : AddressUtil.canonicalAddress(end);
     }
 
+    /**
+     * Reports whether an address falls within {@code [start, end]}.
+     *
+     * @param address candidate address in the same address space
+     * @return {@code true} if {@code address} is inside the range
+     */
     public boolean includes(Address address) {
       return address.compareTo(start) >= 0 && (end == null || address.compareTo(end) <= 0);
     }
 
+    /**
+     * Reports whether an address is strictly past {@link #end()}.
+     *
+     * @param address candidate address in the same address space
+     * @return {@code true} if {@code end} is non-null and {@code address > end}
+     */
     public boolean afterEnd(Address address) {
       return end != null && address.compareTo(end) > 0;
     }

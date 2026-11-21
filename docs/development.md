@@ -89,7 +89,22 @@ Before you submit a change, run the verification suite:
 bash .github/scripts/verify-repository-hygiene.sh
 ```
 
-The verification tasks check:
+To run compiler lint, Javadoc, or unit test checks separately during local work, run:
+
+```bash
+# Compile main, test, and generated script classes with Java 21 lints
+./gradlew --no-daemon classes testClasses compileGeneratedScripts
+
+# Check Javadoc comments and tags across all Java subprojects
+./gradlew --no-daemon javadoc
+
+# Run unit tests across all Java subprojects
+./gradlew --no-daemon test
+```
+
+The `verify` task checks:
+- **Compiler Lints**: Java and script compile tasks use `-Xlint:all` and `-Werror` on Java 21.
+- **Javadoc**: `javadoc` checks all Java subprojects with `-Xdoclint:all` and `-Werror`.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.

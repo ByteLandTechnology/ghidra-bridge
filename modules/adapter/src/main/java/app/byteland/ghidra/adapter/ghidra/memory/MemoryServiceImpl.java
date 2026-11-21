@@ -7,11 +7,19 @@ import app.byteland.ghidra.service.memory.MemoryBlockResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 
+/**
+ * Ghidra-backed implementation of {@link MemoryService}.
+ */
 public final class MemoryServiceImpl implements MemoryService {
   private final MemoryBlockQueries memoryBlockQueries;
   private final MemoryRangeQueries memoryRangeQueries;
   private final MemoryMutations memoryMutations;
 
+  /**
+   * Creates a memory service bound to a Ghidra session.
+   *
+   * @param context active Ghidra session
+   */
   public MemoryServiceImpl(GhidraSession context) {
     this.memoryBlockQueries = new MemoryBlockQueries(context);
     this.memoryRangeQueries = new MemoryRangeQueries(context, MemoryService.MAX_RANGE_LENGTH);

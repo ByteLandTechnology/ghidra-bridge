@@ -5,11 +5,19 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableResource;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
 
+/**
+ * Ghidra-backed implementation of {@link GlobalVariableService}.
+ */
 public final class GlobalVariableServiceImpl implements GlobalVariableService {
   private final GhidraSession context;
   private final GlobalVariableQueries queries;
   private final GlobalVariableMutations mutations;
 
+  /**
+   * Creates a global variable service bound to a Ghidra session.
+   *
+   * @param context active Ghidra session
+   */
   public GlobalVariableServiceImpl(GhidraSession context) {
     this.context = context;
     this.queries = new GlobalVariableQueries(context);
