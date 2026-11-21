@@ -57,7 +57,11 @@ public record ApiMethod<Request, Response>(
     FieldProjection.validate(request, fields, identityFields);
     Response response = handler.handle(request);
     Object encoded = responseCodec.encode(response);
-    return FieldProjection.apply(encoded, request, fields, identityFields);
+    Object projected = FieldProjection.apply(encoded, request, fields, identityFields);
+    if (projected != encoded) {
+      JsonValueCodec.validateOutput(projected, responseCodec.schema());
+    }
+    return projected;
   }
 
   @FunctionalInterface

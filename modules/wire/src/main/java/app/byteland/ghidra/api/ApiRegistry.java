@@ -326,8 +326,7 @@ public final class ApiRegistry {
         request -> {
           String resource = name.substring(0, name.indexOf('.'));
           PageRequest page = decodePage(request, resource);
-          return canonicalList(
-              resource, request, handler.handle(request, page), page, fields, identityFields);
+          return canonicalList(resource, request, handler.handle(request, page), page, fields);
         });
   }
 
@@ -365,8 +364,7 @@ public final class ApiRegistry {
         request -> {
           String resource = name.substring(0, name.indexOf('.'));
           PageRequest page = decodePage(request, resource);
-          return canonicalList(
-              resource, request, handler.handle(request, page), page, fields, identityFields);
+          return canonicalList(resource, request, handler.handle(request, page), page, fields);
         });
   }
 
@@ -420,7 +418,7 @@ public final class ApiRegistry {
         effects,
         description,
         input,
-        ApiSchemaCatalog.resourceSchema(fields, identityFields),
+        ApiSchemaCatalog.resourceSchema(fields, identityFields, false),
         fields,
         identityFields,
         request -> WireValues.restrict(WireValues.resource(handler.handle(request)), fields));
@@ -444,7 +442,7 @@ public final class ApiRegistry {
                 Map.of(
                     ApiVocabulary.ITEMS,
                     WireSchema.array(
-                        ApiSchemaCatalog.resourceSchema(fields, identityFields),
+                        ApiSchemaCatalog.resourceSchema(fields, identityFields, false),
                         0,
                         Integer.MAX_VALUE)),
                 ApiVocabulary.ITEMS)),
@@ -452,8 +450,7 @@ public final class ApiRegistry {
         identityFields,
         request -> {
           Map<String, Object> normalizedList = WireValues.list(handler.handle(request), MAX_LIMIT);
-          return Map.of(
-              ApiVocabulary.ITEMS, restrictAndSortItems(normalizedList, fields, identityFields));
+          return Map.of(ApiVocabulary.ITEMS, restrictItems(normalizedList, fields));
         });
   }
 
@@ -617,11 +614,9 @@ public final class ApiRegistry {
       Map<String, Object> request,
       Object raw,
       PageRequest page,
-      Set<String> fields,
-      List<String> identityFields) {
+      Set<String> fields) {
     Map<String, Object> result = WireValues.list(raw, page.limit());
-    List<Map<String, Object>> normalizedItems =
-        restrictAndSortItems(result, fields, identityFields);
+    List<Map<String, Object>> normalizedItems = restrictItems(result, fields);
     Optional<Object> next = Optional.ofNullable(result.get("next_cursor"));
     result.put(ApiVocabulary.ITEMS, normalizedItems);
     result.remove("next_cursor");
@@ -639,42 +634,11 @@ public final class ApiRegistry {
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static List<Map<String, Object>> restrictAndSortItems(
-      Map<String, Object> normalizedList, Set<String> fields, List<String> identityFields) {
+  private static List<Map<String, Object>> restrictItems(
+      Map<String, Object> normalizedList, Set<String> fields) {
     List<Map<String, Object>> items =
         (List<Map<String, Object>>) (List<?>) normalizedList.get(ApiVocabulary.ITEMS);
-    return items.stream()
-        .map(item -> WireValues.restrict(item, fields))
-        .sorted((left, right) -> compareIdentity(left, right, identityFields))
-        .toList();
-  }
-
-  private static int compareIdentity(
-      Map<String, Object> left, Map<String, Object> right, List<String> identityFields) {
-    for (String field : identityFields) {
-      Object leftValue = left.get(field);
-      Object rightValue = right.get(field);
-      int compared;
-      if (sameReference(leftValue, rightValue)) {
-        compared = 0;
-      } else if (leftValue == null) {
-        compared = -1;
-      } else if (rightValue == null) {
-        compared = 1;
-      } else if (leftValue instanceof Number leftNumber
-          && rightValue instanceof Number rightNumber) {
-        compared = Long.compare(leftNumber.longValue(), rightNumber.longValue());
-      } else {
-        compared = String.valueOf(leftValue).compareTo(String.valueOf(rightValue));
-      }
-      if (compared != 0) return compared;
-    }
-    return 0;
-  }
-
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
-  private static boolean sameReference(Object left, Object right) {
-    return left == right;
+    return items.stream().map(item -> WireValues.restrict(item, fields)).toList();
   }
 
   private boolean analysisRunning() {
@@ -834,7 +798,17 @@ public final class ApiRegistry {
 
   static app.byteland.ghidra.service.listing.FlowOverrideScope flowScope(
       Map<String, Object> selector) {
-    return switch (text(selector, ApiVocabulary.KIND)) {
+    return flowScope(selector, "/selector");
+  }
+
+  static app.byteland.ghidra.service.listing.FlowOverrideScope flowScope(
+      Map<String, Object> selector, String target) {
+    String kind = selector == null ? null : optionalText(selector, ApiVocabulary.KIND);
+    if (kind == null) {
+      throw ApiException.badRequest(
+          ApiVocabulary.MISSING_FIELD, target + "/kind is required", target + "/kind");
+    }
+    return switch (kind) {
       case ApiVocabulary.ADDRESS ->
           new app.byteland.ghidra.service.listing.FlowOverrideScope.AddressScope(
               text(selector, ApiVocabulary.ADDRESS));
@@ -844,7 +818,9 @@ public final class ApiRegistry {
       case "range" ->
           new app.byteland.ghidra.service.listing.FlowOverrideScope.RangeScope(
               text(selector, ApiVocabulary.START), text(selector, ApiVocabulary.END));
-      default -> throw new AssertionError(selector.get(ApiVocabulary.KIND));
+      default ->
+          throw ApiException.badRequest(
+              "invalid_enum", target + "/kind has an unsupported value", target + "/kind");
     };
   }
 

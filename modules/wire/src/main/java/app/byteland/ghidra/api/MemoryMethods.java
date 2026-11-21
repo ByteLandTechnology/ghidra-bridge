@@ -89,7 +89,8 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.BYTES,
                 "bytes.encoding",
                 "bytes.data",
-                "bytes.length")),
+                "bytes.length"),
+            List.of(ApiVocabulary.ADDRESS)),
         Set.of(
             ApiVocabulary.ADDRESS,
             ApiVocabulary.BYTES,

@@ -64,7 +64,8 @@ final class InstructionMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 flowSelector,
                 "flow_overrides",
-                WireSchema.array(ApiSchemaCatalog.flowOverride(), 1, 5)));
+                WireSchema.array(ApiSchemaCatalog.flowOverride(), 1, 5)),
+            ApiVocabulary.SELECTOR);
     registry.scanList(
         "flow_override.list",
         "List stored flow overrides. Select an address, function, or range."
@@ -78,7 +79,7 @@ final class InstructionMethods implements ApiMethodProvider {
               .services()
               .listingService()
               .getFlowOverrides(
-                  flowScope(selected),
+                  flowScope(selected, "/filter/selector"),
                   flowOverrides(
                       filter(request).get("flow_overrides"),
                       List.of("branch", "call", "call_return", "return")),
@@ -109,7 +110,7 @@ final class InstructionMethods implements ApiMethodProvider {
         request -> {
           Map<String, Object> selected = selector(request);
           Map<String, Object> change = patch(request);
-          FlowOverrideScope scope = flowScope(selected);
+          FlowOverrideScope scope = flowScope(selected, "/selector");
           registry
               .services()
               .listingService()
