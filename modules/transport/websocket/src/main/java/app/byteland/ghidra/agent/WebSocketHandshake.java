@@ -1,5 +1,6 @@
 package app.byteland.ghidra.agent;
 
+import app.byteland.ghidra.network.NetworkBinding;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -63,6 +64,7 @@ final class WebSocketHandshake {
     }
 
     Map<String, String> headers = new LinkedHashMap<>();
+    List<String> hostHeaders = new ArrayList<>();
     for (int i = 1; i < lines.size(); i++) {
       String line = lines.get(i);
       if (line.isEmpty()) {
@@ -70,17 +72,41 @@ final class WebSocketHandshake {
       }
       int idx = line.indexOf(':');
       if (idx <= 0) {
-        continue;
+        throw new HttpHandshakeException(400, "Bad Request", "Malformed header line");
       }
-      headers.put(
-          line.substring(0, idx).trim().toLowerCase(Locale.ROOT), line.substring(idx + 1).trim());
+      String rawName = line.substring(0, idx);
+      if (!isValidHeaderToken(rawName)) {
+        throw new HttpHandshakeException(400, "Bad Request", "Malformed header name");
+      }
+      String name = rawName.toLowerCase(Locale.ROOT);
+      String value = line.substring(idx + 1).trim();
+      if ("host".equals(name)) {
+        if (!hostHeaders.isEmpty()) {
+          throw new HttpHandshakeException(400, "Bad Request", "Duplicate Host header");
+        }
+        hostHeaders.add(value);
+      }
+      headers.put(name, value);
+    }
+    if (hostHeaders.isEmpty()) {
+      throw new HttpHandshakeException(400, "Bad Request", "Missing Host header");
+    }
+    String rawHost = hostHeaders.getFirst();
+    if (rawHost.isBlank()) {
+      throw new HttpHandshakeException(400, "Bad Request", "Blank Host header");
+    }
+    try {
+      NetworkBinding.parseHostAuthority(rawHost);
+    } catch (IllegalArgumentException invalidHost) {
+      throw new HttpHandshakeException(400, "Bad Request", "Malformed Host header");
     }
 
     String target = requestLine.get(1);
     int queryIndex = target.indexOf('?');
     String path = queryIndex >= 0 ? target.substring(0, queryIndex) : target;
     String query = queryIndex >= 0 ? target.substring(queryIndex + 1) : "";
-    return new HandshakeRequest(requestLine.getFirst(), path, parseQuery(query), headers);
+    return new HandshakeRequest(
+        requestLine.getFirst(), path, parseQuery(query), headers, hostHeaders);
   }
 
   static void writeHandshakeResponse(OutputStream output, String acceptKey) throws IOException {
@@ -156,11 +182,45 @@ final class WebSocketHandshake {
     return URLDecoder.decode(value, StandardCharsets.UTF_8);
   }
 
+  private static boolean isValidHeaderToken(String token) {
+    if (token == null || token.isEmpty()) {
+      return false;
+    }
+    for (int i = 0; i < token.length(); i++) {
+      char c = token.charAt(i);
+      boolean valid =
+          (c >= '0' && c <= '9')
+              || (c >= 'A' && c <= 'Z')
+              || (c >= 'a' && c <= 'z')
+              || "!#$%&'*+-.^_`|~".indexOf(c) >= 0;
+      if (!valid) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   record HandshakeRequest(
-      String method, String path, Map<String, String> query, Map<String, String> headers) {
+      String method,
+      String path,
+      Map<String, String> query,
+      Map<String, String> headers,
+      List<String> hostHeaders) {
+    HandshakeRequest(
+        String method, String path, Map<String, String> query, Map<String, String> headers) {
+      this(method, path, query, headers, deriveHostHeaders(headers));
+    }
+
     HandshakeRequest {
       query = immutableOrderedCopy(query, "query");
       headers = immutableOrderedCopy(headers, "headers");
+      hostHeaders = List.copyOf(Objects.requireNonNull(hostHeaders, "hostHeaders"));
+    }
+
+    private static List<String> deriveHostHeaders(Map<String, String> headers) {
+      Objects.requireNonNull(headers, "headers");
+      String host = headers.get("host");
+      return host == null ? List.of() : List.of(host);
     }
 
     private static Map<String, String> immutableOrderedCopy(

@@ -59,6 +59,7 @@ public final class McpHttpServer implements AutoCloseable {
   private static final String SESSION_ID_PARAM = "sessionId";
 
   private final McpConfig config;
+  private final boolean loopbackListener;
   private final AgentDispatcher dispatcher;
   private final Consumer<String> requestLogSink;
   private final McpToolRegistry toolRegistry;
@@ -77,6 +78,7 @@ public final class McpHttpServer implements AutoCloseable {
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
     this.config = Objects.requireNonNull(config, "config");
+    this.loopbackListener = NetworkBinding.isLoopback(config.host());
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
     this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
@@ -119,6 +121,10 @@ public final class McpHttpServer implements AutoCloseable {
 
   public String endpoint() {
     return config.endpoint();
+  }
+
+  int activeSseSessionCount() {
+    return sseSessions.size();
   }
 
   @Override
@@ -164,12 +170,19 @@ public final class McpHttpServer implements AutoCloseable {
       RequestLog log = new RequestLog(requestLogSink);
       try (exchange) {
         try {
-          addCommonHeaders(exchange);
+          NetworkBinding.HostValidationResult hostValidation = validateHost(exchange);
+          if (!hostValidation.isValid()) {
+            int status = hostValidation.httpStatus();
+            log.method(exchange.getRequestMethod()).error().status(status);
+            writePlain(exchange, status, hostValidation.message());
+            return;
+          }
           if (!isAllowedOrigin(exchange)) {
             log.method(exchange.getRequestMethod()).error().status(403);
             writePlain(exchange, 403, "Forbidden origin");
             return;
           }
+          addCommonHeaders(exchange);
 
           String requestMethod = exchange.getRequestMethod();
           if (HTTP_OPTIONS_METHOD.equalsIgnoreCase(requestMethod)) {
@@ -764,10 +777,20 @@ public final class McpHttpServer implements AutoCloseable {
       throws IOException {
     byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
     exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+    if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+      exchange.sendResponseHeaders(statusCode, -1);
+      return;
+    }
     exchange.sendResponseHeaders(statusCode, bytes.length);
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
     }
+  }
+
+  private NetworkBinding.HostValidationResult validateHost(HttpExchange exchange) {
+    List<String> hostHeaders = exchange.getRequestHeaders().get("Host");
+    return NetworkBinding.validateHostHeader(
+        hostHeaders, config.host(), server.getAddress().getPort(), loopbackListener);
   }
 
   private static void sendNoBody(HttpExchange exchange, int statusCode) throws IOException {

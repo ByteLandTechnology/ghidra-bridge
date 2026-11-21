@@ -5,11 +5,35 @@ import java.util.Locale;
 
 final class WebSocketHandshakeValidator {
   private static final String BAD_REQUEST_REASON = "Bad Request";
+  private static final String FORBIDDEN_REASON = "Forbidden";
   private static final String REQUIRED_VERSION = "13";
 
   private WebSocketHandshakeValidator() {}
 
   static void validate(AgentConfig config, WebSocketHandshake.HandshakeRequest request) {
+    NetworkBinding.HostValidationResult hostValidation =
+        NetworkBinding.validateHostHeader(request.hostHeaders(), config.host(), config.port());
+    validateWithHostResult(config, request, hostValidation);
+  }
+
+  static void validate(
+      AgentConfig config, boolean loopbackListener, WebSocketHandshake.HandshakeRequest request) {
+    NetworkBinding.HostValidationResult hostValidation =
+        NetworkBinding.validateHostHeader(
+            request.hostHeaders(), config.host(), config.port(), loopbackListener);
+    validateWithHostResult(config, request, hostValidation);
+  }
+
+  private static void validateWithHostResult(
+      AgentConfig config,
+      WebSocketHandshake.HandshakeRequest request,
+      NetworkBinding.HostValidationResult hostValidation) {
+    if (!hostValidation.isValid()) {
+      int status = hostValidation.httpStatus();
+      String reason = status == 403 ? FORBIDDEN_REASON : BAD_REQUEST_REASON;
+      throw new WebSocketHandshake.HttpHandshakeException(
+          status, reason, hostValidation.message());
+    }
     if (!"GET".equals(request.method())) {
       throw new WebSocketHandshake.HttpHandshakeException(
           405, "Method Not Allowed", "WebSocket upgrade requires GET");
