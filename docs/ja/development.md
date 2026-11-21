@@ -73,14 +73,25 @@ Ghidra の内部データ構造を型付けされたドメインレコードに�
 
 ## 品質チェック
 
+ローカルのクローンごとに 1 回、`pre-commit` と `commit-msg` の Git フックをインストールします:
+
+```bash
+pre-commit install --install-hooks
+```
+
 変更をコミットする前に、必ず検証スイートを実行してください:
 
 ```bash
-./gradlew --no-daemon clean verify
+pre-commit run --all-files
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
 ```
 
+[AGENTS.md](../../AGENTS.md) のリポジトリ規則および[コミットメッセージ規則](../../AGENTS.md#commit-messages)に従ってください。
+
 検証タスクは以下を厳格に検査します:
+- **リポジトリ衛生**: `pre-commit` と `verify-repository-hygiene.sh` が空ファイル、重複ファイル、生成物を拒否し、`docs/api.md` のメソッド数を確認します。
+- **コミットメッセージ**: `commit-msg` フックとプルリクエスト検査が Conventional Commit ヘッダー、スコープ、72 文字制限、`- ` リスト本文を検証します。
 - **アーキテクチャ境界**: `verifyArchitecture` により、adapter と launcher 以外での Ghidra クラスのインポートが禁止されます。
 - **規約ドリフト検出**: `verifyApiContracts` により、ドキュメント規約とコードの一致が確認されます。
 - **スクリプトコンパイル**: `compileGeneratedScripts` により、生成された起動スクリプトが正常にコンパイルできることを確認します。

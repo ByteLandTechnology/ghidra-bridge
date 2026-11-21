@@ -82,14 +82,25 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
+Install the `pre-commit` and `commit-msg` Git hooks once per clone:
+
+```bash
+pre-commit install --install-hooks
+```
+
 Before you submit a change, run the verification suite:
 
 ```bash
-./gradlew --no-daemon clean verify
+pre-commit run --all-files
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
 ```
 
+Follow the repository rules in [AGENTS.md](../AGENTS.md) and the [commit message rules](../AGENTS.md#commit-messages).
+
 The verification tasks check:
+- **Repository Hygiene**: `pre-commit` and `verify-repository-hygiene.sh` reject empty, duplicate, and generated files and verify `docs/api.md` method counts.
+- **Commit Messages**: `commit-msg` hooks and pull request checks validate Conventional Commit headers, scopes, 72-character lines, and `- ` list bodies.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.

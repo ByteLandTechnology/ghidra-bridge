@@ -1,0 +1,32 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+repos:
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.5.0
+    hooks:
+      - id: conventional-pre-commit
+        name: Verify Conventional Commit header
+        stages:
+          - commit-msg
+        args:
+          - --scopes=adapter,build,ci,contracts,docs,domain,launcher,main,mcp,runtime,transport,websocket,wire
+
+  - repo: local
+    hooks:
+      - id: verify-repository-hygiene
+        name: Verify repository hygiene
+        entry: bash .github/scripts/verify-repository-hygiene.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-commit
+
+      - id: verify-commit-msg
+        name: Verify commit message rules
+        entry: python3 .github/scripts/verify-commit-msg.py
+        language: system
+        stages:
+          - commit-msg
