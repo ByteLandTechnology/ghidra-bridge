@@ -73,6 +73,7 @@ project(':launcher') {
         implementation project(':transport:websocket')
         implementation project(':transport:mcp')
         compileOnly ghidraJars
+        testImplementation ghidraJars
     }
 }
 

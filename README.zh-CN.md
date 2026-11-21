@@ -59,7 +59,7 @@ mkdir -p /path/to/projects
 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" /path/to/projects demo \
   -import /path/to/target_binary \
   -scriptPath "$PWD/build/ghidra-script" \
-  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo
+  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 ```
 
 该脚本将持续运行并处理请求，直到您停止该进程。
@@ -69,7 +69,7 @@ mkdir -p /path/to/projects
 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" /path/to/projects demo \
   -process target_binary -noanalysis \
   -scriptPath "$PWD/build/ghidra-script" \
-  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo
+  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 ```
 
 ## 配置参数
@@ -99,7 +99,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `port` | `8765` (WS) / `8766` (MCP) | HTTP 或 WebSocket 服务的 TCP 端口号。WebSocket 仅在未设置 `ws_url` 时使用默认值。 |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | 请求分发所使用的 URL 路径端点。 |
 | `session_id` | 程序名 | 当前活跃会话的唯一标识字符串。 |
-| `token` | *(无)* | Bearer 认证所需的共享密钥 Token。 |
+| `token` | 随机生成（服务端）/ *(无)*（出站） | Bearer 认证所需的共享密钥 Token。服务端监听器在省略时自动生成随机 Token。 |
 | `ws_url` | *(无)* | 出站客户端模式中的远程 WebSocket URL。 |
 | `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra.program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
 | `jar` | *(自动)* | 当 `ghidra-bridge.jar` 不在脚本文件旁边时使用的路径。 |
@@ -110,10 +110,11 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 桥接服务强制执行严格的安全边界：
 
 - **默认回环**：监听服务默认绑定至 `127.0.0.1`。
-- **强制 Token**：非回环网络接口上的监听器必须配置 `token`。
-- **Bearer 请求头**：入站请求必须携带 `Authorization: Bearer <token>` 头部。
+- **强制 Token**：所有服务端监听器（包括回环监听器）都必须具备非空 `token`。若脚本启动时省略 `token`，启动器会生成随机的会话 Token，并在本地启动控制台输出一次。
+- **Bearer 请求头**：入站请求必须携带 `Authorization: Bearer <token>` 头部，缺少或无效的 Token 返回 HTTP 401。
+- **Host 校验**：监听器校验 HTTP `Host` 头部，对不匹配的 Host 返回 HTTP 403。
 - **拒绝 URL Token**：服务端直接以 HTTP 400 拒绝在 URL 查询参数中传递 Token。
-- **日志脱敏**：服务端绝不会把安全 Token 写入日志文件或输出控制台。
+- **日志脱敏**：服务端绝不会把安全 Token 写入请求日志或错误响应，也绝不会打印用户提供的 Token。
 
 ## API 与传输协议
 

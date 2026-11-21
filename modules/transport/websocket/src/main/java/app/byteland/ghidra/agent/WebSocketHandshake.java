@@ -72,8 +72,12 @@ final class WebSocketHandshake {
       if (idx <= 0) {
         continue;
       }
-      headers.put(
-          line.substring(0, idx).trim().toLowerCase(Locale.ROOT), line.substring(idx + 1).trim());
+      String headerName = line.substring(0, idx).trim().toLowerCase(Locale.ROOT);
+      String headerValue = line.substring(idx + 1).trim();
+      if ("host".equals(headerName) && headers.containsKey("host")) {
+        throw new HttpHandshakeException(400, "Bad Request", "Duplicate Host header");
+      }
+      headers.put(headerName, headerValue);
     }
 
     String target = requestLine.get(1);

@@ -59,6 +59,7 @@ public final class McpHttpServer implements AutoCloseable {
   private static final String SESSION_ID_PARAM = "sessionId";
 
   private final McpConfig config;
+  private final boolean loopbackHost;
   private final AgentDispatcher dispatcher;
   private final Consumer<String> requestLogSink;
   private final McpToolRegistry toolRegistry;
@@ -77,6 +78,7 @@ public final class McpHttpServer implements AutoCloseable {
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
     this.config = Objects.requireNonNull(config, "config");
+    this.loopbackHost = NetworkBinding.isLoopback(config.host());
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
     this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
@@ -173,13 +175,13 @@ public final class McpHttpServer implements AutoCloseable {
 
           String requestMethod = exchange.getRequestMethod();
           if (HTTP_OPTIONS_METHOD.equalsIgnoreCase(requestMethod)) {
+            if (!isAllowedHost(exchange)) {
+              log.method(HTTP_OPTIONS_METHOD).error().status(403);
+              writePlain(exchange, 403, "Forbidden host");
+              return;
+            }
             log.method(HTTP_OPTIONS_METHOD).ok().status(204);
             sendNoBody(exchange, 204);
-            return;
-          }
-          if ("HEAD".equalsIgnoreCase(requestMethod)) {
-            log.method("HEAD").ok().status(200);
-            sendNoBody(exchange, 200);
             return;
           }
 
@@ -198,6 +200,18 @@ public final class McpHttpServer implements AutoCloseable {
             exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
             log.error().status(401);
             writeJsonRpcError(exchange, 401, null, JSONRPC_UNAUTHORIZED, "Unauthorized");
+            return;
+          }
+
+          if (!isAllowedHost(exchange)) {
+            log.method(requestMethod).error().status(403);
+            writePlain(exchange, 403, "Forbidden host");
+            return;
+          }
+
+          if ("HEAD".equalsIgnoreCase(requestMethod)) {
+            log.method("HEAD").ok().status(200);
+            sendNoBody(exchange, 200);
             return;
           }
 
@@ -685,12 +699,17 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   private boolean authorize(HttpExchange exchange) {
-    String expectedToken = config.token();
-    if (expectedToken == null) {
-      return true;
-    }
     return NetworkBinding.bearerTokenMatches(
-        exchange.getRequestHeaders().getFirst("Authorization"), expectedToken);
+        exchange.getRequestHeaders().getFirst("Authorization"), config.token());
+  }
+
+  private boolean isAllowedHost(HttpExchange exchange) {
+    List<String> hosts = exchange.getRequestHeaders().get("Host");
+    if (hosts == null || hosts.size() != 1) {
+      return false;
+    }
+    return NetworkBinding.isAllowedHostHeader(
+        hosts.get(0), config.host(), config.port(), loopbackHost);
   }
 
   private static boolean hasQueryToken(URI uri) {

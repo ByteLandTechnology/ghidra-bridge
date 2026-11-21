@@ -59,7 +59,7 @@ mkdir -p /path/to/projects
 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" /path/to/projects demo \
   -import /path/to/target_binary \
   -scriptPath "$PWD/build/ghidra-script" \
-  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo
+  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 ```
 
 The post-script serves requests until you stop the process.
@@ -69,7 +69,7 @@ To open a saved project file without a new analysis, use `-process` with `-noana
 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" /path/to/projects demo \
   -process target_binary -noanalysis \
   -scriptPath "$PWD/build/ghidra-script" \
-  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo
+  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 ```
 
 ## Configuration Arguments
@@ -99,7 +99,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `port` | `8765` (WS) / `8766` (MCP) | TCP port number for the HTTP or WebSocket server. WebSocket uses the default only when `ws_url` is not set. |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | URL path endpoint for request dispatch. |
 | `session_id` | Program name | Unique identifier string for this active session. |
-| `token` | *(none)* | Shared secret token for bearer authentication. |
+| `token` | Random (server) / *(none)* (outbound) | Shared secret token for bearer authentication. Server listeners generate a random token on startup when omitted. |
 | `ws_url` | *(none)* | Remote WebSocket URL in outbound client mode. |
 | `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra.program`. Use a different value for each server that one client connects to. |
 | `jar` | *(auto)* | Path to `ghidra-bridge.jar` when the JAR is not beside the script file. |
@@ -110,10 +110,11 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 The bridge enforces strict security boundaries:
 
 - **Loopback Default**: Listeners bind to `127.0.0.1` by default.
-- **Mandatory Token**: A listener on a non-loopback interface requires `token`.
-- **Bearer Header**: Inbound requests must send `Authorization: Bearer <token>`.
+- **Mandatory Token**: Every server listener requires a non-blank `token`, including loopback listeners. When `token` is omitted at script startup, the launcher generates a random session token and prints it once on the local startup console.
+- **Bearer Header**: Inbound requests must send `Authorization: Bearer <token>`. Missing or invalid bearer tokens fail with HTTP 401.
+- **Host Validation**: Listeners validate the HTTP `Host` header and reject mismatched hosts with HTTP 403.
 - **Query Token Rejection**: The server rejects tokens in URL query strings with HTTP 400.
-- **Log Privacy**: The server never writes secret tokens to log files or consoles.
+- **Log Privacy**: The server never writes secret tokens to request logs or error payloads, and never prints user-supplied tokens.
 
 ## API and Transports
 

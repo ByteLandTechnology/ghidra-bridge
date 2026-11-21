@@ -18,6 +18,19 @@ final class WebSocketHandshakeValidator {
       throw new WebSocketHandshake.HttpHandshakeException(
           404, "Not Found", "Expected " + config.path());
     }
+    if (request.query().containsKey("token")) {
+      throw new WebSocketHandshake.HttpHandshakeException(
+          400, BAD_REQUEST_REASON, "Query-string tokens are not supported");
+    }
+    if (!NetworkBinding.bearerTokenMatches(
+        request.headers().get("authorization"), config.token())) {
+      throw new WebSocketHandshake.HttpHandshakeException(401, "Unauthorized", "Invalid token");
+    }
+    if (!NetworkBinding.isAllowedHostHeader(
+        request.headers().get("host"), config.host(), config.port())) {
+      throw new WebSocketHandshake.HttpHandshakeException(
+          403, "Forbidden", "Invalid Host header");
+    }
     String upgrade = request.headers().getOrDefault("upgrade", "");
     String connection = request.headers().getOrDefault("connection", "");
     String version = request.headers().get("sec-websocket-version");
@@ -37,15 +50,6 @@ final class WebSocketHandshakeValidator {
     if (key == null || key.isBlank()) {
       throw new WebSocketHandshake.HttpHandshakeException(
           400, BAD_REQUEST_REASON, "Missing Sec-WebSocket-Key");
-    }
-    if (request.query().containsKey("token")) {
-      throw new WebSocketHandshake.HttpHandshakeException(
-          400, BAD_REQUEST_REASON, "Query-string tokens are not supported");
-    }
-    if (config.token() != null
-        && !NetworkBinding.bearerTokenMatches(
-            request.headers().get("authorization"), config.token())) {
-      throw new WebSocketHandshake.HttpHandshakeException(401, "Unauthorized", "Invalid token");
     }
   }
 }

@@ -96,8 +96,9 @@ The server replies with an error envelope for a bad message and keeps the socket
 ### Handshake Errors
 
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
-- `400`: Absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
+- `400`: Absent upgrade headers, an unsupported WebSocket version, a duplicate `Host` header, or a token in the query string.
 - `401`: Absent or invalid bearer token.
+- `403`: Missing or mismatched `Host` header.
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
@@ -279,11 +280,12 @@ An unknown operation, or an argument other than `operation` and `params`, return
 
 ## Authentication and Security
 
-- **Loopback Default**: Listeners bind to `127.0.0.1` by default. A loopback listener without `token` does not require authentication.
-- **External Listener**: A listener on an external network interface requires `token`.
-- **Authorization Header**: Send credentials through `Authorization: Bearer <token>`.
+- **Loopback Default**: Listeners bind to `127.0.0.1` by default.
+- **Mandatory Token**: Every server listener requires a non-blank `token`, including loopback listeners. When `token` is omitted in script arguments, `Bootstrap` generates a random session token and prints it once on the local startup console.
+- **Authorization Header**: Send credentials through `Authorization: Bearer <token>`. Requests without a valid bearer token fail with HTTP 401.
+- **Host Validation**: Listeners validate the HTTP `Host` header and reject missing or mismatched hosts with HTTP 403.
 - **Query Token Rejection**: The server rejects tokens in query strings with HTTP 400.
-- **Log Redaction**: Secret tokens never appear in server log files.
+- **Log Redaction**: Secret tokens never appear in request logs or error payloads.
 
 ## Bounded Address Scans and Cursors
 

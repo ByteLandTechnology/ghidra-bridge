@@ -59,7 +59,7 @@ mkdir -p /path/to/projects
 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" /path/to/projects demo \
   -import /path/to/target_binary \
   -scriptPath "$PWD/build/ghidra-script" \
-  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo
+  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 ```
 
 ポストスクリプトは、プロセスが停止されるまでリクエストの処理を継続します。
@@ -69,7 +69,7 @@ mkdir -p /path/to/projects
 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" /path/to/projects demo \
   -process target_binary -noanalysis \
   -scriptPath "$PWD/build/ghidra-script" \
-  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo
+  -postScript GhidraMcp.java host=127.0.0.1 port=8766 path=/mcp session_id=demo token=secret
 ```
 
 ## 設定パラメータ
@@ -99,7 +99,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `port` | `8765` (WS) / `8766` (MCP) | HTTP または WebSocket サーバーの TCP ポート番号。WebSocket は `ws_url` 未指定時のみデフォルト値を使用します。 |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | リクエストディスパッチ用の URL パスエンドポイント。 |
 | `session_id` | プログラム名 | 現在のアクティブセッションを一意に識別する文字列。 |
-| `token` | *(なし)* | Bearer 認証用の共有シークレットトークン。 |
+| `token` | 自動生成 (サーバー) / *(なし)* (送信型) | Bearer 認証用の共有シークレットトークン。サーバーリスナーでは省略時にランダムなトークンを起動時に生成します。 |
 | `ws_url` | *(なし)* | 送信型クライアントモードのリモート WebSocket URL。 |
 | `tool_prefix` | `ghidra` | MCP 専用。すべてのツール名の先頭部分（`ghidra.program` の `ghidra` など）。1 つのクライアントが複数のサーバーに接続する場合、サーバーごとに異なる値を指定します。 |
 | `jar` | *(自動)* | `ghidra-bridge.jar` がスクリプトファイルの隣にない場合のパス。 |
@@ -110,10 +110,11 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 ブリッジは厳格なセキュリティ境界を適用します:
 
 - **ループバック既定**: リスナーはデフォルトで `127.0.0.1` にバインドされます。
-- **トークン必須**: ループバック以外のネットワークインターフェース上のリスナーには `token` が必要です。
-- **Bearer ヘッダー**: 受信リクエストは `Authorization: Bearer <token>` を送信する必要があります。
+- **トークン必須**: ループバックを含むすべてのサーバーリスナーに非空白の `token` が必要です。スクリプト起動時に `token` を省略すると、ランチャーがランダムなセッショントークンを生成し、ローカル起動コンソールに 1 回だけ出力します。
+- **Bearer ヘッダー**: 受信リクエストは `Authorization: Bearer <token>` を送信する必要があります。欠落または不正な場合は HTTP 401 を返します。
+- **Host 検証**: リスナーは HTTP `Host` ヘッダーを検証し、不一致のホストを HTTP 403 で拒否します。
 - **URL トークンの拒否**: URL クエリ文字列に含まれるトークンは HTTP 400 で拒否されます。
-- **ログの機密保護**: サーバーはシークレットトークンをログファイルやコンソールに出力しません。
+- **ログの機密保護**: サーバーはシークレットトークンをリクエストログやエラー応答に出力せず、ユーザー指定のトークンも出力しません。
 
 ## API とトランスポート仕様
 

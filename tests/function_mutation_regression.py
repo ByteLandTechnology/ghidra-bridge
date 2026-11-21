@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import pathlib
+import secrets
 import shutil
 import signal
 import socket
@@ -62,7 +63,12 @@ def run_test(headless, root):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     url = f"http://127.0.0.1:{port}/mcp"
-    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    token = secrets.token_urlsafe(32)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
 
     def call(message):
         request = urllib.request.Request(url, json.dumps(message).encode(), headers, method="POST")
@@ -96,7 +102,7 @@ def run_test(headless, root):
     command = [
         str(headless), str(project), "test", "-import", str(binary), "-noanalysis",
         "-scriptPath", str(scripts), "-postScript", "GhidraMcp.java",
-        "host=127.0.0.1", f"port={port}",
+        "host=127.0.0.1", f"port={port}", f"token={token}",
     ]
     log_path = root / "headless.log"
     with log_path.open("w") as log:
@@ -120,6 +126,17 @@ def run_test(headless, root):
                     time.sleep(0.5)
             if not ready:
                 raise RuntimeError("Ghidra did not start")
+            unauth_request = urllib.request.Request(
+                url,
+                json.dumps(initialize).encode(),
+                {"Content-Type": "application/json", "Accept": "application/json"},
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(unauth_request, timeout=5)
+                raise AssertionError("Expected HTTP 401 without Authorization header")
+            except urllib.error.HTTPError as err:
+                assert err.code == 401, f"Expected HTTP 401, got {err.code}"
             call({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
             first = function(2, "create", {

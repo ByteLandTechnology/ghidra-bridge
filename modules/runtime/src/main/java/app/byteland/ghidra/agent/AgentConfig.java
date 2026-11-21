@@ -38,7 +38,7 @@ public record AgentConfig(
     }
     if (port != null) requireValidPort(port);
     if (port != null && host == null) host = DEFAULT_LOOPBACK_HOST;
-    if (port != null) NetworkBinding.requireTokenForNonLoopback(host, token);
+    if (port != null) NetworkBinding.requireToken(host, token);
     if (exitDeadlineSeconds != null && wsUrl == null) {
       throw new IllegalArgumentException("exit_deadline_sec requires ws_url");
     }

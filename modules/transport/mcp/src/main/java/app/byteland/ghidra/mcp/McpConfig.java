@@ -30,7 +30,7 @@ public record McpConfig(
     AgentConfig.requireValidPort(port);
     path = AgentConfig.normalizePath(path, "/mcp");
     token = AgentConfig.optionalText(token);
-    NetworkBinding.requireTokenForNonLoopback(host, token);
+    NetworkBinding.requireToken(host, token);
     sessionId = textOrDefault(sessionId, "ghidra-bridge");
     toolPrefix = requireToolPrefix(textOrDefault(toolPrefix, DEFAULT_TOOL_PREFIX));
   }

@@ -10,8 +10,10 @@ import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.program.ProgramService;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.listing.Program;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +29,9 @@ public final class Bootstrap {
   private static final String LOOPBACK_HOST = "127.0.0.1";
 
   private static final String SESSION_ID_ARGUMENT = "session_id";
+  private static final String TOKEN_ARGUMENT = "token";
+  private static final int GENERATED_TOKEN_BYTES = 32;
+  private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
 
   private Bootstrap() {}
 
@@ -66,8 +71,12 @@ public final class Bootstrap {
               + ":"
               + config.port()
               + config.path());
-      script.println(
-          "[ghidra-bridge]   Auth Token: " + (config.token() == null ? "disabled" : "configured"));
+      if (effectiveConfig.tokenGenerated()) {
+        script.println("[ghidra-bridge]   Auth Token: generated");
+        script.println("[ghidra-bridge]   Bearer Token: " + config.token());
+      } else {
+        script.println("[ghidra-bridge]   Auth Token: configured");
+      }
       script.println("[ghidra-bridge] Starting embedded bridge listener...");
     }
     script.println("[ghidra-bridge]   Session ID: " + config.sessionId());
@@ -119,13 +128,14 @@ public final class Bootstrap {
     }
 
     Program program = requireCurrentProgram(script);
-    McpConfig mcpConfig;
+    EffectiveMcpConfig effectiveMcpConfig;
     try {
-      mcpConfig = resolveMcpConfig(args, program);
+      effectiveMcpConfig = resolveMcpConfig(args, program);
     } catch (IllegalArgumentException e) {
       printMcpUsage(script);
       throw e;
     }
+    McpConfig mcpConfig = effectiveMcpConfig.config();
 
     AgentConfig dispatcherConfig =
         new AgentConfig(
@@ -142,8 +152,12 @@ public final class Bootstrap {
     script.println("[ghidra-mcp] Starting MCP HTTP service");
     script.println("[ghidra-mcp]   Program: " + program.getName());
     script.println("[ghidra-mcp]   Endpoint: " + mcpConfig.endpoint());
-    script.println(
-        "[ghidra-mcp]   Auth Token: " + (mcpConfig.token() == null ? "disabled" : "configured"));
+    if (effectiveMcpConfig.tokenGenerated()) {
+      script.println("[ghidra-mcp]   Auth Token: generated");
+      script.println("[ghidra-mcp]   Bearer Token: " + mcpConfig.token());
+    } else {
+      script.println("[ghidra-mcp]   Auth Token: configured");
+    }
     script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
     script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
 
@@ -216,7 +230,7 @@ public final class Bootstrap {
   private static void printUsage(GhidraScript script) {
     script.printerr("[ghidra-bridge] Invalid startup arguments.");
     script.printerr(
-        "[ghidra-bridge] Defaults are used when ws_url, port, and session_id are omitted.");
+        "[ghidra-bridge] Defaults are used when ws_url, port, session_id, and token are omitted.");
     script.printerr(
         "[ghidra-bridge] If you configure transport manually, use ws_url or host/port/path.");
     script.printerr(
@@ -237,7 +251,7 @@ public final class Bootstrap {
         "[ghidra-mcp] Defaults: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp"
-            + " session_id=<current-program-name> tool_prefix=ghidra");
+            + " session_id=<current-program-name> tool_prefix=ghidra token=<generated>");
     script.printerr(
         "[ghidra-mcp] Example: host="
             + LOOPBACK_HOST
@@ -245,7 +259,7 @@ public final class Bootstrap {
             + " token=secret");
   }
 
-  private static EffectiveConfig resolveConfig(String[] args, Program program) {
+  static EffectiveConfig resolveConfig(String[] args, Program program) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
     List<String> defaultMessages = new ArrayList<>();
 
@@ -264,7 +278,13 @@ public final class Bootstrap {
       defaultMessages.add("session_id=" + defaultSessionId);
     }
 
-    return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages);
+    boolean tokenGenerated = false;
+    if (isBlank(parsedArgs.get("ws_url")) && !parsedArgs.containsKey(TOKEN_ARGUMENT)) {
+      parsedArgs.put(TOKEN_ARGUMENT, generateSessionToken());
+      tokenGenerated = true;
+    }
+
+    return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages, tokenGenerated);
   }
 
   private static String defaultSessionId(Program program) {
@@ -275,21 +295,35 @@ public final class Bootstrap {
     return isBlank(name) ? "ghidra-bridge" : name;
   }
 
-  private static McpConfig resolveMcpConfig(String[] args, Program program) {
+  static EffectiveMcpConfig resolveMcpConfig(String[] args, Program program) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
     if (isBlank(parsedArgs.get(SESSION_ID_ARGUMENT))) {
       parsedArgs.put(SESSION_ID_ARGUMENT, defaultSessionId(program));
     }
-    return McpConfig.fromMap(parsedArgs);
+    boolean tokenGenerated = false;
+    if (!parsedArgs.containsKey(TOKEN_ARGUMENT)) {
+      parsedArgs.put(TOKEN_ARGUMENT, generateSessionToken());
+      tokenGenerated = true;
+    }
+    return new EffectiveMcpConfig(McpConfig.fromMap(parsedArgs), tokenGenerated);
+  }
+
+  static String generateSessionToken() {
+    byte[] randomBytes = new byte[GENERATED_TOKEN_BYTES];
+    TOKEN_RANDOM.nextBytes(randomBytes);
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
   }
 
   private static boolean isBlank(String value) {
     return value == null || value.isBlank();
   }
 
-  record EffectiveConfig(AgentConfig config, List<String> defaultMessages) {
+  record EffectiveConfig(
+      AgentConfig config, List<String> defaultMessages, boolean tokenGenerated) {
     EffectiveConfig {
       defaultMessages = List.copyOf(defaultMessages);
     }
   }
+
+  record EffectiveMcpConfig(McpConfig config, boolean tokenGenerated) {}
 }
