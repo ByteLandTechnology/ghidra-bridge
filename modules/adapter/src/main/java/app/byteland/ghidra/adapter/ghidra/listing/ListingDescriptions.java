@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra.listing;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.FieldProjections;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.ByteSequence;
@@ -16,48 +17,90 @@ import ghidra.program.model.mem.MemoryAccessException;
 import ghidra.program.model.mem.MemoryBlock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 final class ListingDescriptions {
   private ListingDescriptions() {}
 
   static CodeUnitResource toCodeUnitItem(
       CodeUnit codeUnit, CodeUnitResource.Kind kind, GhidraSession context) {
+    return toCodeUnitItem(codeUnit, kind, context, null);
+  }
+
+  static CodeUnitResource toCodeUnitItem(
+      CodeUnit codeUnit,
+      CodeUnitResource.Kind kind,
+      GhidraSession context,
+      Set<String> fields) {
     Instruction instruction = codeUnit instanceof Instruction value ? value : null;
     Data data = codeUnit instanceof Data value ? value : null;
     return new CodeUnitResource(
-        AddressUtil.canonicalAddress(codeUnit.getAddress()),
-        kind,
-        codeUnit.getLength(),
-        bytes(codeUnit, context),
-        codeUnit.toString(),
-        instruction == null ? null : instruction.getMnemonicString(),
-        instruction == null ? null : operandsOf(instruction),
-        data == null ? null : GhidraDataTypeReferences.toReference(data.getDataType()),
-        data == null ? null : String.valueOf(data.getValue()),
-        data == null ? null : formatScalar(data));
+        FieldProjections.allows(fields, "address")
+            ? AddressUtil.canonicalAddress(codeUnit.getAddress())
+            : null,
+        FieldProjections.allows(fields, "kind") ? kind : null,
+        FieldProjections.allows(fields, "length") ? codeUnit.getLength() : 0,
+        FieldProjections.allows(fields, "bytes") ? bytes(codeUnit, context) : null,
+        FieldProjections.allows(fields, "text") ? codeUnit.toString() : null,
+        instruction != null && FieldProjections.allows(fields, "mnemonic")
+            ? instruction.getMnemonicString()
+            : null,
+        instruction != null && FieldProjections.allows(fields, "operands")
+            ? operandsOf(instruction)
+            : null,
+        data != null && FieldProjections.allows(fields, "data_type")
+            ? GhidraDataTypeReferences.toReference(data.getDataType())
+            : null,
+        null,
+        null);
   }
 
   static InstructionResource toInstructionItem(Instruction instruction, GhidraSession context) {
+    return toInstructionItem(instruction, context, null);
+  }
+
+  static InstructionResource toInstructionItem(
+      Instruction instruction, GhidraSession context, Set<String> fields) {
     return new InstructionResource(
-        AddressUtil.canonicalAddress(instruction.getAddress()),
-        instruction.getLength(),
-        context == null ? null : bytes(instruction, context),
-        instruction.getMnemonicString(),
-        operandsOf(instruction),
-        FlowOverrideValue.valueOf(instruction.getFlowOverride().name()),
-        instruction.getPrototype().getFlowType(instruction.getInstructionContext()).getName(),
-        instruction.getFlowType().getName(),
-        AddressUtil.canonicalAddress(instruction.getFallThrough()));
+        FieldProjections.allows(fields, "address")
+            ? AddressUtil.canonicalAddress(instruction.getAddress())
+            : null,
+        FieldProjections.allows(fields, "length") ? instruction.getLength() : 0,
+        context != null && FieldProjections.allows(fields, "bytes")
+            ? bytes(instruction, context)
+            : null,
+        FieldProjections.allows(fields, "mnemonic") ? instruction.getMnemonicString() : null,
+        FieldProjections.allows(fields, "operands") ? operandsOf(instruction) : null,
+        FieldProjections.allows(fields, "flow_override")
+            ? FlowOverrideValue.valueOf(instruction.getFlowOverride().name())
+            : null,
+        FieldProjections.allows(fields, "default_flow_type")
+            ? instruction.getPrototype().getFlowType(instruction.getInstructionContext()).getName()
+            : null,
+        FieldProjections.allows(fields, "flow_type")
+            ? instruction.getFlowType().getName()
+            : null,
+        FieldProjections.allows(fields, "fall_through")
+            ? AddressUtil.canonicalAddress(instruction.getFallThrough())
+            : null);
   }
 
   static DataUnitResource toDataItem(Data data, GhidraSession context) {
+    return toDataItem(data, context, null);
+  }
+
+  static DataUnitResource toDataItem(Data data, GhidraSession context, Set<String> fields) {
     return new DataUnitResource(
-        AddressUtil.canonicalAddress(data.getAddress()),
-        data.getLength(),
-        GhidraDataTypeReferences.toReference(data.getDataType()),
-        String.valueOf(data.getValue()),
-        formatScalar(data),
-        bytes(data, context));
+        FieldProjections.allows(fields, "address")
+            ? AddressUtil.canonicalAddress(data.getAddress())
+            : null,
+        FieldProjections.allows(fields, "length") ? data.getLength() : 0,
+        FieldProjections.allows(fields, "data_type")
+            ? GhidraDataTypeReferences.toReference(data.getDataType())
+            : null,
+        FieldProjections.allows(fields, "value") ? String.valueOf(data.getValue()) : null,
+        FieldProjections.allows(fields, "representation") ? formatScalar(data) : null,
+        FieldProjections.allows(fields, "bytes") ? bytes(data, context) : null);
   }
 
   static CodeUnitResource.Kind classify(CodeUnit codeUnit) {

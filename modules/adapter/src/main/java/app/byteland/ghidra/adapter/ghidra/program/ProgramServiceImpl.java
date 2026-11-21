@@ -1,22 +1,22 @@
 package app.byteland.ghidra.adapter.ghidra.program;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.FieldProjections;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
-import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.lang.CompilerSpec;
 import ghidra.program.model.lang.Language;
-import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
-import ghidra.program.model.symbol.Symbol;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public final class ProgramServiceImpl implements ProgramService {
   private final Program program;
@@ -29,55 +29,106 @@ public final class ProgramServiceImpl implements ProgramService {
 
   @Override
   public ProgramResource getProgram() {
+    return getProgram(null);
+  }
+
+  @Override
+  public ProgramResource getProgram(Set<String> fields) {
     return new ProgramResource(
-        program.getName(),
-        program.getExecutablePath(),
-        program.getExecutableFormat(),
-        AddressUtil.canonicalAddress(program.getImageBase()),
-        AddressUtil.canonicalAddress(program.getMinAddress()),
-        AddressUtil.canonicalAddress(program.getMaxAddress()),
-        String.valueOf(program.getLanguageID()),
-        String.valueOf(program.getCompilerSpec().getCompilerSpecID()),
-        ProgramTimestamps.createdTimestamp(program),
-        ProgramTimestamps.modifiedTimestamp(program),
-        functionCount(),
-        symbolCount());
+        FieldProjections.allows(fields, "name") ? program.getName() : null,
+        FieldProjections.allows(fields, "executable_path") ? program.getExecutablePath() : null,
+        FieldProjections.allows(fields, "executable_format")
+            ? program.getExecutableFormat()
+            : null,
+        FieldProjections.allows(fields, "image_base")
+            ? AddressUtil.canonicalAddress(program.getImageBase())
+            : null,
+        FieldProjections.allows(fields, "min_address")
+            ? AddressUtil.canonicalAddress(program.getMinAddress())
+            : null,
+        FieldProjections.allows(fields, "max_address")
+            ? AddressUtil.canonicalAddress(program.getMaxAddress())
+            : null,
+        FieldProjections.allows(fields, "language_id")
+            ? String.valueOf(program.getLanguageID())
+            : null,
+        FieldProjections.allows(fields, "compiler_spec_id")
+            ? String.valueOf(program.getCompilerSpec().getCompilerSpecID())
+            : null,
+        FieldProjections.allows(fields, "created_at")
+            ? ProgramTimestamps.createdTimestamp(program)
+            : null,
+        FieldProjections.allows(fields, "modified_at")
+            ? ProgramTimestamps.modifiedTimestamp(program)
+            : null,
+        FieldProjections.allows(fields, "function_count") ? functionCount() : 0L,
+        FieldProjections.allows(fields, "symbol_count") ? symbolCount() : 0L);
   }
 
   @Override
   public Page<AddressSpaceResource> getAddressSpaces(int limit, String cursor) {
+    return getAddressSpaces(limit, cursor, null);
+  }
+
+  @Override
+  public Page<AddressSpaceResource> getAddressSpaces(
+      int limit, String cursor, Set<String> fields) {
     var addressFactory = context.script().getAddressFactory();
-    var defaultSpace = addressFactory.getDefaultAddressSpace();
-    List<AddressSpaceResource> list = new ArrayList<>();
+    boolean needDefault = FieldProjections.allows(fields, "default");
+    var defaultSpace = needDefault ? addressFactory.getDefaultAddressSpace() : null;
+    List<SpaceEntry> entries = new ArrayList<>();
     for (AddressSpace space : addressFactory.getAddressSpaces()) {
-      list.add(
-          new AddressSpaceResource(
-              space.getName(),
-              describeAddressSpaceType(space),
-              space.getPointerSize() * 8,
-              AddressUtil.canonicalAddress(space.getMinAddress()),
-              AddressUtil.canonicalAddress(space.getMaxAddress()),
-              defaultSpace != null && defaultSpace.equals(space)));
+      entries.add(new SpaceEntry(space.getName(), space));
     }
-    list.sort(java.util.Comparator.comparing(AddressSpaceResource::name));
-    return Page.paginate(list, limit, cursor, AddressSpaceResource::name);
+    entries.sort(Comparator.comparing(SpaceEntry::name));
+    Page<SpaceEntry> page = Page.paginate(entries, limit, cursor, SpaceEntry::name);
+    boolean needKind = FieldProjections.allows(fields, "kind");
+    boolean needSize = FieldProjections.allows(fields, "size");
+    boolean needMinAddress = FieldProjections.allows(fields, "min_address");
+    boolean needMaxAddress = FieldProjections.allows(fields, "max_address");
+    List<AddressSpaceResource> items = new ArrayList<>(page.items().size());
+    for (SpaceEntry entry : page.items()) {
+      AddressSpace space = entry.space();
+      items.add(
+          new AddressSpaceResource(
+              entry.name(),
+              needKind ? describeAddressSpaceType(space) : null,
+              needSize ? space.getPointerSize() * 8 : 0,
+              needMinAddress ? AddressUtil.canonicalAddress(space.getMinAddress()) : null,
+              needMaxAddress ? AddressUtil.canonicalAddress(space.getMaxAddress()) : null,
+              needDefault && defaultSpace != null && defaultSpace.equals(space)));
+    }
+    return Page.of(items, page.limit(), page.nextCursor());
   }
 
   @Override
   public ProgramLanguageResource getLanguageInfo() {
+    return getLanguageInfo(null);
+  }
+
+  @Override
+  public ProgramLanguageResource getLanguageInfo(Set<String> fields) {
     Language language = program.getLanguage();
     CompilerSpec compilerSpec = program.getCompilerSpec();
     if (language == null || compilerSpec == null) {
       throw new IllegalStateException("program language and compiler spec are required");
     }
     return new ProgramLanguageResource(
-        String.valueOf(program.getLanguageID()),
-        String.valueOf(compilerSpec.getCompilerSpecID()),
-        language.getProcessor().toString(),
-        language.isBigEndian()
-            ? ProgramLanguageResource.Endian.BIG
-            : ProgramLanguageResource.Endian.LITTLE,
-        language.getLanguageDescription().getSize());
+        FieldProjections.allows(fields, "language_id")
+            ? String.valueOf(program.getLanguageID())
+            : null,
+        FieldProjections.allows(fields, "compiler_spec_id")
+            ? String.valueOf(compilerSpec.getCompilerSpecID())
+            : null,
+        FieldProjections.allows(fields, "processor") ? language.getProcessor().toString() : null,
+        FieldProjections.allows(fields, "endian")
+            ? (language.isBigEndian()
+                ? ProgramLanguageResource.Endian.BIG
+                : ProgramLanguageResource.Endian.LITTLE)
+            : null,
+        FieldProjections.allows(fields, "address_size")
+            ? language.getLanguageDescription().getSize()
+            : 0);
   }
 
   @Override
@@ -117,4 +168,6 @@ public final class ProgramServiceImpl implements ProgramService {
   private int symbolCount() {
     return program.getSymbolTable().getNumSymbols();
   }
+
+  private record SpaceEntry(String name, AddressSpace space) {}
 }

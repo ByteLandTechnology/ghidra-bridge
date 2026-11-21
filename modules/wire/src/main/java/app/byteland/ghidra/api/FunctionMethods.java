@@ -41,12 +41,14 @@ final class FunctionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(entrySelector),
         ApiSchemaCatalog.functionFields(),
         List.of(ApiVocabulary.ENTRY),
-        request ->
+        (request, projectedFields) ->
             registry
                 .services()
                 .functionService()
                 .getFunction(
-                    text(selector(request), ApiVocabulary.ENTRY), requestedIncludes(request)));
+                    text(selector(request), ApiVocabulary.ENTRY),
+                    requestedIncludes(projectedFields),
+                    projectedFields));
     Map<String, Object> functionFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
@@ -65,7 +67,7 @@ final class FunctionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.scanListInput(functionFilter),
         ApiSchemaCatalog.functionFields(),
         List.of(ApiVocabulary.ENTRY),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
           return registry
               .services()
@@ -80,7 +82,9 @@ final class FunctionMethods implements ApiMethodProvider {
                       optionalText(filter, "contains"),
                       bool(filter, "external").orElse(null),
                       bool(filter, "thunk").orElse(null),
-                      requestedIncludes(request)));
+                      requestedIncludes(projectedFields),
+                      projectedFields),
+                  projectedFields);
         });
     Map<String, Object> functionResource =
         WireSchema.object(
@@ -150,15 +154,18 @@ final class FunctionMethods implements ApiMethodProvider {
         Set.of(ApiVocabulary.ENTRY, ApiVocabulary.NAME, "call_site", ApiVocabulary.DIRECTION,
             ApiVocabulary.NAMESPACE, "demangled_name"),
         List.of(ApiVocabulary.ENTRY),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
           String entry = text(filter, ApiVocabulary.ENTRY);
           return "callers".equals(optionalText(filter, ApiVocabulary.DIRECTION, "callees"))
-              ? registry.services().functionService().getCallers(entry, page.limit(), page.cursor())
+              ? registry
+                  .services()
+                  .functionService()
+                  .getCallers(entry, page.limit(), page.cursor(), projectedFields)
               : registry
                   .services()
                   .functionService()
-                  .getCallees(entry, page.limit(), page.cursor());
+                  .getCallees(entry, page.limit(), page.cursor(), projectedFields);
         });
   }
 

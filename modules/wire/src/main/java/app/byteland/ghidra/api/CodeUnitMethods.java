@@ -37,7 +37,7 @@ final class CodeUnitMethods implements ApiMethodProvider {
             "operands",
             ApiVocabulary.DATA_TYPE),
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) ->
+        (request, page, projectedFields) ->
             registry
                 .services()
                 .listingService()
@@ -46,7 +46,8 @@ final class CodeUnitMethods implements ApiMethodProvider {
                     page.limit(),
                     optionalText(filter(request), ApiVocabulary.KIND, "all"),
                     "forward",
-                    page.cursor()));
+                    page.cursor(),
+                    projectedFields));
     registry.scanList(
         "data_unit.list",
         ApiSchemaCatalog.scanListInput(
@@ -64,7 +65,7 @@ final class CodeUnitMethods implements ApiMethodProvider {
             "representation",
             ApiVocabulary.BYTES),
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) ->
+        (request, page, projectedFields) ->
             registry
                 .services()
                 .listingService()
@@ -72,6 +73,7 @@ final class CodeUnitMethods implements ApiMethodProvider {
                     addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
                     page.limit(),
                     "forward",
-                    page.cursor()));
+                    page.cursor(),
+                    projectedFields));
   }
 }

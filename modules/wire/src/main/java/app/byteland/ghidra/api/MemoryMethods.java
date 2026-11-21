@@ -97,7 +97,7 @@ final class MemoryMethods implements ApiMethodProvider {
             "bytes.data",
             "bytes.length"),
         List.of(ApiVocabulary.ADDRESS),
-        request ->
+        (request, projectedFields) ->
             WireValues.memory(
                 registry
                     .services()
@@ -106,7 +106,8 @@ final class MemoryMethods implements ApiMethodProvider {
                         text(selector(request), ApiVocabulary.ADDRESS),
                         integer(request, ApiVocabulary.LENGTH, 256),
                         byteEncoding(
-                            optionalText(request, ApiVocabulary.ENCODING, ApiVocabulary.HEX)))));
+                            optionalText(request, ApiVocabulary.ENCODING, ApiVocabulary.HEX))),
+                projectedFields));
     Map<String, Object> byteSequence =
         WireSchema.object(
             ApiSchemaCatalog.props(

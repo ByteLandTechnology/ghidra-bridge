@@ -60,7 +60,7 @@ final class DecompilationMethods implements ApiMethodProvider {
             "warnings",
             "elapsed_ms"),
         List.of(ApiVocabulary.ENTRY),
-        request ->
+        (request, projectedFields) ->
             registry
                 .services()
                 .decompilationService()
@@ -72,6 +72,7 @@ final class DecompilationMethods implements ApiMethodProvider {
                       default -> DecompilationResource.Format.TEXT;
                     },
                     integer(request, "timeout_ms", DecompilationService.DEFAULT_TIMEOUT_MS),
-                    bool(request, "include_comments").orElse(false)));
+                    bool(request, "include_comments").orElse(false),
+                    projectedFields));
   }
 }

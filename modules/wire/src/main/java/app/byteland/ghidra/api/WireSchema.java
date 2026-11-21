@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class WireSchema {
   private static final int EXACT_UNION_MATCHES = 1;
@@ -171,6 +172,223 @@ public final class WireSchema {
 
   public static void validate(Object value, Map<String, Object> schema, String target) {
     validate(value, schema, target, schemaDefinitions(schema));
+  }
+
+  public static void validateProjected(
+      Object value, Map<String, Object> schema, String target, Set<String> projectedFields) {
+    if (projectedFields == null) {
+      validate(value, schema, target);
+      return;
+    }
+    ProjectionNode rootNode = ProjectionNode.fromFields(projectedFields);
+    if (rootNode.includeAll()) {
+      validate(value, schema, target);
+      return;
+    }
+    Map<String, Map<String, Object>> definitions = schemaDefinitions(schema);
+    if (isListEnvelopeSchema(schema, rootNode)) {
+      validateProjectedListEnvelope(value, schema, target, definitions, rootNode);
+      return;
+    }
+    validateProjectedNode(value, schema, target, definitions, rootNode);
+  }
+
+  private static boolean isListEnvelopeSchema(Map<String, Object> schema, ProjectionNode rootNode) {
+    if (!ApiVocabulary.OBJECT.equals(schema.get(ApiVocabulary.TYPE))) return false;
+    if (rootNode.children().containsKey(ApiVocabulary.ITEMS)) return false;
+    if (!(schema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties)) return false;
+    if (!(properties.get(ApiVocabulary.ITEMS) instanceof Map<?, ?> itemsSchema)) return false;
+    return ApiVocabulary.ARRAY.equals(itemsSchema.get(ApiVocabulary.TYPE));
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static void validateProjectedListEnvelope(
+      Object value,
+      Map<String, Object> schema,
+      String target,
+      Map<String, Map<String, Object>> definitions,
+      ProjectionNode itemNode) {
+    if (!(value instanceof Map<?, ?> object)) {
+      fail(ApiVocabulary.INVALID_TYPE, target + " must be an object", target);
+      return;
+    }
+    for (Object required : (List<?>) schema.getOrDefault(ApiVocabulary.REQUIRED, List.of())) {
+      if (!object.containsKey(required)) {
+        fail("missing_field", target + "/" + required + " is required", target + "/" + required);
+      }
+    }
+    Map<String, Object> properties =
+        (Map<String, Object>) schema.getOrDefault(ApiVocabulary.PROPERTIES, Map.of());
+    boolean additional = !Boolean.FALSE.equals(schema.get(ApiVocabulary.ADDITIONAL_PROPERTIES));
+    for (Map.Entry<?, ?> entry : object.entrySet()) {
+      if (!(entry.getKey() instanceof String key)) {
+        fail("invalid_field", target + " field names must be strings", target);
+        return;
+      }
+      Object propertySchema = properties.get(key);
+      if (propertySchema == null) {
+        if (!additional) {
+          fail("unknown_field", target + "/" + key + " is not allowed", target + "/" + key);
+        }
+      } else if (ApiVocabulary.ITEMS.equals(key)) {
+        validateProjectedArray(
+            entry.getValue(),
+            (Map<String, Object>) propertySchema,
+            target + "/" + ApiVocabulary.ITEMS,
+            definitions,
+            itemNode);
+      } else {
+        validate(
+            entry.getValue(),
+            (Map<String, Object>) propertySchema,
+            target + "/" + escapePointer(key),
+            definitions);
+      }
+    }
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static void validateProjectedNode(
+      Object value,
+      Map<String, Object> schema,
+      String target,
+      Map<String, Map<String, Object>> definitions,
+      ProjectionNode node) {
+    Map<String, Map<String, Object>> activeDefinitions =
+        schema.containsKey(ApiVocabulary.DEFINITIONS) ? schemaDefinitions(schema) : definitions;
+    if (node.includeAll()) {
+      validate(value, schema, target, activeDefinitions);
+      return;
+    }
+    Object ref = schema.get(ApiVocabulary.REFERENCE);
+    if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
+      Map<String, Object> resolved =
+          activeDefinitions.get(reference.substring("#/$defs/".length()));
+      if (resolved == null) {
+        throw new IllegalStateException("unresolved schema reference: " + reference);
+      }
+      validateProjectedNode(value, resolved, target, activeDefinitions, node);
+      return;
+    }
+    if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
+      List<ApiException> failures = new ArrayList<>();
+      int matches = 0;
+      for (Object rawAlternative : alternatives) {
+        try {
+          validateProjectedNode(
+              value, (Map<String, Object>) rawAlternative, target, activeDefinitions, node);
+          matches++;
+        } catch (ApiException failure) {
+          failures.add(failure);
+        }
+      }
+      if (matches != EXACT_UNION_MATCHES) {
+        ApiException failure = failures.isEmpty() ? null : failures.getFirst();
+        throw ApiException.badRequest(
+            "invalid_union",
+            failure == null ? target + " must match exactly one schema" : failure.getMessage(),
+            failure == null ? target : failure.error().target());
+      }
+      return;
+    }
+    Object type = schema.get(ApiVocabulary.TYPE);
+    if (type == null) {
+      return;
+    }
+    switch (String.valueOf(type)) {
+      case ApiVocabulary.OBJECT ->
+          validateProjectedObject(value, schema, target, activeDefinitions, node);
+      case ApiVocabulary.ARRAY ->
+          validateProjectedArray(value, schema, target, activeDefinitions, node);
+      default -> validate(value, schema, target, activeDefinitions);
+    }
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static void validateProjectedObject(
+      Object value,
+      Map<String, Object> schema,
+      String target,
+      Map<String, Map<String, Object>> definitions,
+      ProjectionNode node) {
+    if (!(value instanceof Map<?, ?> object)) {
+      fail(ApiVocabulary.INVALID_TYPE, target + " must be an object", target);
+      return;
+    }
+    int minimumProperties =
+        Math.min(
+            ((Number) schema.getOrDefault(ApiVocabulary.MIN_PROPERTIES, 0)).intValue(),
+            node.children().size());
+    int maximumProperties =
+        ((Number) schema.getOrDefault(ApiVocabulary.MAX_PROPERTIES, Integer.MAX_VALUE)).intValue();
+    if (object.size() < minimumProperties || object.size() > maximumProperties) {
+      fail(
+          "invalid_count",
+          target + " must contain " + minimumProperties + ".." + maximumProperties + " fields",
+          target);
+    }
+    for (Object required : (List<?>) schema.getOrDefault(ApiVocabulary.REQUIRED, List.of())) {
+      if (node.children().containsKey(String.valueOf(required)) && !object.containsKey(required)) {
+        fail("missing_field", target + "/" + required + " is required", target + "/" + required);
+      }
+    }
+    Map<String, Object> properties =
+        (Map<String, Object>) schema.getOrDefault(ApiVocabulary.PROPERTIES, Map.of());
+    boolean additional = !Boolean.FALSE.equals(schema.get(ApiVocabulary.ADDITIONAL_PROPERTIES));
+    for (Map.Entry<?, ?> entry : object.entrySet()) {
+      if (!(entry.getKey() instanceof String key)) {
+        fail("invalid_field", target + " field names must be strings", target);
+        return;
+      }
+      ProjectionNode childNode = node.children().get(key);
+      if (childNode == null) {
+        fail("unknown_field", target + "/" + key + " is not allowed", target + "/" + key);
+        return;
+      }
+      Object propertySchema = properties.get(key);
+      if (propertySchema == null) {
+        if (!additional) {
+          fail("unknown_field", target + "/" + key + " is not allowed", target + "/" + key);
+        }
+      } else {
+        validateProjectedNode(
+            entry.getValue(),
+            (Map<String, Object>) propertySchema,
+            target + "/" + escapePointer(key),
+            definitions,
+            childNode);
+      }
+    }
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static void validateProjectedArray(
+      Object value,
+      Map<String, Object> schema,
+      String target,
+      Map<String, Map<String, Object>> definitions,
+      ProjectionNode node) {
+    if (!(value instanceof List<?> items)) {
+      fail(ApiVocabulary.INVALID_TYPE, target + " must be an array", target);
+      return;
+    }
+    int minimum = ((Number) schema.getOrDefault(ApiVocabulary.MIN_ITEMS, 0)).intValue();
+    int maximum =
+        ((Number) schema.getOrDefault(ApiVocabulary.MAX_ITEMS, Integer.MAX_VALUE)).intValue();
+    if (items.size() < minimum || items.size() > maximum) {
+      fail(
+          "invalid_count", target + " must contain " + minimum + ".." + maximum + " items", target);
+    }
+    Map<String, Object> itemSchema =
+        (Map<String, Object>) schema.getOrDefault(ApiVocabulary.ITEMS, Map.of());
+    Map<String, Map<String, Object>> itemDefinitions =
+        itemSchema.containsKey(ApiVocabulary.DEFINITIONS)
+            ? schemaDefinitions(itemSchema)
+            : definitions;
+    for (int index = 0; index < items.size(); index++) {
+      validateProjectedNode(
+          items.get(index), itemSchema, target + "/" + index, itemDefinitions, node);
+    }
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)

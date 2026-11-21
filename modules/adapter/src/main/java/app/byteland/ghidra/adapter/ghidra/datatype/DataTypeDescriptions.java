@@ -1,6 +1,8 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
+import app.byteland.ghidra.adapter.ghidra.FieldProjections;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
+import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.Array;
@@ -17,46 +19,83 @@ import ghidra.program.model.data.Union;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 final class DataTypeDescriptions {
   private DataTypeDescriptions() {}
 
   static DataTypeResource summarize(DataType dataType) {
-    return describe(dataType, false);
+    return describe(dataType, false, null);
+  }
+
+  static DataTypeResource summarize(DataType dataType, Set<String> selectedFields) {
+    return describe(dataType, false, selectedFields);
   }
 
   static DataTypeResource detail(DataType dataType) {
-    return describe(dataType, true);
+    return describe(dataType, true, null);
   }
 
-  private static DataTypeResource describe(DataType dataType, boolean detail) {
-    String path = dataType.getPathName();
+  static DataTypeResource detail(DataType dataType, Set<String> selectedFields) {
+    return describe(dataType, true, selectedFields);
+  }
+
+  private static DataTypeResource describe(
+      DataType dataType, boolean detail, Set<String> selectedFields) {
+    boolean needPath = FieldProjections.allows(selectedFields, "path");
+    boolean needName = FieldProjections.allows(selectedFields, "name");
+    boolean needCategory = FieldProjections.allows(selectedFields, "category_path");
+    String path = needPath || needCategory ? dataType.getPathName() : null;
+    String name = needName || needCategory ? dataType.getName() : null;
     Integer size = null;
     List<DataTypeResource.Field> fields = null;
     List<DataTypeResource.EnumValue> values = null;
     FunctionSignature signature = null;
-    app.byteland.ghidra.service.datatype.DataTypeReference baseType = null;
+    DataTypeReference baseType = null;
     if (detail && dataType instanceof Structure structure) {
-      size = knownLength(structure.getLength());
-      fields = compositeFields(structure);
+      if (FieldProjections.allows(selectedFields, "size")) {
+        size = knownLength(structure.getLength());
+      }
+      if (FieldProjections.allows(selectedFields, "fields")) {
+        fields = compositeFields(structure);
+      }
     } else if (detail && dataType instanceof Union union) {
-      size = knownLength(union.getLength());
-      fields = compositeFields(union);
+      if (FieldProjections.allows(selectedFields, "size")) {
+        size = knownLength(union.getLength());
+      }
+      if (FieldProjections.allows(selectedFields, "fields")) {
+        fields = compositeFields(union);
+      }
     } else if (detail && dataType instanceof ghidra.program.model.data.Enum enumType) {
-      size = knownLength(enumType.getLength());
-      values = enumValues(enumType);
-    } else if (detail && dataType instanceof FunctionDefinition function) {
-      signature = functionSignature(function);
-    } else if (detail && dataType instanceof TypeDef typeDef) {
+      if (FieldProjections.allows(selectedFields, "size")) {
+        size = knownLength(enumType.getLength());
+      }
+      if (FieldProjections.allows(selectedFields, "values")) {
+        values = enumValues(enumType);
+      }
+    } else if (detail
+        && dataType instanceof FunctionDefinition function
+        && FieldProjections.allows(selectedFields, "signature")) {
+      signature = functionSignature(function, selectedFields);
+    } else if (detail
+        && dataType instanceof TypeDef typeDef
+        && FieldProjections.allows(selectedFields, "base_type")) {
       baseType = GhidraDataTypeReferences.toReference(typeDef.getBaseDataType());
     }
+    String description = null;
+    if (FieldProjections.allows(selectedFields, "description")) {
+      String rawDescription = dataType.getDescription();
+      description = rawDescription == null ? "" : rawDescription;
+    }
     return new DataTypeResource(
-        path,
-        dataType.getName(),
-        categoryFromPath(path, dataType.getName()),
-        classifyKind(dataType),
-        knownLength(dataType.getLength()),
-        dataType.getDescription() == null ? "" : dataType.getDescription(),
+        needPath ? path : null,
+        needName ? name : null,
+        needCategory ? categoryFromPath(path, name) : null,
+        FieldProjections.allows(selectedFields, "kind") ? classifyKind(dataType) : null,
+        FieldProjections.allows(selectedFields, "length")
+            ? knownLength(dataType.getLength())
+            : null,
+        description,
         size,
         fields,
         values,
@@ -68,33 +107,47 @@ final class DataTypeDescriptions {
     return length < 0 ? null : length;
   }
 
-  private static FunctionSignature functionSignature(FunctionDefinition function) {
-    DataType returnType = function.getReturnType();
-    if (returnType == null) {
-      throw new IllegalArgumentException(
-          "function definition has no return type: " + function.getPathName());
+  private static FunctionSignature functionSignature(
+      FunctionDefinition function, Set<String> selectedFields) {
+    DataTypeReference returnType;
+    if (FieldProjections.allowsSubfield(selectedFields, "signature", "return_type")) {
+      DataType rawReturnType = function.getReturnType();
+      if (rawReturnType == null) {
+        throw new IllegalArgumentException(
+            "function definition has no return type: " + function.getPathName());
+      }
+      returnType = GhidraDataTypeReferences.toReference(rawReturnType);
+    } else {
+      returnType = DataTypeReference.named("void");
     }
     List<FunctionSignature.Parameter> parameters = new ArrayList<>();
-    for (ParameterDefinition parameter : function.getArguments()) {
-      if (parameter.getDataType() == null) {
-        throw new IllegalArgumentException(
-            "function definition parameter has no data type: " + function.getPathName());
+    if (FieldProjections.allowsSubfield(selectedFields, "signature", "parameters")) {
+      for (ParameterDefinition parameter : function.getArguments()) {
+        if (parameter.getDataType() == null) {
+          throw new IllegalArgumentException(
+              "function definition parameter has no data type: " + function.getPathName());
+        }
+        parameters.add(
+            new FunctionSignature.Parameter(
+                normalizedOptional(parameter.getName()),
+                GhidraDataTypeReferences.toReference(parameter.getDataType())));
       }
-      parameters.add(
-          new FunctionSignature.Parameter(
-              normalizedOptional(parameter.getName()),
-              GhidraDataTypeReferences.toReference(parameter.getDataType())));
     }
-    String callingConvention = normalizedOptional(function.getCallingConventionName());
-    if (callingConvention == null || "unknown".equalsIgnoreCase(callingConvention)) {
-      callingConvention = "default";
+    String callingConvention = "default";
+    if (FieldProjections.allowsSubfield(selectedFields, "signature", "calling_convention")) {
+      String rawConvention = normalizedOptional(function.getCallingConventionName());
+      if (rawConvention != null && !"unknown".equalsIgnoreCase(rawConvention)) {
+        callingConvention = rawConvention;
+      }
     }
     return new FunctionSignature(
-        GhidraDataTypeReferences.toReference(returnType),
+        returnType,
         parameters,
         callingConvention,
-        function.hasVarArgs(),
-        function.hasNoReturn());
+        FieldProjections.allowsSubfield(selectedFields, "signature", "has_var_args")
+            && function.hasVarArgs(),
+        FieldProjections.allowsSubfield(selectedFields, "signature", "has_no_return")
+            && function.hasNoReturn());
   }
 
   private static List<DataTypeResource.Field> compositeFields(Composite composite) {
@@ -128,7 +181,7 @@ final class DataTypeDescriptions {
     return List.copyOf(values);
   }
 
-  private static DataTypeResource.Kind classifyKind(DataType dataType) {
+  static DataTypeResource.Kind classifyKind(DataType dataType) {
     if (dataType instanceof Structure) return DataTypeResource.Kind.STRUCT;
     if (dataType instanceof ghidra.program.model.data.Enum) return DataTypeResource.Kind.ENUM;
     if (dataType instanceof TypeDef) return DataTypeResource.Kind.TYPEDEF;
@@ -140,7 +193,7 @@ final class DataTypeDescriptions {
     return DataTypeResource.Kind.OTHER;
   }
 
-  private static String categoryFromPath(String path, String name) {
+  static String categoryFromPath(String path, String name) {
     if (path == null || path.isBlank() || name == null || name.isBlank()) return "/";
     String suffix = "/" + name;
     if (path.endsWith(suffix)) {

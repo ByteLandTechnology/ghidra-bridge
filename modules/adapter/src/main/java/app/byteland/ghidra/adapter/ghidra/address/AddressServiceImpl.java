@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra.address;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.FieldProjections;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.address.AddressService;
@@ -10,6 +11,7 @@ import ghidra.program.model.listing.Function;
 import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.symbol.Symbol;
 import java.util.Objects;
+import java.util.Set;
 
 public final class AddressServiceImpl implements AddressService {
   private final GhidraSession context;
@@ -20,16 +22,28 @@ public final class AddressServiceImpl implements AddressService {
 
   @Override
   public AddressResource resolveAddress(String rawAddress) {
+    return resolveAddress(rawAddress, null);
+  }
+
+  @Override
+  public AddressResource resolveAddress(String rawAddress, Set<String> fields) {
     Address address = context.parseAddress(rawAddress);
-    MemoryBlock block = context.script().getMemoryBlock(address);
-    Function function = context.script().getFunctionContaining(address);
-    Symbol symbol = context.script().getSymbolAt(address);
-    CodeUnit unit = context.currentProgram().getListing().getCodeUnitContaining(address);
+    boolean needInMemory = FieldProjections.allows(fields, "in_memory");
+    boolean needMemoryBlock = FieldProjections.allows(fields, "memory_block");
+    boolean needFunction = FieldProjections.allows(fields, "function");
+    boolean needSymbol = FieldProjections.allows(fields, "symbol");
+    boolean needCodeUnit = FieldProjections.allows(fields, "code_unit");
+    MemoryBlock block =
+        needInMemory || needMemoryBlock ? context.script().getMemoryBlock(address) : null;
+    Function function = needFunction ? context.script().getFunctionContaining(address) : null;
+    Symbol symbol = needSymbol ? context.script().getSymbolAt(address) : null;
+    CodeUnit unit =
+        needCodeUnit ? context.currentProgram().getListing().getCodeUnitContaining(address) : null;
     return new AddressResource(
         AddressUtil.canonicalAddress(address),
         true,
-        block != null,
-        block == null
+        needInMemory && block != null,
+        block == null || !needMemoryBlock
             ? null
             : new AddressResource.MemoryBlockSummary(
                 block.getName(),
@@ -49,8 +63,10 @@ public final class AddressServiceImpl implements AddressService {
                 String.valueOf(symbol.getID()),
                 symbol.getName(),
                 symbol.getSymbolType().toString()),
-        unit == null ? null : new AddressResource.CodeUnitSummary(
-            AddressUtil.canonicalAddress(unit.getMinAddress()),
-            AddressUtil.canonicalAddress(unit.getMaxAddress())));
+        unit == null
+            ? null
+            : new AddressResource.CodeUnitSummary(
+                AddressUtil.canonicalAddress(unit.getMinAddress()),
+                AddressUtil.canonicalAddress(unit.getMaxAddress())));
   }
 }

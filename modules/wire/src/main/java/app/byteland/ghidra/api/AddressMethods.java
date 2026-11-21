@@ -29,10 +29,10 @@ final class AddressMethods implements ApiMethodProvider {
             ApiVocabulary.FUNCTION,
             "symbol"),
         List.of(ApiVocabulary.ADDRESS),
-        request ->
+        (request, projectedFields) ->
             registry
                 .services()
                 .addressService()
-                .resolveAddress(text(selector(request), ApiVocabulary.ADDRESS)));
+                .resolveAddress(text(selector(request), ApiVocabulary.ADDRESS), projectedFields));
   }
 }

@@ -14,6 +14,7 @@ import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.Structure;
 import ghidra.program.model.data.Union;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 public final class DataTypeServiceImpl implements DataTypeService {
   private final GhidraSession context;
@@ -25,19 +26,41 @@ public final class DataTypeServiceImpl implements DataTypeService {
   @Override
   public Page<DataTypeCategoryResource> listCategories(
       String categoryPath, int limit, String cursor) {
-    return DataTypeQueries.listCategories(dataTypeManager(), categoryPath, limit, cursor);
+    return listCategories(categoryPath, limit, cursor, null);
+  }
+
+  @Override
+  public Page<DataTypeCategoryResource> listCategories(
+      String categoryPath, int limit, String cursor, Set<String> fields) {
+    return DataTypeQueries.listCategories(dataTypeManager(), categoryPath, limit, cursor, fields);
   }
 
   @Override
   public DataTypeResource getDataType(String path) {
-    return DataTypeDescriptions.detail(requireDataType(path));
+    return getDataType(path, null);
+  }
+
+  @Override
+  public DataTypeResource getDataType(String path, Set<String> fields) {
+    return DataTypeDescriptions.detail(requireDataType(path), fields);
   }
 
   @Override
   public Page<DataTypeResource> searchDataTypes(
       String query, String categoryPath, String kind, int limit, String cursor) {
+    return searchDataTypes(query, categoryPath, kind, limit, cursor, null);
+  }
+
+  @Override
+  public Page<DataTypeResource> searchDataTypes(
+      String query,
+      String categoryPath,
+      String kind,
+      int limit,
+      String cursor,
+      Set<String> fields) {
     return DataTypeQueries.searchDataTypes(
-        dataTypeManager(), query, categoryPath, kind, limit, cursor);
+        dataTypeManager(), query, categoryPath, kind, limit, cursor, fields);
   }
 
   @Override

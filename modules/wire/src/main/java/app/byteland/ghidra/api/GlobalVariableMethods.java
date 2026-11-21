@@ -45,11 +45,12 @@ final class GlobalVariableMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(addressSelector),
         globalVariableFields,
         List.of(ApiVocabulary.ADDRESS),
-        request ->
+        (request, projectedFields) ->
             registry
                 .services()
                 .globalVariableService()
-                .getGlobalVariable(text(selector(request), ApiVocabulary.ADDRESS)));
+                .getGlobalVariable(
+                    text(selector(request), ApiVocabulary.ADDRESS), projectedFields));
     Map<String, Object> globalVariableFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
@@ -65,7 +66,7 @@ final class GlobalVariableMethods implements ApiMethodProvider {
         ApiSchemaCatalog.scanListInput(globalVariableFilter),
         globalVariableFields,
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
           return registry
               .services()
@@ -77,7 +78,9 @@ final class GlobalVariableMethods implements ApiMethodProvider {
                       optionalText(filter, ApiVocabulary.NAMESPACE),
                       Boolean.TRUE.equals(bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(null)),
                       page.limit(),
-                      page.cursor()));
+                      page.cursor(),
+                      projectedFields),
+                  projectedFields);
         });
     Map<String, Object> globalVariableDefinition =
         WireSchema.object(

@@ -1,5 +1,7 @@
 package app.byteland.ghidra.service.decompilation;
 
+import java.util.Set;
+
 /**
  * Decompiles machine code to high-level representations.
  */
@@ -19,6 +21,18 @@ public interface DecompilationService extends AutoCloseable {
   DecompilationResource decompileFunction(
       String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
       boolean includeComments);
+
+  /**
+   * Decompiles the function whose entry point is the given address with an optional projection.
+   */
+  default DecompilationResource decompileFunction(
+      String rawAddress,
+      DecompilationResource.Format format,
+      Integer timeoutMs,
+      boolean includeComments,
+      Set<String> fields) {
+    return decompileFunction(rawAddress, format, timeoutMs, includeComments);
+  }
 
   /**
    * Closes active decompiler resources.

@@ -40,24 +40,25 @@ final class DataTypeMethods implements ApiMethodProvider {
             WireSchema.object(ApiSchemaCatalog.props(ApiVocabulary.PATH, WireSchema.string()))),
         Set.of(ApiVocabulary.PATH, ApiVocabulary.NAME, "category_count", "data_type_count"),
         List.of(ApiVocabulary.PATH),
-        (request, page) ->
+        (request, page, projectedFields) ->
             registry
                 .services()
                 .dataTypeService()
                 .listCategories(
                     optionalText(filter(request), ApiVocabulary.PATH, "/"),
                     page.limit(),
-                    page.cursor()));
+                    page.cursor(),
+                    projectedFields));
     registry.read(
         "data_type.get",
         ApiSchemaCatalog.selectorInput(pathSelector),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
-        request ->
+        (request, projectedFields) ->
             registry
                 .services()
                 .dataTypeService()
-                .getDataType(text(selector(request), ApiVocabulary.PATH)));
+                .getDataType(text(selector(request), ApiVocabulary.PATH), projectedFields));
     registry.list(
         "data_type.list",
         ApiSchemaCatalog.listInput(
@@ -71,7 +72,7 @@ final class DataTypeMethods implements ApiMethodProvider {
                     WireSchema.string()))),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
           return registry
               .services()
@@ -81,7 +82,8 @@ final class DataTypeMethods implements ApiMethodProvider {
                   optionalText(filter, ApiVocabulary.CATEGORY_PATH),
                   optionalText(filter, ApiVocabulary.KIND),
                   page.limit(),
-                  page.cursor());
+                  page.cursor(),
+                  projectedFields);
         });
     registry.writeResource(
         "data_type.create",

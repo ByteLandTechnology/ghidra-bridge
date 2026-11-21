@@ -48,7 +48,7 @@ final class SymbolListQueries {
       String address = AddressUtil.canonicalAddress(symbol.getAddress());
       SymbolResource match =
           matchesSymbol(symbol, normalizedName, filterAddress, query)
-              ? SymbolDescriptions.describe(symbol)
+              ? SymbolDescriptions.describe(symbol, query.fields())
               : null;
       scan.visit(address, CompositeCursor.key(address, String.valueOf(symbol.getID())), match);
       if (scan.stopped()) break;

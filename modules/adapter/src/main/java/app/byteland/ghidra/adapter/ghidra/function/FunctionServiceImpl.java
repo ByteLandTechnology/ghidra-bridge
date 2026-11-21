@@ -46,9 +46,33 @@ public final class FunctionServiceImpl implements FunctionService {
   }
 
   @Override
+  public Page<FunctionResource> listFunctions(FunctionQuery query, Set<String> fields) {
+    return listQueries.listFunctions(
+        fields == null
+            ? query
+            : new FunctionQuery(
+                query.scan(),
+                query.limit(),
+                query.cursor(),
+                query.name(),
+                query.entry(),
+                query.contains(),
+                query.external(),
+                query.thunk(),
+                query.includes(),
+                fields));
+  }
+
+  @Override
   public FunctionResource getFunction(String rawAddress, Set<String> includes) {
+    return getFunction(rawAddress, includes, null);
+  }
+
+  @Override
+  public FunctionResource getFunction(
+      String rawAddress, Set<String> includes, Set<String> fields) {
     return FunctionDescriptions.describe(
-        lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes));
+        lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes), fields);
   }
 
   @Override
@@ -142,8 +166,20 @@ public final class FunctionServiceImpl implements FunctionService {
   }
 
   @Override
+  public Page<FunctionCallResource> getCallers(
+      String rawAddress, int limit, String cursor, Set<String> fields) {
+    return relationQueries.getCallers(rawAddress, limit, cursor, fields);
+  }
+
+  @Override
   public Page<FunctionCallResource> getCallees(String rawAddress, int limit, String cursor) {
     return relationQueries.getCallees(rawAddress, limit, cursor);
+  }
+
+  @Override
+  public Page<FunctionCallResource> getCallees(
+      String rawAddress, int limit, String cursor, Set<String> fields) {
+    return relationQueries.getCallees(rawAddress, limit, cursor, fields);
   }
 
   @Override

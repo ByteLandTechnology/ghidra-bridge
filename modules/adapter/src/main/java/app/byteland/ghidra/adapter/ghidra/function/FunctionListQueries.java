@@ -63,7 +63,7 @@ final class FunctionListQueries {
       } else if (query.external() != null && function.isExternal() != query.external()) {
       } else if (query.thunk() != null && function.isThunk() != query.thunk()) {
       } else {
-        match = FunctionDescriptions.describe(function, query.includes());
+        match = FunctionDescriptions.describe(function, query.includes(), query.fields());
       }
       String address = AddressUtil.canonicalAddress(function.getEntryPoint());
       scan.visit(address, address, match);

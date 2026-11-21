@@ -41,7 +41,11 @@ final class SymbolMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(idSelector),
         ApiSchemaCatalog.symbolFields(),
         List.of("id"),
-        request -> registry.services().symbolService().getSymbol(longId(selector(request), "id")));
+        (request, projectedFields) ->
+            registry
+                .services()
+                .symbolService()
+                .getSymbol(longId(selector(request), "id"), projectedFields));
     Map<String, Object> symbolFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
@@ -56,7 +60,7 @@ final class SymbolMethods implements ApiMethodProvider {
         ApiSchemaCatalog.scanListInput(symbolFilter),
         ApiSchemaCatalog.symbolFields(),
         List.of(ApiVocabulary.ADDRESS, "id"),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
           return registry
               .services()
@@ -71,7 +75,9 @@ final class SymbolMethods implements ApiMethodProvider {
                       optionalText(filter, ApiVocabulary.SOURCE_TYPE),
                       Boolean.TRUE.equals(bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(null)),
                       page.limit(),
-                      page.cursor()));
+                      page.cursor(),
+                      projectedFields),
+                  projectedFields);
         });
     registry.writeResource(
         "symbol.patch",

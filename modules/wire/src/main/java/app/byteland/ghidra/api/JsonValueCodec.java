@@ -1,6 +1,7 @@
 package app.byteland.ghidra.api;
 
 import java.util.Map;
+import java.util.Set;
 
 final class JsonValueCodec implements JsonCodec<Object> {
   private final Map<String, Object> valueSchema;
@@ -17,8 +18,17 @@ final class JsonValueCodec implements JsonCodec<Object> {
 
   @Override
   public Object encode(Object value) {
+    return encode(value, null);
+  }
+
+  @Override
+  public Object encode(Object value, Set<String> projectedFields) {
     try {
-      WireSchema.validate(value, valueSchema, "/result");
+      if (projectedFields == null) {
+        WireSchema.validate(value, valueSchema, "/result");
+      } else {
+        WireSchema.validateProjected(value, valueSchema, "/result", projectedFields);
+      }
     } catch (ApiException invalidResponse) {
       ApiException translated =
           new ApiException(

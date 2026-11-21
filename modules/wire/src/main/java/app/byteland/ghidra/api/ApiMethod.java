@@ -54,15 +54,34 @@ public record ApiMethod<Request, Response>(
   }
 
   public Object invokeDecoded(Request request) throws Exception {
-    FieldProjection.validate(request, fields, identityFields);
-    Response response = handler.handle(request);
+    Set<String> projectedFields = FieldProjection.validate(request, fields, identityFields);
+    Response response =
+        handler instanceof ProjectedHandler<Request, Response> projectedHandler
+            ? projectedHandler.handle(request, projectedFields)
+            : handler.handle(request);
+    if (projectedFields == null) {
+      return responseCodec.encode(response);
+    }
+    if (handler instanceof ProjectedHandler<?, ?>) {
+      return responseCodec.encode(response, projectedFields);
+    }
     Object encoded = responseCodec.encode(response);
-    return FieldProjection.apply(encoded, request, fields, identityFields);
+    return ProjectionNode.fromFields(projectedFields).projectResponse(encoded);
   }
 
   @FunctionalInterface
   public interface Handler<Request, Response> {
     Response handle(Request request) throws Exception;
+  }
+
+  @FunctionalInterface
+  public interface ProjectedHandler<Request, Response> extends Handler<Request, Response> {
+    Response handle(Request request, Set<String> projectedFields) throws Exception;
+
+    @Override
+    default Response handle(Request request) throws Exception {
+      return handle(request, null);
+    }
   }
 
   /**
@@ -135,19 +154,10 @@ public record ApiMethod<Request, Response>(
   private static final class FieldProjection {
     private FieldProjection() {}
 
-    static Object apply(
-        Object response, Object request, Set<String> knownFields, List<String> identityFields) {
-      if (!(request instanceof Map<?, ?> params) || !params.containsKey("fields")) {
-        return response;
-      }
-      Set<String> selected = validate(request, knownFields, identityFields);
-      return projectResponse(response, selected);
-    }
-
     static Set<String> validate(
         Object request, Set<String> knownFields, List<String> identityFields) {
       if (!(request instanceof Map<?, ?> params) || !params.containsKey("fields")) {
-        return new java.util.LinkedHashSet<>(identityFields);
+        return null;
       }
       Object rawFields = params.get("fields");
       if (!(rawFields instanceof List<?> requested)) {
@@ -173,75 +183,7 @@ public record ApiMethod<Request, Response>(
         }
         selected.add(path);
       }
-      return selected;
-    }
-
-    private static Object projectResponse(Object response, Set<String> selected) {
-      if (!(response instanceof Map<?, ?> map)) {
-        return response;
-      }
-      if (map.get("items") instanceof List<?> items) {
-        Map<String, Object> result = copyStringMap(map);
-        result.put(
-            "items",
-            items.stream()
-                .map(item -> item instanceof Map<?, ?> row ? projectMap(row, selected) : item)
-                .toList());
-        return result;
-      }
-      return projectMap(map, selected);
-    }
-
-    private static Map<String, Object> projectMap(Map<?, ?> source, Set<String> selected) {
-      Map<String, Object> result = new java.util.LinkedHashMap<>();
-      for (String path : selected) {
-        copyPath(source, result, path, 0);
-      }
-      return result;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static void copyPath(
-        Map<?, ?> source, Map<String, Object> target, String path, int start) {
-      int separator = path.indexOf('.', start);
-      int end = separator < 0 ? path.length() : separator;
-      String segment = path.substring(start, end);
-      Object value = source.get(segment);
-      if (value == null) {
-        return;
-      }
-      if (separator < 0) {
-        target.put(segment, value);
-        return;
-      }
-      if (value instanceof Map<?, ?> child) {
-        Map<String, Object> targetChild =
-            (Map<String, Object>)
-                target.computeIfAbsent(segment, ignored -> new java.util.LinkedHashMap<>());
-        copyPath(child, targetChild, path, separator + 1);
-      } else if (value instanceof List<?> list) {
-        @SuppressWarnings("unchecked")
-        List<Object> projected =
-            target.get(segment) instanceof List<?> existing
-                ? (List<Object>) existing
-                : new java.util.ArrayList<>();
-        int childIndex = 0;
-        for (Object item : list) {
-          if (item instanceof Map<?, ?> child) {
-            Map<String, Object> targetChild;
-            if (childIndex < projected.size()
-                && projected.get(childIndex) instanceof Map<?, ?> existingChild) {
-              targetChild = (Map<String, Object>) existingChild;
-            } else {
-              targetChild = new java.util.LinkedHashMap<>();
-              projected.add(targetChild);
-            }
-            copyPath(child, targetChild, path, separator + 1);
-            childIndex++;
-          }
-        }
-        target.put(segment, projected);
-      }
+      return java.util.Collections.unmodifiableSet(selected);
     }
 
     private static boolean hasNumericSegment(String path) {
@@ -249,14 +191,6 @@ public record ApiMethod<Request, Response>(
         if (segment.isEmpty() || segment.chars().allMatch(Character::isDigit)) return true;
       }
       return false;
-    }
-
-    private static Map<String, Object> copyStringMap(Map<?, ?> source) {
-      Map<String, Object> copy = new java.util.LinkedHashMap<>();
-      for (Map.Entry<?, ?> entry : source.entrySet()) {
-        copy.put(String.valueOf(entry.getKey()), entry.getValue());
-      }
-      return copy;
     }
   }
 }

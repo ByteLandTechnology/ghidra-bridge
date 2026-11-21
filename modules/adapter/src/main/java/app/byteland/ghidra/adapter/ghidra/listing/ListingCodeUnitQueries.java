@@ -11,6 +11,7 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Data;
 import ghidra.program.model.listing.Instruction;
+import java.util.Set;
 
 final class ListingCodeUnitQueries {
   private final GhidraSession context;
@@ -21,6 +22,16 @@ final class ListingCodeUnitQueries {
 
   Page<CodeUnitResource> listCodeUnits(
       AddressScanOptions options, int limit, String kind, String direction, String cursorRaw) {
+    return listCodeUnits(options, limit, kind, direction, cursorRaw, null);
+  }
+
+  Page<CodeUnitResource> listCodeUnits(
+      AddressScanOptions options,
+      int limit,
+      String kind,
+      String direction,
+      String cursorRaw,
+      Set<String> fields) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
@@ -41,7 +52,7 @@ final class ListingCodeUnitQueries {
       CodeUnitResource.Kind kindValue = ListingDescriptions.classify(codeUnit);
       CodeUnitResource match =
           matchesKind(kind, kindValue)
-              ? ListingDescriptions.toCodeUnitItem(codeUnit, kindValue, context)
+              ? ListingDescriptions.toCodeUnitItem(codeUnit, kindValue, context, fields)
               : null;
       String address = AddressUtil.canonicalAddress(codeUnit.getAddress());
       scan.visit(address, address, match);

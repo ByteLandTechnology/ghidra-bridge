@@ -1,6 +1,7 @@
 package app.byteland.ghidra.service.datatype;
 
 import app.byteland.ghidra.service.Page;
+import java.util.Set;
 
 /**
  * Manages data types, structures, and category hierarchies.
@@ -17,12 +18,27 @@ public interface DataTypeService {
   Page<DataTypeCategoryResource> listCategories(String categoryPath, int limit, String cursor);
 
   /**
+   * Returns child categories under a category path with an optional field projection.
+   */
+  default Page<DataTypeCategoryResource> listCategories(
+      String categoryPath, int limit, String cursor, Set<String> fields) {
+    return listCategories(categoryPath, limit, cursor);
+  }
+
+  /**
    * Returns metadata for a data type by path.
    *
    * @param path full data type path
    * @return data type resource metadata
    */
   DataTypeResource getDataType(String path);
+
+  /**
+   * Returns metadata for a data type by path with an optional field projection.
+   */
+  default DataTypeResource getDataType(String path, Set<String> fields) {
+    return getDataType(path);
+  }
 
   /**
    * Searches for data types that match query filters.
@@ -36,6 +52,19 @@ public interface DataTypeService {
    */
   Page<DataTypeResource> searchDataTypes(
       String query, String categoryPath, String kind, int limit, String cursor);
+
+  /**
+   * Searches for data types that match query filters with an optional field projection.
+   */
+  default Page<DataTypeResource> searchDataTypes(
+      String query,
+      String categoryPath,
+      String kind,
+      int limit,
+      String cursor,
+      Set<String> fields) {
+    return searchDataTypes(query, categoryPath, kind, limit, cursor);
+  }
 
   /**
    * Creates a data type in the program data manager.

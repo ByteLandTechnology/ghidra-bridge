@@ -20,14 +20,24 @@ import java.util.List;
 
 record GuiDocument(String code, List<Line> lines) {
   static GuiDocument render(Function function, ClangTokenGroup markup) {
-    if (markup == null) return new GuiDocument("", List.of());
-    Program program = function.getProgram();
+    return render(function, markup, true, true);
+  }
+
+  static GuiDocument render(
+      Function function, ClangTokenGroup markup, boolean needCode, boolean needLines) {
+    if (markup == null || (!needCode && !needLines)) return new GuiDocument("", List.of());
+    Program program = needLines ? function.getProgram() : null;
     List<ClangLine> nativeLines = new PrettyPrinter(function, markup, null).getLines();
-    List<Line> lines = new ArrayList<>();
-    StringBuilder code = new StringBuilder();
+    List<Line> lines = needLines ? new ArrayList<>() : List.of();
+    StringBuilder code = needCode ? new StringBuilder() : null;
     Address previous = null;
     for (ClangLine line : nativeLines) {
-      code.append(PrettyPrinter.getText(line)).append('\n');
+      if (needCode) {
+        code.append(PrettyPrinter.getText(line)).append('\n');
+      }
+      if (!needLines) {
+        continue;
+      }
       List<LocatedToken> tokens = new ArrayList<>();
       int column = line.getIndentString().length();
       for (ClangToken token : line.getAllTokens()) {
@@ -56,7 +66,7 @@ record GuiDocument(String code, List<Line> lines) {
         }
       }
     }
-    return new GuiDocument(code.toString(), List.copyOf(lines));
+    return new GuiDocument(needCode ? code.toString() : "", List.copyOf(lines));
   }
 
   private static String canonical(Address address) {

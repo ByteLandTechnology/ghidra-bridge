@@ -3,6 +3,7 @@ package app.byteland.ghidra.service.globalvariable;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import java.util.Set;
 
 /**
  * Coordinates defined data items and primary labels.
@@ -17,10 +18,22 @@ public interface GlobalVariableService {
       String namespace,
       boolean caseSensitive,
       int limit,
-      String cursor) {
+      String cursor,
+      Set<String> fields) {
     public Query {
       if (scan == null) throw new IllegalArgumentException("scan is required");
       if (limit < 1 || limit > 1000) throw new IllegalArgumentException("limit must be in 1..1000");
+      fields = fields == null ? null : Set.copyOf(fields);
+    }
+
+    public Query(
+        AddressScanOptions scan,
+        String name,
+        String namespace,
+        boolean caseSensitive,
+        int limit,
+        String cursor) {
+      this(scan, name, namespace, caseSensitive, limit, cursor, null);
     }
   }
 
@@ -54,10 +67,28 @@ public interface GlobalVariableService {
    */
   GlobalVariableResource getGlobalVariable(String address);
 
+  default GlobalVariableResource getGlobalVariable(String address, Set<String> fields) {
+    return getGlobalVariable(address);
+  }
+
   /**
    * Returns one page of global variables that match the query.
    */
   Page<GlobalVariableResource> listGlobalVariables(Query query);
+
+  default Page<GlobalVariableResource> listGlobalVariables(Query query, Set<String> fields) {
+    return listGlobalVariables(
+        fields == null
+            ? query
+            : new Query(
+                query.scan(),
+                query.name(),
+                query.namespace(),
+                query.caseSensitive(),
+                query.limit(),
+                query.cursor(),
+                fields));
+  }
 
   /**
    * Writes global variable definitions as specified by the write mode.

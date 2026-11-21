@@ -32,11 +32,11 @@ final class InstructionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(addressSelector),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
-        request ->
+        (request, projectedFields) ->
             registry
                 .services()
                 .listingService()
-                .getInstruction(text(selector(request), ApiVocabulary.ADDRESS)));
+                .getInstruction(text(selector(request), ApiVocabulary.ADDRESS), projectedFields));
     registry.scanList(
         "instruction.list",
         ApiSchemaCatalog.scanListInput(
@@ -48,7 +48,7 @@ final class InstructionMethods implements ApiMethodProvider {
                     WireSchema.string()))),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) ->
+        (request, page, projectedFields) ->
             registry
                 .services()
                 .listingService()
@@ -56,7 +56,8 @@ final class InstructionMethods implements ApiMethodProvider {
                     addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
                     page.limit(),
                     "forward",
-                    page.cursor()));
+                    page.cursor(),
+                    projectedFields));
     Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
     Map<String, Object> flowFilter =
         WireSchema.object(
@@ -72,7 +73,7 @@ final class InstructionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.requiredScanListInput(flowFilter),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> selected = object(filter(request), ApiVocabulary.SELECTOR);
           return registry
               .services()
@@ -84,7 +85,8 @@ final class InstructionMethods implements ApiMethodProvider {
                       List.of("branch", "call", "call_return", "return")),
                   addressScan(request, null, null),
                   page.limit(),
-                  page.cursor());
+                  page.cursor(),
+                  projectedFields);
         });
     registry.writeListResult(
         "flow_override.patch",
