@@ -121,7 +121,7 @@ MCP HTTP 服务端按以下规则处理请求：
 - **OPTIONS**：处理 CORS 预检请求并返回状态码 `204`。
 - **GET**：服务端直接返回状态码 `405` 并附带 `Allow: POST, OPTIONS` 响应头。
 - **其他方法**：服务端返回状态码 `405`。
-- **Origin**：若请求携带的 `Origin` 头部既不是回环主机也不是配置的 `host`，返回状态码 `403`。
+- **Origin**：默认情况下，携带 `Origin` 头部的请求返回状态码 `403`，且不附带任何 CORS 响应头。可通过 `allowed_origins` 配置以逗号分隔的 `http://` 或 `https://` 来源列表（`scheme://host[:port]`），仅对匹配的单值 `Origin` 请求放行并返回 `Access-Control-Allow-Origin` 与 `Vary: Origin`。
 - **内容类型**：POST 请求必须发送 `Content-Type: application/json`，否则返回状态码 `415`。
 - **通知**：不含 `id` 的请求返回状态码 `202`，且不含响应体。
 
@@ -282,6 +282,7 @@ MCP 将操作组织为 15 个工具：
 
 - **默认回环**：监听器默认绑定 `127.0.0.1`。未设置 `token` 的回环监听器不需要认证。
 - **外部监听器**：外部网络接口上的监听器必须提供 `token` 参数。
+- **浏览器来源隔离**：MCP HTTP 服务端默认拒绝所有携带 `Origin` 头部的请求。可通过 `allowed_origins` 显式放行指定的 `scheme://host[:port]` 浏览器来源；`allowed_origins` 中包含非回环来源时必须配置 `token`。
 - **认证头部**：通过 `Authorization: Bearer <token>` 头部传递凭据。
 - **拒绝 URL Token**：URL 查询参数中携带的 Token 会直接被 HTTP 400 拒绝。
 - **日志脱敏**：安全 Token 绝不会在服务日志中打印。

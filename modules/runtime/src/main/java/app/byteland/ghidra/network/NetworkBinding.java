@@ -15,6 +15,22 @@ public final class NetworkBinding {
     }
   }
 
+  public static void requireTokenForNonLoopbackOrigin(String host, String token) {
+    if (token != null && !token.isBlank()) {
+      return;
+    }
+    boolean loopback;
+    try {
+      loopback = isLoopback(host);
+    } catch (IllegalArgumentException unresolved) {
+      loopback = false;
+    }
+    if (!loopback) {
+      throw new IllegalArgumentException(
+          "token is required when allowed_origins includes a non-loopback origin");
+    }
+  }
+
   public static boolean bearerTokenMatches(String authorizationHeader, String expectedToken) {
     if (authorizationHeader == null) {
       return false;

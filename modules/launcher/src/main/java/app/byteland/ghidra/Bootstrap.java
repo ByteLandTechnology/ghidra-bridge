@@ -146,6 +146,11 @@ public final class Bootstrap {
         "[ghidra-mcp]   Auth Token: " + (mcpConfig.token() == null ? "disabled" : "configured"));
     script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
     script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
+    script.println(
+        "[ghidra-mcp]   Allowed Origins: "
+            + (mcpConfig.allowedOrigins().isEmpty()
+                ? "none"
+                : String.join(", ", mcpConfig.allowedOrigins())));
 
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
@@ -237,12 +242,15 @@ public final class Bootstrap {
         "[ghidra-mcp] Defaults: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp"
-            + " session_id=<current-program-name> tool_prefix=ghidra");
+            + " session_id=<current-program-name> tool_prefix=ghidra"
+            + " allowed_origins=<none>");
     script.printerr(
         "[ghidra-mcp] Example: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp session_id=demo-session"
-            + " token=secret");
+            + " token=secret allowed_origins=http://"
+            + LOOPBACK_HOST
+            + ":6274");
   }
 
   private static EffectiveConfig resolveConfig(String[] args, Program program) {
@@ -275,7 +283,7 @@ public final class Bootstrap {
     return isBlank(name) ? "ghidra-bridge" : name;
   }
 
-  private static McpConfig resolveMcpConfig(String[] args, Program program) {
+  static McpConfig resolveMcpConfig(String[] args, Program program) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
     if (isBlank(parsedArgs.get(SESSION_ID_ARGUMENT))) {
       parsedArgs.put(SESSION_ID_ARGUMENT, defaultSessionId(program));

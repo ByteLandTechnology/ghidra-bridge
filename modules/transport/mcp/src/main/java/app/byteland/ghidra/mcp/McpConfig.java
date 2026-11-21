@@ -3,6 +3,11 @@ package app.byteland.ghidra.mcp;
 import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.network.NetworkBinding;
 import java.net.InetAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -16,14 +21,33 @@ import java.util.regex.Pattern;
  * several servers without tool name conflicts.
  */
 public record McpConfig(
-    String host, int port, String path, String token, String sessionId, String toolPrefix) {
+    String host,
+    int port,
+    String path,
+    String token,
+    String sessionId,
+    String toolPrefix,
+    Set<String> allowedOrigins) {
   public static final int DEFAULT_PORT = 8766;
   public static final String DEFAULT_TOOL_PREFIX = "ghidra";
   private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,63}");
   private static final String DEFAULT_LOOPBACK_HOST =
       InetAddress.getLoopbackAddress().getHostAddress();
   private static final Set<String> ALLOWED =
-      Set.of("host", "port", "path", "session_id", "token", "tool_prefix", "jar");
+      Set.of(
+          "host",
+          "port",
+          "path",
+          "session_id",
+          "token",
+          "tool_prefix",
+          "allowed_origins",
+          "jar");
+
+  public McpConfig(
+      String host, int port, String path, String token, String sessionId, String toolPrefix) {
+    this(host, port, path, token, sessionId, toolPrefix, Set.of());
+  }
 
   public McpConfig {
     host = textOrDefault(host, DEFAULT_LOOPBACK_HOST);
@@ -33,6 +57,7 @@ public record McpConfig(
     NetworkBinding.requireTokenForNonLoopback(host, token);
     sessionId = textOrDefault(sessionId, "ghidra-bridge");
     toolPrefix = requireToolPrefix(textOrDefault(toolPrefix, DEFAULT_TOOL_PREFIX));
+    allowedOrigins = normalizeAllowedOrigins(allowedOrigins, token);
   }
 
   public static McpConfig fromMap(Map<String, String> args) {
@@ -44,12 +69,120 @@ public record McpConfig(
         args.get("path"),
         args.get("token"),
         args.get("session_id"),
-        args.get("tool_prefix"));
+        args.get("tool_prefix"),
+        parseAllowedOrigins(args.get("allowed_origins")));
   }
 
   public String endpoint() {
     return "http://" + host + ":" + port + path;
   }
+
+  static String tryNormalizeOrigin(String rawOrigin) {
+    try {
+      return parseOrigin(rawOrigin).normalized();
+    } catch (IllegalArgumentException invalid) {
+      return null;
+    }
+  }
+
+  private static Set<String> parseAllowedOrigins(String value) {
+    String normalizedValue = AgentConfig.optionalText(value);
+    if (normalizedValue == null) {
+      return Set.of();
+    }
+    Set<String> origins = new LinkedHashSet<>();
+    for (String part : normalizedValue.split(",", -1)) {
+      String candidate = part.trim();
+      if (candidate.isEmpty()) {
+        throw new IllegalArgumentException("allowed_origins must not contain empty entries");
+      }
+      origins.add(parseOrigin(candidate).normalized());
+    }
+    return Collections.unmodifiableSet(origins);
+  }
+
+  private static Set<String> normalizeAllowedOrigins(Set<String> origins, String token) {
+    if (origins == null || origins.isEmpty()) {
+      return Set.of();
+    }
+    Set<String> normalized = new LinkedHashSet<>();
+    for (String origin : origins) {
+      if (origin == null) {
+        throw new IllegalArgumentException("allowed_origins must not contain null");
+      }
+      ParsedOrigin parsed = parseOrigin(origin);
+      NetworkBinding.requireTokenForNonLoopbackOrigin(parsed.host(), token);
+      normalized.add(parsed.normalized());
+    }
+    return Collections.unmodifiableSet(normalized);
+  }
+
+  private static ParsedOrigin parseOrigin(String rawOrigin) {
+    if (rawOrigin == null) {
+      throw new IllegalArgumentException("origin is required");
+    }
+    String trimmed = rawOrigin.trim();
+    if (trimmed.isEmpty()) {
+      throw new IllegalArgumentException("origin must not be blank");
+    }
+    if (trimmed.contains("*")) {
+      throw new IllegalArgumentException("wildcard origins are not allowed: " + trimmed);
+    }
+    if ("null".equalsIgnoreCase(trimmed)) {
+      throw new IllegalArgumentException("null origin is not allowed");
+    }
+    URI uri;
+    try {
+      uri = new URI(trimmed);
+    } catch (URISyntaxException error) {
+      throw new IllegalArgumentException("invalid origin: " + trimmed, error);
+    }
+    String rawScheme = uri.getScheme();
+    if (rawScheme == null) {
+      throw new IllegalArgumentException("origin must specify http or https scheme: " + trimmed);
+    }
+    String scheme = rawScheme.toLowerCase(Locale.ROOT);
+    if (!"http".equals(scheme) && !"https".equals(scheme)) {
+      throw new IllegalArgumentException("origin scheme must be http or https: " + trimmed);
+    }
+    if (uri.isOpaque()) {
+      throw new IllegalArgumentException("origin must use scheme://host[:port]: " + trimmed);
+    }
+    if (uri.getRawUserInfo() != null) {
+      throw new IllegalArgumentException("origin must not include userinfo: " + trimmed);
+    }
+    if (uri.getRawPath() != null && !uri.getRawPath().isEmpty()) {
+      throw new IllegalArgumentException("origin must not include a path: " + trimmed);
+    }
+    if (uri.getRawQuery() != null) {
+      throw new IllegalArgumentException("origin must not include a query: " + trimmed);
+    }
+    if (uri.getRawFragment() != null) {
+      throw new IllegalArgumentException("origin must not include a fragment: " + trimmed);
+    }
+    String rawHost = uri.getHost();
+    String rawAuthority = uri.getRawAuthority();
+    if (rawHost == null || rawHost.isBlank() || rawAuthority == null) {
+      throw new IllegalArgumentException("origin must include a valid host: " + trimmed);
+    }
+    int port = uri.getPort();
+    String expectedAuthority = port == -1 ? rawHost : rawHost + ":" + port;
+    if (!rawAuthority.equals(expectedAuthority)) {
+      throw new IllegalArgumentException("origin must use canonical host[:port]: " + trimmed);
+    }
+    if (port != -1) {
+      AgentConfig.requireValidPort(port);
+    }
+    String host = rawHost.toLowerCase(Locale.ROOT);
+    boolean defaultPort =
+        port == -1
+            || ("http".equals(scheme) && port == 80)
+            || ("https".equals(scheme) && port == 443);
+    String normalized = defaultPort ? scheme + "://" + host : scheme + "://" + host + ":" + port;
+    return new ParsedOrigin(normalized, host);
+  }
+
+  private record ParsedOrigin(String normalized, String host) {}
 
   private static int portOrDefault(String value) {
     Integer parsed = AgentConfig.optionalInteger(value, "port");

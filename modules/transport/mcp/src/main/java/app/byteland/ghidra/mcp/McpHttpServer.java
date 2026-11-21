@@ -164,12 +164,12 @@ public final class McpHttpServer implements AutoCloseable {
       RequestLog log = new RequestLog(requestLogSink);
       try (exchange) {
         try {
-          addCommonHeaders(exchange);
           if (!isAllowedOrigin(exchange)) {
             log.method(exchange.getRequestMethod()).error().status(403);
             writePlain(exchange, 403, "Forbidden origin");
             return;
           }
+          addCommonHeaders(exchange);
 
           String requestMethod = exchange.getRequestMethod();
           if (HTTP_OPTIONS_METHOD.equalsIgnoreCase(requestMethod)) {
@@ -762,8 +762,12 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static void writePlain(HttpExchange exchange, int statusCode, String payload)
       throws IOException {
-    byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
     exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+    if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+      sendNoBody(exchange, statusCode);
+      return;
+    }
+    byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
     exchange.sendResponseHeaders(statusCode, bytes.length);
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
@@ -775,34 +779,42 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   private void addCommonHeaders(HttpExchange exchange) {
-    String origin = firstHeader(exchange, "Origin");
-    if (origin != null && !origin.isBlank()) {
-      exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
-      exchange.getResponseHeaders().set("Vary", "Origin");
-    } else {
-      exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+    String allowedOrigin = matchedAllowedOrigin(exchange);
+    if (allowedOrigin == null) {
+      return;
     }
+    exchange.getResponseHeaders().set("Access-Control-Allow-Origin", allowedOrigin);
+    exchange.getResponseHeaders().set("Vary", "Origin");
     exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS");
     exchange
         .getResponseHeaders()
-        .set("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Accept");
-    exchange
-        .getResponseHeaders()
-        .set("Access-Control-Expose-Headers", "MCP-Protocol-Version");
+        .set(
+            "Access-Control-Allow-Headers",
+            "Authorization, Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Accept");
+    exchange.getResponseHeaders().set("Access-Control-Expose-Headers", "MCP-Protocol-Version");
   }
 
   private boolean isAllowedOrigin(HttpExchange exchange) {
-    String origin = firstHeader(exchange, "Origin");
-    if (origin == null || origin.isBlank()) {
+    List<String> origins = exchange.getRequestHeaders().get("Origin");
+    if (origins == null || origins.isEmpty()) {
       return true;
     }
-    try {
-      URI uri = URI.create(origin);
-      String host = uri.getHost();
-      return host != null;
-    } catch (IllegalArgumentException invalidOrigin) {
-      return false;
+    return matchedAllowedOrigin(origins) != null;
+  }
+
+  private String matchedAllowedOrigin(HttpExchange exchange) {
+    return matchedAllowedOrigin(exchange.getRequestHeaders().get("Origin"));
+  }
+
+  private String matchedAllowedOrigin(List<String> origins) {
+    if (origins == null || origins.size() != 1) {
+      return null;
     }
+    String normalized = McpConfig.tryNormalizeOrigin(origins.get(0));
+    if (normalized == null || !config.allowedOrigins().contains(normalized)) {
+      return null;
+    }
+    return normalized;
   }
 
   private static String firstHeader(HttpExchange exchange, String name) {

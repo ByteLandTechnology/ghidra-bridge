@@ -121,7 +121,7 @@ The MCP HTTP server handles requests:
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
 - **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
 - **Other methods**: The server returns status `405`.
-- **Origin**: A request with an `Origin` header that is not a loopback host or the configured `host` returns status `403`.
+- **Origin**: By default, a request that includes an `Origin` header returns status `403` with no CORS headers. Set `allowed_origins` to a comma-separated list of `http://` or `https://` origins (`scheme://host[:port]`) to allow matching single-valued `Origin` headers and return `Access-Control-Allow-Origin` and `Vary: Origin`.
 - **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.
 
@@ -281,6 +281,7 @@ An unknown operation, or an argument other than `operation` and `params`, return
 
 - **Loopback Default**: Listeners bind to `127.0.0.1` by default. A loopback listener without `token` does not require authentication.
 - **External Listener**: A listener on an external network interface requires `token`.
+- **Browser Origin Isolation**: The MCP HTTP server rejects all `Origin` headers by default. Set `allowed_origins` to allow specific `scheme://host[:port]` browser origins. Non-loopback entries in `allowed_origins` require `token`.
 - **Authorization Header**: Send credentials through `Authorization: Bearer <token>`.
 - **Query Token Rejection**: The server rejects tokens in query strings with HTTP 400.
 - **Log Redaction**: Secret tokens never appear in server log files.
