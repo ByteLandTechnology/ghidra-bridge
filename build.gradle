@@ -35,6 +35,10 @@ subprojects {
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
     }
+    def subprojectCheck = tasks.named('check')
+    rootProject.tasks.named('check') {
+        dependsOn subprojectCheck
+    }
 }
 
 def ghidraJars = ghidraInstallDir == null ? files() : fileTree(dir: ghidraInstallDir, include: ['**/*.jar'])
@@ -215,5 +219,5 @@ tasks.register('verifyArchitecture') {
 
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'check', 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
 }
