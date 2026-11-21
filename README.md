@@ -167,13 +167,20 @@ The MCP tool schema is also available at `ghidra-bridge://contracts/mcp-tools`.
 
 ## Verify the Build
 
-Run the full verification suite before you commit changes:
+In a JDK 21 environment without Ghidra, run unit tests across the six Ghidra-free modules and check architecture boundaries:
+
+```bash
+./gradlew --no-daemon testWithoutGhidra verifyArchitecture
+```
+
+With `GHIDRA_INSTALL_DIR` set, run the full verification suite before you commit changes:
 
 ```bash
 ./gradlew --no-daemon clean verify
 ```
 
 The `verify` task checks:
-- Architecture boundary rules.
-- Generated API contract drift.
-- Generated script build and compilation.
+- Unit tests across all modules (`check`).
+- Architecture boundary rules (`verifyArchitecture`).
+- Generated API contract drift (`verifyApiContracts`).
+- Generated script build and compilation (`verifyDistribution`).

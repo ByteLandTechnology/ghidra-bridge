@@ -82,7 +82,13 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
-Before you submit a change, run the verification suite:
+For fast local feedback without Ghidra (JDK 21 only), run unit tests in the six Ghidra-free modules and check architecture boundaries:
+
+```bash
+./gradlew --no-daemon testWithoutGhidra verifyArchitecture
+```
+
+Before you submit a change, set `GHIDRA_INSTALL_DIR` and run the full verification suite:
 
 ```bash
 ./gradlew --no-daemon clean verify
@@ -90,6 +96,8 @@ bash .github/scripts/verify-repository-hygiene.sh
 ```
 
 The verification tasks check:
+- **Fast Unit Tests**: `testWithoutGhidra` runs unit tests in `:domain`, `:wire`, `:contracts`, `:runtime`, `:transport:websocket`, and `:transport:mcp` without `GHIDRA_INSTALL_DIR`.
+- **All Module Checks**: `check` runs unit tests across all eight Java subprojects, including `:adapter`.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
@@ -98,7 +106,7 @@ The verification tasks check:
 ## Releases
 
 The CI workflow uses release-please to manage versions and release notes.
-After a push to `main` passes the `verify` job, release-please creates or updates a release pull request.
+After a push to `main` passes the `unit-test` and `verify` jobs, release-please creates or updates a release pull request.
 The pull request updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
 Review the proposed version and notes in the pull request.
 Merge the pull request into `main` to start the release.

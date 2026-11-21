@@ -19,6 +19,25 @@ env:
   GHIDRA_ZIP_SHA256: "b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d"
 
 jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Verify Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Run unit tests without Ghidra
+        run: ./gradlew --no-daemon testWithoutGhidra verifyArchitecture
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -43,13 +62,13 @@ jobs:
         run: ./gradlew --no-daemon clean verify
 
       - name: Test function mutations
-        run: |
-          ./gradlew --no-daemon :wire:test :contracts:test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
   release:
     # Update the release PR or create a release after main passes verification.
-    needs: verify
+    needs:
+      - unit-test
+      - verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10

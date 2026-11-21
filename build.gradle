@@ -213,7 +213,29 @@ tasks.register('verifyArchitecture') {
     }
 }
 
+def ghidraFreeProjects = [
+    ':domain',
+    ':wire',
+    ':contracts',
+    ':runtime',
+    ':transport:websocket',
+    ':transport:mcp'
+]
+
+def javaProjects = ghidraFreeProjects + [':adapter', ':launcher']
+
+tasks.register('testWithoutGhidra') {
+    group = 'verification'
+    description = 'Runs unit tests in modules that do not need Ghidra.'
+    dependsOn ghidraFreeProjects.collect { "${it}:test" }
+}
+
+tasks.named('check') {
+    dependsOn javaProjects.collect { "${it}:check" }
+}
+
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    description = 'Runs all module checks, contract checks, distribution checks, and architecture checks.'
+    dependsOn 'check', 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
 }

@@ -2,7 +2,13 @@
 
 ## Configure the build
 
-Use Java 21 and Ghidra 12.1. Set `GHIDRA_INSTALL_DIR` to the Ghidra installation directory.
+Use Java 21. To run unit tests in the six Ghidra-free modules without Ghidra, run:
+
+```bash
+./gradlew --no-daemon testWithoutGhidra verifyArchitecture
+```
+
+To compile `:adapter` and `:launcher` and run the full verification suite, install Ghidra 12.1 and set `GHIDRA_INSTALL_DIR` to the Ghidra installation directory:
 
 ```bash
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
@@ -20,7 +26,7 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 ## Submit a change
 
-Run `./gradlew --no-daemon clean verify`. State the behavior change and its effect on users in the pull request.
+For changes in Ghidra-free modules when Ghidra is not installed, run `./gradlew --no-daemon testWithoutGhidra verifyArchitecture`. Before merge, run the full verification suite with Ghidra (`./gradlew --no-daemon clean verify`) and `bash .github/scripts/verify-repository-hygiene.sh`. State the behavior change and its effect on users in the pull request.
 
 Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
 
