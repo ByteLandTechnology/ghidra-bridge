@@ -112,15 +112,17 @@ The server closes the socket with these status codes:
 ## Model Context Protocol (MCP)
 
 The bridge implements MCP Streamable HTTP protocol version `2026-07-28`.
-The server does not use MCP sessions and does not send server-sent events.
+Version `2026-07-28` requests are stateless and do not use MCP sessions.
+For legacy SSE clients, the server supports bounded SSE sessions.
 
 ### HTTP Request Rules
 
 The MCP HTTP server handles requests:
-- **POST**: Dispatches JSON-RPC 2.0 requests.
+- **POST**: Dispatches JSON-RPC 2.0 requests. Up to 32 POST requests can run at the same time; additional requests return status `503`. The server closes a POST exchange if reading the request body takes more than 10 seconds. For an active SSE session (`?sessionId=<id>`), POST sends the JSON-RPC response as a `message` event and returns status `202`. An unknown or expired `sessionId` returns status `404`.
+- **GET**: With `Accept: text/event-stream`, opens a legacy compatibility SSE stream and sends an `endpoint` event. Up to 4 SSE sessions can stay open at the same time; additional requests return status `503`. Without `Accept: text/event-stream`, the server returns status `405` with `Allow: POST, GET, OPTIONS`.
+- **HEAD**: Returns status `200` with no body.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
-- **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
-- **Other methods**: The server returns status `405`.
+- **Other methods**: The server returns status `405` with `Allow: POST, GET, OPTIONS`.
 - **Origin**: A request with an `Origin` header that is not a loopback host or the configured `host` returns status `403`.
 - **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.
