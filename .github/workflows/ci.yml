@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Java and Ghidra
         uses: ./.github/actions/setup-ghidra
@@ -34,7 +34,7 @@ jobs:
           ghidra-zip-sha256: ${{ env.GHIDRA_ZIP_SHA256 }}
 
       - name: Verify Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v6
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
@@ -65,7 +65,7 @@ jobs:
     steps:
       - name: Update release PR or create release
         id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           target-branch: main
@@ -81,7 +81,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout release
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.release.outputs.sha }}
 
