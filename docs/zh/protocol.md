@@ -178,7 +178,7 @@ MCP HTTP 服务端按以下规则处理请求：
 - `server/discover`：返回服务端标识与支持的能力特性。
 - `ping`：在使用初始化流程的版本中检查服务端健康状态。
   桥接在 `2026-07-28` 中保留此兼容方法。
-- `tools/list`：返回全部 15 个工具的 Schema 定义。
+- `tools/list`：返回全部 56 个桥接工具的 Schema 定义。
 - `tools/call`：执行具体的工具操作并返回结构化内容。
 - `resources/list`：列出可用资源，例如 `ghidra-bridge://contracts/mcp-tools`。
 - `resources/read`：读取资源内容。
@@ -197,32 +197,32 @@ MCP HTTP 服务端按以下规则处理请求：
 
 ### 工具调用规范
 
-MCP 将操作组织为 15 个工具：
-- `ghidra.help`：查找领域、列出可用操作及查看操作 Schema。
-- 14 个领域工具：`ghidra.bridge`、`ghidra.program`、`ghidra.address`、`ghidra.memory`、`ghidra.listing`、`ghidra.global_variable`、`ghidra.function`、`ghidra.analysis`、`ghidra.decompilation`、`ghidra.symbol`、`ghidra.reference`、`ghidra.comment`、`ghidra.data_type`、`ghidra.batch`。
+MCP 在 `tools/list` 中发布 56 个工具：
+- `ghidra_help`：查找领域、列出可用操作及查看操作 Schema。
+- 55 个操作工具：为 `bridge`、`program`、`address`、`memory`、`listing`、`global_variable`、`function`、`analysis`、`decompilation`、`symbol`、`reference`、`comment`、`data_type` 与 `batch` 中的每个方法各提供一个工具。
 
-领域工具共公开 55 个方法。`interface.get` 仅通过 WebSocket 提供。
+每个操作工具名采用 `<prefix>_<domain>_<operation>`，其中 `<operation>` 内的点号替换为下划线。
+`interface.get` 仅通过 WebSocket 提供。
 
 ### 工具名前缀
 
-所有工具名都以前缀和一个点开头，默认前缀为 `ghidra`。
+所有工具名都以前缀和下划线开头，默认前缀为 `ghidra`。
 通过 `tool_prefix` 启动参数可以修改前缀，例如 `tool_prefix=sample`。
-此时工具名包括 `sample.help` 和 `sample.program`。
+此时工具名包括 `sample_help` 和 `sample_program_get`。
 当一个 MCP 客户端接入多个桥接服务时，为每个桥接服务设置不同的前缀。
 
-前缀以字母开头，由 1 至 64 个字母、数字、`_` 或 `-` 组成。
+前缀以字母开头，由 1 至 34 个字母、数字、`_` 或 `-` 组成，使生成的工具名保持在 64 个字符以内。
 服务端拒绝使用其他前缀的工具名。
-在 `ghidra.help` 中，`domain` 参数既接受完整工具名，也接受不带前缀的领域名，例如 `memory`。
+在 `ghidra_help` 中，`domain` 参数既接受 `ghidra_<domain>`，也接受不带前缀的领域名，例如 `memory`。
 本文档中的示例均使用默认前缀。
 
-`ghidra.help` 接受可选的 `domain` 与 `operation` 参数：
-- 不带参数：返回领域工具列表。
-- 仅 `domain`：返回该领域工具的操作名列表。
-- `domain` 与 `operation`：返回该操作的方法名、描述、副作用、`inputSchema` 与 `outputSchema`。
+`ghidra_help` 接受可选的 `domain` 与 `operation` 参数：
+- 不带参数：返回带工具前缀的领域名列表。
+- 仅 `domain`：返回该领域的操作名列表。
+- `domain` 与 `operation`：返回该操作的工具名、方法名、描述、副作用、`inputSchema` 与 `outputSchema`。
 
-调用具体操作时，向领域工具传递 `operation` 与 `params` 参数。
-`operation` 的值是领域工具内的操作名，而不是点分方法名。
-例如，`memory.read` 方法对应 `ghidra.memory` 的 `read` 操作：
+调用具体操作时，直接在 `arguments` 中传入参数调用对应的操作工具。
+例如，`memory.read` 方法对应 `ghidra_memory_read`：
 
 ```json
 {
@@ -235,13 +235,10 @@ MCP 将操作组织为 15 个工具：
       "io.modelcontextprotocol/clientInfo": {"name": "example-client", "version": "1.0.0"},
       "io.modelcontextprotocol/clientCapabilities": {}
     },
-    "name": "ghidra.memory",
+    "name": "ghidra_memory_read",
     "arguments": {
-      "operation": "read",
-      "params": {
-        "selector": {"address": "ram:00100000"},
-        "length": 4
-      }
+      "selector": {"address": "ram:00100000"},
+      "length": 4
     }
   }
 }
@@ -258,25 +255,24 @@ MCP 将操作组织为 15 个工具：
     "content": [
       {
         "type": "text",
-        "text": "{\"operation\":\"read\",\"result\":{\"address\":\"ram:00100000\",\"bytes\":{\"encoding\":\"hex\",\"data\":\"7f454c46\",\"length\":4}}}"
+        "text": "{\"address\":\"ram:00100000\",\"bytes\":{\"encoding\":\"hex\",\"data\":\"7f454c46\",\"length\":4}}"
       }
     ],
     "structuredContent": {
-      "operation": "read",
-      "result": {
-        "address": "ram:00100000",
-        "bytes": {"encoding": "hex", "data": "7f454c46", "length": 4}
-      }
+      "address": "ram:00100000",
+      "bytes": {"encoding": "hex", "data": "7f454c46", "length": 4}
     },
     "isError": false
   }
 }
 ```
 
+向 `ghidra_<domain>` 传递 `operation` 与 `params` 的旧式 `tools/call` 请求仍继续受支持，并在 `structuredContent` 中返回 `{"operation": "<operation>", "result": ...}`。
+
 操作失败时，服务端返回 HTTP `200` 且 `"isError": true`。
 `structuredContent` 对象携带桥接错误，包含 `status`、`code`、`message`、`target` 与 `details`。
 未知工具名返回 HTTP `400`，错误码 `-32602`。
-未知操作，或 `operation` 与 `params` 之外的参数，返回工具错误。
+无效工具参数或未知旧式操作返回错误。
 
 ## 认证与网络安全
 

@@ -178,7 +178,7 @@ The server handles these MCP methods:
 - `server/discover`: Returns server identification and capabilities.
 - `ping`: Checks server health in initialization-based versions.
   The bridge keeps this compatibility method in `2026-07-28`.
-- `tools/list`: Returns tool schemas for all 15 bridge tools.
+- `tools/list`: Returns tool schemas for all 56 bridge tools.
 - `tools/call`: Executes a tool operation and returns structured content.
 - `resources/list`: Lists available resources, such as `ghidra-bridge://contracts/mcp-tools`.
 - `resources/read`: Reads contract resource content.
@@ -196,32 +196,33 @@ The MCP error schema for that version cannot represent this case.
 
 ### Tool Call Convention
 
-MCP organizes operations into 15 tools:
-- `ghidra.help`: Finds domains, lists operations, and shows schemas.
-- 14 Domain Tools: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`.
+MCP publishes 56 tools in `tools/list`:
+- `ghidra_help`: Finds domains, lists operations, and shows schemas.
+- 55 Operation Tools: One tool per method across `bridge`, `program`, `address`, `memory`, `listing`, `global_variable`, `function`, `analysis`, `decompilation`, `symbol`, `reference`, `comment`, `data_type`, and `batch`.
 
-The domain tools expose 55 methods. `interface.get` is available only through WebSocket.
+Each operation tool uses `<prefix>_<domain>_<operation>`, with dots in `<operation>` replaced by underscores.
+`interface.get` is available only through WebSocket.
 
 ### Tool Name Prefix
 
-Every tool name starts with a prefix and a dot. The default prefix is `ghidra`.
+Every tool name starts with a prefix and an underscore. The default prefix is `ghidra`.
 Set the `tool_prefix` startup argument to change it, for example `tool_prefix=sample`.
-Then the tool names include `sample.help` and `sample.program`.
+Then the tool names include `sample_help` and `sample_program_get`.
 Use a different prefix for each bridge when one MCP client connects to more than one bridge.
 
-The prefix starts with a letter and has 1 to 64 letters, digits, `_`, or `-`.
+The prefix starts with a letter and has 1 to 34 letters, digits, `_`, or `-`.
+Every generated tool name stays within 64 characters.
 The server rejects a tool name with a different prefix.
-In `ghidra.help`, the `domain` argument accepts the full tool name or the domain name without the prefix, such as `memory`.
+In `ghidra_help`, the `domain` argument accepts `ghidra_<domain>` or the domain name without the prefix, such as `memory`.
 The examples in this document use the default prefix.
 
-`ghidra.help` accepts optional `domain` and `operation` arguments:
-- No arguments: Returns the list of domain tools.
-- `domain`: Returns the operation names of one domain tool.
-- `domain` and `operation`: Returns the method name, description, effects, `inputSchema`, and `outputSchema` of one operation.
+`ghidra_help` accepts optional `domain` and `operation` arguments:
+- No arguments: Returns the list of domain names with the tool prefix.
+- `domain`: Returns the operation names of one domain.
+- `domain` and `operation`: Returns the tool name, method name, description, effects, `inputSchema`, and `outputSchema` of one operation.
 
-To execute an operation, call its domain tool with `operation` and `params`.
-The `operation` value is the operation name in the domain tool, not the dotted method name.
-For example, the `memory.read` method is the `read` operation of `ghidra.memory`:
+To execute an operation, call its operation tool directly with its parameters in `arguments`.
+For example, the `memory.read` method maps to `ghidra_memory_read`:
 
 ```json
 {
@@ -234,13 +235,10 @@ For example, the `memory.read` method is the `read` operation of `ghidra.memory`
       "io.modelcontextprotocol/clientInfo": {"name": "example-client", "version": "1.0.0"},
       "io.modelcontextprotocol/clientCapabilities": {}
     },
-    "name": "ghidra.memory",
+    "name": "ghidra_memory_read",
     "arguments": {
-      "operation": "read",
-      "params": {
-        "selector": {"address": "ram:00100000"},
-        "length": 4
-      }
+      "selector": {"address": "ram:00100000"},
+      "length": 4
     }
   }
 }
@@ -257,25 +255,25 @@ The server returns both text and structured content:
     "content": [
       {
         "type": "text",
-        "text": "{\"operation\":\"read\",\"result\":{\"address\":\"ram:00100000\",\"bytes\":{\"encoding\":\"hex\",\"data\":\"7f454c46\",\"length\":4}}}"
+        "text": "{\"address\":\"ram:00100000\",\"bytes\":{\"encoding\":\"hex\",\"data\":\"7f454c46\",\"length\":4}}"
       }
     ],
     "structuredContent": {
-      "operation": "read",
-      "result": {
-        "address": "ram:00100000",
-        "bytes": {"encoding": "hex", "data": "7f454c46", "length": 4}
-      }
+      "address": "ram:00100000",
+      "bytes": {"encoding": "hex", "data": "7f454c46", "length": 4}
     },
     "isError": false
   }
 }
 ```
 
+Legacy `tools/call` requests to `ghidra_<domain>` with `operation` and `params` remain supported.
+Legacy domain calls return `{"operation": "<operation>", "result": ...}` in `structuredContent`.
+
 When an operation fails, the server returns HTTP `200` with `"isError": true`.
 The `structuredContent` object holds the bridge error with `status`, `code`, `message`, `target`, and `details`.
 An unknown tool name returns HTTP `400` with code `-32602`.
-An unknown operation, or an argument other than `operation` and `params`, returns a tool error.
+Invalid tool arguments or an unknown legacy operation return an error.
 
 ## Authentication and Security
 

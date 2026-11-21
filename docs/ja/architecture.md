@@ -71,7 +71,7 @@ modules/domain (サービスインターフェースとデータモデル)
 
 このモジュールは Model Context Protocol を実装します:
 - `McpHttpServer` がプロトコル `2026-07-28` に準拠する Streamable HTTP サーバーを実装します。
-- `McpToolRegistry` が 55 個の公開メソッドを 14 個のドメインツールおよび `ghidra.help` にマッピングします。
+- `McpToolRegistry` が 55 個の公開メソッドを 55 個の操作ツールおよび `ghidra_help` として公開し、従来の `ghidra_<domain>` ディスパッチも維持します。
   `interface.get` は公開しません。
 - `ghidra-bridge://contracts/mcp-tools` にてツール規約リソースを提供します。
 

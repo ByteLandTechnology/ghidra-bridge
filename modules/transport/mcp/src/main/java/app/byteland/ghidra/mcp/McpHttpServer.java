@@ -32,7 +32,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /**
- * HTTP server that exposes the bridge API as grouped MCP tools through Streamable HTTP and SSE.
+ * HTTP server that exposes the bridge API as typed MCP tools through Streamable HTTP and SSE.
  */
 public final class McpHttpServer implements AutoCloseable {
   private static final int JSONRPC_PARSE_ERROR = -32700;
@@ -466,6 +466,12 @@ public final class McpHttpServer implements AutoCloseable {
         log.ok().status(200);
         return toolResult(toolRegistry.help(arguments), false, statelessProtocol);
       }
+      MethodDescriptor directTool = toolRegistry.findOperationTool(name);
+      if (directTool != null) {
+        Object result = dispatchMethod(directTool, arguments);
+        log.ok().status(200);
+        return toolResult(result, false, statelessProtocol);
+      }
       if (!List.of("operation", "params").containsAll(arguments.keySet())) {
         throw new IllegalArgumentException("Unknown domain tool argument");
       }
@@ -476,16 +482,22 @@ public final class McpHttpServer implements AutoCloseable {
             "Unknown operation " + operation + " for " + name);
       }
       Map<String, Object> operationParams = requireArguments(arguments.get("params"), id);
-      Object result = dispatcher.dispatch(tool.name(), operationParams);
-      if (dispatcher.isShuttingDown()) {
-        closeSoon();
-      }
+      Object result = dispatchMethod(tool, operationParams);
       log.ok().status(200);
       return toolResult(Map.of("operation", operation, "result", result), false, statelessProtocol);
     } catch (Exception error) {
       log.error().status(200);
       return toolResult(errorPayload(error), true, statelessProtocol);
     }
+  }
+
+  private Object dispatchMethod(MethodDescriptor tool, Map<String, Object> arguments)
+      throws Exception {
+    Object result = dispatcher.dispatch(tool.name(), arguments);
+    if (dispatcher.isShuttingDown()) {
+      closeSoon();
+    }
+    return result;
   }
 
   private Map<String, Object> toolResult(Object result, boolean isError, boolean statelessProtocol) {

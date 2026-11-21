@@ -3,17 +3,22 @@ package app.byteland.ghidra.mcp;
 import app.byteland.ghidra.api.ApiCatalog;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
- * Groups the API methods into MCP tools named {@code <prefix>_<domain>}, plus
- * {@code <prefix>_help}.
+ * Publishes the API methods as MCP tools named {@code <prefix>_<domain>_<operation>}, plus
+ * {@code <prefix>_help}. Legacy {@code <prefix>_<domain>} tool calls remain supported.
  */
 final class McpToolRegistry {
+  private static final Pattern VALID_TOOL_NAME = Pattern.compile("[A-Za-z0-9_-]{1,64}");
+
   private final String prefix;
   private final Map<String, Map<String, MethodDescriptor>> domains = new LinkedHashMap<>();
+  private final Map<String, MethodDescriptor> operationTools = new LinkedHashMap<>();
   private final List<Map<String, Object>> listedTools;
 
   McpToolRegistry(ApiCatalog catalog) {
@@ -29,13 +34,15 @@ final class McpToolRegistry {
           .put(target[1], method);
     }
     List<Map<String, Object>> tools = new ArrayList<>();
-    tools.add(Map.of("name", helpToolName(), "description", "Get domains, operations, schemas, and effects.",
-        "inputSchema", Map.of("type", "object", "properties", Map.of(
-            "domain", Map.of("type", "string"), "operation", Map.of("type", "string")),
-            "additionalProperties", false),
-        "annotations", Map.of("readOnlyHint", true, "destructiveHint", false,
-            "idempotentHint", true, "openWorldHint", false)));
-    domains.forEach((domain, operations) -> tools.add(groupTool(domain, operations)));
+    tools.add(helpTool());
+    domains.forEach((domain, operations) ->
+        operations.forEach((operation, descriptor) -> {
+          String name = operationToolName(domain, operation);
+          if (operationTools.put(name, descriptor) != null) {
+            throw new IllegalArgumentException("Duplicate MCP tool name: " + name);
+          }
+          tools.add(operationTool(name, descriptor));
+        }));
     listedTools = List.copyOf(tools);
   }
 
@@ -58,33 +65,44 @@ final class McpToolRegistry {
     };
   }
 
-  private Map<String, Object> groupTool(
-      String domain, Map<String, MethodDescriptor> operations) {
-    Map<String, Object> properties = new LinkedHashMap<>();
-    properties.put("operation", Map.of(
-        "type", "string",
-        "description", "The operation to perform",
-        "enum", List.copyOf(operations.keySet())));
-    properties.put("params", Map.of(
-        "type", "object",
-        "description", "Parameters for the operation"));
+  private Map<String, Object> helpTool() {
+    String name = requireValidToolName(helpToolName());
+    return Map.of(
+        "name", name,
+        "description", "Get domains, operations, schemas, and effects.",
+        "inputSchema",
+            Map.of(
+                "type", "object",
+                "properties",
+                    Map.of(
+                        "domain", Map.of("type", "string"),
+                        "operation", Map.of("type", "string")),
+                "additionalProperties", false),
+        "annotations",
+            Map.of(
+                "readOnlyHint", true,
+                "destructiveHint", false,
+                "idempotentHint", true,
+                "openWorldHint", false));
+  }
 
-    Map<String, Object> inputSchema = Map.of(
-        "type", "object",
-        "properties", properties,
-        "required", List.of("operation"));
-
-    String purpose = "listing".equals(domain)
-        ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
-    return Map.of("name", toolName(domain),
-        "description", "Use this tool " + purpose + ". Select an operation: "
-            + String.join(", ", operations.keySet()) + ".",
-        "inputSchema", inputSchema,
-        "annotations", Map.of("readOnlyHint", false, "destructiveHint", true,
-            "idempotentHint", false, "openWorldHint", false));
+  private static Map<String, Object> operationTool(String name, MethodDescriptor descriptor) {
+    Map<String, Object> inputSchema = descriptor.inputSchema();
+    if (!"object".equals(inputSchema.get("type"))
+        || inputSchema.containsKey("oneOf")
+        || inputSchema.containsKey("anyOf")) {
+      throw new IllegalArgumentException("MCP inputSchema must be a flat object: " + name);
+    }
+    Map<String, Object> tool = new LinkedHashMap<>(descriptor.mcpTool());
+    tool.put("name", name);
+    return Collections.unmodifiableMap(tool);
   }
 
   List<Map<String, Object>> listTools() { return listedTools; }
+
+  MethodDescriptor findOperationTool(String name) {
+    return operationTools.get(name);
+  }
 
   MethodDescriptor findTool(String name, String operation) {
     String domain = domainOf(name);
@@ -93,7 +111,7 @@ final class McpToolRegistry {
   }
 
   boolean hasTool(String name) {
-    if (isHelpTool(name)) return true;
+    if (isHelpTool(name) || operationTools.containsKey(name)) return true;
     String domain = domainOf(name);
     return domain != null && domains.containsKey(domain);
   }
@@ -115,9 +133,11 @@ final class McpToolRegistry {
     Object operationValue = arguments.get("operation");
     if (operationValue == null) return Map.of("domain", toolName(domain),
         "operations", List.copyOf(operations.keySet()));
-    MethodDescriptor descriptor = operations.get(operationValue.toString());
+    String operationName = operationValue.toString();
+    MethodDescriptor descriptor = operations.get(operationName);
     if (descriptor == null) throw new IllegalArgumentException("Unknown operation: " + operationValue);
     return Map.of("domain", toolName(domain), "operation", operationValue,
+        "tool", operationToolName(domain, operationName),
         "method", descriptor.name(), "description", descriptor.description(),
         "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
         "effects", descriptor.contractValue().get("effects"));
@@ -125,6 +145,17 @@ final class McpToolRegistry {
 
   boolean isHelpTool(String name) {
     return "help".equals(domainOf(name));
+  }
+
+  String operationToolName(String domain, String operation) {
+    return requireValidToolName(prefix + "_" + domain + "_" + operation.replace('.', '_'));
+  }
+
+  private static String requireValidToolName(String name) {
+    if (!VALID_TOOL_NAME.matcher(name).matches()) {
+      throw new IllegalArgumentException("Invalid MCP tool name: " + name);
+    }
+    return name;
   }
 
   private String helpToolName() {

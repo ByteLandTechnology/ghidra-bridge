@@ -101,7 +101,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `session_id` | プログラム名 | 現在のアクティブセッションを一意に識別する文字列。 |
 | `token` | *(なし)* | Bearer 認証用の共有シークレットトークン。 |
 | `ws_url` | *(なし)* | 送信型クライアントモードのリモート WebSocket URL。 |
-| `tool_prefix` | `ghidra` | MCP 専用。すべてのツール名の先頭部分（`ghidra.program` の `ghidra` など）。1 つのクライアントが複数のサーバーに接続する場合、サーバーごとに異なる値を指定します。 |
+| `tool_prefix` | `ghidra` | MCP 専用。すべてのツール名の先頭部分（`ghidra_program_get` の `ghidra` など）。1 つのクライアントが複数のサーバーに接続する場合、サーバーごとに異なる値を指定します。 |
 | `jar` | *(自動)* | `ghidra-bridge.jar` がスクリプトファイルの隣にない場合のパス。 |
 | `exit_deadline_sec` | *(なし)* | 送信型のみ。セッション終了後、この秒数以内に Ghidra が終了しない場合に JVM を強制停止します。アクティブな保存は先に完了します。ホストが起動するヘッドレスの Ghidra にのみ使用してください。 |
 
@@ -131,22 +131,21 @@ WebSocket では標準的な JSON-RPC 2.0 形式でリクエストを送信し�
 
 ### Model Context Protocol (MCP)
 
-MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 15 個のツールとして公開します:
-- `ghidra.help`: ドメインの探索、操作一覧の取得、スキーマの確認。
-- 14 個のドメインツール: `ghidra.program`、`ghidra.memory`、`ghidra.function`、および他のドメインツール。
+MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 56 個のツールとして公開します:
+- `ghidra_help`: ドメインの探索、操作一覧の取得、スキーマの確認。
+- 55 個の操作ツール: `ghidra_program_get`、`ghidra_memory_read`、`ghidra_function_list` などの操作ツール。
 
-操作名とパラメータを指定してドメインツールを呼び出します。
-たとえば、`program.get` メソッドは `ghidra.program` の `get` 操作です:
+パラメータを直接渡して操作ツールを呼び出します。
+たとえば、`program.get` メソッドは `ghidra_program_get` に対応します:
 
 ```json
 {
-  "name": "ghidra.program",
-  "arguments": {
-    "operation": "get",
-    "params": {}
-  }
+  "name": "ghidra_program_get",
+  "arguments": {}
 }
 ```
+
+`ghidra_<domain>` に `operation` と `params` を渡す従来の `tools/call` リクエストも引き続きサポートされます。
 
 `2026-07-28` のリクエストには MCP メタデータとヘッダーも必要です。
 サーバーはバージョン `2025-06-18` と `2025-11-25` の `initialize` クライアントをサポートします。
