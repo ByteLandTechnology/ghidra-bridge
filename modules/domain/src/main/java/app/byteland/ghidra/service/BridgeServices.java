@@ -12,13 +12,32 @@ import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.util.Objects;
 
 /**
  * Holds domain services for an active Ghidra program session.
  *
  * <p>Close this container to release analysis and decompilation resources.
+ *
+ * @param programService service for program metadata and address spaces
+ * @param addressService service for address parsing and resolution
+ * @param commentService service for listing comments
+ * @param referenceService service for cross-references
+ * @param memoryService service for memory blocks, reads, writes, and searches
+ * @param listingService service for code units, instructions, and data items
+ * @param functionService service for functions, signatures, and variables
+ * @param globalVariableService service for global variables
+ * @param analysisService service for background analysis tasks
+ * @param decompilationService service for function decompilation
+ * @param symbolService service for symbols and namespaces
+ * @param dataTypeService service for data types and archives
+ * @param transactionRunner runner for atomic program transactions
+ * @param programName active program name
  */
+@SuppressFBWarnings(
+    value = "EI_EXPOSE_REP",
+    justification = "Container exposes live session-scoped service collaborators by design")
 public record BridgeServices(
     ProgramService programService,
     AddressService addressService,
@@ -36,6 +55,10 @@ public record BridgeServices(
     String programName)
     implements AutoCloseable {
 
+  /** Validates non-null service collaborators. */
+  @SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "Container stores live session-scoped service collaborators by design")
   public BridgeServices {
     Objects.requireNonNull(programService, "programService");
     Objects.requireNonNull(addressService, "addressService");

@@ -65,6 +65,7 @@ final class GracefulExit implements AutoCloseable {
    * <p>The deadline never stops a save. If a save runs at the deadline, the JVM gets {@link
    * #AFTER_SAVE_GRACE} after the save to exit. A normal exit stops the daemon thread.
    */
+  @SuppressWarnings("PMD.DoNotTerminateVM")
   void startExitDeadline(Duration delay, java.util.function.Consumer<String> log) {
     Thread.ofPlatform()
         .daemon()
@@ -126,6 +127,7 @@ final class GracefulExit implements AutoCloseable {
     try {
       Runtime.getRuntime().removeShutdownHook(shutdownHook.orElseThrow());
     } catch (IllegalStateException ignored) {
+      // JVM shutdown is already in progress.
     } finally {
       shutdownHook = Optional.empty();
     }

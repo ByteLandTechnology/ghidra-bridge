@@ -44,16 +44,34 @@ public final class McpHttpServer implements AutoCloseable {
   private static final int JSONRPC_RESOURCE_NOT_FOUND = -32002;
   private static final String MCP_PROTOCOL_VERSION = "2026-07-28";
   private static final String INITIALIZE_PROTOCOL_VERSION = "2025-11-25";
+  private static final String JUNE_2025_PROTOCOL_VERSION = "2025-06-18";
   private static final List<String> INITIALIZE_PROTOCOL_VERSIONS =
-      List.of("2024-11-05", "2025-03-26", "2025-06-18", INITIALIZE_PROTOCOL_VERSION);
+      List.of("2024-11-05", "2025-03-26", JUNE_2025_PROTOCOL_VERSION, INITIALIZE_PROTOCOL_VERSION);
   private static final List<String> SUPPORTED_PROTOCOL_VERSIONS =
-      List.of(MCP_PROTOCOL_VERSION, INITIALIZE_PROTOCOL_VERSION, "2025-06-18", "2025-03-26", "2024-11-05");
+      List.of(
+          MCP_PROTOCOL_VERSION,
+          INITIALIZE_PROTOCOL_VERSION,
+          JUNE_2025_PROTOCOL_VERSION,
+          "2025-03-26",
+          "2024-11-05");
   private static final int HEADER_MISMATCH = -32020;
   private static final int UNSUPPORTED_PROTOCOL_VERSION = -32022;
   private static final String MCP_TOOLS_RESOURCE_URI = "ghidra-bridge://contracts/mcp-tools";
   private static final String HTTP_GET_METHOD = "GET";
+  private static final String HTTP_HEAD_METHOD = "HEAD";
   private static final String HTTP_OPTIONS_METHOD = "OPTIONS";
   private static final String HTTP_POST_METHOD = "POST";
+  private static final String CONTENT_TYPE_HEADER = "Content-Type";
+  private static final String PROTOCOL_VERSION_HEADER = "MCP-Protocol-Version";
+  private static final String METHOD_FIELD = "method";
+  private static final String PARAMS_FIELD = "params";
+  private static final String TOOLS_FIELD = "tools";
+  private static final String CAPABILITIES_FIELD = "capabilities";
+  private static final String OPERATION_FIELD = "operation";
+  private static final String RESULT_TYPE_FIELD = "resultType";
+  private static final String COMPLETE_RESULT = "complete";
+  private static final String TOOLS_CALL_METHOD = "tools/call";
+  private static final String RESOURCES_READ_METHOD = "resources/read";
   private static final String NAME_FIELD = "name";
   private static final String URI_FIELD = "uri";
   private static final String SESSION_ID_PARAM = "sessionId";
@@ -67,12 +85,27 @@ public final class McpHttpServer implements AutoCloseable {
   private final ExecutorService executor;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final AtomicBoolean closed = new AtomicBoolean(false);
-  private final ConcurrentHashMap<String, SseSession> sseSessions = new ConcurrentHashMap<>();
+  private final Map<String, SseSession> sseSessions = new ConcurrentHashMap<>();
 
+  /**
+   * Creates an MCP HTTP server that discards request log lines.
+   *
+   * @param config MCP server configuration
+   * @param dispatcher API request dispatcher
+   * @throws IOException if binding the HTTP server socket fails
+   */
   public McpHttpServer(McpConfig config, AgentDispatcher dispatcher) throws IOException {
     this(config, dispatcher, McpHttpServer::discardRequestLog);
   }
 
+  /**
+   * Creates an MCP HTTP server that writes request log lines to {@code requestLogSink}.
+   *
+   * @param config MCP server configuration
+   * @param dispatcher API request dispatcher
+   * @param requestLogSink consumer for formatted request log lines
+   * @throws IOException if binding the HTTP server socket fails
+   */
   public McpHttpServer(
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
@@ -82,7 +115,7 @@ public final class McpHttpServer implements AutoCloseable {
     this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
     Map<String, Object> toolContract = new LinkedHashMap<>();
     toolContract.put("protocol_version", MCP_PROTOCOL_VERSION);
-    toolContract.put("tools", toolRegistry.listTools());
+    toolContract.put(TOOLS_FIELD, toolRegistry.listTools());
     this.toolContractJson = JsonUtil.toJson(toolContract);
     this.server = createServer(config);
     this.executor = Executors.newCachedThreadPool();
@@ -105,23 +138,42 @@ public final class McpHttpServer implements AutoCloseable {
     }
   }
 
+  /** Starts accepting HTTP connections on the bound endpoint. */
   public void start() {
     server.start();
   }
 
+  /**
+   * Waits until this server closes.
+   *
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   */
   public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
 
+  /**
+   * Waits until this server closes or {@code cancelRequested} returns {@code true}.
+   *
+   * @param cancelRequested supplier polled to detect external cancellation
+   * @return {@code true} if closed by session shutdown, or {@code false} if canceled
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   */
   public boolean awaitShutdown(BooleanSupplier cancelRequested) throws InterruptedException {
     return awaitShutdown(shutdownLatch, cancelRequested, this::close, 250L);
   }
 
+  /**
+   * Returns the bound HTTP endpoint URL.
+   *
+   * @return HTTP endpoint URL
+   */
   public String endpoint() {
     return config.endpoint();
   }
 
   @Override
+  @SuppressWarnings("PMD.CloseResource")
   public void close() {
     if (!closed.compareAndSet(false, true)) {
       return;
@@ -159,7 +211,7 @@ public final class McpHttpServer implements AutoCloseable {
 
   private final class JsonRpcHandler implements HttpHandler {
     @Override
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
+    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
     public void handle(HttpExchange exchange) throws IOException {
       RequestLog log = new RequestLog(requestLogSink);
       try (exchange) {
@@ -177,8 +229,8 @@ public final class McpHttpServer implements AutoCloseable {
             sendNoBody(exchange, 204);
             return;
           }
-          if ("HEAD".equalsIgnoreCase(requestMethod)) {
-            log.method("HEAD").ok().status(200);
+          if (HTTP_HEAD_METHOD.equalsIgnoreCase(requestMethod)) {
+            log.method(HTTP_HEAD_METHOD).ok().status(200);
             sendNoBody(exchange, 200);
             return;
           }
@@ -230,7 +282,7 @@ public final class McpHttpServer implements AutoCloseable {
             }
           }
 
-          if (!String.valueOf(firstHeader(exchange, "Content-Type")).startsWith("application/json")) {
+          if (!String.valueOf(firstHeader(exchange, CONTENT_TYPE_HEADER)).startsWith("application/json")) {
             throw new JsonRpcError(415, null, JSONRPC_INVALID_REQUEST, "Content-Type must be application/json");
           }
           Map<String, Object> request = parseRequest(readBody(exchange));
@@ -271,7 +323,9 @@ public final class McpHttpServer implements AutoCloseable {
           if (activeSse != null && activeSse.isActive()) {
             try {
               activeSse.sendEvent("message", JsonUtil.toJson(errResponse));
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+              // Ignore stream write failure when the SSE client disconnects.
+            }
             exchange.sendResponseHeaders(202, -1);
           } else {
             writeJson(exchange, error.httpStatus(), errResponse);
@@ -285,48 +339,43 @@ public final class McpHttpServer implements AutoCloseable {
       }
     }
 
-    private void handleSseGet(HttpExchange exchange, RequestLog log) throws IOException {
+    private void handleSseGet(HttpExchange exchange, RequestLog log) {
       String sessionId = UUID.randomUUID().toString();
-      SseSession session;
-      try {
-        session = new SseSession(sessionId, exchange);
+      try (SseSession session = new SseSession(exchange)) {
+        sseSessions.put(sessionId, session);
+        log.method(HTTP_GET_METHOD).ok().status(200);
+        try {
+          String endpointUri = config.path() + "?" + SESSION_ID_PARAM + "=" + sessionId;
+          session.sendEvent("endpoint", endpointUri);
+
+          while (session.isActive() && !closed.get()) {
+            try {
+              Thread.sleep(15000L);
+              session.sendComment("keepalive");
+            } catch (InterruptedException interrupted) {
+              Thread.currentThread().interrupt();
+              break;
+            }
+          }
+        } catch (IOException ignored) {
+          // The SSE client disconnected.
+        } finally {
+          sseSessions.remove(sessionId);
+        }
       } catch (IOException error) {
         log.method(HTTP_GET_METHOD).error().status(500);
-        return;
-      }
-      sseSessions.put(sessionId, session);
-      log.method(HTTP_GET_METHOD).ok().status(200);
-
-      try {
-        String endpointUri = config.path() + "?" + SESSION_ID_PARAM + "=" + sessionId;
-        session.sendEvent("endpoint", endpointUri);
-
-        while (session.isActive() && !closed.get()) {
-          try {
-            Thread.sleep(15000L);
-            session.sendComment("keepalive");
-          } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            break;
-          }
-        }
-      } catch (IOException clientDisconnected) {
-        // The SSE client disconnected.
-      } finally {
-        sseSessions.remove(sessionId);
-        session.close();
       }
     }
   }
 
   private Object handleRequest(
       Map<String, Object> request, Object id, RequestLog log, boolean statelessProtocol) {
-    String method = request.get("method").toString();
+    String method = request.get(METHOD_FIELD).toString();
     log.method(method);
     if (!request.containsKey("id")) {
       return null;
     }
-    Object params = request.get("params");
+    Object params = request.get(PARAMS_FIELD);
     log.id(id);
 
     return switch (method) {
@@ -344,32 +393,32 @@ public final class McpHttpServer implements AutoCloseable {
       }
       case "ping" -> {
         log.ok().status(200);
-        yield success(id, statelessProtocol ? Map.of("resultType", "complete") : Map.of());
+        yield success(id, statelessProtocol ? Map.of(RESULT_TYPE_FIELD, COMPLETE_RESULT) : Map.of());
       }
       case "tools/list" -> {
         log.ok().status(200);
         yield success(id, statelessProtocol
-            ? cacheableResult(Map.of("resultType", "complete", "tools", toolRegistry.listTools()), true)
-            : Map.of("tools", toolRegistry.listTools()));
+            ? cacheableResult(Map.of(RESULT_TYPE_FIELD, COMPLETE_RESULT, TOOLS_FIELD, toolRegistry.listTools()), true)
+            : Map.of(TOOLS_FIELD, toolRegistry.listTools()));
       }
       case "resources/list" -> {
         log.ok().status(200);
         yield success(id, statelessProtocol
-            ? cacheableResult(Map.of("resultType", "complete", "resources", List.of(mcpToolsResource())), true)
+            ? cacheableResult(Map.of(RESULT_TYPE_FIELD, COMPLETE_RESULT, "resources", List.of(mcpToolsResource())), true)
             : Map.of("resources", List.of(mcpToolsResource())));
       }
       case "resources/templates/list" -> {
         log.ok().status(200);
         yield success(id, statelessProtocol
-            ? cacheableResult(Map.of("resultType", "complete", "resourceTemplates", List.of()), true)
+            ? cacheableResult(Map.of(RESULT_TYPE_FIELD, COMPLETE_RESULT, "resourceTemplates", List.of()), true)
             : Map.of("resourceTemplates", List.of()));
       }
-      case "resources/read" -> {
+      case RESOURCES_READ_METHOD -> {
         log.ok().status(200);
         yield success(id, cacheableResult(
             readResource(id, requireParamsMap(params, id), statelessProtocol), statelessProtocol));
       }
-      case "tools/call" -> {
+      case TOOLS_CALL_METHOD -> {
         yield success(id, handleToolCall(id, requireParamsMap(params, id), log, statelessProtocol));
       }
       default ->
@@ -381,7 +430,7 @@ public final class McpHttpServer implements AutoCloseable {
     if (!(params.get("protocolVersion") instanceof String requestedVersion)) {
       throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "protocolVersion must be a string");
     }
-    if (!(params.get("capabilities") instanceof Map<?, ?>)) {
+    if (!(params.get(CAPABILITIES_FIELD) instanceof Map<?, ?>)) {
       throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "capabilities must be a JSON object");
     }
     validateImplementation(params.get("clientInfo"), id);
@@ -389,7 +438,7 @@ public final class McpHttpServer implements AutoCloseable {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("protocolVersion", INITIALIZE_PROTOCOL_VERSIONS.contains(requestedVersion)
         ? requestedVersion : INITIALIZE_PROTOCOL_VERSION);
-    result.put("capabilities", discovery.get("capabilities"));
+    result.put(CAPABILITIES_FIELD, discovery.get(CAPABILITIES_FIELD));
     result.put("serverInfo", Map.of(NAME_FIELD, "ghidra-bridge", "version", serverVersion()));
     result.put("instructions", discovery.get("instructions"));
     return result;
@@ -397,7 +446,7 @@ public final class McpHttpServer implements AutoCloseable {
 
   private Map<String, Object> discoveryResult() {
     Map<String, Object> capabilities = new LinkedHashMap<>();
-    capabilities.put("tools", Map.of("listChanged", false));
+    capabilities.put(TOOLS_FIELD, Map.of("listChanged", false));
     capabilities.put("resources", Map.of("listChanged", false));
 
     Map<String, Object> serverInfo = new LinkedHashMap<>();
@@ -405,9 +454,9 @@ public final class McpHttpServer implements AutoCloseable {
     serverInfo.put("version", serverVersion());
 
     Map<String, Object> result = new LinkedHashMap<>();
-    result.put("resultType", "complete");
+    result.put(RESULT_TYPE_FIELD, COMPLETE_RESULT);
     result.put("supportedVersions", SUPPORTED_PROTOCOL_VERSIONS);
-    result.put("capabilities", capabilities);
+    result.put(CAPABILITIES_FIELD, capabilities);
     result.put("_meta", Map.of("io.modelcontextprotocol/serverInfo", serverInfo));
     result.put(
         "instructions",
@@ -448,7 +497,7 @@ public final class McpHttpServer implements AutoCloseable {
     content.put("mimeType", "application/json");
     content.put("text", toolContractJson);
     return statelessProtocol
-        ? Map.of("resultType", "complete", "contents", List.of(content))
+        ? Map.of(RESULT_TYPE_FIELD, COMPLETE_RESULT, "contents", List.of(content))
         : Map.of("contents", List.of(content));
   }
 
@@ -466,22 +515,22 @@ public final class McpHttpServer implements AutoCloseable {
         log.ok().status(200);
         return toolResult(toolRegistry.help(arguments), false, statelessProtocol);
       }
-      if (!List.of("operation", "params").containsAll(arguments.keySet())) {
+      if (!List.of(OPERATION_FIELD, PARAMS_FIELD).containsAll(arguments.keySet())) {
         throw new IllegalArgumentException("Unknown domain tool argument");
       }
-      String operation = requireString(arguments.get("operation"), "operation", id);
+      String operation = requireString(arguments.get(OPERATION_FIELD), OPERATION_FIELD, id);
       MethodDescriptor tool = toolRegistry.findTool(name, operation);
       if (tool == null) {
         throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
             "Unknown operation " + operation + " for " + name);
       }
-      Map<String, Object> operationParams = requireArguments(arguments.get("params"), id);
+      Map<String, Object> operationParams = requireArguments(arguments.get(PARAMS_FIELD), id);
       Object result = dispatcher.dispatch(tool.name(), operationParams);
       if (dispatcher.isShuttingDown()) {
         closeSoon();
       }
       log.ok().status(200);
-      return toolResult(Map.of("operation", operation, "result", result), false, statelessProtocol);
+      return toolResult(Map.of(OPERATION_FIELD, operation, "result", result), false, statelessProtocol);
     } catch (Exception error) {
       log.error().status(200);
       return toolResult(errorPayload(error), true, statelessProtocol);
@@ -495,7 +544,7 @@ public final class McpHttpServer implements AutoCloseable {
 
     Map<String, Object> response = new LinkedHashMap<>();
     if (statelessProtocol) {
-      response.put("resultType", "complete");
+      response.put(RESULT_TYPE_FIELD, COMPLETE_RESULT);
     }
     response.put("content", List.of(content));
     response.put("structuredContent", structuredContent(result));
@@ -557,7 +606,7 @@ public final class McpHttpServer implements AutoCloseable {
       throw new JsonRpcError(
           400, request.get("id"), JSONRPC_INVALID_REQUEST, "jsonrpc must be \"2.0\"");
     }
-    if (!(request.get("method") instanceof String method) || method.isBlank()) {
+    if (!(request.get(METHOD_FIELD) instanceof String method) || method.isBlank()) {
       throw new JsonRpcError(
           400, request.get("id"), JSONRPC_INVALID_REQUEST, "method must be a non-empty string");
     }
@@ -571,7 +620,7 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static boolean usesStatelessProtocol(
       HttpExchange exchange, Map<String, Object> request) {
-    Map<String, Object> params = requireParamsMap(request.get("params"), request.get("id"));
+    Map<String, Object> params = requireParamsMap(request.get(PARAMS_FIELD), request.get("id"));
     if (params.get("_meta") instanceof Map<?, ?> meta
         && (meta.containsKey("io.modelcontextprotocol/protocolVersion")
             || meta.containsKey("io.modelcontextprotocol/clientInfo")
@@ -579,14 +628,14 @@ public final class McpHttpServer implements AutoCloseable {
       return true;
     }
     // Initialization negotiates its version in params before the HTTP headers control it.
-    return !"initialize".equals(request.get("method"))
-        && (MCP_PROTOCOL_VERSION.equals(firstHeader(exchange, "MCP-Protocol-Version"))
-            || "server/discover".equals(request.get("method")));
+    return !"initialize".equals(request.get(METHOD_FIELD))
+        && (MCP_PROTOCOL_VERSION.equals(firstHeader(exchange, PROTOCOL_VERSION_HEADER))
+            || "server/discover".equals(request.get(METHOD_FIELD)));
   }
 
   private static void validateInitializeProtocol(
       HttpExchange exchange, Map<String, Object> request) {
-    String version = firstHeader(exchange, "MCP-Protocol-Version");
+    String version = firstHeader(exchange, PROTOCOL_VERSION_HEADER);
     if (version == null
         || SUPPORTED_PROTOCOL_VERSIONS.contains(version)
         || INITIALIZE_PROTOCOL_VERSIONS.contains(version)) {
@@ -598,7 +647,7 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static void validateMetadata(HttpExchange exchange, Map<String, Object> request) {
     Object id = request.get("id");
-    Map<String, Object> params = requireParamsMap(request.get("params"), id);
+    Map<String, Object> params = requireParamsMap(request.get(PARAMS_FIELD), id);
     if (!(params.get("_meta") instanceof Map<?, ?> meta)
         || !(meta.get("io.modelcontextprotocol/protocolVersion") instanceof String)
         || !(meta.get("io.modelcontextprotocol/clientCapabilities") instanceof Map<?, ?>)) {
@@ -612,14 +661,14 @@ public final class McpHttpServer implements AutoCloseable {
       throw new JsonRpcError(400, id, UNSUPPORTED_PROTOCOL_VERSION,
           "UnsupportedProtocolVersionError", String.valueOf(version));
     }
-    requireHeader(exchange, "MCP-Protocol-Version", version.toString(), id);
-    Object method = request.get("method");
+    requireHeader(exchange, PROTOCOL_VERSION_HEADER, version.toString(), id);
+    Object method = request.get(METHOD_FIELD);
     if (!(method instanceof String)) {
       throw new JsonRpcError(400, id, JSONRPC_INVALID_REQUEST, "Missing method");
     }
     requireHeader(exchange, "Mcp-Method", method.toString(), id);
-    if (method.equals("tools/call") || method.equals("resources/read")) {
-      String key = method.equals("tools/call") ? "name" : "uri";
+    if (TOOLS_CALL_METHOD.equals(method) || RESOURCES_READ_METHOD.equals(method)) {
+      String key = TOOLS_CALL_METHOD.equals(method) ? NAME_FIELD : URI_FIELD;
       Object name = params.get(key);
       requireHeader(exchange, "Mcp-Name", name == null ? "" : name.toString(), id);
     }
@@ -644,7 +693,7 @@ public final class McpHttpServer implements AutoCloseable {
         actual = new String(java.util.Base64.getDecoder().decode(
             actual.substring(9, actual.length() - 2)), StandardCharsets.UTF_8);
       } catch (IllegalArgumentException invalid) {
-        throw new JsonRpcError(400, id, HEADER_MISMATCH, "Invalid " + header + " encoding");
+        throw new JsonRpcError(400, id, HEADER_MISMATCH, "Invalid " + header + " encoding", invalid);
       }
     }
     if (!expected.equals(actual)) {
@@ -737,7 +786,7 @@ public final class McpHttpServer implements AutoCloseable {
     if (!isRequestId(id)) {
       // The June error schema cannot express an unknown ID.
       // Follow the JSON-RPC null ID rule.
-      if ("2025-06-18".equals(firstHeader(exchange, "MCP-Protocol-Version"))) {
+      if (JUNE_2025_PROTOCOL_VERSION.equals(firstHeader(exchange, PROTOCOL_VERSION_HEADER))) {
         response.put("id", null);
       } else {
         response.remove("id");
@@ -753,7 +802,7 @@ public final class McpHttpServer implements AutoCloseable {
   private static void writeJson(HttpExchange exchange, int statusCode, Object payload)
       throws IOException {
     byte[] bytes = JsonUtil.toJson(payload).getBytes(StandardCharsets.UTF_8);
-    exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+    exchange.getResponseHeaders().set(CONTENT_TYPE_HEADER, "application/json; charset=utf-8");
     exchange.sendResponseHeaders(statusCode, bytes.length);
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
@@ -763,7 +812,7 @@ public final class McpHttpServer implements AutoCloseable {
   private static void writePlain(HttpExchange exchange, int statusCode, String payload)
       throws IOException {
     byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
-    exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+    exchange.getResponseHeaders().set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
     exchange.sendResponseHeaders(statusCode, bytes.length);
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
@@ -788,7 +837,7 @@ public final class McpHttpServer implements AutoCloseable {
         .set("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Accept");
     exchange
         .getResponseHeaders()
-        .set("Access-Control-Expose-Headers", "MCP-Protocol-Version");
+        .set("Access-Control-Expose-Headers", PROTOCOL_VERSION_HEADER);
   }
 
   private boolean isAllowedOrigin(HttpExchange exchange) {
@@ -829,7 +878,7 @@ public final class McpHttpServer implements AutoCloseable {
     private final int statusCode;
     private final transient Object requestId;
     private final int errorCode;
-    private final String requestedVersion;
+    private final String protocolVersion;
 
     JsonRpcError(int httpStatus, Object id, int code, String message) {
       this(httpStatus, id, code, message, (Throwable) null);
@@ -840,7 +889,7 @@ public final class McpHttpServer implements AutoCloseable {
       this.statusCode = httpStatus;
       this.requestId = id;
       this.errorCode = code;
-      this.requestedVersion = null;
+      this.protocolVersion = null;
     }
 
     JsonRpcError(int httpStatus, Object id, int code, String message, String requestedVersion) {
@@ -848,7 +897,7 @@ public final class McpHttpServer implements AutoCloseable {
       this.statusCode = httpStatus;
       this.requestId = id;
       this.errorCode = code;
-      this.requestedVersion = requestedVersion;
+      this.protocolVersion = requestedVersion;
     }
 
     int httpStatus() {
@@ -864,7 +913,7 @@ public final class McpHttpServer implements AutoCloseable {
     }
 
     String requestedVersion() {
-      return requestedVersion;
+      return protocolVersion;
     }
   }
 
@@ -873,7 +922,7 @@ public final class McpHttpServer implements AutoCloseable {
     if (query == null || query.isBlank()) {
       return null;
     }
-    for (String pair : query.split("&")) {
+    for (String pair : query.split("&", -1)) {
       int eq = pair.indexOf('=');
       String key = eq >= 0 ? pair.substring(0, eq) : pair;
       if (key.equals(name)) {
@@ -886,15 +935,13 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   private static final class SseSession implements AutoCloseable {
-    private final String id;
     private final HttpExchange exchange;
     private final OutputStream output;
     private final AtomicBoolean active = new AtomicBoolean(true);
 
-    SseSession(String id, HttpExchange exchange) throws IOException {
-      this.id = id;
+    SseSession(HttpExchange exchange) throws IOException {
       this.exchange = exchange;
-      exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
+      exchange.getResponseHeaders().set(CONTENT_TYPE_HEADER, "text/event-stream; charset=utf-8");
       exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-transform");
       exchange.getResponseHeaders().set("Connection", "keep-alive");
       exchange.getResponseHeaders().set("X-Accel-Buffering", "no");
@@ -910,7 +957,7 @@ public final class McpHttpServer implements AutoCloseable {
       if (event != null && !event.isBlank()) {
         sb.append("event: ").append(event).append("\n");
       }
-      for (String line : data.split("\r?\n")) {
+      for (String line : data.split("\r?\n", -1)) {
         sb.append("data: ").append(line).append("\n");
       }
       sb.append("\n");
@@ -928,14 +975,19 @@ public final class McpHttpServer implements AutoCloseable {
     }
 
     @Override
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     public void close() {
       if (active.compareAndSet(true, false)) {
         try {
           output.close();
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+          // Ignore close failure during session teardown.
+        }
         try {
           exchange.close();
-        } catch (Exception ignored) {}
+        } catch (RuntimeException ignored) {
+          // Ignore close failure during session teardown.
+        }
       }
     }
 

@@ -35,14 +35,29 @@ public final class ApiCatalog {
     return new ApiCatalog(interfaceVersion, List.copyOf(ordered.values()));
   }
 
+  /**
+   * Returns the published API interface version string.
+   *
+   * @return semantic interface version
+   */
   public String interfaceVersion() {
     return apiInterfaceVersion;
   }
 
+  /**
+   * Returns all registered method descriptors in catalog order.
+   *
+   * @return immutable list of method descriptors
+   */
   public List<MethodDescriptor> methods() {
     return methodDescriptors;
   }
 
+  /**
+   * Returns the wire payload for {@code interface.get}.
+   *
+   * @return map containing interface version and method descriptions
+   */
   public Map<String, Object> interfaceDescription() {
     return Map.of(
         "interface_version",
@@ -94,22 +109,47 @@ public final class ApiCatalog {
       return new MethodDescriptor(method);
     }
 
+    /**
+     * Returns the dotted API method name.
+     *
+     * @return method name
+     */
     public String name() {
       return methodName;
     }
 
+    /**
+     * Returns the method summary description.
+     *
+     * @return method description
+     */
     public String description() {
       return methodDescription;
     }
 
+    /**
+     * Returns the immutable JSON Schema for method request parameters.
+     *
+     * @return input JSON Schema map
+     */
     public Map<String, Object> inputSchema() {
-      return requestSchema;
+      return Collections.unmodifiableMap(requestSchema);
     }
 
+    /**
+     * Returns the immutable JSON Schema for method response values.
+     *
+     * @return output JSON Schema map
+     */
     public Map<String, Object> outputSchema() {
-      return responseSchema;
+      return Collections.unmodifiableMap(responseSchema);
     }
 
+    /**
+     * Returns the contract snapshot map for this method without the method name key.
+     *
+     * @return unmodifiable contract descriptor map
+     */
     public Map<String, Object> contractValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put("description", methodDescription);
@@ -119,6 +159,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(descriptor);
     }
 
+    /**
+     * Returns the {@code interface.get} descriptor map including the method name.
+     *
+     * @return unmodifiable interface descriptor map
+     */
     public Map<String, Object> interfaceValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put(ApiVocabulary.NAME, methodName);
@@ -126,6 +171,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(descriptor);
     }
 
+    /**
+     * Returns the Model Context Protocol tool definition map for this method.
+     *
+     * @return unmodifiable MCP tool descriptor map
+     */
     public Map<String, Object> mcpTool() {
       Map<String, Object> tool = new LinkedHashMap<>();
       tool.put("name", methodName);
@@ -143,6 +193,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(tool);
     }
 
+    /**
+     * Returns a short human-readable summary of the method side effects.
+     *
+     * @return effect summary label
+     */
     public String effectSummary() {
       if (readOnly) return "read-only";
       if (!mutatesProgram) return "lifecycle";

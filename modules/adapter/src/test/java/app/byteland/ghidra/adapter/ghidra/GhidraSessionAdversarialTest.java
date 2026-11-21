@@ -1,5 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -25,18 +26,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts"
+})
 class GhidraSessionAdversarialTest {
 
-  static class TestScript extends GhidraScript {
+  static class StubScript extends GhidraScript {
     @Override
     protected void run() {}
   }
 
-  static class TestCommand implements Command<Program> {
+  static class StubCommand implements Command<Program> {
     private final boolean success;
     private final String statusMsg;
 
-    TestCommand(boolean success, String statusMsg) {
+    StubCommand(boolean success, String statusMsg) {
       this.success = success;
       this.statusMsg = statusMsg;
     }
@@ -53,17 +58,17 @@ class GhidraSessionAdversarialTest {
 
     @Override
     public String getName() {
-      return "TestCommand";
+      return "StubCommand";
     }
   }
 
   @Test
   @DisplayName("Adversarial: runCommand throws TransactionExecutionException on command failure")
   void testRunCommandFailure() {
-    var session = new GhidraSession(new TestScript());
+    var session = new GhidraSession(new StubScript());
 
     // A normal failure has a status message.
-    var cmd = new TestCommand(false, "address out of bounds");
+    var cmd = new StubCommand(false, "address out of bounds");
     var ex = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmd, "unable to write memory"));
     assertEquals("unable to write memory: address out of bounds", ex.getMessage());
@@ -74,22 +79,22 @@ class GhidraSessionAdversarialTest {
   @Test
   @DisplayName("Adversarial: runCommand handles null, empty, and blank statusMsg with fallback")
   void testRunCommandBlankStatusMsg() {
-    var session = new GhidraSession(new TestScript());
+    var session = new GhidraSession(new StubScript());
 
     // The statusMsg is null.
-    var cmdNull = new TestCommand(false, null);
+    var cmdNull = new StubCommand(false, null);
     var exNull = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmdNull, "patch failed"));
     assertEquals("patch failed: command failed", exNull.getMessage());
 
     // The statusMsg is empty.
-    var cmdEmpty = new TestCommand(false, "");
+    var cmdEmpty = new StubCommand(false, "");
     var exEmpty = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmdEmpty, "patch failed"));
     assertEquals("patch failed: command failed", exEmpty.getMessage());
 
     // The statusMsg contains only white space.
-    var cmdBlank = new TestCommand(false, "   \t\n  ");
+    var cmdBlank = new StubCommand(false, "   \t\n  ");
     var exBlank = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmdBlank, "patch failed"));
     assertEquals("patch failed: command failed", exBlank.getMessage());
@@ -98,9 +103,9 @@ class GhidraSessionAdversarialTest {
   @Test
   @DisplayName("Adversarial: runCommand handles extremely long status message")
   void testRunCommandHugeStatusMsg() {
-    var session = new GhidraSession(new TestScript());
+    var session = new GhidraSession(new StubScript());
     String hugeStatus = "X".repeat(100_000);
-    var cmd = new TestCommand(false, hugeStatus);
+    var cmd = new StubCommand(false, hugeStatus);
 
     var ex = assertThrows(TransactionExecutionException.class, () ->
         session.runCommand(cmd, "prefix"));
@@ -110,16 +115,16 @@ class GhidraSessionAdversarialTest {
   @Test
   @DisplayName("Adversarial: runCommand succeeds with valid command")
   void testRunCommandSuccess() {
-    var session = new GhidraSession(new TestScript());
-    var cmd = new TestCommand(true, "ok");
+    var session = new GhidraSession(new StubScript());
+    var cmd = new StubCommand(true, "ok");
     // This call must not throw an exception.
-    session.runCommand(cmd, "prefix");
+    assertDoesNotThrow(() -> session.runCommand(cmd, "prefix"));
   }
 
   @Test
   @DisplayName("Adversarial: withTransaction propagates RuntimeException without a second wrap")
   void testWithTransactionPropagatesRuntimeException() {
-    var session = new GhidraSession(new TestScript());
+    var session = new GhidraSession(new StubScript());
 
     // The client parameter error must stay an IllegalArgumentException.
     var clientEx = new IllegalArgumentException("invalid register name: R99");
@@ -143,7 +148,7 @@ class GhidraSessionAdversarialTest {
   @Test
   @DisplayName("Adversarial: withTransaction wraps checked Exception into TransactionExecutionException")
   void testWithTransactionWrapsCheckedException() {
-    var session = new GhidraSession(new TestScript());
+    var session = new GhidraSession(new StubScript());
 
     var ioEx = new IOException("corrupt program database file");
     var thrown = assertThrows(TransactionExecutionException.class, () ->
@@ -158,7 +163,7 @@ class GhidraSessionAdversarialTest {
   @Test
   @DisplayName("Adversarial: Transaction depth and locks never leak across 2,000 repeated failures")
   void testRepeatedFailuresTransactionDepthHygiene() {
-    var session = new GhidraSession(new TestScript());
+    var session = new GhidraSession(new StubScript());
 
     for (int i = 0; i < 2_000; i++) {
       final int iteration = i;
@@ -180,7 +185,7 @@ class GhidraSessionAdversarialTest {
   @Test
   @DisplayName("Adversarial: Nested transaction rejection for temporary changes does not leak depth")
   void testNestedTransactionDepthHygiene() {
-    var session = new GhidraSession(new TestScript());
+    var session = new GhidraSession(new StubScript());
 
     assertThrows(IllegalStateException.class, () ->
         session.withTransaction(() -> {
@@ -197,54 +202,57 @@ class GhidraSessionAdversarialTest {
   @Test
   @DisplayName("Adversarial: high-concurrency test confirms thread safety without deadlock")
   void testConcurrentTransactionsNoDeadlock() throws Exception {
-    var session = new GhidraSession(new TestScript());
+    var session = new GhidraSession(new StubScript());
     int threads = 20;
     int opsPerThread = 100;
-    ExecutorService executor = Executors.newFixedThreadPool(threads);
-    CountDownLatch startLatch = new CountDownLatch(1);
-    List<Future<?>> futures = new ArrayList<>();
-    AtomicInteger successfulTransactions = new AtomicInteger(0);
+    try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
+      CountDownLatch startLatch = new CountDownLatch(1);
+      List<Future<?>> futures = new ArrayList<>();
+      AtomicInteger successfulTransactions = new AtomicInteger(0);
 
-    for (int t = 0; t < threads; t++) {
-      final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            final int opIndex = i;
-            int mode = (threadId + opIndex) % 4;
-            switch (mode) {
-              case 0 -> {
-                String res = session.withTransaction(() -> "success_" + threadId + "_" + opIndex);
-                assertNotNull(res);
-                successfulTransactions.incrementAndGet();
-              }
-              case 1 -> {
-                assertThrows(IllegalArgumentException.class, () ->
-                    session.withTransaction(() -> { throw new IllegalArgumentException("fail"); }));
-              }
-              case 2 -> {
-                assertThrows(TransactionExecutionException.class, () ->
-                    session.withTransaction(() -> { throw new IOException("io fail"); }));
-              }
-              case 3 -> {
-                var cmd = new TestCommand(true, "ok");
-                session.runCommand(cmd, "run");
+      for (int t = 0; t < threads; t++) {
+        final int threadId = t;
+        futures.add(executor.submit(() -> {
+          try {
+            startLatch.await();
+            for (int i = 0; i < opsPerThread; i++) {
+              final int opIndex = i;
+              int mode = (threadId + opIndex) % 4;
+              switch (mode) {
+                case 0 -> {
+                  String res = session.withTransaction(() -> "success_" + threadId + "_" + opIndex);
+                  assertNotNull(res);
+                  successfulTransactions.incrementAndGet();
+                }
+                case 1 -> {
+                  assertThrows(IllegalArgumentException.class, () ->
+                      session.withTransaction(() -> { throw new IllegalArgumentException("fail"); }));
+                }
+                case 2 -> {
+                  assertThrows(TransactionExecutionException.class, () ->
+                      session.withTransaction(() -> { throw new IOException("io fail"); }));
+                }
+                case 3 -> {
+                  var cmd = new StubCommand(true, "ok");
+                  session.runCommand(cmd, "run");
+                }
+                default -> throw new AssertionError("unexpected mode: " + mode);
               }
             }
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
           }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
-    }
+        }));
+      }
 
-    startLatch.countDown();
-    for (Future<?> f : futures) {
-      f.get(10, TimeUnit.SECONDS);
+      startLatch.countDown();
+      for (Future<?> f : futures) {
+        f.get(10, TimeUnit.SECONDS);
+      }
+      executor.shutdown();
+      assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
     }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
 
     // Verify that the session remains operational and unlocked.
     String finalCheck = session.withTemporaryChanges(() -> "verified_operational");

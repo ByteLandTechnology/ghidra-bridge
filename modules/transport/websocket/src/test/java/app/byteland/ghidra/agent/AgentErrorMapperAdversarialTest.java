@@ -18,7 +18,13 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts"
+})
 class AgentErrorMapperAdversarialTest {
+  private static final String STATUS_KEY = "status";
+  private static final String CODE_KEY = "code";
 
   @Test
   @DisplayName("Adversarial: errorResponse maps null and blank messages and does not throw")
@@ -27,15 +33,15 @@ class AgentErrorMapperAdversarialTest {
     var resNull = AgentErrorMapper.errorResponse("req-null", exNull);
     assertEquals("req-null", resNull.id());
     assertEquals("Internal error", resNull.error().message());
-    assertEquals(500, resNull.error().data().get("status"));
-    assertEquals("internal_error", resNull.error().data().get("code"));
+    assertEquals(500, resNull.error().data().get(STATUS_KEY));
+    assertEquals("internal_error", resNull.error().data().get(CODE_KEY));
 
     var exBlank = new IllegalArgumentException("   ");
     var resBlank = AgentErrorMapper.errorResponse(999, exBlank);
     assertEquals(999, resBlank.id());
     assertEquals("java.lang.IllegalArgumentException", resBlank.error().message());
-    assertEquals(400, resBlank.error().data().get("status"));
-    assertEquals("invalid_request", resBlank.error().data().get("code"));
+    assertEquals(400, resBlank.error().data().get(STATUS_KEY));
+    assertEquals("invalid_request", resBlank.error().data().get(CODE_KEY));
   }
 
   @Test
@@ -57,8 +63,8 @@ class AgentErrorMapperAdversarialTest {
     assertEquals("failed to patch instruction", res.error().message());
 
     Map<String, Object> data = res.error().data();
-    assertEquals(500, data.get("status"));
-    assertEquals("transaction_failed", data.get("code"));
+    assertEquals(500, data.get(STATUS_KEY));
+    assertEquals("transaction_failed", data.get(CODE_KEY));
     assertEquals("failed to patch instruction", data.get("message"));
     assertEquals("/instructions/4/bytes", data.get("target"));
 
@@ -86,37 +92,39 @@ class AgentErrorMapperAdversarialTest {
   void testConcurrentErrorMapping() throws Exception {
     int threads = 50;
     int opsPerThread = 100;
-    ExecutorService executor = Executors.newFixedThreadPool(threads);
-    CountDownLatch startLatch = new CountDownLatch(1);
-    List<Future<?>> futures = new ArrayList<>();
+    try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
+      CountDownLatch startLatch = new CountDownLatch(1);
+      List<Future<?>> futures = new ArrayList<>();
 
-    for (int t = 0; t < threads; t++) {
-      final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            Exception ex = (i % 2 == 0)
-                ? new TransactionExecutionException("tx failure " + i)
-                : new IllegalArgumentException("arg failure " + i);
-            var res = AgentErrorMapper.errorResponse("id-" + threadId + "-" + i, ex);
-            assertNotNull(res);
-            assertEquals("id-" + threadId + "-" + i, res.id());
-            assertEquals(-32000, res.error().code());
-            assertNotNull(res.error().data().get("status"));
-            assertNotNull(res.error().data().get("code"));
+      for (int t = 0; t < threads; t++) {
+        final int threadId = t;
+        futures.add(executor.submit(() -> {
+          try {
+            startLatch.await();
+            for (int i = 0; i < opsPerThread; i++) {
+              Exception ex = (i % 2 == 0)
+                  ? new TransactionExecutionException("tx failure " + i)
+                  : new IllegalArgumentException("arg failure " + i);
+              var res = AgentErrorMapper.errorResponse("id-" + threadId + "-" + i, ex);
+              assertNotNull(res);
+              assertEquals("id-" + threadId + "-" + i, res.id());
+              assertEquals(-32000, res.error().code());
+              assertNotNull(res.error().data().get(STATUS_KEY));
+              assertNotNull(res.error().data().get(CODE_KEY));
+            }
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
           }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
-    }
+        }));
+      }
 
-    startLatch.countDown();
-    for (Future<?> f : futures) {
-      f.get(10, TimeUnit.SECONDS);
+      startLatch.countDown();
+      for (Future<?> f : futures) {
+        f.get(10, TimeUnit.SECONDS);
+      }
+      executor.shutdown();
+      assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
     }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
   }
 }

@@ -2,6 +2,15 @@ package app.byteland.ghidra.service.datatype;
 
 import java.util.List;
 
+/**
+ * Represents a function definition signature with return type, parameters, and calling convention.
+ *
+ * @param returnType non-null return data type reference
+ * @param parameters ordered parameter definitions
+ * @param callingConvention explicit non-unknown calling convention name
+ * @param hasVarArgs true when the signature accepts variadic arguments
+ * @param hasNoReturn true when the function does not return
+ */
 public record FunctionSignature(
     DataTypeReference returnType,
     List<Parameter> parameters,
@@ -10,6 +19,7 @@ public record FunctionSignature(
     boolean hasNoReturn) {
   private static final String UNKNOWN_CALLING_CONVENTION = "unknown";
 
+  /** Validates return type, parameters, and calling convention invariants. */
   public FunctionSignature {
     if (returnType == null) {
       throw new IllegalArgumentException("function signature returnType is required");
@@ -34,7 +44,14 @@ public record FunctionSignature(
     }
   }
 
+  /**
+   * Describes one formal parameter in a function definition signature.
+   *
+   * @param name optional normalized parameter name
+   * @param dataType non-null parameter data type reference
+   */
   public record Parameter(String name, DataTypeReference dataType) {
+    /** Normalizes optional parameter name and validates required data type. */
     public Parameter {
       name = emptyToNull(name);
       if (dataType == null) {

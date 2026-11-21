@@ -6,6 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts"
+})
 class CppSymbolNamesTest {
   @Test
   void detectsItaniumAndMicrosoftNames() {

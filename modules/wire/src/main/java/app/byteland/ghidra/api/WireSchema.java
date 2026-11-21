@@ -5,32 +5,68 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * JSON Schema builders and runtime request/response validator for bridge wire contracts.
+ */
 public final class WireSchema {
   private static final int EXACT_UNION_MATCHES = 1;
 
   private WireSchema() {}
 
+  /**
+   * Returns an unconstrained JSON Schema that accepts any JSON value.
+   *
+   * @return unconstrained schema map
+   */
   public static Map<String, Object> any() {
     return Map.of();
   }
 
+  /**
+   * Returns a JSON Schema matching any string value.
+   *
+   * @return string schema map
+   */
   public static Map<String, Object> string() {
     return Map.of(ApiVocabulary.TYPE, ApiVocabulary.STRING);
   }
 
+  /**
+   * Returns a JSON Schema matching strings with at least one character.
+   *
+   * @return non-empty string schema map
+   */
   public static Map<String, Object> nonBlankString() {
     return Map.of(ApiVocabulary.TYPE, ApiVocabulary.STRING, ApiVocabulary.MIN_LENGTH, 1);
   }
 
+  /**
+   * Returns a JSON Schema matching one of the given string enumeration literals.
+   *
+   * @param values allowed string values
+   * @return string enum schema map
+   */
   public static Map<String, Object> stringEnum(String... values) {
     List<String> sorted = java.util.Arrays.stream(values).sorted().toList();
     return Map.of(ApiVocabulary.TYPE, ApiVocabulary.STRING, ApiVocabulary.ENUM, sorted);
   }
 
+  /**
+   * Returns a JSON Schema matching boolean values.
+   *
+   * @return boolean schema map
+   */
   public static Map<String, Object> bool() {
     return Map.of(ApiVocabulary.TYPE, ApiVocabulary.BOOLEAN);
   }
 
+  /**
+   * Returns a JSON Schema matching integers within an inclusive range.
+   *
+   * @param minimum inclusive minimum value
+   * @param maximum inclusive maximum value
+   * @return bounded integer schema map
+   */
   public static Map<String, Object> integer(long minimum, long maximum) {
     return Map.of(
         ApiVocabulary.TYPE,
@@ -41,6 +77,13 @@ public final class WireSchema {
         maximum);
   }
 
+  /**
+   * Returns a JSON Schema matching finite numbers within an inclusive range.
+   *
+   * @param minimum inclusive minimum value
+   * @param maximum inclusive maximum value
+   * @return bounded number schema map
+   */
   public static Map<String, Object> number(double minimum, double maximum) {
     return Map.of(
         ApiVocabulary.TYPE,
@@ -51,6 +94,14 @@ public final class WireSchema {
         maximum);
   }
 
+  /**
+   * Returns a JSON Schema matching arrays with item schema and length bounds.
+   *
+   * @param items item element schema
+   * @param minimum minimum item count
+   * @param maximum maximum item count
+   * @return bounded array schema map
+   */
   public static Map<String, Object> array(Map<String, Object> items, int minimum, int maximum) {
     return Map.of(
         ApiVocabulary.TYPE,
@@ -63,6 +114,13 @@ public final class WireSchema {
         maximum);
   }
 
+  /**
+   * Returns a closed JSON object schema with declared properties and required field names.
+   *
+   * @param properties map of property names to property schemas
+   * @param required required property names
+   * @return closed object schema map
+   */
   public static Map<String, Object> object(
       Map<String, Map<String, Object>> properties, String... required) {
     Map<String, Object> schema = new LinkedHashMap<>();
@@ -75,11 +133,21 @@ public final class WireSchema {
     return schema;
   }
 
+  /**
+   * Returns an open JSON object schema that permits arbitrary string-keyed properties.
+   *
+   * @return open object schema map
+   */
   public static Map<String, Object> openObject() {
     return Map.of(
         ApiVocabulary.TYPE, ApiVocabulary.OBJECT, ApiVocabulary.ADDITIONAL_PROPERTIES, true);
   }
 
+  /**
+   * Returns the JSON Schema for a serialized {@link BridgeError} object.
+   *
+   * @return bridge error schema map
+   */
   public static Map<String, Object> bridgeError() {
     return object(
         Map.of(
@@ -93,24 +161,60 @@ public final class WireSchema {
         "message");
   }
 
+  /**
+   * Wraps a schema in a {@code oneOf} union that also accepts {@code null}.
+   *
+   * @param schema non-null value schema
+   * @return nullable schema map
+   */
   public static Map<String, Object> nullable(Map<String, Object> schema) {
     return Map.of(
         ApiVocabulary.ONE_OF, List.of(schema, Map.of(ApiVocabulary.TYPE, ApiVocabulary.NULL)));
   }
 
+  /**
+   * Returns a {@code oneOf} union schema from a list of alternative schemas.
+   *
+   * @param schemas alternative schemas
+   * @return {@code oneOf} schema map
+   */
   public static Map<String, Object> oneOf(List<Map<String, Object>> schemas) {
     return Map.of(ApiVocabulary.ONE_OF, List.copyOf(schemas));
   }
 
+  /**
+   * Returns a {@code oneOf} union schema over two alternatives.
+   *
+   * @param first first alternative schema
+   * @param second second alternative schema
+   * @return {@code oneOf} schema map
+   */
   public static Map<String, Object> oneOf(Map<String, Object> first, Map<String, Object> second) {
     return oneOf(List.of(first, second));
   }
 
+  /**
+   * Returns a {@code oneOf} union schema over three alternatives.
+   *
+   * @param first first alternative schema
+   * @param second second alternative schema
+   * @param third third alternative schema
+   * @return {@code oneOf} schema map
+   */
   public static Map<String, Object> oneOf(
       Map<String, Object> first, Map<String, Object> second, Map<String, Object> third) {
     return oneOf(List.of(first, second, third));
   }
 
+  /**
+   * Returns a {@code oneOf} union schema over four alternatives.
+   *
+   * @param first first alternative schema
+   * @param second second alternative schema
+   * @param third third alternative schema
+   * @param fourth fourth alternative schema
+   * @return {@code oneOf} schema map
+   */
   public static Map<String, Object> oneOf(
       Map<String, Object> first,
       Map<String, Object> second,
@@ -119,6 +223,16 @@ public final class WireSchema {
     return oneOf(List.of(first, second, third, fourth));
   }
 
+  /**
+   * Returns a {@code oneOf} union schema over five alternatives.
+   *
+   * @param first first alternative schema
+   * @param second second alternative schema
+   * @param third third alternative schema
+   * @param fourth fourth alternative schema
+   * @param fifth fifth alternative schema
+   * @return {@code oneOf} schema map
+   */
   public static Map<String, Object> oneOf(
       Map<String, Object> first,
       Map<String, Object> second,
@@ -128,10 +242,21 @@ public final class WireSchema {
     return oneOf(List.of(first, second, third, fourth, fifth));
   }
 
+  /**
+   * Returns a {@code $ref} schema pointing to the shared {@code data_type_reference} definition.
+   *
+   * @return data type reference {@code $ref} schema map
+   */
   public static Map<String, Object> dataTypeReference() {
     return Map.of(ApiVocabulary.REFERENCE, "#/$defs/data_type_reference");
   }
 
+  /**
+   * Attaches shared {@code $defs} definitions to a root JSON Schema map.
+   *
+   * @param schema root schema map
+   * @return root schema map with {@code $defs}
+   */
   public static Map<String, Object> withDefinitions(Map<String, Object> schema) {
     Map<String, Object> root = new LinkedHashMap<>(schema);
     root.put(ApiVocabulary.DEFINITIONS, DEFAULT_DEFINITIONS);
@@ -169,6 +294,13 @@ public final class WireSchema {
     return oneOf(named, pointer, array, untyped);
   }
 
+  /**
+   * Validates a parsed JSON value against a schema and throws {@link ApiException} on mismatch.
+   *
+   * @param value parsed JSON value
+   * @param schema expected JSON Schema map
+   * @param target JSON pointer prefix for validation errors
+   */
   public static void validate(Object value, Map<String, Object> schema, String target) {
     validate(value, schema, target, schemaDefinitions(schema));
   }

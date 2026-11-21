@@ -90,6 +90,7 @@ final class LeasePool<T> implements AutoCloseable {
     try {
       destroyer.accept(resource);
     } catch (RuntimeException ignored) {
+      // Ignore cleanup failures while releasing pooled resources.
     }
   }
 

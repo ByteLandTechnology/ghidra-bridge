@@ -5,10 +5,18 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.comment.CommentResource;
 import app.byteland.ghidra.service.comment.CommentService;
 
+/**
+ * Ghidra-backed implementation of {@link CommentService}.
+ */
 public final class CommentServiceImpl implements CommentService {
   private final CommentQueries queries;
   private final CommentMutations mutations;
 
+  /**
+   * Creates a comment service bound to the given {@link GhidraSession}.
+   *
+   * @param context active Ghidra session
+   */
   public CommentServiceImpl(GhidraSession context) {
     this.queries = new CommentQueries(context);
     this.mutations = new CommentMutations(context);

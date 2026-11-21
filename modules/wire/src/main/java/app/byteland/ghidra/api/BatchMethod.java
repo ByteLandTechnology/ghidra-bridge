@@ -337,6 +337,7 @@ final class BatchMethod {
     return violation;
   }
 
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private Map<String, Object> executePerItem(List<PreparedItem> items) {
     List<Map<String, Object>> rows = new ArrayList<>();
     for (PreparedItem item : items) {
@@ -375,6 +376,7 @@ final class BatchMethod {
     }
   }
 
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private List<Map<String, Object>> executeAllOrNoneItems(List<PreparedItem> items) {
     List<Map<String, Object>> temporary = new ArrayList<>();
     for (PreparedItem item : items) {

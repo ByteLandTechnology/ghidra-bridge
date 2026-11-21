@@ -5,9 +5,19 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeManager;
 import java.util.List;
 
+/**
+ * Resolves Ghidra {@link DataType} instances by category path or simple name.
+ */
 public final class DataTypeResolver {
   private DataTypeResolver() {}
 
+  /**
+   * Looks up a {@link DataType} by path or simple name in the program or built-in manager.
+   *
+   * @param dataTypeManager program data type manager
+   * @param typeName category path or simple type name
+   * @return resolved data type, or {@code null} when not found
+   */
   public static DataType resolve(DataTypeManager dataTypeManager, String typeName) {
     if (typeName == null || typeName.isBlank()) {
       return null;

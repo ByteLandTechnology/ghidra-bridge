@@ -9,10 +9,22 @@ import java.util.Map;
 public final class JsonUtil {
   private JsonUtil() {}
 
+  /**
+   * Serializes a JSON-compatible Java value into a compact JSON string.
+   *
+   * @param value JSON-compatible map, list, string, number, boolean, or null
+   * @return serialized JSON text
+   */
   public static String toJson(Object value) {
     return JsonWriter.toJson(value);
   }
 
+  /**
+   * Parses a JSON text document into Java maps, lists, strings, numbers, booleans, or null.
+   *
+   * @param json JSON document text
+   * @return parsed Java value
+   */
   public static Object parse(String json) {
     JsonParser parser = new JsonParser(json);
     Object value = parser.parseValue();
@@ -24,6 +36,12 @@ public final class JsonUtil {
     return value;
   }
 
+  /**
+   * Parses a JSON text document and requires the root value to be a JSON object.
+   *
+   * @param json JSON object text
+   * @return parsed string-keyed map
+   */
   public static Map<String, Object> parseObject(String json) {
     Object parsed = parse(json);
     if (!(parsed instanceof Map<?, ?> map)) {

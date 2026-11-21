@@ -20,14 +20,23 @@ import java.util.function.Supplier;
  * Central registry that defines and dispatches all public API methods.
  */
 public final class ApiRegistry {
+  /** Published wire interface version string. */
   public static final String INTERFACE_VERSION = "0.2.0";
+
+  /** Default page size limit when a list request omits {@code limit}. */
   public static final int DEFAULT_LIMIT = 100;
+
+  /** Maximum page size limit accepted by paginated list methods. */
   public static final int MAX_LIMIT = app.byteland.ghidra.service.Page.MAX_LIMIT;
+
+  /** Maximum number of items accepted in a single {@code batch.execute} call. */
   public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
+  static final String INTERFACE_GET_METHOD = "interface.get";
   static final String ANALYSIS_START_METHOD = "analysis.start";
   static final String PATCH_DATA_TYPE_TARGET = "/patch/data_type";
+  private static final String ACTIVE_PROGRAM_DATA_SUFFIX = " data in the active program.";
 
   private final BridgeServices bridgeServices;
   private final String sessionId;
@@ -38,6 +47,14 @@ public final class ApiRegistry {
   private final ApiCatalog catalogSnapshot;
   private BatchMethod batchMethod;
 
+  /**
+   * Creates an API registry bound to live session services and lifecycle callbacks.
+   *
+   * @param services domain services for the active Ghidra program
+   * @param sessionId session identifier used to bind pagination cursors
+   * @param sessionSupplier supplier for {@code session.get} status fields
+   * @param shutdownAction callback invoked by {@code session.shutdown}
+   */
   public ApiRegistry(
       BridgeServices services,
       String sessionId,
@@ -52,7 +69,11 @@ public final class ApiRegistry {
     catalogSnapshot = ApiCatalog.from(INTERFACE_VERSION, methodsByName.values());
   }
 
-  /** Builds the method catalog without an open Ghidra program. */
+  /**
+   * Builds the method catalog without an open Ghidra program.
+   *
+   * @return schema-only API catalog snapshot
+   */
   public static ApiCatalog catalog() {
     return new ApiRegistry(metadataServices(), "schema", Map::of, () -> {}).methodCatalog();
   }
@@ -123,22 +144,51 @@ public final class ApiRegistry {
     return bridgeServices;
   }
 
+  /**
+   * Returns the immutable catalog snapshot for all registered methods.
+   *
+   * @return API method catalog
+   */
   public ApiCatalog methodCatalog() {
     return catalogSnapshot;
   }
 
+  /**
+   * Returns all registered API methods in registration order.
+   *
+   * @return immutable list of registered API methods
+   */
   public List<ApiMethod<Map<String, Object>, Object>> methods() {
     return List.copyOf(methodsByName.values());
   }
 
+  /**
+   * Returns all registered API method names in registration order.
+   *
+   * @return unmodifiable set of method names
+   */
   public Set<String> methodNames() {
     return Collections.unmodifiableSet(methodsByName.keySet());
   }
 
+  /**
+   * Looks up a registered API method by dotted name.
+   *
+   * @param name dotted method name
+   * @return matching API method, or null when unregistered
+   */
   public ApiMethod<Map<String, Object>, Object> method(String name) {
     return methodsByName.get(name);
   }
 
+  /**
+   * Validates parameters and dispatches a named API method, opening a transaction when required.
+   *
+   * @param name dotted API method name
+   * @param params wire request parameter map
+   * @return wire-encoded method result
+   * @throws Exception if validation or execution fails
+   */
   public Object dispatch(String name, Map<String, Object> params) throws Exception {
     ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
     if (method == null) {
@@ -184,7 +234,7 @@ public final class ApiRegistry {
 
   private void registerInterface() {
     register(
-        "interface.get",
+        INTERFACE_GET_METHOD,
         MethodEffects.metadata(),
         null,
         ApiSchemaCatalog.input(Map.of()),
@@ -192,9 +242,10 @@ public final class ApiRegistry {
         Set.of(),
         List.of(),
         request -> interfaceDescription());
-    ApiMethod<Map<String, Object>, Object> interfaceMethod = methodsByName.remove("interface.get");
+    ApiMethod<Map<String, Object>, Object> interfaceMethod =
+        methodsByName.remove(INTERFACE_GET_METHOD);
     Map<String, ApiMethod<Map<String, Object>, Object>> reordered = new LinkedHashMap<>();
-    reordered.put("interface.get", interfaceMethod);
+    reordered.put(INTERFACE_GET_METHOD, interfaceMethod);
     reordered.putAll(methodsByName);
     methodsByName.clear();
     methodsByName.putAll(reordered);
@@ -570,7 +621,7 @@ public final class ApiRegistry {
 
   private static String defaultDescription(String name) {
     switch (name) {
-      case "interface.get" -> {
+      case INTERFACE_GET_METHOD -> {
         return "Describe all API methods, their schemas, and their effects.";
       }
       case "session.get" -> {
@@ -599,10 +650,10 @@ public final class ApiRegistry {
     String operation = name.substring(separator + 1);
     return switch (operation) {
       case "get" -> "Get " + resource + " data from the active program.";
-      case "list" -> "List " + resource + " data in the active program.";
-      case "create" -> "Create " + resource + " data in the active program.";
-      case ApiVocabulary.PATCH -> "Change " + resource + " data in the active program.";
-      case "upsert" -> "Create or replace " + resource + " data in the active program.";
+      case "list" -> "List " + resource + ACTIVE_PROGRAM_DATA_SUFFIX;
+      case "create" -> "Create " + resource + ACTIVE_PROGRAM_DATA_SUFFIX;
+      case ApiVocabulary.PATCH -> "Change " + resource + ACTIVE_PROGRAM_DATA_SUFFIX;
+      case "upsert" -> "Create or replace " + resource + ACTIVE_PROGRAM_DATA_SUFFIX;
       case "delete" -> "Delete " + resource + " data from the active program.";
       case "save" -> "Save the active program to its project file.";
       case ApiVocabulary.START -> "Start automatic analysis of the active program.";

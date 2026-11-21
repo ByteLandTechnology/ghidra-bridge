@@ -82,18 +82,38 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
-Before you submit a change, run the verification suite:
+Before you submit a change, run the verification and test suites:
 
 ```bash
 ./gradlew --no-daemon clean verify
+./gradlew --no-daemon test
 bash .github/scripts/verify-repository-hygiene.sh
 ```
 
-The verification tasks check:
-- **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
-- **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
-- **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
-- **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+The `verify` task runs these gates across all Java modules:
+- **Compiler and ErrorProne**: `compileJava`, `testClasses`, and `compileGeneratedScripts` compile for Java 21 with `-Xlint:all`, `-Werror`, and ErrorProne.
+- **Javadoc**: `javadoc` checks all public and protected API comments and tags with `-Xdoclint:all` and `-Werror`.
+- **SpotBugs**: `spotbugsMain` and `spotbugsTest` check main and test bytecode at maximum effort.
+- **PMD**: `pmdMain` and `pmdTest` check main and test source files against the `errorprone`, `bestpractices`, and `security` rulesets.
+- **Architecture**: `verifyArchitecture` verifies that only `modules/adapter` and `modules/launcher` import Ghidra classes.
+- **Contract Drift**: `verifyApiContracts` verifies that `docs/api.md`, `docs/asyncapi.yaml`, and `docs/mcp-tools.json` match the code.
+- **Distribution**: `verifyDistribution` verifies `build/ghidra-script/` and checks that `ghidra-bridge.jar` contains zero third-party runtime classes.
+
+To run individual static checks locally during development:
+
+```bash
+./gradlew --no-daemon compileJava compileTestJava compileGeneratedScripts
+./gradlew --no-daemon javadoc
+./gradlew --no-daemon spotbugsMain spotbugsTest
+./gradlew --no-daemon pmdMain pmdTest
+```
+
+`gradle.properties` sets `org.gradle.dependency.verification=strict`.
+When you add or update a Gradle plugin, static analyzer, or test dependency, refresh the SHA-256 checksums in `gradle/verification-metadata.xml`:
+
+```bash
+./gradlew --no-daemon --write-verification-metadata sha256 verify test
+```
 
 ## Releases
 

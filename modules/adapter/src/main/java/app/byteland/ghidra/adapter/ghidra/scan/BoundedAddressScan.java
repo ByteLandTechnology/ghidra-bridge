@@ -6,6 +6,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.LongSupplier;
 
+/**
+ * Tracks result count, elapsed time, and cursor progress for a bounded address scan.
+ *
+ * @param <T> matched item type
+ */
 public final class BoundedAddressScan<T> {
   private static final int MIN_RESULT_LIMIT = 1;
   private static final int MAX_RESULT_LIMIT = Page.MAX_LIMIT;
@@ -25,6 +30,16 @@ public final class BoundedAddressScan<T> {
   private String lastCursor;
   private ScanProgress.StopReason stopReason;
 
+  /**
+   * Starts a bounded scan using the system monotonic clock.
+   *
+   * @param <T> matched item type
+   * @param limit maximum number of matching items to collect
+   * @param timeoutMs scan timeout budget in milliseconds
+   * @param requestedStart requested start address, or {@code null}
+   * @param requestedEnd requested end address, or {@code null}
+   * @return active bounded scan tracker
+   */
   public static <T> BoundedAddressScan<T> start(
       int limit, int timeoutMs, String requestedStart, String requestedEnd) {
     return new BoundedAddressScan<>(
@@ -48,6 +63,13 @@ public final class BoundedAddressScan<T> {
     this.startedNanos = nanoTime.getAsLong();
   }
 
+  /**
+   * Records a visited address and optional matched item, updating stop conditions.
+   *
+   * @param address canonical visited address
+   * @param cursor resume cursor key for {@code address}
+   * @param matchingItem matched item at {@code address}, or {@code null} when filtered out
+   */
   public void visit(String address, String cursor, T matchingItem) {
     if (stopped()) throw new IllegalStateException("scan is already stopped");
     if (address == null || cursor == null) {
@@ -65,10 +87,20 @@ public final class BoundedAddressScan<T> {
     }
   }
 
+  /**
+   * Returns {@code true} when the scan has reached its item limit or timeout budget.
+   *
+   * @return {@code true} when stopped
+   */
   public boolean stopped() {
     return stopReason != null;
   }
 
+  /**
+   * Finalizes the scan and returns the collected {@link Page} with {@link ScanProgress}.
+   *
+   * @return scanned result page
+   */
   public Page<T> finish() {
     ScanProgress.StopReason reason =
         stopReason == null ? ScanProgress.StopReason.COMPLETED : stopReason;

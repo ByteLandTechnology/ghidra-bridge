@@ -10,13 +10,23 @@ import java.util.Map;
 import java.util.List;
 import java.util.TreeMap;
 
+/** Generates the published MCP tool contract JSON file from the API catalog. */
 public final class McpContractGenerator {
   private McpContractGenerator() {}
 
+  /**
+   * Writes {@code docs/mcp-tools.json} under the target root directory.
+   *
+   * @param args optional single-element array with the repository root path
+   * @throws IOException if writing the contract file fails
+   */
   public static void main(String[] args) throws IOException {
     Path root = Path.of(args.length == 0 ? "." : args[0]).toAbsolutePath().normalize();
     Path output = root.resolve("docs/mcp-tools.json");
-    Files.createDirectories(output.getParent());
+    Path parent = output.getParent();
+    if (parent != null) {
+      Files.createDirectories(parent);
+    }
     Files.writeString(output,
         JsonUtil.toJson(canonical(Map.of("version", ApiRegistry.INTERFACE_VERSION,
             "protocol_version", "2026-07-28",

@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 record FunctionComments(List<CommentResource> items, boolean complete) {
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   static FunctionComments read(
       Function function, long startedAt, int timeoutMs, List<String> warnings) {
     List<CommentResource> comments = new ArrayList<>();

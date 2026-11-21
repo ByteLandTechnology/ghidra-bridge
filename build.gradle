@@ -1,5 +1,8 @@
 plugins {
     id 'base'
+    id 'java-base'
+    id 'com.github.spotbugs' version '6.5.9' apply false
+    id 'net.ltgt.errorprone' version '5.1.0'
 }
 
 group = 'app.byteland'
@@ -7,6 +10,17 @@ group = 'app.byteland'
 version = providers.gradleProperty('releaseVersion').getOrElse(file('version.txt').text.trim())
 
 apply from: 'gradle/ghidra-detect.gradle'
+
+def spotbugsAnnotations = 'com.github.spotbugs:spotbugs-annotations:4.10.3'
+def errorProneCore = 'com.google.errorprone:error_prone_core:2.49.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    errorprone errorProneCore
+}
 
 subprojects {
     group = rootProject.group
@@ -18,6 +32,10 @@ subprojects {
     }
 
     apply plugin: 'java-library'
+    apply plugin: 'pmd'
+    apply plugin: 'com.github.spotbugs'
+    apply plugin: 'net.ltgt.errorprone'
+
     java {
         toolchain {
             languageVersion = JavaLanguageVersion.of(21)
@@ -25,6 +43,9 @@ subprojects {
     }
     repositories { mavenCentral() }
     dependencies {
+        compileOnly spotbugsAnnotations
+        testCompileOnly spotbugsAnnotations
+        errorprone errorProneCore
         testImplementation platform('org.junit:junit-bom:6.1.2')
         testImplementation 'org.junit.jupiter:junit-jupiter'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -34,6 +55,34 @@ subprojects {
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
+        options.release = 21
+        options.compilerArgs.addAll(['-Xlint:all', '-Werror'])
+    }
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+        options.addBooleanOption('Xdoclint:all', true)
+        options.addBooleanOption('Werror', true)
+        options.quiet()
+    }
+    pmd {
+        toolVersion = '7.26.0'
+        consoleOutput = true
+        ignoreFailures = false
+        ruleSets = [
+            'category/java/errorprone.xml',
+            'category/java/bestpractices.xml',
+            'category/java/security.xml'
+        ]
+    }
+    spotbugs {
+        toolVersion = '4.10.3'
+        ignoreFailures = false
+    }
+    tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+        reports {
+            html.required = true
+            xml.required = false
+        }
     }
 }
 
@@ -57,7 +106,6 @@ project(':adapter') {
         implementation project(':wire')
         implementation project(':runtime')
         compileOnly ghidraJars
-        compileOnly 'com.github.spotbugs:spotbugs-annotations:4.9.8'
         testImplementation ghidraJars
     }
 }
@@ -184,6 +232,14 @@ tasks.register('verifyDistribution') {
             if (jar.entries().find { it.name.startsWith('org/snakeyaml/') } != null) {
                 throw new GradleException('Runtime jar contains the contract YAML library')
             }
+            def unexpectedEntry = jar.entries().find { entry ->
+                !entry.isDirectory() &&
+                    entry.name != 'META-INF/MANIFEST.MF' &&
+                    !entry.name.startsWith('app/byteland/ghidra/')
+            }
+            if (unexpectedEntry != null) {
+                throw new GradleException("Runtime jar contains third-party entry: ${unexpectedEntry.name}")
+            }
         }
     }
 }
@@ -194,9 +250,12 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     source project(':launcher').layout.buildDirectory.dir('generated/scripts')
     classpath = ghidraJars
     destinationDirectory = layout.buildDirectory.dir('compiled-scripts')
-    sourceCompatibility = '21'
-    targetCompatibility = '21'
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
     options.encoding = 'UTF-8'
+    options.release = 21
+    options.compilerArgs.addAll(['-Xlint:all', '-Werror'])
 }
 
 tasks.register('verifyArchitecture') {
@@ -213,7 +272,17 @@ tasks.register('verifyArchitecture') {
     }
 }
 
+def javaSubprojects = subprojects.findAll { it.path != ':transport' }
+
 tasks.register('verify') {
     group = 'verification'
     dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    javaSubprojects.each { subproject ->
+        dependsOn subproject.tasks.named('testClasses')
+        dependsOn subproject.tasks.named('javadoc')
+        dependsOn subproject.tasks.named('spotbugsMain')
+        dependsOn subproject.tasks.named('spotbugsTest')
+        dependsOn subproject.tasks.named('pmdMain')
+        dependsOn subproject.tasks.named('pmdTest')
+    }
 }

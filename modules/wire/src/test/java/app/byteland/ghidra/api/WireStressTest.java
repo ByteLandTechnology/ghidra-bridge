@@ -20,7 +20,13 @@ import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts"
+})
 class WireStressTest {
+  private static final String TRANSACTION_FAILED_CODE = "transaction_failed";
+  private static final String ERR_MESSAGE = "err";
 
   @Test
   @DisplayName("Stress: Null message fallback to class name without crash")
@@ -29,14 +35,14 @@ class WireStressTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("app.byteland.ghidra.service.TransactionExecutionException", failure.error().message());
     assertNull(failure.error().target());
     assertTrue(failure.error().details().isEmpty());
 
     Map<String, Object> map = failure.error().toMap();
     assertEquals(500, map.get("status"));
-    assertEquals("transaction_failed", map.get("code"));
+    assertEquals(TRANSACTION_FAILED_CODE, map.get("code"));
     assertEquals("app.byteland.ghidra.service.TransactionExecutionException", map.get("message"));
     assertFalse(map.containsKey("target"));
     assertFalse(map.containsKey("details"));
@@ -49,7 +55,7 @@ class WireStressTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("app.byteland.ghidra.service.TransactionExecutionException", failure.error().message());
   }
 
@@ -61,7 +67,7 @@ class WireStressTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals(message, failure.error().message());
   }
 
@@ -73,7 +79,7 @@ class WireStressTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals(65536, failure.error().message().length());
   }
 
@@ -88,7 +94,7 @@ class WireStressTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("transaction aborted due to io", failure.error().message());
     assertNotNull(ex.getCause());
   }
@@ -97,34 +103,34 @@ class WireStressTest {
   @DisplayName("Stress: target pointer conversions across different syntax forms")
   void testTargetPointerConversions() {
     // The path has a plain property.
-    var ex1 = new TransactionExecutionException("err", "paramName");
+    var ex1 = new TransactionExecutionException(ERR_MESSAGE, "paramName");
     assertEquals("/param_name", ApiFailures.normalize(ex1).error().target());
 
     // The path has a camelCase property.
-    var ex2 = new TransactionExecutionException("err", "symbolAddress");
+    var ex2 = new TransactionExecutionException(ERR_MESSAGE, "symbolAddress");
     assertEquals("/symbol_address", ApiFailures.normalize(ex2).error().target());
 
     // The path has a nested dot property.
-    var ex3 = new TransactionExecutionException("err", "parent.child.subProperty");
+    var ex3 = new TransactionExecutionException(ERR_MESSAGE, "parent.child.subProperty");
     assertEquals("/parent/child/sub_property", ApiFailures.normalize(ex3).error().target());
 
     // The path has array index notation.
-    var ex4 = new TransactionExecutionException("err", "items[0]");
+    var ex4 = new TransactionExecutionException(ERR_MESSAGE, "items[0]");
     assertEquals("/items/0", ApiFailures.normalize(ex4).error().target());
 
     // The path has nested properties and an array.
-    var ex5 = new TransactionExecutionException("err", "function.parameters[2].storage");
+    var ex5 = new TransactionExecutionException(ERR_MESSAGE, "function.parameters[2].storage");
     assertEquals("/function/parameters/2/storage", ApiFailures.normalize(ex5).error().target());
 
     // The pointer already has a slash at the start.
-    var ex6 = new TransactionExecutionException("err", "/already/pointer/format");
+    var ex6 = new TransactionExecutionException(ERR_MESSAGE, "/already/pointer/format");
     assertEquals("/already/pointer/format", ApiFailures.normalize(ex6).error().target());
 
     // The target is null or blank.
-    var ex7 = new TransactionExecutionException("err", (String) null);
+    var ex7 = new TransactionExecutionException(ERR_MESSAGE, (String) null);
     assertNull(ApiFailures.normalize(ex7).error().target());
 
-    var ex8 = new TransactionExecutionException("err", "   ");
+    var ex8 = new TransactionExecutionException(ERR_MESSAGE, "   ");
     assertEquals("   ", ApiFailures.normalize(ex8).error().target());
   }
 
@@ -142,7 +148,7 @@ class WireStressTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals(details, failure.error().details());
 
     Map<String, Object> wireMap = failure.error().toMap();
@@ -163,7 +169,7 @@ class WireStressTest {
     var dbErr = new TransactionExecutionException("transaction rolled back: lock timeout");
     var dbNorm = ApiFailures.normalize(dbErr);
     assertEquals(500, dbNorm.status());
-    assertEquals("transaction_failed", dbNorm.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, dbNorm.error().code());
 
     // Internal state failures become 500 internal_error errors.
     var stateErr = new IllegalStateException("Program is closed");
@@ -200,7 +206,7 @@ class WireStressTest {
     Map<String, Object> dataObj = (Map<String, Object>) errorObj.get(JsonRpc.DATA);
     assertNotNull(dataObj);
     assertEquals(500, dataObj.get("status"));
-    assertEquals("transaction_failed", dataObj.get("code"));
+    assertEquals(TRANSACTION_FAILED_CODE, dataObj.get("code"));
     assertEquals("symbol conflict at address", dataObj.get("message"));
     assertEquals("/symbol/name", dataObj.get("target"));
   }

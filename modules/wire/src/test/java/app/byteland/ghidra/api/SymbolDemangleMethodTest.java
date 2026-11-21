@@ -26,8 +26,15 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts"
+})
 class SymbolDemangleMethodTest {
+  private static final String SYMBOL_DEMANGLE_METHOD = "symbol.demangle";
+
   @Test
+  @SuppressWarnings("PMD.CloseResource")
   void demangleRunsInOneTransactionAndReturnsCounts() throws Exception {
     AtomicInteger transactions = new AtomicInteger();
     SymbolService symbols = proxy(SymbolService.class, (method, args) -> {
@@ -39,6 +46,7 @@ class SymbolDemangleMethodTest {
             false, null, null, null, null));
     TransactionRunner transaction = new TransactionRunner() {
       @Override
+      @SuppressWarnings("PMD.AvoidCatchingGenericException")
       public <T> T run(Operation<T> operation) {
         transactions.incrementAndGet();
         try {
@@ -56,26 +64,28 @@ class SymbolDemangleMethodTest {
         symbols, unused(DataTypeService.class), transaction, "test");
     ApiRegistry registry = new ApiRegistry(services, "test", Map::of, () -> {});
 
-    Map<?, ?> result = (Map<?, ?>) registry.dispatch("symbol.demangle", Map.of());
+    Map<?, ?> result = (Map<?, ?>) registry.dispatch(SYMBOL_DEMANGLE_METHOD, Map.of());
     assertEquals(2, result.get("renamed"));
     assertEquals(1, result.get("failed"));
     assertEquals(List.of("_Zbad: No supported C++ name"), result.get("failures"));
     assertEquals(1, transactions.get());
-    assertTrue(registry.method("symbol.demangle").effects().requiresTransaction());
-    assertFalse(registry.method("symbol.demangle").effects().destructive());
-    assertTrue(registry.method("symbol.demangle").effects().idempotent());
+    assertTrue(registry.method(SYMBOL_DEMANGLE_METHOD).effects().requiresTransaction());
+    assertFalse(registry.method(SYMBOL_DEMANGLE_METHOD).effects().destructive());
+    assertTrue(registry.method(SYMBOL_DEMANGLE_METHOD).effects().idempotent());
     assertThrows(ApiException.class,
-        () -> registry.dispatch("symbol.demangle", Map.of("unknown", true)));
+        () -> registry.dispatch(SYMBOL_DEMANGLE_METHOD, Map.of("unknown", true)));
   }
 
+  @FunctionalInterface
   private interface Handler {
-    Object invoke(String method, Object[] args);
+    Object invoke(String method, Object... args);
   }
 
   private static <T> T unused(Class<T> type) {
     return proxy(type, (method, args) -> { throw new AssertionError(method); });
   }
 
+  @SuppressWarnings("PMD.UseProperClassLoader")
   private static <T> T proxy(Class<T> type, Handler handler) {
     return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type},
         (proxy, method, args) -> handler.invoke(method.getName(), args)));

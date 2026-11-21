@@ -152,6 +152,7 @@ final class DataTypeMethods implements ApiMethodProvider {
       registry.services().dataTypeService().getDataType(dataTypePath(resource));
       throw new ApiException(409, "data_type_exists", "data type already exists", "/resource");
     } catch (NoSuchElementException ignored) {
+      // Data type does not exist yet, so creation can proceed.
     }
     createDataTypeResource(resource);
   }

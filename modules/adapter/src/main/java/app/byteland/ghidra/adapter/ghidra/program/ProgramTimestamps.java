@@ -57,10 +57,12 @@ final class ProgramTimestamps {
     try {
       return Instant.parse(text);
     } catch (DateTimeParseException ignored) {
+      // Try the next timestamp format.
     }
     try {
       return OffsetDateTime.parse(text).toInstant();
     } catch (DateTimeParseException ignored) {
+      // Try the next timestamp format.
     }
     for (DateTimeFormatter formatter :
         List.of(
@@ -69,6 +71,7 @@ final class ProgramTimestamps {
       try {
         return ZonedDateTime.parse(text, formatter).toInstant();
       } catch (DateTimeParseException ignored) {
+        // Try the next timestamp format.
       }
     }
     try {

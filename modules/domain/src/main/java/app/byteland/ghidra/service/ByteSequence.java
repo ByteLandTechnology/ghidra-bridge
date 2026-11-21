@@ -8,6 +8,7 @@ package app.byteland.ghidra.service;
  * @param length byte length of decoded sequence
  */
 public record ByteSequence(Encoding encoding, String data, int length) {
+  /** Validates required byte sequence fields and non-negative length. */
   public ByteSequence {
     if (encoding == null) throw new IllegalArgumentException("encoding is required");
     if (data == null) throw new IllegalArgumentException("data is required");
@@ -18,7 +19,9 @@ public record ByteSequence(Encoding encoding, String data, int length) {
    * Supported wire formats for byte transfer.
    */
   public enum Encoding {
+    /** Lowercase hexadecimal byte representation. */
     HEX,
+    /** Standard Base64 byte representation. */
     BASE64
   }
 }

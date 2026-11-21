@@ -16,6 +16,10 @@ import org.junit.jupiter.api.io.TempDir;
 import org.snakeyaml.engine.v2.api.Load;
 import org.snakeyaml.engine.v2.api.LoadSettings;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts"
+})
 class ApiContractGeneratorTest {
   @Test
   void formattedYamlPreservesValues() {

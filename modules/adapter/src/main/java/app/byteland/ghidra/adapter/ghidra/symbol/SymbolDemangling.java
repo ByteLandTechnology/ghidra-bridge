@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class SymbolDemangling {
+  private static final int MAX_FAILURE_MESSAGES = 20;
+
   private SymbolDemangling() {}
 
   static DemangleResult apply(GhidraSession context) {
@@ -49,7 +51,7 @@ final class SymbolDemangling {
           renamed++;
         } else {
           failed++;
-          if (failures.size() < 20) failures.add(name + ": " + error);
+          if (failures.size() < MAX_FAILURE_MESSAGES) failures.add(name + ": " + error);
         }
       }
       return new DemangleResult(renamed, failed, failures);

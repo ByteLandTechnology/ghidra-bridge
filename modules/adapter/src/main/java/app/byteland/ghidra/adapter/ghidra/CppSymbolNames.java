@@ -16,6 +16,14 @@ public final class CppSymbolNames {
 
   private CppSymbolNames() {}
 
+  /**
+   * Returns the demangled C++ signature for a mangled symbol name without mutating the program.
+   *
+   * @param program active Ghidra program
+   * @param name raw symbol name
+   * @param address symbol address
+   * @return demangled signature, or {@code null} when not mangled or unable to demangle
+   */
   public static String demangled(Program program, String name, Address address) {
     if (!isMangled(name)) return null;
     Map<String, Optional<String>> cache = cacheFor(program);
@@ -32,6 +40,12 @@ public final class CppSymbolNames {
     return result;
   }
 
+  /**
+   * Checks whether a symbol name starts with a supported C++ mangled prefix.
+   *
+   * @param name raw symbol name
+   * @return {@code true} when {@code name} matches a mangled prefix
+   */
   public static boolean isMangled(String name) {
     return name != null
         && (name.startsWith("_Z") || name.startsWith("__Z") || name.startsWith("?"));

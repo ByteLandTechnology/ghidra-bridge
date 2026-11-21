@@ -13,12 +13,19 @@ import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts"
+})
 class ApiFailuresTest {
+  private static final String INTERNAL_ERROR_MESSAGE = "Internal error";
+  private static final String TRANSACTION_FAILED_CODE = "transaction_failed";
+
   @Test
   void unexpectedFailuresKeepPathsAndCredentialsPrivate() {
     var failure = ApiFailures.normalize(new java.io.IOException("/private/project Bearer TEST_SECRET"));
     assertEquals(500, failure.status());
-    assertEquals("Internal error", failure.error().message());
+    assertEquals(INTERNAL_ERROR_MESSAGE, failure.error().message());
     assertEquals(Map.of(), failure.error().details());
   }
 
@@ -29,7 +36,7 @@ class ApiFailuresTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("unable to remove parameter: command failed", failure.error().message());
     assertNull(failure.error().target());
     assertTrue(failure.error().details().isEmpty());
@@ -43,7 +50,7 @@ class ApiFailuresTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("transaction aborted", failure.error().message());
     assertEquals(cause, ex.getCause());
   }
@@ -56,7 +63,7 @@ class ApiFailuresTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("variable storage collision", failure.error().message());
     assertEquals("/parameters/0", failure.error().target());
   }
@@ -72,7 +79,7 @@ class ApiFailuresTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("flow override mutation failed", failure.error().message());
     assertEquals("SetFlowOverrideCmd", failure.error().details().get("command"));
     assertEquals(false, failure.error().details().get("retryable"));
@@ -98,7 +105,7 @@ class ApiFailuresTest {
 
     assertEquals(500, failure.status());
     assertEquals("internal_error", failure.error().code());
-    assertEquals("Internal error", failure.error().message());
+    assertEquals(INTERNAL_ERROR_MESSAGE, failure.error().message());
   }
 
   @Test
@@ -142,7 +149,7 @@ class ApiFailuresTest {
 
     assertEquals(500, failure.status());
     assertEquals("internal_error", failure.error().code());
-    assertEquals("Internal error", failure.error().message());
+    assertEquals(INTERNAL_ERROR_MESSAGE, failure.error().message());
   }
 
   @Test
@@ -153,7 +160,7 @@ class ApiFailuresTest {
 
     assertEquals(500, failure.status());
     assertEquals("internal_error", failure.error().code());
-    assertEquals("Internal error", failure.error().message());
+    assertEquals(INTERNAL_ERROR_MESSAGE, failure.error().message());
   }
 
   @Test

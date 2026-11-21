@@ -12,6 +12,14 @@ import java.util.Map;
  * {@code <prefix>_help}.
  */
 final class McpToolRegistry {
+  private static final String INTERFACE_GET_METHOD = "interface.get";
+  private static final String DESCRIPTION_KEY = "description";
+  private static final String TYPE_KEY = "type";
+  private static final String DOMAIN_KEY = "domain";
+  private static final String OPERATION_KEY = "operation";
+  private static final String OBJECT_TYPE = "object";
+  private static final String STRING_TYPE = "string";
+
   private final String prefix;
   private final Map<String, Map<String, MethodDescriptor>> domains = new LinkedHashMap<>();
   private final List<Map<String, Object>> listedTools;
@@ -23,15 +31,15 @@ final class McpToolRegistry {
   McpToolRegistry(ApiCatalog catalog, String prefix) {
     this.prefix = McpConfig.requireToolPrefix(prefix);
     for (MethodDescriptor method : catalog.methods()) {
-      if (method.name().equals("interface.get")) continue;
+      if (INTERFACE_GET_METHOD.equals(method.name())) continue;
       String[] target = target(method.name());
       domains.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>())
           .put(target[1], method);
     }
     List<Map<String, Object>> tools = new ArrayList<>();
-    tools.add(Map.of("name", helpToolName(), "description", "Get domains, operations, schemas, and effects.",
-        "inputSchema", Map.of("type", "object", "properties", Map.of(
-            "domain", Map.of("type", "string"), "operation", Map.of("type", "string")),
+    tools.add(Map.of("name", helpToolName(), DESCRIPTION_KEY, "Get domains, operations, schemas, and effects.",
+        "inputSchema", Map.of(TYPE_KEY, OBJECT_TYPE, "properties", Map.of(
+            DOMAIN_KEY, Map.of(TYPE_KEY, STRING_TYPE), OPERATION_KEY, Map.of(TYPE_KEY, STRING_TYPE)),
             "additionalProperties", false),
         "annotations", Map.of("readOnlyHint", true, "destructiveHint", false,
             "idempotentHint", true, "openWorldHint", false)));
@@ -61,23 +69,23 @@ final class McpToolRegistry {
   private Map<String, Object> groupTool(
       String domain, Map<String, MethodDescriptor> operations) {
     Map<String, Object> properties = new LinkedHashMap<>();
-    properties.put("operation", Map.of(
-        "type", "string",
-        "description", "The operation to perform",
+    properties.put(OPERATION_KEY, Map.of(
+        TYPE_KEY, STRING_TYPE,
+        DESCRIPTION_KEY, "The operation to perform",
         "enum", List.copyOf(operations.keySet())));
     properties.put("params", Map.of(
-        "type", "object",
-        "description", "Parameters for the operation"));
+        TYPE_KEY, OBJECT_TYPE,
+        DESCRIPTION_KEY, "Parameters for the operation"));
 
     Map<String, Object> inputSchema = Map.of(
-        "type", "object",
+        TYPE_KEY, OBJECT_TYPE,
         "properties", properties,
-        "required", List.of("operation"));
+        "required", List.of(OPERATION_KEY));
 
     String purpose = "listing".equals(domain)
         ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
     return Map.of("name", toolName(domain),
-        "description", "Use this tool " + purpose + ". Select an operation: "
+        DESCRIPTION_KEY, "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
         "inputSchema", inputSchema,
         "annotations", Map.of("readOnlyHint", false, "destructiveHint", true,
@@ -99,12 +107,12 @@ final class McpToolRegistry {
   }
 
   Map<String, Object> help(Map<String, Object> arguments) {
-    if (!List.of("domain", "operation").containsAll(arguments.keySet())) {
+    if (!List.of(DOMAIN_KEY, OPERATION_KEY).containsAll(arguments.keySet())) {
       throw new IllegalArgumentException("Unknown help argument");
     }
-    Object domainValue = arguments.get("domain");
+    Object domainValue = arguments.get(DOMAIN_KEY);
     if (domainValue == null) {
-      if (arguments.containsKey("operation")) {
+      if (arguments.containsKey(OPERATION_KEY)) {
         throw new IllegalArgumentException("operation requires domain");
       }
       return Map.of("domains", domains.keySet().stream().map(this::toolName).toList());
@@ -112,13 +120,13 @@ final class McpToolRegistry {
     String domain = helpDomain(domainValue.toString());
     Map<String, MethodDescriptor> operations = domains.get(domain);
     if (operations == null) throw new IllegalArgumentException("Unknown domain: " + domainValue);
-    Object operationValue = arguments.get("operation");
-    if (operationValue == null) return Map.of("domain", toolName(domain),
+    Object operationValue = arguments.get(OPERATION_KEY);
+    if (operationValue == null) return Map.of(DOMAIN_KEY, toolName(domain),
         "operations", List.copyOf(operations.keySet()));
     MethodDescriptor descriptor = operations.get(operationValue.toString());
     if (descriptor == null) throw new IllegalArgumentException("Unknown operation: " + operationValue);
-    return Map.of("domain", toolName(domain), "operation", operationValue,
-        "method", descriptor.name(), "description", descriptor.description(),
+    return Map.of(DOMAIN_KEY, toolName(domain), OPERATION_KEY, operationValue,
+        "method", descriptor.name(), DESCRIPTION_KEY, descriptor.description(),
         "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
         "effects", descriptor.contractValue().get("effects"));
   }

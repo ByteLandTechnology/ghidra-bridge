@@ -21,6 +21,7 @@ public record ScanProgress(
     boolean complete,
     StopReason stopReason,
     long elapsedMs) {
+  /** Validates scan progress invariants and non-negative elapsed time. */
   public ScanProgress {
     if (kind == null) throw new IllegalArgumentException("kind is required");
     if (stopReason == null) throw new IllegalArgumentException("stopReason is required");
@@ -34,6 +35,7 @@ public record ScanProgress(
    * Scan classification category.
    */
   public enum Kind {
+    /** Linear memory address range scan. */
     ADDRESS
   }
 
@@ -41,8 +43,11 @@ public record ScanProgress(
    * Cause of scan loop termination.
    */
   public enum StopReason {
+    /** Scan visited the entire requested address range. */
     COMPLETED,
+    /** Scan stopped after collecting the page item limit. */
     LIMIT,
+    /** Scan stopped after reaching the scan time limit. */
     TIMEOUT
   }
 }

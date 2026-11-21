@@ -12,6 +12,9 @@ import java.util.TreeMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+/**
+ * Signs, encodes, and verifies HMAC-protected pagination cursor tokens.
+ */
 public final class CursorTokens {
   private static final int CURSOR_PART_COUNT = 5;
   private static final int SIGNING_KEY_LENGTH = 32;
@@ -21,6 +24,15 @@ public final class CursorTokens {
 
   private CursorTokens() {}
 
+  /**
+   * Encodes and signs a pagination cursor token bound to resource, session, and query fingerprint.
+   *
+   * @param resource resource namespace name
+   * @param sessionId active session identifier
+   * @param queryFingerprint SHA-256 query fingerprint
+   * @param compositeKey opaque resource pagination key
+   * @return URL-safe Base64 signed cursor token
+   */
   public static String encode(
       String resource, String sessionId, String queryFingerprint, String compositeKey) {
     String payload =
@@ -37,6 +49,16 @@ public final class CursorTokens {
         .encodeToString(wire.getBytes(StandardCharsets.UTF_8));
   }
 
+  /**
+   * Verifies a signed pagination cursor token and returns its underlying composite key.
+   *
+   * @param token signed cursor token, or null
+   * @param resource expected resource namespace name
+   * @param sessionId expected active session identifier
+   * @param queryFingerprint expected SHA-256 query fingerprint
+   * @param target JSON pointer target used when reporting validation errors
+   * @return decoded composite pagination key, or null when {@code token} is null
+   */
   public static String decode(
       String token, String resource, String sessionId, String queryFingerprint, String target) {
     if (token == null) return null;
@@ -67,6 +89,12 @@ public final class CursorTokens {
     }
   }
 
+  /**
+   * Computes a canonical SHA-256 fingerprint over query parameters excluding page controls.
+   *
+   * @param request decoded request parameter map
+   * @return URL-safe Base64 SHA-256 query fingerprint
+   */
   public static String queryFingerprint(Map<String, Object> request) {
     Map<String, Object> query = new TreeMap<>();
     for (Map.Entry<String, Object> entry : request.entrySet()) {

@@ -24,7 +24,13 @@ import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts"
+})
 class ApiFailuresAdversarialTest {
+  private static final String TRANSACTION_FAILED_CODE = "transaction_failed";
+  private static final String ERR_MESSAGE = "err";
 
   @Test
   @DisplayName("Adversarial: null, empty, and blank messages use the class name")
@@ -47,7 +53,7 @@ class ApiFailuresAdversarialTest {
     var exBlank = new TransactionExecutionException("   \t\n  ");
     var failureBlank = ApiFailures.normalize(exBlank);
     assertEquals(500, failureBlank.status());
-    assertEquals("transaction_failed", failureBlank.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failureBlank.error().code());
     assertEquals("app.byteland.ghidra.service.TransactionExecutionException", failureBlank.error().message());
   }
 
@@ -59,7 +65,7 @@ class ApiFailuresAdversarialTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals(500_000, failure.error().message().length());
     assertEquals(hugeMessage, failure.error().message());
 
@@ -75,7 +81,7 @@ class ApiFailuresAdversarialTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals(special, failure.error().message());
 
     Map<String, Object> map = failure.error().toMap();
@@ -93,7 +99,7 @@ class ApiFailuresAdversarialTest {
 
     var failure = ApiFailures.normalize(topEx);
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("top transaction abort", failure.error().message());
     assertNotNull(topEx.getCause());
   }
@@ -102,22 +108,22 @@ class ApiFailuresAdversarialTest {
   @DisplayName("Adversarial: complex pointer conversion for deep targets and array targets")
   void testPointerConversionEdgeCases() {
     // The target is already a pointer.
-    var ex1 = new TransactionExecutionException("err", "/already/a/pointer");
+    var ex1 = new TransactionExecutionException(ERR_MESSAGE, "/already/a/pointer");
     assertEquals("/already/a/pointer", ApiFailures.normalize(ex1).error().target());
 
     // The targets are null or blank.
-    var ex2 = new TransactionExecutionException("err", (String) null);
+    var ex2 = new TransactionExecutionException(ERR_MESSAGE, (String) null);
     assertNull(ApiFailures.normalize(ex2).error().target());
 
-    var ex3 = new TransactionExecutionException("err", "   ");
+    var ex3 = new TransactionExecutionException(ERR_MESSAGE, "   ");
     assertEquals("   ", ApiFailures.normalize(ex3).error().target());
 
     // Deep nested array indexes and CamelCase.
-    var ex4 = new TransactionExecutionException("err", "deeplyNestedObject.subFieldList[12].itemProperty");
+    var ex4 = new TransactionExecutionException(ERR_MESSAGE, "deeplyNestedObject.subFieldList[12].itemProperty");
     assertEquals("/deeply_nested_object/sub_field_list/12/item_property", ApiFailures.normalize(ex4).error().target());
 
     // The path has multiple adjacent separators.
-    var ex5 = new TransactionExecutionException("err", "foo..bar[[3]]");
+    var ex5 = new TransactionExecutionException(ERR_MESSAGE, "foo..bar[[3]]");
     assertEquals("/foo/bar/3", ApiFailures.normalize(ex5).error().target());
   }
 
@@ -135,7 +141,7 @@ class ApiFailuresAdversarialTest {
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
-    assertEquals("transaction_failed", failure.error().code());
+    assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     assertEquals("/params/0", failure.error().target());
     assertEquals(5, failure.error().details().size());
     assertEquals(true, failure.error().details().get("boolValue"));
@@ -159,20 +165,21 @@ class ApiFailuresAdversarialTest {
   @DisplayName("Adversarial: custom DomainException implementations map status and code")
   void testCustomDomainExceptions() {
     class CustomDomainException extends RuntimeException implements DomainException {
-      private final int status;
-      private final String code;
-      private final String target;
+      private static final long serialVersionUID = 1L;
+      private final int httpStatus;
+      private final String errorCode;
+      private final String errorTarget;
 
       CustomDomainException(int status, String code, String target, String msg) {
         super(msg);
-        this.status = status;
-        this.code = code;
-        this.target = target;
+        this.httpStatus = status;
+        this.errorCode = code;
+        this.errorTarget = target;
       }
 
-      @Override public int status() { return status; }
-      @Override public String code() { return code; }
-      @Override public String target() { return target; }
+      @Override public int status() { return httpStatus; }
+      @Override public String code() { return errorCode; }
+      @Override public String target() { return errorTarget; }
     }
 
     var ex409 = new CustomDomainException(409, "conflict_error", "session_id", "conflict detected");
@@ -213,7 +220,7 @@ class ApiFailuresAdversarialTest {
     for (Throwable t : transactionErrors) {
       var failure = ApiFailures.normalize(t);
       assertEquals(500, failure.status(), "Transaction error must map to 500");
-      assertEquals("transaction_failed", failure.error().code());
+      assertEquals(TRANSACTION_FAILED_CODE, failure.error().code());
     }
   }
 
@@ -222,42 +229,44 @@ class ApiFailuresAdversarialTest {
   void testConcurrentNormalizationStress() throws Exception {
     int threadCount = 100;
     int opsPerThread = 100;
-    ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-    CountDownLatch startLatch = new CountDownLatch(1);
-    List<Future<?>> futures = new ArrayList<>();
+    try (ExecutorService executor = Executors.newFixedThreadPool(threadCount)) {
+      CountDownLatch startLatch = new CountDownLatch(1);
+      List<Future<?>> futures = new ArrayList<>();
 
-    for (int t = 0; t < threadCount; t++) {
-      final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            Throwable ex;
-            switch ((threadId + i) % 6) {
-              case 0 -> ex = new IllegalArgumentException("arg error " + i);
-              case 1 -> ex = new TransactionExecutionException("tx error " + i, "target." + i);
-              case 2 -> ex = new IllegalStateException("state error " + i);
-              case 3 -> ex = new NoSuchElementException("not found " + i);
-              case 4 -> ex = new TimeoutException("timeout " + i);
-              default -> ex = new RuntimeException("generic " + i);
+      for (int t = 0; t < threadCount; t++) {
+        final int threadId = t;
+        futures.add(executor.submit(() -> {
+          try {
+            startLatch.await();
+            for (int i = 0; i < opsPerThread; i++) {
+              Throwable ex =
+                  switch ((threadId + i) % 6) {
+                    case 0 -> new IllegalArgumentException("arg error " + i);
+                    case 1 -> new TransactionExecutionException("tx error " + i, "target." + i);
+                    case 2 -> new IllegalStateException("state error " + i);
+                    case 3 -> new NoSuchElementException("not found " + i);
+                    case 4 -> new TimeoutException("timeout " + i);
+                    default -> new RuntimeException("generic " + i);
+                  };
+              var failure = ApiFailures.normalize(ex);
+              assertNotNull(failure);
+              assertTrue(failure.status() >= 400 && failure.status() <= 500);
+              assertNotNull(failure.error().code());
+              assertNotNull(failure.error().message());
             }
-            var failure = ApiFailures.normalize(ex);
-            assertNotNull(failure);
-            assertTrue(failure.status() >= 400 && failure.status() <= 500);
-            assertNotNull(failure.error().code());
-            assertNotNull(failure.error().message());
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
           }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
-    }
+        }));
+      }
 
-    startLatch.countDown();
-    for (Future<?> f : futures) {
-      f.get(10, TimeUnit.SECONDS);
+      startLatch.countDown();
+      for (Future<?> f : futures) {
+        f.get(10, TimeUnit.SECONDS);
+      }
+      executor.shutdown();
+      assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
     }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
   }
 }

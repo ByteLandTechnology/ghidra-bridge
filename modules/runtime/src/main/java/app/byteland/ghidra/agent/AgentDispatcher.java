@@ -20,6 +20,12 @@ public final class AgentDispatcher implements AutoCloseable {
   private final Object sequenceLock = new Object();
   private volatile boolean shuttingDown;
 
+  /**
+   * Creates a dispatcher for {@code services} and {@code config}.
+   *
+   * @param services domain services for the active program
+   * @param config session runtime configuration
+   */
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
     Objects.requireNonNull(services, "services");
     this.config = Objects.requireNonNull(config, "config");
@@ -35,6 +41,14 @@ public final class AgentDispatcher implements AutoCloseable {
     services.close();
   }
 
+  /**
+   * Dispatches one API method call in serialized order.
+   *
+   * @param method API method name
+   * @param params decoded request parameters
+   * @return wire-normalized method result
+   * @throws Exception if validation or method execution fails
+   */
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {
@@ -47,14 +61,29 @@ public final class AgentDispatcher implements AutoCloseable {
         });
   }
 
+  /**
+   * Returns the immutable API method catalog for this dispatcher.
+   *
+   * @return API method catalog
+   */
   public ApiCatalog methodCatalog() {
     return apiRegistry.methodCatalog();
   }
 
+  /**
+   * Reports whether a session shutdown request has been accepted.
+   *
+   * @return {@code true} when shutdown is in progress
+   */
   public boolean isShuttingDown() {
     return shuttingDown;
   }
 
+  /**
+   * Returns the active program name associated with this session.
+   *
+   * @return active program name
+   */
   public String getProgramName() {
     return programName;
   }

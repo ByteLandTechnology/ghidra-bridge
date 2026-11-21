@@ -25,7 +25,9 @@ public record AnalysisResource(
    * Represents the initiator of the analysis task.
    */
   public enum Kind {
+    /** Analysis started by Ghidra outside the bridge. */
     GHIDRA,
+    /** Analysis started through the bridge service. */
     BRIDGE
   }
 
@@ -33,10 +35,15 @@ public record AnalysisResource(
    * Lifecycle execution status of the analysis task.
    */
   public enum Status {
+    /** No active or recorded bridge analysis task. */
     IDLE,
+    /** Analysis task is currently executing. */
     RUNNING,
+    /** Analysis task finished without error. */
     COMPLETED,
+    /** Analysis task stopped after cancellation. */
     CANCELLED,
+    /** Analysis task terminated with an error. */
     FAILED
   }
 }

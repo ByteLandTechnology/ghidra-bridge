@@ -13,6 +13,13 @@ import java.util.Locale;
 public final class AddressUtil {
   private AddressUtil() {}
 
+  /**
+   * Parses an address string against the given {@link GhidraScript} address factory.
+   *
+   * @param script active Ghidra script context
+   * @param rawAddress raw address text
+   * @return resolved Ghidra address
+   */
   public static Address parseAddress(GhidraScript script, String rawAddress) {
     if (script == null) {
       throw new IllegalArgumentException("script is required");
@@ -34,6 +41,12 @@ public final class AddressUtil {
     return address;
   }
 
+  /**
+   * Formats a Ghidra {@link Address} in canonical {@code space:offset} form.
+   *
+   * @param address Ghidra address, or {@code null}
+   * @return canonical address text, or {@code null} when {@code address} is {@code null}
+   */
   public static String canonicalAddress(Address address) {
     if (address == null) {
       return null;
@@ -42,10 +55,23 @@ public final class AddressUtil {
     return canonicalAddress(space, address.toString());
   }
 
+  /**
+   * Formats an address space name and hexadecimal offset in canonical {@code space:offset} form.
+   *
+   * @param addressSpace address space name
+   * @param offsetHex hexadecimal offset string
+   * @return canonical address text
+   */
   public static String canonicalAddress(String addressSpace, String offsetHex) {
     return addressSpace + ":" + normalizeOffset(offsetHex);
   }
 
+  /**
+   * Returns the address space name of a Ghidra {@link Address}.
+   *
+   * @param address Ghidra address, or {@code null}
+   * @return address space name, or {@code null} when {@code address} is {@code null}
+   */
   public static String addressSpace(Address address) {
     if (address == null) {
       return null;
@@ -53,6 +79,12 @@ public final class AddressUtil {
     return address.getAddressSpace().getName();
   }
 
+  /**
+   * Returns the {@code 0x}-prefixed offset text of a Ghidra {@link Address}.
+   *
+   * @param address Ghidra address, or {@code null}
+   * @return prefixed hexadecimal offset, or {@code null} when {@code address} is {@code null}
+   */
   public static String offset(Address address) {
     if (address == null) {
       return null;

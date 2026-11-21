@@ -11,6 +11,9 @@ import app.byteland.ghidra.service.listing.InstructionResource;
 import app.byteland.ghidra.service.listing.ListingService;
 import java.util.List;
 
+/**
+ * Ghidra-backed implementation of {@link ListingService}.
+ */
 public final class ListingServiceImpl implements ListingService {
   private final ListingCodeUnitQueries codeUnitQueries;
   private final ListingInstructionQueries instructionQueries;
@@ -18,6 +21,11 @@ public final class ListingServiceImpl implements ListingService {
   private final ListingFlowOverrideQueries flowOverrideQueries;
   private final ListingFlowOverrideMutations flowOverrideMutations;
 
+  /**
+   * Creates a listing service bound to the given {@link GhidraSession}.
+   *
+   * @param context active Ghidra session
+   */
   public ListingServiceImpl(GhidraSession context) {
     this.codeUnitQueries = new ListingCodeUnitQueries(context);
     this.instructionQueries = new ListingInstructionQueries(context);

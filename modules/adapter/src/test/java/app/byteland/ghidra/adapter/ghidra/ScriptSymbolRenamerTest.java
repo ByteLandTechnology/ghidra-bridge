@@ -14,7 +14,15 @@ import ghidra.util.task.TaskMonitor;
 import java.lang.reflect.Proxy;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({
+  "PMD.UnitTestAssertionsShouldIncludeMessage",
+  "PMD.UnitTestContainsTooManyAsserts",
+  "PMD.UseProperClassLoader"
+})
 class ScriptSymbolRenamerTest {
+  private static final String CREATE_LABEL_METHOD = "createLabel";
+  private static final String GET_SYMBOL_TABLE_METHOD = "getSymbolTable";
+
   private static final class InvalidNameScript extends GhidraScript {
     private InvalidNameScript(Program program) {
       set(program, TaskMonitor.DUMMY);
@@ -38,7 +46,7 @@ class ScriptSymbolRenamerTest {
     SymbolTable table = (SymbolTable) Proxy.newProxyInstance(
         SymbolTable.class.getClassLoader(), new Class<?>[] {SymbolTable.class},
         (proxy, method, arguments) -> {
-          if (method.getName().equals("createLabel")) {
+          if (CREATE_LABEL_METHOD.equals(method.getName())) {
             assertEquals("bad name", arguments[1]);
             throw new InvalidInputException("symbol names cannot contain whitespace");
           }
@@ -47,7 +55,7 @@ class ScriptSymbolRenamerTest {
     Program program = (Program) Proxy.newProxyInstance(
         Program.class.getClassLoader(), new Class<?>[] {Program.class},
         (proxy, method, arguments) -> {
-          if (method.getName().equals("getSymbolTable")) {
+          if (GET_SYMBOL_TABLE_METHOD.equals(method.getName())) {
             return table;
           }
           throw new AssertionError(method.getName());

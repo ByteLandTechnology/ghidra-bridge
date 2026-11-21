@@ -50,6 +50,9 @@ import java.util.Set;
 
 final class ApiSchemaCatalog {
   static final int MAX_NESTED_ITEMS = 1000;
+  private static final String LINES_FIELD = "lines";
+  private static final String COMMENTS_FIELD = "comments";
+  private static final String CODE_UNIT_FIELD = "code_unit";
 
   private ApiSchemaCatalog() {}
 
@@ -611,12 +614,12 @@ final class ApiSchemaCatalog {
           0,
           Integer.MAX_VALUE);
     }
-    if ("lines".equals(field)) return DecompilationSchemas.lines();
-    if ("comments".equals(field)) {
+    if (LINES_FIELD.equals(field)) return DecompilationSchemas.lines();
+    if (COMMENTS_FIELD.equals(field)) {
       return WireSchema.array(
           resourceSchema(commentFields(), List.of(ADDRESS, TYPE)), 0, Integer.MAX_VALUE);
     }
-    if ("code_unit".equals(field)) {
+    if (CODE_UNIT_FIELD.equals(field)) {
       return WireSchema.object(
           props(ADDRESS, WireSchema.string(), END, WireSchema.string()), ADDRESS, END);
     }

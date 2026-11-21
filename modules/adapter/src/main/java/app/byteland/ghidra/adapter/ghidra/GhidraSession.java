@@ -16,10 +16,20 @@ public final class GhidraSession {
   private final Object executionLock = new Object();
   private int transactionDepth;
 
+  /**
+   * Creates a session backed by the given {@link GhidraScript}.
+   *
+   * @param script active Ghidra script context
+   */
   public GhidraSession(GhidraScript script) {
     this.ghidraScript = Objects.requireNonNull(script, "script");
   }
 
+  /**
+   * Returns the underlying {@link GhidraScript} execution context.
+   *
+   * @return active Ghidra script context
+   */
   @SuppressFBWarnings(
       value = "EI_EXPOSE_REP",
       justification = "Adapter collaborators require the live GhidraScript execution context")
@@ -27,6 +37,11 @@ public final class GhidraSession {
     return ghidraScript;
   }
 
+  /**
+   * Returns the currently open Ghidra {@link Program}, failing if none is open.
+   *
+   * @return open Ghidra program
+   */
   public Program currentProgram() {
     Program program = currentProgramOrNull();
     if (program == null) {
@@ -35,10 +50,18 @@ public final class GhidraSession {
     return program;
   }
 
+  /**
+   * Returns the currently open Ghidra {@link Program}, or {@code null} if none is open.
+   *
+   * @return open Ghidra program, or {@code null}
+   */
   public Program currentProgramOrNull() {
     return ghidraScript.getCurrentProgram();
   }
 
+  /**
+   * Commits any active ambient script transaction and saves the current program.
+   */
   @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public void saveCurrentProgram() {
     synchronized (executionLock) {
@@ -68,20 +91,47 @@ public final class GhidraSession {
     }
   }
 
+  /**
+   * Parses an address string against the active script context.
+   *
+   * @param rawAddress raw address text
+   * @return resolved Ghidra address
+   */
   public Address parseAddress(String rawAddress) {
     return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
+  /**
+   * Returns references to or from the given address.
+   *
+   * @param address target or source address
+   * @param to {@code true} to read incoming references, {@code false} for outgoing references
+   * @return matching Ghidra references
+   */
   public java.util.List<ghidra.program.model.symbol.Reference> references(
       Address address, boolean to) {
     return java.util.Arrays.asList(
         to ? ghidraScript.getReferencesTo(address) : ghidraScript.getReferencesFrom(address));
   }
 
+  /**
+   * Runs an operation inside a committed Ghidra program transaction.
+   *
+   * @param <T> operation return type
+   * @param operation transactional callback
+   * @return result returned by {@code operation}
+   */
   public <T> T withTransaction(TransactionalOperation<T> operation) {
     return withTransaction(operation, true);
   }
 
+  /**
+   * Runs an operation inside a rolled-back Ghidra program transaction.
+   *
+   * @param <T> operation return type
+   * @param operation transactional callback whose program mutations are discarded
+   * @return result returned by {@code operation}
+   */
   public <T> T withTemporaryChanges(TransactionalOperation<T> operation) {
     return withTransaction(operation, false);
   }
@@ -115,6 +165,12 @@ public final class GhidraSession {
     }
   }
 
+  /**
+   * Executes a Ghidra {@link Command} against the active program, throwing on failure.
+   *
+   * @param command Ghidra program command
+   * @param failurePrefix message prefix used when the command reports failure
+   */
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
     synchronized (executionLock) {
@@ -129,8 +185,19 @@ public final class GhidraSession {
     throw new TransactionExecutionException(failurePrefix + ": " + status);
   }
 
+  /**
+   * Callback executed inside a Ghidra transaction boundary.
+   *
+   * @param <T> operation result type
+   */
   @FunctionalInterface
   public interface TransactionalOperation<T> {
+    /**
+     * Runs the transactional work.
+     *
+     * @return operation result
+     * @throws Exception when the underlying Ghidra operation fails
+     */
     T run() throws Exception;
   }
 

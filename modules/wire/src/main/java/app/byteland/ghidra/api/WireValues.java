@@ -78,15 +78,13 @@ final class WireValues {
     if (value instanceof DataTypeReference reference) {
       Map<String, Object> result = new LinkedHashMap<>();
       result.put(ApiVocabulary.KIND, reference.kind());
-      switch (reference) {
-        case DataTypeReference.Named named -> result.put("name", named.name());
-        case DataTypeReference.Pointer pointer -> result.put("target", normalize(pointer.target()));
-        case DataTypeReference.Array array -> {
-          result.put("element", normalize(array.element()));
-          result.put("count", array.count());
-        }
-        case DataTypeReference.UntypedPointer ignored -> {
-        }
+      if (reference instanceof DataTypeReference.Named named) {
+        result.put("name", named.name());
+      } else if (reference instanceof DataTypeReference.Pointer pointer) {
+        result.put("target", normalize(pointer.target()));
+      } else if (reference instanceof DataTypeReference.Array array) {
+        result.put("element", normalize(array.element()));
+        result.put("count", array.count());
       }
       return result;
     }

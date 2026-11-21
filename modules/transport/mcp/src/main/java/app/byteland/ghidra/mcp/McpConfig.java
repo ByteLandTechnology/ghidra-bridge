@@ -14,10 +14,19 @@ import java.util.regex.Pattern;
  * <p>{@code toolPrefix} is the first part of every tool name. An example is {@code ghidra} in
  * {@code ghidra.program}. Give each server a different prefix. Then one client can connect to
  * several servers without tool name conflicts.
+ *
+ * @param host listen host name or IP address
+ * @param port TCP listen port
+ * @param path HTTP endpoint path
+ * @param token optional bearer authentication token
+ * @param sessionId session identifier reported by the server
+ * @param toolPrefix prefix applied to grouped MCP tool names
  */
 public record McpConfig(
     String host, int port, String path, String token, String sessionId, String toolPrefix) {
+  /** Default TCP port for the MCP HTTP server. */
   public static final int DEFAULT_PORT = 8766;
+  /** Default tool name prefix when {@code tool_prefix} is omitted. */
   public static final String DEFAULT_TOOL_PREFIX = "ghidra";
   private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,63}");
   private static final String DEFAULT_LOOPBACK_HOST =
@@ -25,6 +34,7 @@ public record McpConfig(
   private static final Set<String> ALLOWED =
       Set.of("host", "port", "path", "session_id", "token", "tool_prefix", "jar");
 
+  /** Validates and normalizes MCP server configuration values. */
   public McpConfig {
     host = textOrDefault(host, DEFAULT_LOOPBACK_HOST);
     AgentConfig.requireValidPort(port);
@@ -35,6 +45,12 @@ public record McpConfig(
     toolPrefix = requireToolPrefix(textOrDefault(toolPrefix, DEFAULT_TOOL_PREFIX));
   }
 
+  /**
+   * Builds an {@link McpConfig} from a parsed key-value argument map.
+   *
+   * @param args key-value startup arguments
+   * @return validated MCP configuration
+   */
   public static McpConfig fromMap(Map<String, String> args) {
     Objects.requireNonNull(args, "args");
     AgentConfig.rejectUnknown(args, ALLOWED);
@@ -47,6 +63,11 @@ public record McpConfig(
         args.get("tool_prefix"));
   }
 
+  /**
+   * Returns the full HTTP endpoint URL for this server.
+   *
+   * @return HTTP endpoint URL
+   */
   public String endpoint() {
     return "http://" + host + ":" + port + path;
   }
@@ -59,6 +80,9 @@ public record McpConfig(
   /**
    * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores,
    * or hyphens. A dot is not permitted because it separates the prefix from the domain.
+   *
+   * @param prefix candidate tool prefix
+   * @return validated tool prefix
    */
   public static String requireToolPrefix(String prefix) {
     if (prefix == null || !TOOL_PREFIX.matcher(prefix).matches()) {
