@@ -162,7 +162,7 @@ class BatchQueryMethodTest {
     assertNotNull(items.get(1).get("result"));
     assertEquals(1, programReads.get());
 
-    // Prevalidation must reject a mutation item with 400 validation_failed before running item 0.
+    // Prevalidation must reject a mutation item with 400 validation_failed before it runs item 0.
     ApiException mutationRejected =
         assertThrows(
             ApiException.class,
