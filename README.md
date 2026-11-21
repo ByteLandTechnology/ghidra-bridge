@@ -44,8 +44,12 @@ The loader scripts locate `ghidra-bridge.jar` relative to their file path.
 1. Open a binary in the Ghidra CodeBrowser tool.
 2. Open the Script Manager window.
 3. Add `build/ghidra-script/` to your script directories.
-4. Run `Bridge.java` for WebSocket or `GhidraMcp.java` for MCP.
-5. Enter configuration arguments in the prompt window.
+4. Select the `Ghidra Bridge` category and run `Bridge.java` for WebSocket or `GhidraMcp.java` for MCP.
+5. Review or edit the pre-filled configuration dialog (`host`, `port`, `path`, `session_id`, `token`, plus `ws_url` / `exit_deadline_sec` for WebSocket or `tool_prefix` for MCP) and click **OK**.
+
+The first open tab pre-fills `127.0.0.1:8765` for WebSocket or `127.0.0.1:8766` (with `tool_prefix=ghidra`) for MCP.
+Additional CodeBrowser tabs automatically pre-fill the next free loopback port and a program-based `session_id` (and `tool_prefix` for MCP) so multiple binaries can serve clients concurrently.
+Canceling the dialog exits cleanly, and interactive GUI runs save programs only on explicit `program.save` requests.
 
 ### Run in Ghidra Headless Mode
 

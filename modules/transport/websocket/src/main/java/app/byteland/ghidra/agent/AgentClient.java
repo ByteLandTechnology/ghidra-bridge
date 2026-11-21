@@ -4,7 +4,13 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.net.http.WebSocketHandshakeException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -13,6 +19,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Runs the WebSocket transport as an embedded server or an outbound client to ws_url.
@@ -29,6 +37,9 @@ public final class AgentClient {
 
   /** The maximum time for the send of one keepalive ping. */
   private static final Duration KEEPALIVE_TIMEOUT = Duration.ofSeconds(10);
+
+  private static final Pattern URL_QUERY_OR_FRAGMENT =
+      Pattern.compile("((?:wss?|https?)://[^\\s'\"()\\[\\]<>,;?]+)[?#][^\\s'\"()\\[\\]<>,;]*");
 
   public interface LifecycleListener {
     default void onListening() {}
@@ -106,9 +117,9 @@ public final class AgentClient {
       if (ws == null) {
         return;
       }
+      lifecycleListener.onConnected();
       AgentClientChannels.OutboundMessageChannel channel =
           activateOutbound(ws, channelRef, messageHandler::sendReady);
-      lifecycleListener.onConnected();
 
       awaitDisconnect(cancellationRequested, channel);
     }
@@ -241,9 +252,61 @@ public final class AgentClient {
         }
       } catch (ExecutionException executionException) {
         Throwable cause = executionException.getCause();
-        throw new IOException("Failed to connect to " + wsUrl, cause);
+        throw handshakeFailure(wsUrl, cause);
       }
     }
+  }
+
+  private static IOException handshakeFailure(String wsUrl, Throwable cause) {
+    String detail = describeHandshakeCause(cause);
+    String message =
+        detail == null
+            ? "Failed to connect to " + wsUrl
+            : "Failed to connect to " + wsUrl + ": " + detail;
+    return new IOException(message, cause);
+  }
+
+  private static String describeHandshakeCause(Throwable cause) {
+    if (cause == null) {
+      return null;
+    }
+    Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+    List<String> details = new ArrayList<>();
+    Integer statusCode = null;
+    Throwable current = cause;
+    while (current != null && visited.add(current)) {
+      if (current instanceof WebSocketHandshakeException handshake
+          && handshake.getResponse() != null) {
+        statusCode = handshake.getResponse().statusCode();
+      }
+      String message = redactUrls(current.getMessage());
+      if (message != null && details.stream().noneMatch(existing -> existing.contains(message))) {
+        details.add(message);
+      }
+      current = current.getCause();
+    }
+    if (statusCode != null) {
+      String statusToken = Integer.toString(statusCode);
+      if (details.stream().noneMatch(existing -> existing.contains(statusToken))) {
+        details.add(0, "HTTP " + statusCode);
+      }
+    }
+    if (details.isEmpty()) {
+      return cause.getClass().getSimpleName();
+    }
+    return String.join(": ", details);
+  }
+
+  private static String redactUrls(String message) {
+    if (message == null) {
+      return null;
+    }
+    String trimmed = message.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    Matcher matcher = URL_QUERY_OR_FRAGMENT.matcher(trimmed);
+    return matcher.replaceAll("$1?<redacted>");
   }
 
   private static IOException handshakeTimeout(

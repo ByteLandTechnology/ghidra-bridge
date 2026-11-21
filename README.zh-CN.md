@@ -44,8 +44,12 @@ ghidra-bridge.jar
 1. 在 Ghidra CodeBrowser 中打开目标二进制程序。
 2. 打开 Script Manager（脚本管理器）窗口。
 3. 将 `build/ghidra-script/` 目录添加到脚本目录列表中。
-4. 运行 `Bridge.java`（WebSocket）或 `GhidraMcp.java`（MCP）。
-5. 在弹出的参数窗口中输入配置参数。
+4. 选择 `Ghidra Bridge` 分类，运行 `Bridge.java`（WebSocket）或 `GhidraMcp.java`（MCP）。
+5. 在预填充的配置对话框中确认或修改参数（`host`、`port`、`path`、`session_id`、`token`，以及 WebSocket 的 `ws_url` / `exit_deadline_sec` 或 MCP 的 `tool_prefix`），然后点击 **OK**。
+
+首个打开的标签页默认预填充 WebSocket 的 `127.0.0.1:8765` 或 MCP 的 `127.0.0.1:8766`（`tool_prefix=ghidra`）。
+后续 CodeBrowser 标签页会自动预填充下一个空闲回环端口以及基于程序名的 `session_id`（和 MCP 的 `tool_prefix`），以便多个二进制程序同时提供服务。
+取消对话框会安静退出，且交互式 GUI 运行仅在收到显式 `program.save` 请求时保存程序。
 
 ### 在 Ghidra Headless 无头模式中运行
 

@@ -19,6 +19,7 @@ final class GracefulExit implements AutoCloseable {
   private final CheckedAction saveAction;
   private final Runnable saveSucceeded;
   private final java.util.function.Consumer<Exception> saveFailed;
+  private final AtomicBoolean saveActivated = new AtomicBoolean(false);
   private final AtomicBoolean closeStarted = new AtomicBoolean(false);
   private final CountDownLatch saveCompleted = new CountDownLatch(1);
 
@@ -31,6 +32,14 @@ final class GracefulExit implements AutoCloseable {
     this.saveAction = Objects.requireNonNull(saveAction, "saveAction");
     this.saveSucceeded = Objects.requireNonNull(saveSucceeded, "saveSucceeded");
     this.saveFailed = Objects.requireNonNull(saveFailed, "saveFailed");
+  }
+
+  void activateSave() {
+    saveActivated.set(true);
+  }
+
+  boolean isSaveActivated() {
+    return saveActivated.get();
   }
 
   synchronized void installShutdownHook(Runnable stopAction, Runnable onShutdown) {
@@ -93,8 +102,10 @@ final class GracefulExit implements AutoCloseable {
     }
 
     try {
-      saveAction.run();
-      saveSucceeded.run();
+      if (saveActivated.get()) {
+        saveAction.run();
+        saveSucceeded.run();
+      }
     } catch (Exception failure) {
       saveFailed.accept(failure);
       throw failure;

@@ -1,6 +1,7 @@
 package app.byteland.ghidra.agent;
 
 import java.io.IOException;
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -34,7 +35,7 @@ public final class AgentWebSocketServer implements AutoCloseable {
     }
     ServerSocket socket = new ServerSocket();
     try {
-      socket.bind(new InetSocketAddress(config.host(), config.port()));
+      bindServerSocket(socket, config);
       AgentWebSocketConnectionRunner connectionRunner =
           new AgentWebSocketConnectionRunner(
               config, handler, running, activeConnection, pendingSocket);
@@ -49,6 +50,32 @@ public final class AgentWebSocketServer implements AutoCloseable {
       running.set(false);
       closeAfterFailedStart(socket, startFailure);
       throw startFailure;
+    }
+  }
+
+  public static String endpoint(AgentConfig config) {
+    String host = config.host();
+    String formattedHost =
+        host != null && host.indexOf(':') >= 0 && !host.startsWith("[") ? "[" + host + "]" : host;
+    return "ws://" + formattedHost + ":" + config.port() + config.path();
+  }
+
+  private static void bindServerSocket(ServerSocket socket, AgentConfig config) throws IOException {
+    try {
+      socket.bind(new InetSocketAddress(config.host(), config.port()));
+    } catch (BindException error) {
+      String detail = error.getMessage();
+      String causeDetail = detail == null || detail.isBlank() ? "" : " (" + detail + ")";
+      BindException friendly =
+          new BindException(
+              "WebSocket endpoint "
+                  + endpoint(config)
+                  + " is already in use"
+                  + causeDetail
+                  + ". Stop the existing Bridge/GhidraMcp script, close the old Ghidra session, or"
+                  + " pass a different port value.");
+      friendly.initCause(error);
+      throw friendly;
     }
   }
 
