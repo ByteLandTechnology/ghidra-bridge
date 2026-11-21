@@ -86,6 +86,7 @@ Before you submit a change, run the verification suite:
 
 ```bash
 ./gradlew --no-daemon clean verify
+./gradlew --no-daemon test
 bash .github/scripts/verify-repository-hygiene.sh
 ```
 
@@ -94,15 +95,26 @@ The verification tasks check:
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+- **Unit Tests**: `test` runs all JUnit test classes across the Gradle modules.
 
 ## Releases
 
 The CI workflow uses release-please to manage versions and release notes.
-After a push to `main` passes the `verify` job, release-please creates or updates a release pull request.
+On each push to `main`, the `release` job runs first in a dedicated concurrency group.
+For feature commits on `main`, release-please creates or updates the release pull request.
 The pull request updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
 Review the proposed version and notes in the pull request.
 Merge the pull request into `main` to start the release.
-After verification, release-please creates a `v<version>` tag and a GitHub release.
+
+When you merge the release pull request, `release` creates a `v<version>` tag and a draft GitHub Release.
+Next, `verify` fetches the release commit SHA, runs all verification and test suites, builds the archive, and uploads workflow artifacts.
+The `publish` job reuses those verified workflow artifacts without a second Java or Ghidra build.
+It verifies the commit SHA, the `v<version>` tag, the draft status, `.release-please-manifest.json`, `version.txt`, and the SHA-256 checksum.
+Then `publish` uploads two assets to the draft release and sets `draft=false`:
+
+- `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
+  `LICENSE`, and `README.md`.
+- `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
 
 release-please reads Conventional Commit messages to select the version:
 
@@ -111,15 +123,9 @@ release-please reads Conventional Commit messages to select the version:
 - A `!` after the type or a `BREAKING CHANGE:` footer: Increases the major version.
 - Other types, such as `docs`, `ci`, and `test`: Do not start a release on their own.
 
-The `publish` job gets the release commit and verifies the build.
-Then it uploads two assets:
-
-- `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
-  `LICENSE`, and `README.md`.
-- `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
-
 Gradle reads the version from `version.txt` unless you set the `releaseVersion` property.
-The package script checks that the release version matches `version.txt` and the JAR manifest.
+The package script checks that the release version matches `version.txt`, `.release-please-manifest.json`, and the JAR manifest.
+It reuses a verified build when `build/ghidra-script/` matches the target version, or runs `clean verify test` first.
 To build and verify the release archive locally, run:
 
 ```bash
@@ -133,5 +139,6 @@ For CI on release pull requests, set the `RELEASE_PLEASE_TOKEN` secret to a pers
 Give that token Contents, Issues, and Pull requests write access to this repository.
 See the [release-please Action documentation](https://github.com/googleapis/release-please-action).
 
-If the `publish` job fails, use "Re-run failed jobs" in GitHub Actions.
-The upload step can replace assets from an earlier attempt that did not complete.
+If `verify` or `publish` fails, the GitHub Release stays hidden as a draft while `Latest` points to the previous public release.
+Select "Re-run failed jobs" in GitHub Actions to recover.
+`verify` overwrites the workflow artifacts, and `publish` replaces partial draft assets with `--clobber` before it makes the release public.
