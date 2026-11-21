@@ -4113,9 +4113,13 @@
                     "properties":
                       "analyzed":
                         "type": "boolean"
+                      "error":
+                        "type": "string"
                       "finished_at":
                         "type": "string"
                       "kind":
+                        "type": "string"
+                      "message":
                         "type": "string"
                       "progress":
                         "maximum": !!float "100.0"
@@ -4188,9 +4192,13 @@
                     "properties":
                       "analyzed":
                         "type": "boolean"
+                      "error":
+                        "type": "string"
                       "finished_at":
                         "type": "string"
                       "kind":
+                        "type": "string"
+                      "message":
                         "type": "string"
                       "progress":
                         "maximum": !!float "100.0"
@@ -10589,8 +10597,10 @@
                         "items":
                           "enum":
                           - "analyzed"
+                          - "error"
                           - "finished_at"
                           - "kind"
+                          - "message"
                           - "progress"
                           - "started_at"
                           - "status"
@@ -15029,8 +15039,10 @@
                                     "items":
                                       "enum":
                                       - "analyzed"
+                                      - "error"
                                       - "finished_at"
                                       - "kind"
+                                      - "message"
                                       - "progress"
                                       - "started_at"
                                       - "status"
@@ -16948,8 +16960,10 @@
               "items":
                 "enum":
                 - "analyzed"
+                - "error"
                 - "finished_at"
                 - "kind"
+                - "message"
                 - "progress"
                 - "started_at"
                 - "status"
@@ -17020,9 +17034,13 @@
       "properties":
         "analyzed":
           "type": "boolean"
+        "error":
+          "type": "string"
         "finished_at":
           "type": "string"
         "kind":
+          "type": "string"
+        "message":
           "type": "string"
         "progress":
           "maximum": !!float "100.0"
@@ -17170,9 +17188,13 @@
       "properties":
         "analyzed":
           "type": "boolean"
+        "error":
+          "type": "string"
         "finished_at":
           "type": "string"
         "kind":
+          "type": "string"
+        "message":
           "type": "string"
         "progress":
           "maximum": !!float "100.0"
@@ -19069,8 +19091,10 @@
                           "items":
                             "enum":
                             - "analyzed"
+                            - "error"
                             - "finished_at"
                             - "kind"
+                            - "message"
                             - "progress"
                             - "started_at"
                             - "status"

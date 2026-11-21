@@ -55,4 +55,34 @@ class ApiContractGeneratorTest {
     ApiContractGenerator.main(new String[] {directory.toString()});
     assertEquals(first, Files.readString(contractPath, StandardCharsets.UTF_8));
   }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void analysisMethodsExposeTelemetryFieldsInContract() {
+    ApiCatalog catalog = ApiRegistry.catalog();
+    Map<String, Object> document = ApiContractGenerator.asyncApi(catalog);
+    Map<String, Object> methods = (Map<String, Object>) document.get("x-ghidra-bridge-methods");
+
+    for (String methodName : List.of("analysis.get", "analysis.start")) {
+      Map<String, Object> method = (Map<String, Object>) methods.get(methodName);
+      Map<String, Object> outputSchema = (Map<String, Object>) method.get("output_schema");
+      assertEquals(false, outputSchema.get("additionalProperties"));
+      assertEquals(List.of("kind"), outputSchema.get("required"));
+      Map<String, Object> properties = (Map<String, Object>) outputSchema.get("properties");
+      assertEquals(Map.of("type", "string"), properties.get("message"));
+      assertEquals(Map.of("type", "string"), properties.get("error"));
+      assertTrue(properties.containsKey("status"));
+      assertTrue(properties.containsKey("progress"));
+    }
+
+    for (ApiCatalog.MethodDescriptor descriptor : catalog.methods()) {
+      if ("analysis.get".equals(descriptor.name()) || "analysis.start".equals(descriptor.name())) {
+        Map<String, Object> mcpOutput =
+            (Map<String, Object>) descriptor.mcpTool().get("outputSchema");
+        Map<String, Object> mcpProps = (Map<String, Object>) mcpOutput.get("properties");
+        assertEquals(Map.of("type", "string"), mcpProps.get("message"));
+        assertEquals(Map.of("type", "string"), mcpProps.get("error"));
+      }
+    }
+  }
 }

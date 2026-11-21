@@ -26,7 +26,9 @@ final class AnalysisMethods implements ApiMethodProvider {
             "task_id",
             "started_at",
             "finished_at",
-            "progress");
+            "progress",
+            "message",
+            ApiVocabulary.ERROR);
     registry.read(
         "analysis.get",
         ApiSchemaCatalog.input(ApiSchemaCatalog.props(ApiVocabulary.FIELDS, fields)),

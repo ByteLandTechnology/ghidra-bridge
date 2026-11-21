@@ -4,9 +4,12 @@ import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.analysis.AnalysisResource;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManagerListener;
+import ghidra.framework.cmd.BackgroundCommand;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.listing.Program;
 import ghidra.program.util.GhidraProgramUtilities;
+import ghidra.util.task.TaskMonitor;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -14,8 +17,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 final class AnalysisTask {
   private final String id = UUID.randomUUID().toString();
@@ -25,22 +32,34 @@ final class AnalysisTask {
   private volatile AnalysisResource.Status status = AnalysisResource.Status.RUNNING;
   private final long startedAt = System.currentTimeMillis();
   private volatile Long completedAt;
+  private volatile String error;
 
-  AnalysisTask(GhidraSession context, AutoAnalysisManager manager, AnalyzerSelection selection) {
+  AnalysisTask(
+      GhidraSession context, AutoAnalysisManager manager, AnalysisOptionChange optionChange) {
     GhidraSession session = Objects.requireNonNull(context, "context");
     AutoAnalysisManager analysisManager = Objects.requireNonNull(manager, "manager");
-    AnalyzerSelection analyzerSelection = Objects.requireNonNull(selection, "selection");
     Program program = session.currentProgram();
     this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(program);
-    this.body = () -> performAnalysis(session, analysisManager, program, analyzerSelection);
+    this.body = () -> performAnalysis(session, analysisManager, program, optionChange);
   }
 
   AnalysisTask(BooleanSupplier analyzed, Runnable operation) {
+    this(
+        analyzed,
+        ignored -> {
+          Objects.requireNonNull(operation, "operation").run();
+        });
+  }
+
+  AnalysisTask(BooleanSupplier analyzed, Consumer<AnalysisTaskMonitor> operation) {
     this.analyzed = Objects.requireNonNull(analyzed, "analyzed");
     Objects.requireNonNull(operation, "operation");
     this.body =
         () -> {
-          operation.run();
+          operation.accept(monitor);
+          if (monitor.isCancelled()) {
+            return new TaskOutcome(AnalysisResource.Status.CANCELLED, null);
+          }
           return new TaskOutcome(AnalysisResource.Status.COMPLETED, null);
         };
   }
@@ -61,7 +80,7 @@ final class AnalysisTask {
       GhidraSession context,
       AutoAnalysisManager manager,
       Program program,
-      AnalyzerSelection selection) {
+      AnalysisOptionChange optionChange) {
     Map<String, String> previousAnalysisOptions = null;
     AnalysisResource.Status terminalStatus;
     String terminalError = null;
@@ -77,8 +96,6 @@ final class AnalysisTask {
         throw new IllegalStateException(
             "Ghidra analysis started before the bridge task acquired the analysis manager");
       }
-      AnalysisOptionChange optionChange =
-          prepareScriptAnalyzerSelection(context, manager, program, selection);
       if (optionChange != null) {
         previousAnalysisOptions = optionChange.previous();
         applyScriptAnalyzerSelection(context, program, optionChange.updates());
@@ -86,12 +103,10 @@ final class AnalysisTask {
       monitor.setIndeterminate(true);
       monitor.setMessage("Running analysis");
       manager.initializeOptions();
-      manager.reAnalyzeAll(null);
-      runAndWaitForAnalysis(manager);
+      runAnalysis(manager, program);
       AnalysisManagerWait.awaitIdle(manager);
       if (monitor.isCancelled() || managerCancelled.get()) {
         terminalStatus = AnalysisResource.Status.CANCELLED;
-        terminalError = "analysis cancelled";
       } else {
         terminalStatus = AnalysisResource.Status.COMPLETED;
       }
@@ -116,13 +131,17 @@ final class AnalysisTask {
     }
     if (terminalStatus == AnalysisResource.Status.COMPLETED) {
       if (monitor.isCancelled()) {
-        return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
+        return new TaskOutcome(AnalysisResource.Status.CANCELLED, null);
       }
-      context.withTransaction(
-          () -> {
-            GhidraProgramUtilities.markProgramAnalyzed(program);
-            return null;
-          });
+      try {
+        context.withTransaction(
+            () -> {
+              GhidraProgramUtilities.markProgramAnalyzed(program);
+              return null;
+            });
+      } catch (RuntimeException markFailure) {
+        return new TaskOutcome(AnalysisResource.Status.FAILED, errorMessage(markFailure));
+      }
     }
     return new TaskOutcome(terminalStatus, terminalError);
   }
@@ -136,53 +155,87 @@ final class AnalysisTask {
     monitor.cancel();
   }
 
+  AnalysisTaskMonitor monitor() {
+    return monitor;
+  }
+
   AnalysisResource snapshot() {
+    AnalysisResource.Status currentStatus = status;
+    boolean terminal = currentStatus != AnalysisResource.Status.RUNNING;
+    Long finished = terminal ? completedAt : null;
+    String currentError = currentStatus == AnalysisResource.Status.FAILED ? error : null;
     return new AnalysisResource(
         AnalysisResource.Kind.BRIDGE,
-        status,
+        currentStatus,
         analyzed.getAsBoolean(),
         id,
-        java.time.Instant.ofEpochMilli(startedAt),
-        completedAt == null ? null : java.time.Instant.ofEpochMilli(completedAt),
-        monitor.percent());
+        Instant.ofEpochMilli(startedAt),
+        finished == null ? null : Instant.ofEpochMilli(finished),
+        monitor.percent(),
+        message(),
+        currentError);
   }
 
   String message() {
-    return monitor.getMessage();
+    return normalizeMessage(monitor.getMessage());
+  }
+
+  String error() {
+    return error;
   }
 
   private void publish(TaskOutcome outcome) {
-    if (outcome.error() != null) {
-      monitor.setMessage(outcome.error());
-    } else if (outcome.status() == AnalysisResource.Status.COMPLETED) {
+    if (outcome.status() == AnalysisResource.Status.COMPLETED) {
       monitor.setMessage("Analysis completed");
+    } else if (outcome.status() == AnalysisResource.Status.CANCELLED) {
+      monitor.setMessage("Analysis cancelled");
     }
+    error =
+        outcome.status() == AnalysisResource.Status.FAILED
+            ? normalizeMessage(outcome.error())
+            : null;
     completedAt = System.currentTimeMillis();
     status = outcome.status();
   }
 
-  private static AnalysisOptionChange prepareScriptAnalyzerSelection(
+  static AnalysisOptionChange prepareScriptAnalyzerSelection(
       GhidraSession context,
       AutoAnalysisManager manager,
       Program program,
       AnalyzerSelection selection) {
+    Objects.requireNonNull(selection, "selection");
     if (!selection.hasSelection()) {
       return null;
     }
+    return prepareScriptAnalyzerSelection(
+        context.script().getCurrentAnalysisOptionsAndValues(program),
+        analyzer -> manager.getAnalyzer(analyzer) != null,
+        selection);
+  }
 
-    Map<String, String> current = context.script().getCurrentAnalysisOptionsAndValues(program);
+  static AnalysisOptionChange prepareScriptAnalyzerSelection(
+      Map<String, String> currentOptions,
+      Predicate<String> analyzerExists,
+      AnalyzerSelection selection) {
+    Objects.requireNonNull(selection, "selection");
+    if (!selection.hasSelection()) {
+      return null;
+    }
+    Objects.requireNonNull(currentOptions, "currentOptions");
+    Objects.requireNonNull(analyzerExists, "analyzerExists");
+
     Set<String> selected = new LinkedHashSet<>(selection.analyzers());
     for (String analyzer : selected) {
-      if (manager.getAnalyzer(analyzer) == null) {
+      if (!analyzerExists.test(analyzer)) {
         throw new IllegalArgumentException("unknown analyzer: " + analyzer);
       }
     }
 
     Map<String, String> previous = new LinkedHashMap<>();
     Map<String, String> updates = new LinkedHashMap<>();
-    for (Map.Entry<String, String> entry : current.entrySet()) {
+    for (Map.Entry<String, String> entry : currentOptions.entrySet()) {
       String value = entry.getValue();
-      if (manager.getAnalyzer(entry.getKey()) == null || !isBooleanOption(value)) {
+      if (!analyzerExists.test(entry.getKey()) || !isBooleanOption(value)) {
         continue;
       }
       previous.put(entry.getKey(), value);
@@ -223,13 +276,81 @@ final class AnalysisTask {
     }
   }
 
-  private void runAndWaitForAnalysis(AutoAnalysisManager manager) {
-    PluginTool tool = manager.getAnalysisTool();
+  private void runAnalysis(AutoAnalysisManager manager, Program program) {
+    runAnalysis(
+        manager.getAnalysisTool(),
+        program,
+        activeMonitor -> {
+          manager.reAnalyzeAll(null);
+          manager.startAnalysis(activeMonitor, true);
+        });
+  }
+
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
+  void runAnalysis(PluginTool tool, Program program, Consumer<TaskMonitor> execution) {
+    Objects.requireNonNull(execution, "execution");
     if (tool == null || tool.threadIsBackgroundTaskThread()) {
-      manager.startAnalysis(monitor, true);
+      execution.accept(monitor);
       return;
     }
-    manager.waitForAnalysis(null, monitor);
+    CountDownLatch completed = new CountDownLatch(1);
+    AtomicBoolean started = new AtomicBoolean();
+    AtomicReference<RuntimeException> commandFailure = new AtomicReference<>();
+    BackgroundCommand<Program> command =
+        new BackgroundCommand<>("Auto Analysis", true, true, false) {
+          @Override
+          public boolean applyTo(Program targetProgram, TaskMonitor toolMonitor) {
+            boolean finishedNormally = false;
+            started.set(true);
+            try (AnalysisTaskMonitor.BridgedMonitor bridged = monitor.bridge(toolMonitor)) {
+              if (!bridged.isCancelled()) {
+                execution.accept(bridged);
+              }
+              finishedNormally = true;
+              return true;
+            } catch (RuntimeException failure) {
+              commandFailure.set(failure);
+              finishedNormally = true;
+              return true;
+            } finally {
+              if (!finishedNormally) {
+                completed.countDown();
+              }
+            }
+          }
+
+          @Override
+          public void taskCompleted() {
+            if (!started.get()) {
+              monitor.cancel();
+            }
+            completed.countDown();
+          }
+
+          @Override
+          public void dispose() {
+            if (!started.get()) {
+              monitor.cancel();
+            }
+            completed.countDown();
+          }
+        };
+    tool.executeBackgroundCommand(command, program);
+    try {
+      completed.await();
+    } catch (InterruptedException interrupted) {
+      monitor.cancel();
+      Thread.currentThread().interrupt();
+      return;
+    }
+    RuntimeException failure = commandFailure.get();
+    if (failure != null) {
+      throw failure;
+    }
+  }
+
+  private static String normalizeMessage(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private static boolean isBooleanOption(String value) {
