@@ -1,5 +1,6 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.addressScan;
 import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.byteEncoding;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
@@ -107,6 +108,28 @@ final class MemoryMethods implements ApiMethodProvider {
                         integer(request, ApiVocabulary.LENGTH, 256),
                         byteEncoding(
                             optionalText(request, ApiVocabulary.ENCODING, ApiVocabulary.HEX)))));
+    Map<String, Object> memoryFindFilter =
+        WireSchema.object(
+            ApiSchemaCatalog.props("pattern", WireSchema.nonBlankString()), "pattern");
+    registry.scanList(
+        "memory.find",
+        "Find byte patterns with optional ?? wildcards in initialized memory."
+            + " Set a range or time limit if necessary. Use next_cursor to get the next page.",
+        ApiSchemaCatalog.requiredRangeScanListInput(memoryFindFilter),
+        Set.of(ApiVocabulary.ADDRESS, ApiVocabulary.LENGTH, ApiVocabulary.BYTES),
+        List.of(ApiVocabulary.ADDRESS),
+        (request, page) -> {
+          Map<String, Object> filter = filter(request);
+          return registry
+              .services()
+              .memoryService()
+              .findMemory(
+                  new MemoryService.MemoryFindQuery(
+                      addressScan(request, null, null),
+                      text(filter, "pattern"),
+                      page.limit(),
+                      page.cursor()));
+        });
     Map<String, Object> byteSequence =
         WireSchema.object(
             ApiSchemaCatalog.props(

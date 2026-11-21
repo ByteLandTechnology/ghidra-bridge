@@ -167,6 +167,24 @@ final class ApiSchemaCatalog {
         FILTER);
   }
 
+  static Map<String, Object> requiredRangeScanListInput(Map<String, Object> filter) {
+    return input(
+        props(
+            FILTER,
+            filter,
+            "range",
+            ADDRESS_RANGE_SCHEMA,
+            "timeout_ms",
+            scanTimeoutSchema(),
+            LIMIT,
+            ApiRegistry.limitSchema(),
+            CURSOR,
+            ApiRegistry.cursorSchema(),
+            FIELDS,
+            ApiRegistry.fieldsSchema()),
+        FILTER);
+  }
+
   static Map<String, Object> selectorInput(Map<String, Object> selector) {
     return input(
         props(ApiVocabulary.SELECTOR, selector, FIELDS, ApiRegistry.fieldsSchema()),
@@ -486,6 +504,7 @@ final class ApiSchemaCatalog {
             "primary",
             "completed",
             "comments_complete",
+            "defined",
             "analyzed")
         .contains(field)) {
       return WireSchema.bool();

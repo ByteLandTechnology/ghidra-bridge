@@ -4,16 +4,19 @@ import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.ByteSequence;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.memory.MemoryBlockResource;
+import app.byteland.ghidra.service.memory.MemoryMatchResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 
 public final class MemoryServiceImpl implements MemoryService {
   private final MemoryBlockQueries memoryBlockQueries;
+  private final MemorySearchQueries memorySearchQueries;
   private final MemoryRangeQueries memoryRangeQueries;
   private final MemoryMutations memoryMutations;
 
   public MemoryServiceImpl(GhidraSession context) {
     this.memoryBlockQueries = new MemoryBlockQueries(context);
+    this.memorySearchQueries = new MemorySearchQueries(context);
     this.memoryRangeQueries = new MemoryRangeQueries(context, MemoryService.MAX_RANGE_LENGTH);
     this.memoryMutations = new MemoryMutations(context);
   }
@@ -22,6 +25,11 @@ public final class MemoryServiceImpl implements MemoryService {
   public Page<MemoryBlockResource> listMemoryBlocks(MemoryBlockQuery query) {
     return memoryBlockQueries.listMemoryBlocks(
         query.limit(), query.cursor(), query.execute(), query.write(), query.read(), query.name());
+  }
+
+  @Override
+  public Page<MemoryMatchResource> findMemory(MemoryFindQuery query) {
+    return memorySearchQueries.findMemory(query);
   }
 
   @Override
