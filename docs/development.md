@@ -86,7 +86,9 @@ Before you submit a change, run the verification suite:
 
 ```bash
 ./gradlew --no-daemon clean verify
+./gradlew --no-daemon :wire:test :contracts:test
 bash .github/scripts/verify-repository-hygiene.sh
+python3 tests/release_archive_reproducibility.py
 ```
 
 The verification tasks check:
@@ -112,18 +114,27 @@ release-please reads Conventional Commit messages to select the version:
 - Other types, such as `docs`, `ci`, and `test`: Do not start a release on their own.
 
 The `publish` job gets the release commit and verifies the build.
-Then it uploads two assets:
+It signs a SLSA provenance attestation before it uploads two assets:
 
-- `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
-  `LICENSE`, and `README.md`.
+- `ghidra-bridge-<version>.zip`: Deterministic archive with `Bridge.java`, `GhidraMcp.java`,
+  `ghidra-bridge.jar`, `LICENSE`, and `README.md`.
 - `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
 
+Verify a downloaded release archive with `sha256sum` and [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify):
+
+```bash
+sha256sum -c ghidra-bridge-<version>.zip.sha256
+gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghidra-bridge
+```
+
 Gradle reads the version from `version.txt` unless you set the `releaseVersion` property.
-The package script checks that the release version matches `version.txt` and the JAR manifest.
-To build and verify the release archive locally, run:
+The package script trims whitespace from `version.txt` and checks that the release version matches the JAR manifest.
+It sets fixed file modes, UTC `1980-02-01 00:00:00` timestamps, and sorted entries for reproducible zip digests.
+To build the release archive and verify archive reproducibility locally, run:
 
 ```bash
 bash .github/scripts/package-release.sh
+python3 tests/release_archive_reproducibility.py
 ```
 
 In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests".
