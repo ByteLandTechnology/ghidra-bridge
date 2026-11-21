@@ -1,15 +1,34 @@
 package app.byteland.ghidra.agent;
 
 import app.byteland.ghidra.network.NetworkBinding;
+import java.net.InetAddress;
 import java.util.Locale;
 
 final class WebSocketHandshakeValidator {
   private static final String BAD_REQUEST_REASON = "Bad Request";
+  private static final String FORBIDDEN_REASON = "Forbidden";
   private static final String REQUIRED_VERSION = "13";
 
   private WebSocketHandshakeValidator() {}
 
   static void validate(AgentConfig config, WebSocketHandshake.HandshakeRequest request) {
+    validate(config, config.port(), null, request);
+  }
+
+  static void validate(
+      AgentConfig config,
+      int boundPort,
+      InetAddress localAddress,
+      WebSocketHandshake.HandshakeRequest request) {
+    if (!NetworkBinding.isAllowedHost(
+        request.headerValues("host"), config.host(), boundPort, localAddress)) {
+      throw new WebSocketHandshake.HttpHandshakeException(
+          403, FORBIDDEN_REASON, "Forbidden Host header");
+    }
+    if (!NetworkBinding.isAllowedOrigin(request.headerValues("origin"), config.host())) {
+      throw new WebSocketHandshake.HttpHandshakeException(
+          403, FORBIDDEN_REASON, "Forbidden Origin header");
+    }
     if (!"GET".equals(request.method())) {
       throw new WebSocketHandshake.HttpHandshakeException(
           405, "Method Not Allowed", "WebSocket upgrade requires GET");

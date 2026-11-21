@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -17,14 +19,27 @@ public final class AgentWebSocketServer implements AutoCloseable {
 
   private final AgentConfig config;
   private final Handler handler;
+  private final Duration keepaliveInterval;
+  private final Duration pongTimeout;
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicReference<Object> activeConnection = new AtomicReference<>();
   private final AtomicReference<Socket> pendingSocket = new AtomicReference<>();
   private ServerSocket serverSocket;
 
   public AgentWebSocketServer(AgentConfig config, Handler handler) {
-    this.config = config;
-    this.handler = handler;
+    this(
+        config,
+        handler,
+        AgentWebSocketConnectionRunner.DEFAULT_KEEPALIVE_INTERVAL,
+        AgentWebSocketConnectionRunner.DEFAULT_PONG_TIMEOUT);
+  }
+
+  AgentWebSocketServer(
+      AgentConfig config, Handler handler, Duration keepaliveInterval, Duration pongTimeout) {
+    this.config = Objects.requireNonNull(config, "config");
+    this.handler = Objects.requireNonNull(handler, "handler");
+    this.keepaliveInterval = Objects.requireNonNull(keepaliveInterval, "keepaliveInterval");
+    this.pongTimeout = Objects.requireNonNull(pongTimeout, "pongTimeout");
   }
 
   @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
@@ -37,7 +52,13 @@ public final class AgentWebSocketServer implements AutoCloseable {
       socket.bind(new InetSocketAddress(config.host(), config.port()));
       AgentWebSocketConnectionRunner connectionRunner =
           new AgentWebSocketConnectionRunner(
-              config, handler, running, activeConnection, pendingSocket);
+              config,
+              handler,
+              running,
+              activeConnection,
+              pendingSocket,
+              keepaliveInterval,
+              pongTimeout);
       AgentWebSocketAcceptor acceptor =
           new AgentWebSocketAcceptor(
               socket, handler, running, activeConnection, pendingSocket, connectionRunner);

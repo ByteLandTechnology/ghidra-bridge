@@ -63,6 +63,7 @@ final class WebSocketHandshake {
     }
 
     Map<String, String> headers = new LinkedHashMap<>();
+    Map<String, List<String>> headerValues = new LinkedHashMap<>();
     for (int i = 1; i < lines.size(); i++) {
       String line = lines.get(i);
       if (line.isEmpty()) {
@@ -72,15 +73,18 @@ final class WebSocketHandshake {
       if (idx <= 0) {
         continue;
       }
-      headers.put(
-          line.substring(0, idx).trim().toLowerCase(Locale.ROOT), line.substring(idx + 1).trim());
+      String name = line.substring(0, idx).trim().toLowerCase(Locale.ROOT);
+      String value = line.substring(idx + 1).trim();
+      headers.putIfAbsent(name, value);
+      headerValues.computeIfAbsent(name, ignored -> new ArrayList<>()).add(value);
     }
 
     String target = requestLine.get(1);
     int queryIndex = target.indexOf('?');
     String path = queryIndex >= 0 ? target.substring(0, queryIndex) : target;
     String query = queryIndex >= 0 ? target.substring(queryIndex + 1) : "";
-    return new HandshakeRequest(requestLine.getFirst(), path, parseQuery(query), headers);
+    return new HandshakeRequest(
+        requestLine.getFirst(), path, parseQuery(query), headers, headerValues);
   }
 
   static void writeHandshakeResponse(OutputStream output, String acceptKey) throws IOException {
@@ -157,15 +161,50 @@ final class WebSocketHandshake {
   }
 
   record HandshakeRequest(
-      String method, String path, Map<String, String> query, Map<String, String> headers) {
+      String method,
+      String path,
+      Map<String, String> query,
+      Map<String, String> headers,
+      Map<String, List<String>> rawHeaderValues) {
+    HandshakeRequest(
+        String method, String path, Map<String, String> query, Map<String, String> headers) {
+      this(method, path, query, headers, singleValueCopy(headers));
+    }
+
     HandshakeRequest {
       query = immutableOrderedCopy(query, "query");
       headers = immutableOrderedCopy(headers, "headers");
+      rawHeaderValues = immutableMultiCopy(rawHeaderValues, "rawHeaderValues");
+    }
+
+    List<String> headerValues(String name) {
+      if (name == null) {
+        return List.of();
+      }
+      return rawHeaderValues.getOrDefault(name.toLowerCase(Locale.ROOT), List.of());
     }
 
     private static Map<String, String> immutableOrderedCopy(
         Map<String, String> source, String name) {
       return Collections.unmodifiableMap(new LinkedHashMap<>(Objects.requireNonNull(source, name)));
+    }
+
+    private static Map<String, List<String>> singleValueCopy(Map<String, String> headers) {
+      Map<String, List<String>> copy = new LinkedHashMap<>();
+      for (Map.Entry<String, String> entry : Objects.requireNonNull(headers, "headers").entrySet()) {
+        copy.put(entry.getKey().toLowerCase(Locale.ROOT), List.of(entry.getValue()));
+      }
+      return copy;
+    }
+
+    private static Map<String, List<String>> immutableMultiCopy(
+        Map<String, List<String>> source, String name) {
+      Map<String, List<String>> copy = new LinkedHashMap<>();
+      for (Map.Entry<String, List<String>> entry :
+          Objects.requireNonNull(source, name).entrySet()) {
+        copy.put(entry.getKey(), List.copyOf(entry.getValue()));
+      }
+      return Collections.unmodifiableMap(copy);
     }
 
     String acceptKey() {

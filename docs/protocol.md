@@ -98,31 +98,41 @@ The server replies with an error envelope for a bad message and keeps the socket
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
 - `400`: Absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
 - `401`: Absent or invalid bearer token.
+- `403`: Absent, duplicate, or invalid `Host` header, or an unpermitted `Origin` header.
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
 
-### WebSocket Close Codes
+### Message Fragments, Keepalive, and Close Codes
+
+The server reassembles multi-frame RFC 6455 UTF-8 text messages up to 16 MiB and answers interleaved `PING` and `CLOSE` frames.
+When a socket read times out, the server sends a `PING` frame.
+If no `PONG` frame arrives before the timeout, the server closes the socket and frees the client slot.
 
 The server closes the socket with these status codes:
 - `1000`: Normal closure.
-- `1001`: The server stops.
-- `1003`: The client sent a fragmented text message or an unsupported frame.
+- `1001`: The server stops, or a keepalive ping gets no `PONG` before the timeout.
+- `1002`: Protocol error, such as unmasked client frames, reserved bits, fragmented control frames, or unexpected continuation frames.
+- `1003`: Unsupported frame type, such as binary data.
+- `1007`: Invalid UTF-8 text or close reason.
+- `1009`: Message payload exceeds the 16 MiB limit.
 
 ## Model Context Protocol (MCP)
 
-The bridge implements MCP Streamable HTTP protocol version `2026-07-28`.
-The server does not use MCP sessions and does not send server-sent events.
+The bridge implements MCP Streamable HTTP protocol version `2026-07-28` and legacy SSE sessions on virtual threads.
 
 ### HTTP Request Rules
 
 The MCP HTTP server handles requests:
-- **POST**: Dispatches JSON-RPC 2.0 requests.
+- **POST**: Dispatches JSON-RPC 2.0 requests, or delivers messages to `?sessionId=<id>` for an active legacy SSE session.
+- **Body Limit**: A `POST` body larger than 4 MiB returns status `413`.
+- **GET**: Opens a legacy SSE stream when `Accept` includes `text/event-stream` with a non-zero `q` weight. Modern MCP headers (`MCP-Protocol-Version`, `Mcp-Session-Id`, `Last-Event-Id`) must be absent. Other `GET` requests return status `405` with `Allow: POST, GET, HEAD, OPTIONS`. When all 16 concurrent SSE slots are full, `GET` returns status `503`.
+- **HEAD**: Returns status `200` with no body.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
-- **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
-- **Other methods**: The server returns status `405`.
-- **Origin**: A request with an `Origin` header that is not a loopback host or the configured `host` returns status `403`.
-- **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
+- **Other methods**: The server returns status `405` with `Allow: POST, GET, HEAD, OPTIONS`.
+- **Host**: Every request must send one `Host` header for the bound listener address and port. Other values return status `403`.
+- **Origin**: An `Origin` header must use `http` or `https` on a loopback host or the configured `host`. Other values return status `403`.
+- **Content Type**: A `POST` request must send media type `application/json` (case-insensitive, RFC 9110 parameters permitted). Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.
 
 ### Initialization Compatibility

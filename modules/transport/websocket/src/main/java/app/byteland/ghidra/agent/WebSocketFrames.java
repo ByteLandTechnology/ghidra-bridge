@@ -4,19 +4,34 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.Objects;
 
 final class WebSocketFrames {
+  static final int CONTINUATION_OPCODE = 0x0;
   static final int TEXT_OPCODE = 0x1;
+  static final int BINARY_OPCODE = 0x2;
   static final int CLOSE_OPCODE = 0x8;
   static final int PING_OPCODE = 0x9;
   static final int PONG_OPCODE = 0xA;
 
+  static final int NORMAL_CLOSE_STATUS = 1000;
+  static final int GOING_AWAY_CLOSE_STATUS = 1001;
+  static final int PROTOCOL_ERROR_CLOSE_STATUS = 1002;
+  static final int UNSUPPORTED_DATA_CLOSE_STATUS = 1003;
+  static final int INVALID_PAYLOAD_CLOSE_STATUS = 1007;
+  static final int MESSAGE_TOO_BIG_CLOSE_STATUS = 1009;
+  static final int MAX_MESSAGE_BYTES = 16 * 1024 * 1024; // 16 MiB
+
   private static final int FINAL_FRAGMENT_FLAG = 0x80;
+  private static final int RESERVED_BITS_MASK = 0x70;
+  private static final int CONTROL_FRAME_FLAG = 0x08;
   private static final int OPCODE_MASK = 0x0F;
   private static final int MASK_FLAG = 0x80;
   private static final int PAYLOAD_LENGTH_MASK = 0x7F;
@@ -25,37 +40,63 @@ final class WebSocketFrames {
   private static final int LONG_LENGTH_MARKER = 127;
   private static final int MAX_UNSIGNED_SHORT = 0xFFFF;
   private static final int MASK_KEY_LENGTH = 4;
-  private static final int NORMAL_CLOSE_STATUS = 1000;
-  private static final long MAX_FRAME_PAYLOAD_BYTES = 16L * 1024 * 1024; // 16 MiB
+  private static final long MAX_FRAME_PAYLOAD_BYTES = MAX_MESSAGE_BYTES;
 
   private WebSocketFrames() {}
 
   static Frame readFrame(InputStream input) throws IOException {
     int b1 = input.read();
-    int b2 = input.read();
-    if (b1 < 0 || b2 < 0) {
+    if (b1 < 0) {
       throw new EOFException("EOF while reading frame");
+    }
+    int b2 = readByteAfterStart(input);
+    if ((b1 & RESERVED_BITS_MASK) != 0) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Reserved WebSocket frame bits set");
     }
     boolean fin = (b1 & FINAL_FRAGMENT_FLAG) != 0;
     int opcode = b1 & OPCODE_MASK;
+    if ((opcode >= 0x3 && opcode <= 0x7) || opcode >= 0xB) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Unsupported WebSocket opcode");
+    }
+    boolean controlFrame = (opcode & CONTROL_FRAME_FLAG) != 0;
+    if (controlFrame && !fin) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Control frames must not be fragmented");
+    }
     boolean masked = (b2 & MASK_FLAG) != 0;
+    if (!masked) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Client frames must be masked");
+    }
     long payloadLength = b2 & PAYLOAD_LENGTH_MASK;
+    if (controlFrame && payloadLength > MAX_INLINE_PAYLOAD_LENGTH) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Control frame payload exceeds 125 bytes");
+    }
     if (payloadLength == UNSIGNED_SHORT_LENGTH_MARKER) {
       payloadLength =
-          Short.toUnsignedInt(ByteBuffer.wrap(readFully(input, Short.BYTES)).getShort());
+          Short.toUnsignedInt(ByteBuffer.wrap(readFullyAfterStart(input, Short.BYTES)).getShort());
     } else if (payloadLength == LONG_LENGTH_MARKER) {
-      payloadLength = ByteBuffer.wrap(readFully(input, Long.BYTES)).getLong();
+      payloadLength = ByteBuffer.wrap(readFullyAfterStart(input, Long.BYTES)).getLong();
     }
-    if (payloadLength < 0 || payloadLength > MAX_FRAME_PAYLOAD_BYTES) {
-      throw new IOException("WebSocket frame payload exceeds limit: " + payloadLength);
+    if (payloadLength < 0) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Invalid WebSocket frame length");
     }
-    if (!masked) {
-      throw new IOException("Client frames must be masked");
+    if (payloadLength > MAX_FRAME_PAYLOAD_BYTES) {
+      throw new WebSocketProtocolException(
+          MESSAGE_TOO_BIG_CLOSE_STATUS, "Frame payload exceeds 16 MiB limit");
     }
-    byte[] mask = readFully(input, MASK_KEY_LENGTH);
-    byte[] payload = readFully(input, (int) payloadLength);
+    byte[] mask = readFullyAfterStart(input, MASK_KEY_LENGTH);
+    byte[] payload = readFullyAfterStart(input, (int) payloadLength);
     for (int i = 0; i < payload.length; i++) {
       payload[i] = (byte) (payload[i] ^ mask[i % MASK_KEY_LENGTH]);
+    }
+    if (opcode == CLOSE_OPCODE && payload.length == 1) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Invalid close frame payload");
     }
     return Frame.fromOwnedPayload(fin, opcode, payload);
   }
@@ -79,6 +120,26 @@ final class WebSocketFrames {
     output.flush();
   }
 
+  private static int readByteAfterStart(InputStream input) throws IOException {
+    try {
+      int value = input.read();
+      if (value < 0) {
+        throw new EOFException("EOF while reading frame");
+      }
+      return value;
+    } catch (SocketTimeoutException timeout) {
+      throw new IOException("Timed out reading partial WebSocket frame", timeout);
+    }
+  }
+
+  private static byte[] readFullyAfterStart(InputStream input, int length) throws IOException {
+    try {
+      return readFully(input, length);
+    } catch (SocketTimeoutException timeout) {
+      throw new IOException("Timed out reading partial WebSocket frame", timeout);
+    }
+  }
+
   static byte[] readFully(InputStream input, int length) throws IOException {
     byte[] data = new byte[length];
     int offset = 0;
@@ -90,6 +151,51 @@ final class WebSocketFrames {
       offset += read;
     }
     return data;
+  }
+
+  static String decodeUtf8(byte[] payload) throws WebSocketProtocolException {
+    return decodeUtf8(payload, 0, payload.length);
+  }
+
+  static String decodeUtf8(byte[] payload, int offset, int length)
+      throws WebSocketProtocolException {
+    try {
+      return StandardCharsets.UTF_8
+          .newDecoder()
+          .onMalformedInput(CodingErrorAction.REPORT)
+          .onUnmappableCharacter(CodingErrorAction.REPORT)
+          .decode(ByteBuffer.wrap(payload, offset, length))
+          .toString();
+    } catch (CharacterCodingException invalidUtf8) {
+      throw new WebSocketProtocolException(
+          INVALID_PAYLOAD_CLOSE_STATUS, "Invalid UTF-8 text", invalidUtf8);
+    }
+  }
+
+  static CloseInfo parseClosePayload(byte[] payload) throws WebSocketProtocolException {
+    if (payload.length == 0) {
+      return new CloseInfo(NORMAL_CLOSE_STATUS, "closed");
+    }
+    if (payload.length == 1) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Invalid close frame payload");
+    }
+    int code = Short.toUnsignedInt(ByteBuffer.wrap(payload, 0, Short.BYTES).getShort());
+    if (!isValidWireCloseCode(code)) {
+      throw new WebSocketProtocolException(
+          PROTOCOL_ERROR_CLOSE_STATUS, "Invalid close status code");
+    }
+    String reason =
+        payload.length == Short.BYTES
+            ? "closed"
+            : decodeUtf8(payload, Short.BYTES, payload.length - Short.BYTES);
+    return new CloseInfo(code, reason);
+  }
+
+  private static boolean isValidWireCloseCode(int code) {
+    return (code >= 1000 && code <= 1003)
+        || (code >= 1007 && code <= 1014)
+        || (code >= 3000 && code <= 4999);
   }
 
   static int closeStatus(byte[] payload) {
@@ -104,6 +210,27 @@ final class WebSocketFrames {
       return "closed";
     }
     return new String(payload, Short.BYTES, payload.length - Short.BYTES, StandardCharsets.UTF_8);
+  }
+
+  record CloseInfo(int code, String reason) {}
+
+  static final class WebSocketProtocolException extends IOException {
+    private static final long serialVersionUID = 1L;
+    private final int statusCode;
+
+    WebSocketProtocolException(int closeCode, String reason) {
+      super(reason);
+      this.statusCode = closeCode;
+    }
+
+    WebSocketProtocolException(int closeCode, String reason, Throwable cause) {
+      super(reason, cause);
+      this.statusCode = closeCode;
+    }
+
+    int closeCode() {
+      return statusCode;
+    }
   }
 
   static final class Frame {
