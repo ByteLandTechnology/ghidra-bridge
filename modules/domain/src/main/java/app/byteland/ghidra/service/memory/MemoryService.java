@@ -91,7 +91,7 @@ public interface MemoryService {
   MemoryResource readMemoryRange(String startRaw, int length, ByteSequence.Encoding encoding);
 
   /**
-   * Searches initialized memory blocks for matching byte sequences.
+   * Searches initialized memory blocks for byte sequences that match the query.
    */
   default Page<MemorySearchMatchResource> searchMemory(MemorySearchQuery query) {
     throw new UnsupportedOperationException("searchMemory is not implemented");

@@ -61,7 +61,7 @@ public interface FunctionService {
   FunctionResource getFunction(String rawAddress, Set<String> includes);
 
   /**
-   * Returns function details by entry, containing address, or symbol selector.
+   * Returns function details by entry, body address, or symbol selector.
    *
    * @param selector function target selector
    * @param includes optional field projection set

@@ -1,7 +1,7 @@
 package app.byteland.ghidra.service.function;
 
 /**
- * Selects a function by exact entry address, containing address, or symbol name.
+ * Selects a function by exact entry address, body address, or symbol name.
  */
 public sealed interface FunctionSelector
     permits FunctionSelector.Entry, FunctionSelector.Containing, FunctionSelector.Symbol {

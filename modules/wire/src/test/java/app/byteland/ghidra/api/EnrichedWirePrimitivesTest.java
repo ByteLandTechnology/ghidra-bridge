@@ -94,7 +94,7 @@ class EnrichedWirePrimitivesTest {
     assertEquals("ram:00100020", ((Map<?, ?>) items.getFirst()).get("address"));
     assertEquals(".text", ((Map<?, ?>) items.getFirst()).get("block_name"));
 
-    // Rejects mutually exclusive search modes or missing search mode.
+    // Rejects mutually exclusive search modes or an absent search mode.
     assertThrows(
         ApiException.class,
         () ->
@@ -365,7 +365,7 @@ class EnrichedWirePrimitivesTest {
         Map.of("filter", Map.of("query", "Packet", "include_details", true)));
     assertEquals(Boolean.TRUE, includeDetails.get());
 
-    // Requesting fields in projection also enables composite details automatically.
+    // A fields projection also enables composite details automatically.
     registry.dispatch(
         "data_type.list",
         Map.of(

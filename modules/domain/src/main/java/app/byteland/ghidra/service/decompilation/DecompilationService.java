@@ -23,7 +23,7 @@ public interface DecompilationService extends AutoCloseable {
       boolean includeComments);
 
   /**
-   * Decompiles the function identified by an entry, containing address, or symbol selector.
+   * Decompiles the function identified by an entry, body address, or symbol selector.
    *
    * @param selector function target selector
    * @param format output representation format
