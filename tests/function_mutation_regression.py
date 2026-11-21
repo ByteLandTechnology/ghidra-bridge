@@ -39,6 +39,9 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global caller_entry
+caller_entry: call label_only
+ ret
 """
 
 
@@ -167,6 +170,71 @@ def run_test(headless, root):
                 "resource": {"entry": symbols["label_only"]}, "disassemble": True,
             })["result"]
             assert label["name"] == "label_only"
+
+            decomp_initial = tool(18, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a" in decomp_initial["c"]
+            decomp_repeat = tool(19, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert decomp_repeat["c"] == decomp_initial["c"]
+
+            sym_items = tool(21, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "func_a", "address": symbols["func_a"]}},
+            })["result"]["items"]
+            assert len(sym_items) == 1
+            renamed_sym = tool(22, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": sym_items[0]["id"]},
+                    "patch": {"name": "func_a_renamed"},
+                },
+            })["result"]
+            assert renamed_sym["name"] == "func_a_renamed"
+            decomp_after_rename = tool(23, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a_renamed" in decomp_after_rename["c"]
+
+            caller = function(24, "create", {
+                "resource": {"entry": symbols["caller_entry"], "name": "caller_entry"},
+                "disassemble": True,
+            })["result"]
+            assert caller["name"] == "caller_entry"
+            caller_before = tool(25, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_only(" in caller_before["c"]
+            caller_repeat = tool(26, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert caller_repeat["c"] == caller_before["c"]
+
+            callee_syms = tool(27, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "label_only", "address": symbols["label_only"]}},
+            })["result"]["items"]
+            assert len(callee_syms) == 1
+            tool(28, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": callee_syms[0]["id"]},
+                    "patch": {"name": "label_renamed"},
+                },
+            })
+            caller_after = tool(29, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_renamed(" in caller_after["c"]
+            assert "label_only(" not in caller_after["c"]
             print("Function mutation regression checks passed")
         finally:
             if ready:

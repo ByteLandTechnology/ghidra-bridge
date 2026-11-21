@@ -9,6 +9,8 @@ import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.Program;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -22,10 +24,18 @@ public final class DecompilationServiceImpl implements DecompilationService {
   private final LeasePool<DecompInterface> decompilerPool;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
+  private final Map<DecompInterface, CacheState> cacheStates =
+      Collections.synchronizedMap(new WeakHashMap<>());
 
   public DecompilationServiceImpl(GhidraSession context) {
+    this(
+        Objects.requireNonNull(context, "context"),
+        DecompilerPoolFactory.create(context.currentProgram()));
+  }
+
+  DecompilationServiceImpl(GhidraSession context, LeasePool<DecompInterface> decompilerPool) {
     this.context = Objects.requireNonNull(context, "context");
-    this.decompilerPool = DecompilerPoolFactory.create(context.currentProgram());
+    this.decompilerPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
   }
 
   @Override
@@ -59,8 +69,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
       DecompInterface decompiler = lease.value();
       applyCommentMode(decompiler, includeComments);
-      // The native process keeps program data. Clear it to show the current names and comments.
-      decompiler.flushCache();
+      flushCacheIfNeeded(decompiler, programOf(function));
       DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
       boolean completed = results.decompileCompleted();
       List<String> warnings = new ArrayList<>();
@@ -124,6 +133,45 @@ public final class DecompilationServiceImpl implements DecompilationService {
       throw new IllegalStateException("unable to set decompiler display options");
     }
     commentModes.put(decompiler, includeComments);
+  }
+
+  private Program programOf(Function function) {
+    Program program = function.getProgram();
+    return program != null ? program : context.currentProgram();
+  }
+
+  /** Flushes cached native symbols and types only when the program state changed. */
+  private void flushCacheIfNeeded(DecompInterface decompiler, Program program) {
+    Objects.requireNonNull(program, "program");
+    long modificationNumber = program.getModificationNumber();
+    CacheState state = cacheStates.get(decompiler);
+    if (state == null) {
+      cacheStates.put(decompiler, CacheState.clean(program, modificationNumber));
+      return;
+    }
+    if (state.isCleanFor(program, modificationNumber)) {
+      return;
+    }
+    cacheStates.put(decompiler, state.markDirty());
+    decompiler.flushCache();
+    cacheStates.put(decompiler, CacheState.clean(program, modificationNumber));
+  }
+
+  private record CacheState(
+      WeakReference<Program> program, long modificationNumber, boolean dirty) {
+    static CacheState clean(Program program, long modificationNumber) {
+      return new CacheState(new WeakReference<>(program), modificationNumber, false);
+    }
+
+    CacheState markDirty() {
+      return new CacheState(program, modificationNumber, true);
+    }
+
+    boolean isCleanFor(Program candidate, long candidateModificationNumber) {
+      return !dirty
+          && program.refersTo(candidate)
+          && modificationNumber == candidateModificationNumber;
+    }
   }
 
   static DecompilationResource.Token.Kind tokenKind(ClangToken token) {
