@@ -31,7 +31,9 @@ final class FunctionDescriptions {
                 body.getNumAddresses()),
         String.valueOf(function.getSignature()),
         GhidraDataTypeReferences.toReference(function.getReturnType()),
-        describeStorage(function.getReturn().getVariableStorage()),
+        function.getReturn() == null
+            ? describeStorage(VariableStorage.UNASSIGNED_STORAGE)
+            : describeStorage(function.getReturn().getVariableStorage()),
         function.getParameterCount(),
         String.valueOf(function.getCallingConventionName()),
         includes.contains("parameters") ? describeParameters(function) : null,

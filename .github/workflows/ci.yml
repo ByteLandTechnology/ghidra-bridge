@@ -46,6 +46,7 @@ jobs:
         run: |
           ./gradlew --no-daemon :wire:test :contracts:test
           python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+          python3 tests/program_entry_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
   release:
     # Update the release PR or create a release after main passes verification.

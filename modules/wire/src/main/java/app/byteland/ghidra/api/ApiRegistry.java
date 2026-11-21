@@ -665,11 +665,30 @@ public final class ApiRegistry {
           && rightValue instanceof Number rightNumber) {
         compared = Long.compare(leftNumber.longValue(), rightNumber.longValue());
       } else {
-        compared = String.valueOf(leftValue).compareTo(String.valueOf(rightValue));
+        compared = compareFieldStrings(field, String.valueOf(leftValue), String.valueOf(rightValue));
       }
       if (compared != 0) return compared;
     }
     return 0;
+  }
+
+  private static int compareFieldStrings(String field, String left, String right) {
+    if (Set.of(ApiVocabulary.ADDRESS, ApiVocabulary.ENTRY, ApiVocabulary.START).contains(field)) {
+      int leftColon = left.indexOf(':');
+      int rightColon = right.indexOf(':');
+      if (leftColon > 0 && rightColon > 0) {
+        int spaceOrder = left.substring(0, leftColon).compareTo(right.substring(0, rightColon));
+        if (spaceOrder != 0) return spaceOrder;
+        try {
+          long leftOffset = Long.parseUnsignedLong(left.substring(leftColon + 1), 16);
+          long rightOffset = Long.parseUnsignedLong(right.substring(rightColon + 1), 16);
+          return Long.compareUnsigned(leftOffset, rightOffset);
+        } catch (NumberFormatException ignored) {
+          // Fall back to lexical order when an address token is not hexadecimal.
+        }
+      }
+    }
+    return left.compareTo(right);
   }
 
   @SuppressWarnings("PMD.CompareObjectsWithEquals")

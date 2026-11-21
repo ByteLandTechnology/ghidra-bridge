@@ -46,6 +46,7 @@ final class McpToolRegistry {
     return switch (prefix) {
       case "session" -> new String[] {"bridge", operation};
       case "program_language" -> new String[] {"program", "language." + operation};
+      case "import", "export", "entry_point" -> new String[] {"program", prefix + "." + operation};
       case "address_space" -> new String[] {"address", "space." + operation};
       case "memory_block" -> new String[] {"memory", "block." + operation};
       case "code_unit", "data_unit", "instruction", "flow_override" ->

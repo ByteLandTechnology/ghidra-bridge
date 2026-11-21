@@ -11,6 +11,9 @@
 | `program.save` | `mutation` | Save the active program to its project file. |
 | `program_language.get` | `read-only` | Get program language data from the active program. |
 | `address_space.list` | `read-only` | List address space data in the active program. |
+| `import.list` | `read-only` | List imported symbols and external functions in the active program. |
+| `export.list` | `read-only` | List exported entry points in the active program in address order. |
+| `entry_point.list` | `read-only` | List external entry points in the active program in address order. |
 | `address.resolve` | `read-only` | Resolve an address and report its memory block, the function that contains it, and its primary symbol. |
 | `memory_block.get` | `read-only` | Get memory block data from the active program. |
 | `memory_block.list` | `read-only` | List memory block data in the active program. |

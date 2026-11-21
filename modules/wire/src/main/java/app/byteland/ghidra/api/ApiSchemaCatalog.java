@@ -411,6 +411,30 @@ final class ApiSchemaCatalog {
         "symbol_count");
   }
 
+  static Set<String> importFields() {
+    return Set.of(
+        ADDRESS,
+        "library",
+        NAME,
+        "original_name",
+        "demangled_name",
+        ORDINAL,
+        "thunk_addresses",
+        SIGNATURE,
+        "is_function");
+  }
+
+  static Set<String> exportFields() {
+    return Set.of(
+        ADDRESS,
+        NAME,
+        "demangled_name",
+        NAMESPACE,
+        "is_function",
+        FUNCTION,
+        ORDINAL);
+  }
+
   static Map<String, Object> resourceSchema(Set<String> fields) {
     return resourceSchema(fields, List.of());
   }
@@ -477,6 +501,7 @@ final class ApiSchemaCatalog {
             "default",
             "valid",
             "in_memory",
+            "is_function",
             "is_inline",
             HAS_NO_RETURN,
             HAS_VAR_ARGS,
@@ -579,7 +604,7 @@ final class ApiSchemaCatalog {
     if (SIGNATURE.equals(field)) {
       return WireSchema.oneOf(WireSchema.string(), functionSignatureSchema());
     }
-    if (Set.of("operands", "tags", "warnings").contains(field)) {
+    if (Set.of("operands", "tags", "thunk_addresses", "warnings").contains(field)) {
       return WireSchema.array(WireSchema.string(), 0, Integer.MAX_VALUE);
     }
     if (REFERENCES.equals(field)) {

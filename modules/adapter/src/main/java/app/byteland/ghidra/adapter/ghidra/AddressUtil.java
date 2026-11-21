@@ -39,7 +39,7 @@ public final class AddressUtil {
       return null;
     }
     String space = address.getAddressSpace().getName();
-    return canonicalAddress(space, address.toString());
+    return canonicalAddress(space, address.toString(false));
   }
 
   public static String canonicalAddress(String addressSpace, String offsetHex) {
@@ -57,7 +57,7 @@ public final class AddressUtil {
     if (address == null) {
       return null;
     }
-    return "0x" + address.toString();
+    return "0x" + address.toString(false);
   }
 
   private static String normalizeOffset(String offset) {
@@ -72,6 +72,23 @@ public final class AddressUtil {
   }
 
   private static Address tryAddressWithDefaultSpace(AddressFactory addressFactory, String value) {
+    int idx = value.indexOf(':');
+    if (idx > 0) {
+      String spaceName = value.substring(0, idx);
+      AddressSpace namedSpace =
+          addressFactory == null ? null : addressFactory.getAddressSpace(spaceName);
+      if (namedSpace == null && AddressSpace.EXTERNAL_SPACE.getName().equalsIgnoreCase(spaceName)) {
+        namedSpace = AddressSpace.EXTERNAL_SPACE;
+      }
+      if (namedSpace == null) {
+        return null;
+      }
+      try {
+        return namedSpace.getAddress(normalizeOffset(value.substring(idx + 1)));
+      } catch (AddressFormatException ignored) {
+        return null;
+      }
+    }
     if (addressFactory == null) {
       return null;
     }
@@ -79,19 +96,8 @@ public final class AddressUtil {
     if (addressSpace == null) {
       return null;
     }
-    int idx = value.indexOf(':');
-    if (idx <= 0) {
-      try {
-        return addressSpace.getAddress(normalizeOffset(value));
-      } catch (AddressFormatException ignored) {
-        return null;
-      }
-    }
     try {
-      AddressSpace namedSpace = addressFactory.getAddressSpace(value.substring(0, idx));
-      return namedSpace == null
-          ? null
-          : namedSpace.getAddress(normalizeOffset(value.substring(idx + 1)));
+      return addressSpace.getAddress(normalizeOffset(value));
     } catch (AddressFormatException ignored) {
       return null;
     }
