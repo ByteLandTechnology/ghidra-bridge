@@ -51,8 +51,8 @@
                           - "output_schema"
                           - "effects"
                           "type": "object"
-                        "maxItems": !!int "56"
-                        "minItems": !!int "56"
+                        "maxItems": !!int "57"
+                        "minItems": !!int "57"
                         "type": "array"
                     "required":
                     - "interface_version"
@@ -4113,6 +4113,8 @@
                     "properties":
                       "analyzed":
                         "type": "boolean"
+                      "error":
+                        "type": "string"
                       "finished_at":
                         "type": "string"
                       "kind":
@@ -4188,6 +4190,85 @@
                     "properties":
                       "analyzed":
                         "type": "boolean"
+                      "error":
+                        "type": "string"
+                      "finished_at":
+                        "type": "string"
+                      "kind":
+                        "type": "string"
+                      "progress":
+                        "maximum": !!float "100.0"
+                        "minimum": !!float "0.0"
+                        "type": "number"
+                      "started_at":
+                        "type": "string"
+                      "status":
+                        "type": "string"
+                      "task_id":
+                        "type": "string"
+                    "required":
+                    - "kind"
+                    "type": "object"
+                  - "$defs":
+                      "data_type_reference":
+                        "oneOf":
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "named"
+                              "type": "string"
+                            "name":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "name"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "pointer"
+                              "type": "string"
+                            "target":
+                              "$ref": "#/$defs/data_type_reference"
+                          "required":
+                          - "kind"
+                          - "target"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "count":
+                              "maximum": !!int "2147483647"
+                              "minimum": !!int "1"
+                              "type": "integer"
+                            "element":
+                              "$ref": "#/$defs/data_type_reference"
+                            "kind":
+                              "enum":
+                              - "array"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "element"
+                          - "count"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "untyped_pointer"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          "type": "object"
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "analyzed":
+                        "type": "boolean"
+                      "error":
+                        "type": "string"
                       "finished_at":
                         "type": "string"
                       "kind":
@@ -10589,6 +10670,7 @@
                         "items":
                           "enum":
                           - "analyzed"
+                          - "error"
                           - "finished_at"
                           - "kind"
                           - "progress"
@@ -10685,6 +10767,83 @@
                     "maxItems": !!int "1000"
                     "minItems": !!int "1"
                     "type": "array"
+                "type": "object"
+            "required":
+            - "jsonrpc"
+            - "id"
+            - "method"
+            - "params"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "id":
+                "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
+                - "type": "number"
+              "jsonrpc":
+                "const": "2.0"
+                "type": "string"
+              "method":
+                "const": "analysis.cancel"
+                "type": "string"
+              "params":
+                "$defs":
+                  "data_type_reference":
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "named"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "pointer"
+                          "type": "string"
+                        "target":
+                          "$ref": "#/$defs/data_type_reference"
+                      "required":
+                      - "kind"
+                      - "target"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "count":
+                          "maximum": !!int "2147483647"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                        "element":
+                          "$ref": "#/$defs/data_type_reference"
+                        "kind":
+                          "enum":
+                          - "array"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "element"
+                      - "count"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "untyped_pointer"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      "type": "object"
+                "additionalProperties": !!bool "false"
+                "properties": {}
                 "type": "object"
             "required":
             - "jsonrpc"
@@ -15029,6 +15188,7 @@
                                     "items":
                                       "enum":
                                       - "analyzed"
+                                      - "error"
                                       - "finished_at"
                                       - "kind"
                                       - "progress"
@@ -16875,6 +17035,151 @@
       "required":
       - "items"
       "type": "object"
+  "analysis.cancel":
+    "description": "Cancel automatic analysis of the active program."
+    "effects":
+      "allowed_during_analysis": !!bool "true"
+      "destructive": !!bool "false"
+      "idempotent": !!bool "true"
+      "mutates_program": !!bool "false"
+      "read_only": !!bool "false"
+      "requires_transaction": !!bool "false"
+    "input_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties": {}
+      "type": "object"
+    "output_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "analyzed":
+          "type": "boolean"
+        "error":
+          "type": "string"
+        "finished_at":
+          "type": "string"
+        "kind":
+          "type": "string"
+        "progress":
+          "maximum": !!float "100.0"
+          "minimum": !!float "0.0"
+          "type": "number"
+        "started_at":
+          "type": "string"
+        "status":
+          "type": "string"
+        "task_id":
+          "type": "string"
+      "required":
+      - "kind"
+      "type": "object"
   "analysis.get":
     "description": "Get analysis data from the active program."
     "effects":
@@ -16948,6 +17253,7 @@
               "items":
                 "enum":
                 - "analyzed"
+                - "error"
                 - "finished_at"
                 - "kind"
                 - "progress"
@@ -17020,6 +17326,8 @@
       "properties":
         "analyzed":
           "type": "boolean"
+        "error":
+          "type": "string"
         "finished_at":
           "type": "string"
         "kind":
@@ -17170,6 +17478,8 @@
       "properties":
         "analyzed":
           "type": "boolean"
+        "error":
+          "type": "string"
         "finished_at":
           "type": "string"
         "kind":
@@ -19069,6 +19379,7 @@
                           "items":
                             "enum":
                             - "analyzed"
+                            - "error"
                             - "finished_at"
                             - "kind"
                             - "progress"
@@ -29867,8 +30178,8 @@
             - "output_schema"
             - "effects"
             "type": "object"
-          "maxItems": !!int "56"
-          "minItems": !!int "56"
+          "maxItems": !!int "57"
+          "minItems": !!int "57"
           "type": "array"
       "required":
       - "interface_version"

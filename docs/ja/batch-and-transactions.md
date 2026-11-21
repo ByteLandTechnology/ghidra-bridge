@@ -57,6 +57,7 @@
 - `interface.get`
 - `program.save`
 - `analysis.start`
+- `analysis.cancel`
 - `session.shutdown`
 - `batch.execute`
 

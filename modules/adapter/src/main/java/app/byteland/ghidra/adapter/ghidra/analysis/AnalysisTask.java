@@ -25,6 +25,7 @@ final class AnalysisTask {
   private volatile AnalysisResource.Status status = AnalysisResource.Status.RUNNING;
   private final long startedAt = System.currentTimeMillis();
   private volatile Long completedAt;
+  private volatile String error;
 
   AnalysisTask(GhidraSession context, AutoAnalysisManager manager, AnalyzerSelection selection) {
     GhidraSession session = Objects.requireNonNull(context, "context");
@@ -41,6 +42,9 @@ final class AnalysisTask {
     this.body =
         () -> {
           operation.run();
+          if (monitor.isCancelled()) {
+            return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
+          }
           return new TaskOutcome(AnalysisResource.Status.COMPLETED, null);
         };
   }
@@ -144,7 +148,8 @@ final class AnalysisTask {
         id,
         java.time.Instant.ofEpochMilli(startedAt),
         completedAt == null ? null : java.time.Instant.ofEpochMilli(completedAt),
-        monitor.percent());
+        monitor.percent(),
+        error);
   }
 
   String message() {
@@ -157,6 +162,7 @@ final class AnalysisTask {
     } else if (outcome.status() == AnalysisResource.Status.COMPLETED) {
       monitor.setMessage("Analysis completed");
     }
+    error = outcome.error();
     completedAt = System.currentTimeMillis();
     status = outcome.status();
   }

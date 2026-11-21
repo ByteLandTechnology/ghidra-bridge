@@ -67,6 +67,22 @@ public final class AnalysisServiceImpl implements AnalysisService {
     }
   }
 
+  @Override
+  public AnalysisResource cancelAnalysis() {
+    AnalysisTask task;
+    synchronized (lock) {
+      if (closed) {
+        throw new IllegalStateException("analysis service is closed");
+      }
+      task = currentTask;
+    }
+    if (task != null && task.isRunning()) {
+      task.cancel();
+    }
+    manager.cancelQueuedTasks();
+    return getStatus();
+  }
+
   /**
    * Cancels the active analysis and waits until it stops.
    *
@@ -94,6 +110,7 @@ public final class AnalysisServiceImpl implements AnalysisService {
         AnalysisResource.Kind.GHIDRA,
         state,
         GhidraProgramUtilities.isAnalyzed(program),
+        null,
         null,
         null,
         null,

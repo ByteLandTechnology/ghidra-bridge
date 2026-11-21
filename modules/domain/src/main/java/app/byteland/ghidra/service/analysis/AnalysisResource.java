@@ -12,6 +12,7 @@ import java.time.Instant;
  * @param startedAt timestamp when task started
  * @param finishedAt timestamp when task finished
  * @param progress completion percentage from 0 to 100, or null if unknown
+ * @param error terminal failure or cancellation reason, or null
  */
 public record AnalysisResource(
     Kind kind,
@@ -20,7 +21,8 @@ public record AnalysisResource(
     String taskId,
     Instant startedAt,
     Instant finishedAt,
-    Double progress) {
+    Double progress,
+    String error) {
   /**
    * Represents the initiator of the analysis task.
    */
