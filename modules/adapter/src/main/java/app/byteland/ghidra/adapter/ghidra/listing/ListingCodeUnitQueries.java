@@ -11,6 +11,7 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Data;
 import ghidra.program.model.listing.Instruction;
+import ghidra.util.task.TaskMonitor;
 
 final class ListingCodeUnitQueries {
   private final GhidraSession context;
@@ -71,15 +72,16 @@ final class ListingCodeUnitQueries {
   }
 
   private CodeUnit codeUnitAt(Address address) {
-    Instruction instruction = context.script().getInstructionAt(address);
+    var listing = context.currentProgram().getListing();
+    Instruction instruction = listing.getInstructionAt(address);
     if (instruction != null) {
       return instruction;
     }
-    Data data = context.script().getDataAt(address);
+    Data data = listing.getDefinedDataAt(address);
     if (data != null) {
       return data;
     }
-    return context.script().getUndefinedDataAt(address);
+    return listing.getUndefinedDataAt(address);
   }
 
   private CodeUnit nextCodeUnit(CodeUnit codeUnit, boolean forward) {
@@ -93,15 +95,17 @@ final class ListingCodeUnitQueries {
   }
 
   private CodeUnit nextCodeUnitAfter(Address address) {
-    CodeUnit nearest = context.script().getInstructionAfter(address);
-    nearest = nearest(nearest, context.script().getDataAfter(address), true);
-    return nearest(nearest, context.script().getUndefinedDataAfter(address), true);
+    var listing = context.currentProgram().getListing();
+    CodeUnit nearest = listing.getInstructionAfter(address);
+    nearest = nearest(nearest, listing.getDefinedDataAfter(address), true);
+    return nearest(nearest, listing.getUndefinedDataAfter(address, TaskMonitor.DUMMY), true);
   }
 
   private CodeUnit nextCodeUnitBefore(Address address) {
-    CodeUnit nearest = context.script().getInstructionBefore(address);
-    nearest = nearest(nearest, context.script().getDataBefore(address), false);
-    return nearest(nearest, context.script().getUndefinedDataBefore(address), false);
+    var listing = context.currentProgram().getListing();
+    CodeUnit nearest = listing.getInstructionBefore(address);
+    nearest = nearest(nearest, listing.getDefinedDataBefore(address), false);
+    return nearest(nearest, listing.getUndefinedDataBefore(address, TaskMonitor.DUMMY), false);
   }
 
   private static CodeUnit nearest(CodeUnit current, CodeUnit candidate, boolean forward) {

@@ -216,4 +216,5 @@ tasks.register('verifyArchitecture') {
 tasks.register('verify') {
     group = 'verification'
     dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn subprojects.findAll { it.path != ':transport' }.collect { "${it.path}:test" }
 }

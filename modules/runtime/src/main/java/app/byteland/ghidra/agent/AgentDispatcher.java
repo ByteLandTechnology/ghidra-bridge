@@ -1,7 +1,6 @@
 package app.byteland.ghidra.agent;
 
 import app.byteland.ghidra.api.ApiCatalog;
-import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.api.ApiRegistry;
 import app.byteland.ghidra.service.BridgeServices;
 import java.util.LinkedHashMap;
@@ -9,7 +8,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Dispatches API requests to the registry one at a time and blocks new requests during shutdown.
+ * Dispatches API requests with concurrent shared reads, fair exclusive writes, and graceful
+ * shutdown barriers.
  */
 public final class AgentDispatcher implements AutoCloseable {
   private final AgentConfig config;
@@ -17,7 +17,6 @@ public final class AgentDispatcher implements AutoCloseable {
   private final BridgeServices services;
   private final ApiRegistry apiRegistry;
   private final DispatchBarrier dispatchBarrier = new DispatchBarrier();
-  private final Object sequenceLock = new Object();
   private volatile boolean shuttingDown;
 
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
@@ -38,13 +37,17 @@ public final class AgentDispatcher implements AutoCloseable {
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {
-          if (method == null || method.isBlank()) {
-            throw ApiException.badRequest("missing_method", "method is required", "/method");
-          }
-          synchronized (sequenceLock) {
-            return apiRegistry.dispatch(method, params);
-          }
+          ApiRegistry.PreparedDispatch prepared = apiRegistry.prepareDispatch(method, params);
+          Object rawResponse =
+              prepared.readOnly()
+                  ? dispatchBarrier.runRead(prepared::execute)
+                  : dispatchBarrier.runWrite(prepared::execute);
+          return prepared.encodeResponse(rawResponse);
         });
+  }
+
+  DispatchBarrier barrier() {
+    return dispatchBarrier;
   }
 
   public ApiCatalog methodCatalog() {

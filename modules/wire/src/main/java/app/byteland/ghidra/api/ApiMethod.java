@@ -53,11 +53,23 @@ public record ApiMethod<Request, Response>(
     return requestCodec.decode(params, "");
   }
 
-  public Object invokeDecoded(Request request) throws Exception {
+  public void validateProjection(Request request) {
     FieldProjection.validate(request, fields, identityFields);
-    Response response = handler.handle(request);
+  }
+
+  public Response invokeHandler(Request request) throws Exception {
+    return handler.handle(request);
+  }
+
+  public Object encodeResponse(Request request, Response response) {
     Object encoded = responseCodec.encode(response);
     return FieldProjection.apply(encoded, request, fields, identityFields);
+  }
+
+  public Object invokeDecoded(Request request) throws Exception {
+    validateProjection(request);
+    Response response = invokeHandler(request);
+    return encodeResponse(request, response);
   }
 
   @FunctionalInterface

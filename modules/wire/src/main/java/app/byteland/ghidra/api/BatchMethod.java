@@ -65,11 +65,32 @@ final class BatchMethod {
     return new Registration(
         batchEffects(batchableMethods),
         batchCodec(requestSchema),
-        batchResultSchema(),
+        batchResponseCodec(batchResultSchema()),
         this::executeBatch);
   }
 
+  boolean isReadOnly(Map<String, Object> request) {
+    if (request instanceof DecodedBatchRequest decoded) {
+      return decoded.prepared().readOnly();
+    }
+    if (!(request.get(ApiVocabulary.ITEMS) instanceof List<?> items) || items.isEmpty()) {
+      return false;
+    }
+    for (Object rawItem : items) {
+      if (!(rawItem instanceof Map<?, ?> item)
+          || !(item.get(ApiVocabulary.METHOD) instanceof String targetName)) {
+        return false;
+      }
+      ApiMethod<Map<String, Object>, Object> target = methods.get(targetName);
+      if (target == null || !target.effects().readOnly()) return false;
+    }
+    return true;
+  }
+
   boolean allowedDuringAnalysis(Map<String, Object> request) {
+    if (request instanceof DecodedBatchRequest decoded) {
+      return decoded.prepared().allowedDuringAnalysis();
+    }
     if (!(request.get(ApiVocabulary.ITEMS) instanceof List<?> items)) return false;
     for (Object rawItem : items) {
       if (!(rawItem instanceof Map<?, ?> item)
@@ -104,8 +125,8 @@ final class BatchMethod {
               ApiVocabulary.INVALID_TYPE, target + " must be an object", target);
         }
         Map<String, Object> request = stringMap(raw);
-        prepareBatch(request);
-        return Collections.unmodifiableMap(request);
+        PreparedBatch prepared = prepareBatch(request);
+        return new DecodedBatchRequest(request, prepared);
       }
 
       @Override
@@ -117,6 +138,28 @@ final class BatchMethod {
       @Override
       public Map<String, Object> schema() {
         return immutableSchema(publishedSchema);
+      }
+    };
+  }
+
+  private static JsonCodec<Object> batchResponseCodec(Map<String, Object> schema) {
+    JsonValueCodec delegate = new JsonValueCodec(immutableSchema(schema));
+    return new JsonCodec<>() {
+      @Override
+      public Object decode(Object value, String target) {
+        return delegate.decode(value, target);
+      }
+
+      @Override
+      public Object encode(Object value) {
+        Object encoded =
+            value instanceof PendingBatchResponse pending ? pending.encodeRows() : value;
+        return delegate.encode(encoded);
+      }
+
+      @Override
+      public Map<String, Object> schema() {
+        return delegate.schema();
       }
     };
   }
@@ -186,8 +229,11 @@ final class BatchMethod {
         readOnly, mutatesProgram, false, allowedDuringAnalysis, destructive, idempotent, false);
   }
 
-  private Map<String, Object> executeBatch(Map<String, Object> request) {
-    PreparedBatch batch = prepareBatch(request);
+  private Object executeBatch(Map<String, Object> request) {
+    PreparedBatch batch =
+        request instanceof DecodedBatchRequest decoded
+            ? decoded.prepared()
+            : prepareBatch(request);
     return "all_or_none".equals(batch.transactionMode())
         ? executeAllOrNone(batch.items())
         : executePerItem(batch.items());
@@ -291,7 +337,9 @@ final class BatchMethod {
       try {
         @SuppressWarnings("unchecked")
         Map<String, Object> arguments = (Map<String, Object>) rawArguments;
-        prepared.add(new PreparedItem(id, target, target.decodeRequest(arguments)));
+        Map<String, Object> decodedArguments = target.decodeRequest(arguments);
+        target.validateProjection(decodedArguments);
+        prepared.add(new PreparedItem(id, target, decodedArguments));
       } catch (ApiException error) {
         Map<String, Object> violation = new LinkedHashMap<>();
         String targetPath = error.error().target();
@@ -307,7 +355,13 @@ final class BatchMethod {
     }
     String mode =
         request.get(ApiVocabulary.TRANSACTION_MODE) instanceof String value ? value : "per_item";
-    return new PreparedBatch(List.copyOf(prepared), mode);
+    List<PreparedItem> immutableItems = List.copyOf(prepared);
+    boolean readOnly =
+        !immutableItems.isEmpty()
+            && immutableItems.stream().allMatch(item -> item.method().effects().readOnly());
+    boolean allowedDuringAnalysis =
+        immutableItems.stream().allMatch(item -> item.method().effects().allowedDuringAnalysis());
+    return new PreparedBatch(immutableItems, mode, readOnly, allowedDuringAnalysis);
   }
 
   private static ApiException batchValidationFailed(List<Map<String, Object>> violations) {
@@ -337,28 +391,28 @@ final class BatchMethod {
     return violation;
   }
 
-  private Map<String, Object> executePerItem(List<PreparedItem> items) {
-    List<Map<String, Object>> rows = new ArrayList<>();
+  private PendingBatchResponse executePerItem(List<PreparedItem> items) {
+    List<PendingRow> rows = new ArrayList<>();
     for (PreparedItem item : items) {
       try {
-        Object result = runtime.invokeDecoded(item.method(), item.request(), true);
-        rows.add(successRow(item.id(), result));
+        Object rawResult = runtime.invokeHandler(item.method(), item.request(), true);
+        rows.add(PendingRow.success(item, rawResult));
       } catch (Exception error) {
-        rows.add(errorRow(item.id(), error));
+        rows.add(PendingRow.failure(item.id(), error));
       }
     }
-    return batchEnvelope(rows);
+    return new PendingBatchResponse(List.copyOf(rows), false);
   }
 
-  private Map<String, Object> executeAllOrNone(List<PreparedItem> items) {
+  private PendingBatchResponse executeAllOrNone(List<PreparedItem> items) {
     try {
       boolean requiresTransaction =
           items.stream().anyMatch(item -> item.method().effects().requiresTransaction());
-      List<Map<String, Object>> rows =
+      List<PendingRow> rows =
           requiresTransaction
               ? runtime.inTransaction(() -> executeAllOrNoneItems(items))
               : executeAllOrNoneItems(items);
-      return batchEnvelope(rows);
+      return new PendingBatchResponse(List.copyOf(rows), true);
     } catch (BatchRollback rollback) {
       BridgeError cause = ApiFailures.normalize(rollback.getCause()).error();
       ApiException translated =
@@ -375,12 +429,12 @@ final class BatchMethod {
     }
   }
 
-  private List<Map<String, Object>> executeAllOrNoneItems(List<PreparedItem> items) {
-    List<Map<String, Object>> temporary = new ArrayList<>();
+  private List<PendingRow> executeAllOrNoneItems(List<PreparedItem> items) {
+    List<PendingRow> temporary = new ArrayList<>();
     for (PreparedItem item : items) {
       try {
         temporary.add(
-            successRow(item.id(), runtime.invokeDecoded(item.method(), item.request(), false)));
+            PendingRow.success(item, runtime.invokeHandler(item.method(), item.request(), false)));
       } catch (Exception error) {
         throw new BatchRollback(item.id(), error);
       }
@@ -410,7 +464,67 @@ final class BatchMethod {
   private record PreparedItem(
       String id, ApiMethod<Map<String, Object>, Object> method, Map<String, Object> request) {}
 
-  private record PreparedBatch(List<PreparedItem> items, String transactionMode) {}
+  private record PreparedBatch(
+      List<PreparedItem> items,
+      String transactionMode,
+      boolean readOnly,
+      boolean allowedDuringAnalysis) {}
+
+  private static final class DecodedBatchRequest extends java.util.AbstractMap<String, Object> {
+    private final Map<String, Object> fields;
+    private final PreparedBatch prepared;
+
+    DecodedBatchRequest(Map<String, Object> fields, PreparedBatch prepared) {
+      this.fields = Collections.unmodifiableMap(new LinkedHashMap<>(fields));
+      this.prepared = prepared;
+    }
+
+    PreparedBatch prepared() {
+      return prepared;
+    }
+
+    @Override
+    public Set<Entry<String, Object>> entrySet() {
+      return fields.entrySet();
+    }
+  }
+
+  private record PendingRow(
+      String id, PreparedItem item, Object rawResult, Throwable failure) {
+    static PendingRow success(PreparedItem item, Object rawResult) {
+      return new PendingRow(item.id(), item, rawResult, null);
+    }
+
+    static PendingRow failure(String id, Throwable failure) {
+      return new PendingRow(id, null, null, failure);
+    }
+  }
+
+  private record PendingBatchResponse(List<PendingRow> rows, boolean allOrNone) {
+    Map<String, Object> encodeRows() {
+      List<Map<String, Object>> encoded = new ArrayList<>(rows.size());
+      for (PendingRow row : rows) {
+        if (row.failure() != null) {
+          encoded.add(errorRow(row.id(), row.failure()));
+          continue;
+        }
+        PreparedItem item = row.item();
+        if (allOrNone) {
+          encoded.add(
+              successRow(item.id(), item.method().encodeResponse(item.request(), row.rawResult())));
+        } else {
+          try {
+            encoded.add(
+                successRow(
+                    item.id(), item.method().encodeResponse(item.request(), row.rawResult())));
+          } catch (Exception error) {
+            encoded.add(errorRow(item.id(), error));
+          }
+        }
+      }
+      return batchEnvelope(encoded);
+    }
+  }
 
   private static final class BatchRollback extends RuntimeException {
     private static final long serialVersionUID = 1L;
@@ -429,15 +543,11 @@ final class BatchMethod {
   record Registration(
       MethodEffects effects,
       JsonCodec<Map<String, Object>> requestCodec,
-      Map<String, Object> responseSchema,
-      ApiMethod.Handler<Map<String, Object>, Object> handler) {
-    Registration {
-      responseSchema = immutableSchema(responseSchema);
-    }
-  }
+      JsonCodec<Object> responseCodec,
+      ApiMethod.Handler<Map<String, Object>, Object> handler) {}
 
   interface BatchRuntime {
-    Object invokeDecoded(
+    Object invokeHandler(
         ApiMethod<Map<String, Object>, Object> method,
         Map<String, Object> request,
         boolean ownTransaction)

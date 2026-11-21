@@ -44,20 +44,23 @@ final class ListingDataQueries {
   }
 
   private Data firstData(Address start, boolean forward) {
-    Data data = context.script().getDataAt(start);
+    var listing = context.currentProgram().getListing();
+    Data data = listing.getDefinedDataAt(start);
     if (data != null) {
       return data;
     }
-    return forward ? context.script().getDataAfter(start) : context.script().getDataBefore(start);
+    return forward ? listing.getDefinedDataAfter(start) : listing.getDefinedDataBefore(start);
   }
 
   private Data nextData(Data data, boolean forward) {
-    return forward ? context.script().getDataAfter(data) : context.script().getDataBefore(data);
+    var listing = context.currentProgram().getListing();
+    return forward
+        ? listing.getDefinedDataAfter(data.getMaxAddress())
+        : listing.getDefinedDataBefore(data.getMinAddress());
   }
 
   private Data nextData(Address address, boolean forward) {
-    return forward
-        ? context.script().getDataAfter(address)
-        : context.script().getDataBefore(address);
+    var listing = context.currentProgram().getListing();
+    return forward ? listing.getDefinedDataAfter(address) : listing.getDefinedDataBefore(address);
   }
 }

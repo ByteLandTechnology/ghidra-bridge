@@ -5,7 +5,16 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceIterator;
+import ghidra.program.model.symbol.ReferenceManager;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -69,13 +78,45 @@ public final class GhidraSession {
   }
 
   public Address parseAddress(String rawAddress) {
-    return AddressUtil.parseAddress(ghidraScript, rawAddress);
+    return AddressUtil.parseAddress(currentProgram(), rawAddress);
   }
 
-  public java.util.List<ghidra.program.model.symbol.Reference> references(
-      Address address, boolean to) {
-    return java.util.Arrays.asList(
-        to ? ghidraScript.getReferencesTo(address) : ghidraScript.getReferencesFrom(address));
+  public List<Reference> references(Address address, boolean to) {
+    Objects.requireNonNull(address, "address");
+    ReferenceManager referenceManager = currentProgram().getReferenceManager();
+    if (!to) {
+      return Arrays.asList(referenceManager.getReferencesFrom(address));
+    }
+    List<Reference> result = new ArrayList<>();
+    ReferenceIterator iterator = referenceManager.getReferencesTo(address);
+    while (iterator.hasNext()) {
+      result.add(iterator.next());
+    }
+    return result;
+  }
+
+  public byte[] readBytes(Address start, int length) throws MemoryAccessException {
+    Objects.requireNonNull(start, "start");
+    byte[] bytes = new byte[length];
+    currentProgram().getMemory().getBytes(start, bytes);
+    return bytes;
+  }
+
+  public Function functionAfter(Function function) {
+    return function == null ? null : functionAfter(function.getEntryPoint());
+  }
+
+  public Function functionAfter(Address address) {
+    Objects.requireNonNull(address, "address");
+    FunctionIterator iterator = currentProgram().getListing().getFunctions(address, true);
+    if (!iterator.hasNext()) {
+      return null;
+    }
+    Function candidate = iterator.next();
+    if (address.equals(candidate.getEntryPoint())) {
+      return iterator.hasNext() ? iterator.next() : null;
+    }
+    return candidate;
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {

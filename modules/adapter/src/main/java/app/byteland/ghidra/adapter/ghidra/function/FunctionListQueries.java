@@ -77,17 +77,15 @@ final class FunctionListQueries {
   }
 
   private Function firstFunction(Address address, boolean resumeStrictlyAfter) {
-    return resumeStrictlyAfter
-        ? context.script().getFunctionAfter(address)
-        : firstFunctionAtOrAfter(address);
+    return resumeStrictlyAfter ? context.functionAfter(address) : firstFunctionAtOrAfter(address);
   }
 
   private Function nextFunction(Function function) {
-    return context.script().getFunctionAfter(function);
+    return context.functionAfter(function);
   }
 
   private Function firstFunctionAtOrAfter(Address cursorAddress) {
-    Function function = context.script().getFunctionAt(cursorAddress);
-    return function == null ? context.script().getFunctionAfter(cursorAddress) : function;
+    Function function = context.currentProgram().getListing().getFunctionAt(cursorAddress);
+    return function == null ? context.functionAfter(cursorAddress) : function;
   }
 }

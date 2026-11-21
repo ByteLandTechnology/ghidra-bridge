@@ -37,7 +37,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
       throw new IllegalArgumentException(
           "timeoutMs must be in " + MIN_TIMEOUT_MS + ".." + MAX_TIMEOUT_MS);
     }
-    Function function = context.script().getFunctionAt(context.parseAddress(rawAddress));
+    Function function =
+        context.currentProgram().getListing().getFunctionAt(context.parseAddress(rawAddress));
     if (function == null) {
       throw new NoSuchElementException("function not found");
     }
