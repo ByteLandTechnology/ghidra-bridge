@@ -1,11 +1,15 @@
 package app.byteland.ghidra.adapter.ghidra;
 
+import app.byteland.ghidra.service.InvalidAddressException;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.address.AddressFormatException;
 import ghidra.program.model.address.AddressSpace;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Utility methods that parse and format Ghidra addresses.
@@ -14,11 +18,17 @@ public final class AddressUtil {
   private AddressUtil() {}
 
   public static Address parseAddress(GhidraScript script, String rawAddress) {
+    return parseAddress(script, rawAddress, null);
+  }
+
+  public static Address parseAddress(GhidraScript script, String rawAddress, String target) {
     if (script == null) {
       throw new IllegalArgumentException("script is required");
     }
     if (rawAddress == null || rawAddress.isBlank()) {
-      throw new IllegalArgumentException("address is required");
+      List<String> spaces = validSpaces(script);
+      throw new InvalidAddressException(
+          "address is required" + formatSpacesSuffix(spaces), target, spaces, null);
     }
     String value = rawAddress.trim();
     Address address = toAddress(script, value);
@@ -29,9 +39,36 @@ public final class AddressUtil {
       address = tryAddressWithDefaultSpace(script.getAddressFactory(), value);
     }
     if (address == null) {
-      throw new IllegalArgumentException("unable to parse address: " + rawAddress);
+      List<String> spaces = validSpaces(script);
+      throw new InvalidAddressException(
+          "unable to parse address: " + rawAddress + formatSpacesSuffix(spaces),
+          target,
+          spaces,
+          rawAddress);
     }
     return address;
+  }
+
+  private static List<String> validSpaces(GhidraScript script) {
+    AddressFactory addressFactory = script.getAddressFactory();
+    if (addressFactory == null) {
+      return List.of();
+    }
+    AddressSpace[] spaces = addressFactory.getAddressSpaces();
+    if (spaces == null || spaces.length == 0) {
+      return List.of();
+    }
+    return Arrays.stream(spaces)
+        .filter(Objects::nonNull)
+        .map(AddressSpace::getName)
+        .filter(Objects::nonNull)
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  private static String formatSpacesSuffix(List<String> spaces) {
+    return spaces.isEmpty() ? "" : " (valid spaces: [" + String.join(", ", spaces) + "])";
   }
 
   public static String canonicalAddress(Address address) {

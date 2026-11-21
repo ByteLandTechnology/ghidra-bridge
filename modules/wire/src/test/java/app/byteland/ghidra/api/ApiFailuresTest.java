@@ -5,8 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.service.DomainException;
+import app.byteland.ghidra.service.InvalidAddressException;
 import app.byteland.ghidra.service.TransactionExecutionException;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeoutException;
@@ -166,5 +169,52 @@ class ApiFailuresTest {
     assertEquals(409, failure.status());
     assertEquals("batch_rolled_back", failure.error().code());
     assertEquals("atomic batch failed", failure.error().message());
+  }
+
+  @Test
+  @DisplayName("DomainException default details map is empty while custom details are preserved")
+  void testDomainExceptionDetailsNormalization() {
+    class DefaultDomainError extends RuntimeException implements DomainException {
+      private static final long serialVersionUID = 1L;
+
+      DefaultDomainError(String message) {
+        super(message);
+      }
+
+      @Override
+      public int status() {
+        return 409;
+      }
+
+      @Override
+      public String code() {
+        return "conflict";
+      }
+
+      @Override
+      public String target() {
+        return "/selector/address";
+      }
+    }
+
+    var defaultFailure = ApiFailures.normalize(new DefaultDomainError("resource conflict"));
+    assertEquals(409, defaultFailure.status());
+    assertEquals("conflict", defaultFailure.error().code());
+    assertEquals("/selector/address", defaultFailure.error().target());
+    assertEquals(Map.of(), defaultFailure.error().details());
+
+    var addressError =
+        new InvalidAddressException(
+            "unable to parse address: 0xZZZZ (valid spaces: [EXTERNAL, ram])",
+            "/selector/address",
+            List.of("ram", "EXTERNAL"),
+            "0xZZZZ");
+    var addressFailure = ApiFailures.normalize(addressError);
+    assertEquals(400, addressFailure.status());
+    assertEquals("invalid_request", addressFailure.error().code());
+    assertEquals("/selector/address", addressFailure.error().target());
+    assertEquals(List.of("EXTERNAL", "ram"), addressFailure.error().details().get("valid_spaces"));
+    assertEquals("0xZZZZ", addressFailure.error().details().get("address"));
+    assertNotNull(addressFailure.error().message());
   }
 }

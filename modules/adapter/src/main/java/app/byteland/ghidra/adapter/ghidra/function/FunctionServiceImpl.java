@@ -53,7 +53,7 @@ public final class FunctionServiceImpl implements FunctionService {
 
   @Override
   public FunctionResource createFunction(String rawAddress, String name, boolean disassemble) {
-    Address entry = context.parseAddress(rawAddress);
+    Address entry = context.parseAddress(rawAddress, "/resource/entry");
     Program program = context.currentProgram();
     FunctionManager manager = program.getFunctionManager();
     Function existing = manager.getFunctionContaining(entry);

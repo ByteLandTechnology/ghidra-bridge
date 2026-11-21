@@ -14,15 +14,15 @@ final class MemoryMutations {
   }
 
   void patchMemory(String startRaw, ByteSequence sequence) {
-    Address start = parseAddress(startRaw);
+    Address start = parseAddress(startRaw, "/selector/address");
     byte[] bytes =
         MemoryEncoding.decodeBytes(
             sequence.data(), sequence.encoding().name().toLowerCase(java.util.Locale.ROOT));
     writeBytes(start, bytes);
   }
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 
   private void writeBytes(Address start, byte[] bytes) {

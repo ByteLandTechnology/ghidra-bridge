@@ -27,7 +27,7 @@ final class FunctionRelationQueries {
 
   private Page<FunctionCallResource> getFunctionRelations(
       String rawAddress, boolean callers, int limit, String cursor) {
-    Function function = resolver.resolveFunction(rawAddress);
+    Function function = resolver.resolveFunction(rawAddress, "/filter/entry");
     List<FunctionCallResource> rows = new ArrayList<>();
     Iterable<Function> related =
         callers

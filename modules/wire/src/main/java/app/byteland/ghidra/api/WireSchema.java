@@ -1,6 +1,7 @@
 package app.byteland.ghidra.api;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -170,7 +171,7 @@ public final class WireSchema {
   }
 
   public static void validate(Object value, Map<String, Object> schema, String target) {
-    validate(value, schema, target, schemaDefinitions(schema));
+    validate(value, schema, target, schemaDefinitions(schema), schema);
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
@@ -178,37 +179,14 @@ public final class WireSchema {
       Object value,
       Map<String, Object> schema,
       String target,
-      Map<String, Map<String, Object>> definitions) {
-    Object ref = schema.get(ApiVocabulary.REFERENCE);
-    if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
-      Map<String, Object> resolved = definitions.get(reference.substring("#/$defs/".length()));
-      if (resolved == null) {
-        throw new IllegalStateException("unresolved schema reference: " + reference);
-      }
-      validate(value, resolved, target, definitions);
+      Map<String, Map<String, Object>> definitions,
+      Map<String, Object> rootSchema) {
+    Map<String, Object> resolvedSchema = resolveSchema(schema, definitions);
+    if (resolvedSchema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
+      validateUnion(value, alternatives, target, definitions, rootSchema);
       return;
     }
-    if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
-      List<ApiException> failures = new ArrayList<>();
-      int matches = 0;
-      for (Object rawAlternative : alternatives) {
-        try {
-          validate(value, (Map<String, Object>) rawAlternative, target, definitions);
-          matches++;
-        } catch (ApiException failure) {
-          failures.add(failure);
-        }
-      }
-      if (matches != EXACT_UNION_MATCHES) {
-        ApiException failure = failures.isEmpty() ? null : failures.getFirst();
-        throw ApiException.badRequest(
-            "invalid_union",
-            failure == null ? target + " must match exactly one schema" : failure.getMessage(),
-            failure == null ? target : failure.error().target());
-      }
-      return;
-    }
-    Object type = schema.get(ApiVocabulary.TYPE);
+    Object type = resolvedSchema.get(ApiVocabulary.TYPE);
     if (type == null) {
       return;
     }
@@ -216,11 +194,13 @@ public final class WireSchema {
       case ApiVocabulary.NULL -> {
         if (value != null) fail(ApiVocabulary.INVALID_TYPE, target + " must be null", target);
       }
-      case ApiVocabulary.OBJECT -> validateObject(value, schema, target, definitions);
-      case ApiVocabulary.ARRAY -> validateArray(value, schema, target, definitions);
-      case ApiVocabulary.STRING -> validateString(value, schema, target);
-      case ApiVocabulary.INTEGER -> validateInteger(value, schema, target);
-      case ApiVocabulary.NUMBER -> validateNumber(value, schema, target);
+      case ApiVocabulary.OBJECT ->
+          validateObject(value, resolvedSchema, target, definitions, rootSchema);
+      case ApiVocabulary.ARRAY ->
+          validateArray(value, resolvedSchema, target, definitions, rootSchema);
+      case ApiVocabulary.STRING -> validateString(value, resolvedSchema, target);
+      case ApiVocabulary.INTEGER -> validateInteger(value, resolvedSchema, target);
+      case ApiVocabulary.NUMBER -> validateNumber(value, resolvedSchema, target);
       case ApiVocabulary.BOOLEAN -> {
         if (!(value instanceof Boolean))
           fail(ApiVocabulary.INVALID_TYPE, target + " must be a boolean", target);
@@ -230,11 +210,103 @@ public final class WireSchema {
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static Map<String, Object> resolveSchema(
+      Map<String, Object> schema, Map<String, Map<String, Object>> definitions) {
+    Object ref = schema.get(ApiVocabulary.REFERENCE);
+    if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
+      Map<String, Object> resolved = definitions.get(reference.substring("#/$defs/".length()));
+      if (resolved == null) {
+        throw new IllegalStateException("unresolved schema reference: " + reference);
+      }
+      return resolveSchema(resolved, definitions);
+    }
+    return schema;
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static void validateUnion(
+      Object value,
+      List<?> alternatives,
+      String target,
+      Map<String, Map<String, Object>> definitions,
+      Map<String, Object> rootSchema) {
+    List<BranchFailure> failures = new ArrayList<>();
+    int matches = 0;
+    for (Object rawAlternative : alternatives) {
+      Map<String, Object> alternative =
+          resolveSchema((Map<String, Object>) rawAlternative, definitions);
+      try {
+        validate(value, alternative, target, definitions, rootSchema);
+        matches++;
+      } catch (ApiException failure) {
+        failures.add(new BranchFailure(alternative, failure));
+      }
+    }
+    if (matches == EXACT_UNION_MATCHES) {
+      return;
+    }
+    ApiException selected = selectPrimaryUnionFailure(value, failures, matches);
+    List<Map<String, Object>> branchErrors =
+        failures.stream().map(item -> branchErrorMap(item.failure())).toList();
+    Map<String, Object> details = new LinkedHashMap<>();
+    if (selected != null && !selected.error().details().isEmpty()) {
+      details.putAll(selected.error().details());
+    }
+    details.put("branch_errors", branchErrors);
+    throw ApiException.badRequest(
+        "invalid_union",
+        selected == null ? target + " must match exactly one schema" : selected.getMessage(),
+        selected == null ? target : selected.error().target(),
+        details);
+  }
+
+  private static ApiException selectPrimaryUnionFailure(
+      Object value, List<BranchFailure> failures, int matches) {
+    if (matches > 0 || failures.isEmpty()) {
+      return null;
+    }
+    if (value instanceof Map<?, ?> map && map.get(ApiVocabulary.KIND) instanceof String kindValue) {
+      List<BranchFailure> kindMatches =
+          failures.stream().filter(item -> branchMatchesKind(item.schema(), kindValue)).toList();
+      if (kindMatches.size() == 1) {
+        return kindMatches.getFirst().failure();
+      }
+    }
+    return failures.getFirst().failure();
+  }
+
+  private static boolean branchMatchesKind(Map<String, Object> schema, String kindValue) {
+    if (!(schema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties)
+        || !(properties.get(ApiVocabulary.KIND) instanceof Map<?, ?> kindSchema)
+        || !(kindSchema.get(ApiVocabulary.ENUM) instanceof List<?> values)) {
+      return false;
+    }
+    return values.contains(kindValue);
+  }
+
+  private static Map<String, Object> branchErrorMap(ApiException failure) {
+    BridgeError error = failure.error();
+    Map<String, Object> map = new LinkedHashMap<>();
+    map.put("code", error.code());
+    map.put("message", error.message());
+    if (error.target() != null) {
+      map.put("target", error.target());
+    }
+    if (!error.details().isEmpty()) {
+      map.put("details", error.details());
+    }
+    return Collections.unmodifiableMap(map);
+  }
+
+  private record BranchFailure(Map<String, Object> schema, ApiException failure) {}
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
   private static void validateObject(
       Object value,
       Map<String, Object> schema,
       String target,
-      Map<String, Map<String, Object>> definitions) {
+      Map<String, Map<String, Object>> definitions,
+      Map<String, Object> rootSchema) {
     if (!(value instanceof Map<?, ?>)) {
       fail(ApiVocabulary.INVALID_TYPE, target + " must be an object", target);
     }
@@ -265,16 +337,75 @@ public final class WireSchema {
       Object propertySchema = properties.get(key);
       if (propertySchema == null) {
         if (!additional) {
-          fail("unknown_field", target + "/" + key + " is not allowed", target + "/" + key);
+          throw unknownField(key, target, properties, rootSchema);
         }
       } else {
         validate(
             entry.getValue(),
             (Map<String, Object>) propertySchema,
             target + "/" + escapePointer(key),
-            definitions);
+            definitions,
+            rootSchema);
       }
     }
+  }
+
+  private static ApiException unknownField(
+      String key,
+      String target,
+      Map<String, Object> properties,
+      Map<String, Object> rootSchema) {
+    String fieldTarget = target + "/" + escapePointer(key);
+    List<String> allowedFields = properties.keySet().stream().sorted().toList();
+    String suggestion = suggestContainerWrapper(key, target, properties, rootSchema);
+    Map<String, Object> details = new LinkedHashMap<>();
+    details.put("allowed_fields", allowedFields);
+    if (suggestion != null) {
+      details.put("suggested_field", suggestion);
+    }
+    String allowedDescription =
+        allowedFields.isEmpty() ? "none" : "[" + String.join(", ", allowedFields) + "]";
+    String message =
+        suggestion == null
+            ? fieldTarget + " is not allowed; allowed fields: " + allowedDescription
+            : fieldTarget
+                + " is not allowed; use "
+                + suggestion
+                + " (allowed fields: "
+                + allowedDescription
+                + ")";
+    return ApiException.badRequest("unknown_field", message, fieldTarget, details);
+  }
+
+  private static String suggestContainerWrapper(
+      String key,
+      String target,
+      Map<String, Object> properties,
+      Map<String, Object> rootSchema) {
+    for (String container : List.of("page", "scan", "projection")) {
+      if (hasNestedProperty(properties.get(container), key)) {
+        return container + "." + key;
+      }
+    }
+    if (properties.get("scan") instanceof Map<?, ?> scanSchema
+        && scanSchema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> scanProperties
+        && hasNestedProperty(scanProperties.get("range"), key)) {
+      return "scan.range." + key;
+    }
+    if ("/filter".equals(target)
+        && rootSchema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> rootProperties
+        && rootProperties.get("scan") instanceof Map<?, ?> rootScanSchema
+        && rootScanSchema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> rootScanProperties
+        && hasNestedProperty(rootScanProperties.get("range"), key)) {
+      return "scan.range." + key;
+    }
+    return null;
+  }
+
+  private static boolean hasNestedProperty(Object candidateSchema, String key) {
+    return candidateSchema instanceof Map<?, ?> schemaMap
+        && schemaMap.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> nestedProperties
+        && nestedProperties.containsKey(key);
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
@@ -282,7 +413,8 @@ public final class WireSchema {
       Object value,
       Map<String, Object> schema,
       String target,
-      Map<String, Map<String, Object>> definitions) {
+      Map<String, Map<String, Object>> definitions,
+      Map<String, Object> rootSchema) {
     if (!(value instanceof List<?>)) {
       fail(ApiVocabulary.INVALID_TYPE, target + " must be an array", target);
     }
@@ -297,7 +429,7 @@ public final class WireSchema {
     Map<String, Object> itemSchema =
         (Map<String, Object>) schema.getOrDefault(ApiVocabulary.ITEMS, Map.of());
     for (int index = 0; index < items.size(); index++) {
-      validate(items.get(index), itemSchema, target + "/" + index, definitions);
+      validate(items.get(index), itemSchema, target + "/" + index, definitions, rootSchema);
     }
   }
 
@@ -311,7 +443,14 @@ public final class WireSchema {
       fail(ApiVocabulary.INVALID_VALUE, target + " must not be empty", target);
     }
     if (schema.get(ApiVocabulary.ENUM) instanceof List<?> values && !values.contains(text)) {
-      fail("invalid_enum", target + " has an unsupported value", target);
+      List<String> allowedValues = values.stream().map(String::valueOf).sorted().toList();
+      throw ApiException.badRequest(
+          "invalid_enum",
+          target + " has an unsupported value; allowed values: ["
+              + String.join(", ", allowedValues)
+              + "]",
+          target,
+          Map.of("allowed_values", allowedValues));
     }
   }
 

@@ -14,7 +14,7 @@ public final class AddressScanRanges {
     Address start =
         options.start() == null
             ? context.currentProgram().getMinAddress()
-            : context.parseAddress(options.start());
+            : context.parseAddress(options.start(), options.startTarget());
     if (start == null) {
       AddressSpace space = context.script().getAddressFactory().getDefaultAddressSpace();
       if (space == null) throw new IllegalStateException("no default address space");
@@ -23,7 +23,7 @@ public final class AddressScanRanges {
     Address end =
         options.end() == null
             ? (defaultEndToAddressSpace ? defaultProgramEnd(context, start) : null)
-            : context.parseAddress(options.end());
+            : context.parseAddress(options.end(), options.endTarget());
     return of(start, end);
   }
 

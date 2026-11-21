@@ -1,5 +1,7 @@
 package app.byteland.ghidra.api;
 
+import java.util.Map;
+
 /**
  * Represents a structured API error with HTTP status and JSON pointer.
  */
@@ -9,7 +11,12 @@ public final class ApiException extends RuntimeException {
   private final transient BridgeError bridgeError;
 
   public ApiException(int status, String code, String message, String target) {
-    this(status, new BridgeError(status, code, message, target, java.util.Map.of()));
+    this(status, code, message, target, Map.of());
+  }
+
+  public ApiException(
+      int status, String code, String message, String target, Map<String, Object> details) {
+    this(status, new BridgeError(status, code, message, target, details == null ? Map.of() : details));
   }
 
   public ApiException(int status, BridgeError error) {
@@ -31,5 +38,10 @@ public final class ApiException extends RuntimeException {
 
   public static ApiException badRequest(String reason, String message, String target) {
     return new ApiException(400, reason, message, target);
+  }
+
+  public static ApiException badRequest(
+      String reason, String message, String target, Map<String, Object> details) {
+    return new ApiException(400, reason, message, target, details);
   }
 }

@@ -20,7 +20,7 @@ public final class AddressServiceImpl implements AddressService {
 
   @Override
   public AddressResource resolveAddress(String rawAddress) {
-    Address address = context.parseAddress(rawAddress);
+    Address address = context.parseAddress(rawAddress, "/selector/address");
     MemoryBlock block = context.script().getMemoryBlock(address);
     Function function = context.script().getFunctionContaining(address);
     Symbol symbol = context.script().getSymbolAt(address);

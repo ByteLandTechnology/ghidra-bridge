@@ -71,14 +71,14 @@ final class CommentQueries {
     return scan.finish();
   }
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 
   private CursorPosition parseCursor(String cursor) {
     CompositeCursor parts = CompositeCursor.parse(cursor, "comments");
     if (parts == null) return null;
-    return new CursorPosition(parseAddress(parts.address()), parts.secondary());
+    return new CursorPosition(parseAddress(parts.address(), "/page/cursor"), parts.secondary());
   }
 
   private static int compare(Address address, String type, CursorPosition cursor) {

@@ -20,7 +20,7 @@ final class MemoryRangeQueries {
     if (length < 1 || length > maxRangeLength) {
       throw new IllegalArgumentException("length must be in 1.." + maxRangeLength);
     }
-    Address start = parseAddress(startRaw);
+    Address start = parseAddress(startRaw, "/selector/address");
     byte[] bytes;
     try {
       bytes = readBytes(start, length);
@@ -35,8 +35,8 @@ final class MemoryRangeQueries {
         AddressUtil.canonicalAddress(start), new ByteSequence(byteEncoding, encoded, bytes.length));
   }
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 
   private byte[] readBytes(Address start, int length) throws MemoryAccessException {

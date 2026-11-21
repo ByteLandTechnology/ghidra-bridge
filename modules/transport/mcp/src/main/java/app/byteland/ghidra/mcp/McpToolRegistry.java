@@ -2,6 +2,7 @@ package app.byteland.ghidra.mcp;
 
 import app.byteland.ghidra.api.ApiCatalog;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
+import app.byteland.ghidra.api.ApiException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -99,8 +100,16 @@ final class McpToolRegistry {
   }
 
   Map<String, Object> help(Map<String, Object> arguments) {
-    if (!List.of("domain", "operation").containsAll(arguments.keySet())) {
-      throw new IllegalArgumentException("Unknown help argument");
+    List<String> allowedArguments = List.of("domain", "operation");
+    for (String key : arguments.keySet()) {
+      if (!allowedArguments.contains(key)) {
+        String escaped = key.replace("~", "~0").replace("/", "~1");
+        throw ApiException.badRequest(
+            "unknown_field",
+            "/arguments/" + escaped + " is not allowed; allowed fields: [domain, operation]",
+            "/arguments/" + escaped,
+            Map.of("allowed_fields", allowedArguments));
+      }
     }
     Object domainValue = arguments.get("domain");
     if (domainValue == null) {

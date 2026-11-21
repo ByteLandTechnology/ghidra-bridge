@@ -60,6 +60,7 @@ public class TransactionExecutionException extends RuntimeException implements D
     return target;
   }
 
+  @Override
   public Map<String, Object> details() {
     return details;
   }

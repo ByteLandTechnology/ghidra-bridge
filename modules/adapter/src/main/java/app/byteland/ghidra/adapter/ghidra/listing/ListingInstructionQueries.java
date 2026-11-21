@@ -22,7 +22,7 @@ final class ListingInstructionQueries {
       AddressScanOptions options, int limit, String direction, String cursorRaw) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
-    Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
+    Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw, "/page/cursor");
     boolean forward = !"backward".equalsIgnoreCase(direction);
 
     BoundedAddressScan<InstructionResource> scan =
@@ -46,7 +46,7 @@ final class ListingInstructionQueries {
   }
 
   InstructionResource getInstruction(String rawAddress) {
-    Address address = parseAddress(rawAddress);
+    Address address = parseAddress(rawAddress, "/selector/address");
     Instruction instruction = context.script().getInstructionAt(address);
     if (instruction == null) {
       throw new NoSuchElementException("no instruction at address");
@@ -54,8 +54,8 @@ final class ListingInstructionQueries {
     return ListingDescriptions.toInstructionItem(instruction, context);
   }
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 
   private Instruction firstInstruction(Address start, boolean forward) {

@@ -15,20 +15,20 @@ final class CommentMutations {
   }
 
   void setComment(String addressRaw, String type, String text) {
-    applyCommentChange(addressRaw, type, text);
+    applyCommentChange(addressRaw, type, text, "/resource/address");
   }
 
   void deleteComment(String addressRaw, String type) {
-    applyCommentChange(addressRaw, type, null);
+    applyCommentChange(addressRaw, type, null, "/selector/address");
   }
 
-  private void applyCommentChange(String addressRaw, String type, String text) {
-    Address address = parseAddress(addressRaw);
+  private void applyCommentChange(String addressRaw, String type, String text, String target) {
+    Address address = parseAddress(addressRaw, target);
     applyAtExactAddress(address, type, text);
   }
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 
   private void applyAtExactAddress(Address address, String type, String text) {

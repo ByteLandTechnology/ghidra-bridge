@@ -24,15 +24,17 @@ final class FunctionListQueries {
     int normalizedLimit = Page.clampLimit(query.limit());
     String normalizedName = FunctionQuerySupport.trimLower(query.name());
     Address cursorAddress =
-        query.cursor() == null || query.cursor().isBlank() ? null : parseAddress(query.cursor());
+        query.cursor() == null || query.cursor().isBlank()
+            ? null
+            : parseAddress(query.cursor(), "/page/cursor");
     Function entryFunction = null;
     if (query.entry() != null && !query.entry().isBlank()) {
-      entryFunction = resolver.resolveFunction(query.entry());
+      entryFunction = resolver.resolveFunction(query.entry(), "/filter/entry");
     }
     Address containsAddress =
         query.contains() == null || query.contains().isBlank()
             ? null
-            : parseAddress(query.contains());
+            : parseAddress(query.contains(), "/filter/contains");
     AddressScanRanges.Resolved range =
         entryFunction != null
                 && containsAddress == null
@@ -72,8 +74,8 @@ final class FunctionListQueries {
     return scan.finish();
   }
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 
   private Function firstFunction(Address address, boolean resumeStrictlyAfter) {

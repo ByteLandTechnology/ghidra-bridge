@@ -13,10 +13,13 @@ final class FunctionLookupQueries implements FunctionResolver {
 
   @Override
   public Function resolveFunction(String rawAddress) {
-    if (rawAddress == null || rawAddress.isBlank()) {
-      throw new IllegalArgumentException("address is required");
-    }
-    Function function = context.script().getFunctionAt(context.parseAddress(rawAddress));
+    return resolveFunction(rawAddress, "/selector/entry");
+  }
+
+  @Override
+  public Function resolveFunction(String rawAddress, String target) {
+    Function function =
+        context.script().getFunctionAt(context.parseAddress(rawAddress, target));
     if (function == null) {
       throw new NoSuchElementException("function not found: " + rawAddress);
     }

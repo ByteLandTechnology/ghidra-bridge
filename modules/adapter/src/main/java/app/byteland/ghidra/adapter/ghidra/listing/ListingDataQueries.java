@@ -21,7 +21,7 @@ final class ListingDataQueries {
       AddressScanOptions options, int limit, String direction, String cursorRaw) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
-    Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
+    Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw, "/page/cursor");
     boolean forward = !"backward".equalsIgnoreCase(direction);
 
     BoundedAddressScan<DataUnitResource> scan =
@@ -39,8 +39,8 @@ final class ListingDataQueries {
     return scan.finish();
   }
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 
   private Data firstData(Address start, boolean forward) {

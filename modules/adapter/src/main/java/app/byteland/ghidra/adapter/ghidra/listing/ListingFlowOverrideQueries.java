@@ -30,7 +30,7 @@ final class ListingFlowOverrideQueries {
       AddressScanOptions options,
       int limit,
       String cursorRaw) {
-    ListingFlowOverrideScopes.ResolvedScope scope = scopes.resolve(selected);
+    ListingFlowOverrideScopes.ResolvedScope scope = scopes.resolve(selected, "/filter/selector");
     Address cursor = resolveCursor(cursorRaw, scope);
     AddressScanRanges.Resolved range =
         AddressScanRanges.of(scope.addresses().getMinAddress(), scope.addresses().getMaxAddress());
@@ -57,7 +57,7 @@ final class ListingFlowOverrideQueries {
     if (cursorRaw == null) {
       return scope.addresses().getMinAddress();
     }
-    Address cursor = context.parseAddress(cursorRaw);
+    Address cursor = context.parseAddress(cursorRaw, "/page/cursor");
     if (!scope.addresses().contains(cursor)) {
       throw new IllegalArgumentException("cursor must be inside the selected scope");
     }

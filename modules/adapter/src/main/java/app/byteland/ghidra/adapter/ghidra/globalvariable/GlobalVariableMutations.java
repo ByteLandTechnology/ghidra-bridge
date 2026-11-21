@@ -33,7 +33,9 @@ final class GlobalVariableMutations {
     if (mode != WriteMode.PATCH && (mutation.name() == null || mutation.dataType() == null)) {
       throw new IllegalArgumentException("create and upsert require name and dataType");
     }
-    Address address = context.parseAddress(mutation.address());
+    Address address =
+        context.parseAddress(
+            mutation.address(), mode == WriteMode.PATCH ? "/selector/address" : "/resource/address");
     Listing listing = context.currentProgram().getListing();
     Data existing = listing.getDefinedDataAt(address);
     if (mode == WriteMode.CREATE && existing != null) {
@@ -56,7 +58,7 @@ final class GlobalVariableMutations {
   }
 
   void deleteGlobalVariable(String rawAddress, boolean deleteSymbol) {
-    Address address = context.parseAddress(rawAddress);
+    Address address = context.parseAddress(rawAddress, "/selector/address");
     Listing listing = context.currentProgram().getListing();
     Data data = listing.getDefinedDataAt(address);
     if (data == null) throw new NoSuchElementException("global variable not found: " + rawAddress);

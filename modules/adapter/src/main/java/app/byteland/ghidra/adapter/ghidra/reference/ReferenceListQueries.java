@@ -23,7 +23,8 @@ final class ReferenceListQueries {
     ReferenceQuerySupport.requireTarget(normalizedDirection, fromRaw, toRaw);
 
     String target = "to".equals(normalizedDirection) ? toRaw : fromRaw;
-    Address anchor = parseAddress(target);
+    String pointer = "to".equals(normalizedDirection) ? "/filter/to" : "/filter/from";
+    Address anchor = parseAddress(target, pointer);
     List<KeyedReference> matched = new ArrayList<>();
     String nextCursor = null;
     Iterable<Reference> refs = context.references(anchor, "to".equals(normalizedDirection));
@@ -56,7 +57,7 @@ final class ReferenceListQueries {
 
   private record KeyedReference(Reference reference, String encodedKey) {}
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 }

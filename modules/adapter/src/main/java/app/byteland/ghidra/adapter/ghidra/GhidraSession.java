@@ -72,6 +72,10 @@ public final class GhidraSession {
     return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
+  public Address parseAddress(String rawAddress, String target) {
+    return AddressUtil.parseAddress(ghidraScript, rawAddress, target);
+  }
+
   public java.util.List<ghidra.program.model.symbol.Reference> references(
       Address address, boolean to) {
     return java.util.Arrays.asList(

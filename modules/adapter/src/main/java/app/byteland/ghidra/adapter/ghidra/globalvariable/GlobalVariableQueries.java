@@ -22,7 +22,7 @@ final class GlobalVariableQueries {
   }
 
   GlobalVariableResource getGlobalVariable(String rawAddress) {
-    Address address = context.parseAddress(rawAddress);
+    Address address = context.parseAddress(rawAddress, "/selector/address");
     Data data = context.currentProgram().getListing().getDefinedDataAt(address);
     if (data == null) throw new NoSuchElementException("global variable not found: " + rawAddress);
     return describe(data);
@@ -30,7 +30,8 @@ final class GlobalVariableQueries {
 
   Page<GlobalVariableResource> listGlobalVariables(Query query) {
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, query.scan(), true);
-    Address cursor = query.cursor() == null ? null : context.parseAddress(query.cursor());
+    Address cursor =
+        query.cursor() == null ? null : context.parseAddress(query.cursor(), "/page/cursor");
     Address iterationStart =
         cursor != null && cursor.compareTo(range.start()) > 0 ? cursor : range.start();
     DataIterator iterator =

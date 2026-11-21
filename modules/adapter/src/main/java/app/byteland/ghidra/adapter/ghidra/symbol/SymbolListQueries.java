@@ -21,7 +21,8 @@ final class SymbolListQueries {
   }
 
   Page<SymbolResource> listSymbols(SymbolQuery query) {
-    Address filterAddress = query.address() == null ? null : context.parseAddress(query.address());
+    Address filterAddress =
+        query.address() == null ? null : context.parseAddress(query.address(), "/filter/address");
     AddressScanRanges.Resolved range =
         filterAddress != null && query.scan().start() == null && query.scan().end() == null
             ? AddressScanRanges.of(filterAddress, filterAddress)
@@ -83,7 +84,7 @@ final class SymbolListQueries {
     if (parts == null) return null;
     try {
       return new CursorPosition(
-          context.parseAddress(parts.address()), Long.parseLong(parts.secondary()));
+          context.parseAddress(parts.address(), "/page/cursor"), Long.parseLong(parts.secondary()));
     } catch (NumberFormatException error) {
       throw new IllegalArgumentException("invalid symbols cursor", error);
     }

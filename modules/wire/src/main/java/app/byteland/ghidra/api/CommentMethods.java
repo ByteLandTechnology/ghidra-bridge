@@ -39,7 +39,7 @@ final class CommentMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(commentSelector),
         ApiSchemaCatalog.commentFields(),
         List.of(ApiVocabulary.ADDRESS, ApiVocabulary.TYPE),
-        request -> requireComment(selector(request)));
+        request -> requireComment(selector(request), "/selector/address"));
     Map<String, Object> commentFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
@@ -84,7 +84,7 @@ final class CommentMethods implements ApiMethodProvider {
         List.of(ApiVocabulary.ADDRESS, ApiVocabulary.TYPE),
         request -> {
           writeComment(request, false);
-          return requireComment(resource(request));
+          return requireComment(resource(request), "/resource/address");
         });
     registry.writeResource(
         "comment.patch",
@@ -102,7 +102,7 @@ final class CommentMethods implements ApiMethodProvider {
         List.of(ApiVocabulary.ADDRESS, ApiVocabulary.TYPE),
         request -> {
           patchComment(request);
-          return requireComment(selector(request));
+          return requireComment(selector(request), "/selector/address");
         });
     registry.writeResource(
         "comment.upsert",
@@ -114,7 +114,7 @@ final class CommentMethods implements ApiMethodProvider {
         List.of(ApiVocabulary.ADDRESS, ApiVocabulary.TYPE),
         request -> {
           writeComment(request, true);
-          return requireComment(resource(request));
+          return requireComment(resource(request), "/resource/address");
         });
     registry.writeResult(
         "comment.delete",
@@ -122,7 +122,7 @@ final class CommentMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorOnlyInput(commentSelector),
         ApiSchemaCatalog.DELETED_RECEIPT_SCHEMA,
         request -> {
-          requireComment(selector(request));
+          requireComment(selector(request), "/selector/address");
           registry
               .services()
               .commentService()
@@ -133,7 +133,7 @@ final class CommentMethods implements ApiMethodProvider {
         });
   }
 
-  private CommentResource requireComment(Map<String, Object> selected) {
+  private CommentResource requireComment(Map<String, Object> selected, String addressTarget) {
     Page<CommentResource> page =
         registry
             .services()
@@ -143,7 +143,9 @@ final class CommentMethods implements ApiMethodProvider {
                     new AddressScanOptions(
                         text(selected, ApiVocabulary.ADDRESS),
                         text(selected, ApiVocabulary.ADDRESS),
-                        AddressScanOptions.DEFAULT_TIMEOUT_MS),
+                        AddressScanOptions.DEFAULT_TIMEOUT_MS,
+                        addressTarget,
+                        addressTarget),
                     commentType(text(selected, ApiVocabulary.TYPE)),
                     null,
                     2,
@@ -158,7 +160,7 @@ final class CommentMethods implements ApiMethodProvider {
     Map<String, Object> resource = resource(request);
     if (!upsert) {
       try {
-        requireComment(resource);
+        requireComment(resource, "/resource/address");
         throw new ApiException(409, "comment_exists", "comment already exists", "/resource");
       } catch (ApiException error) {
         if (error.status() != NOT_FOUND_STATUS) throw error;
@@ -174,7 +176,7 @@ final class CommentMethods implements ApiMethodProvider {
   }
 
   private void patchComment(Map<String, Object> request) {
-    requireComment(selector(request));
+    requireComment(selector(request), "/selector/address");
     registry
         .services()
         .commentService()

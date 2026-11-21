@@ -39,9 +39,11 @@ final class ListingFlowOverrideMutations {
 
   private List<String> candidates(FlowOverrideScope selected, Set<FlowOverride> expected) {
     if (selected instanceof FlowOverrideScope.AddressScope address) {
-      return List.of(AddressUtil.canonicalAddress(context.parseAddress(address.address())));
+      return List.of(
+          AddressUtil.canonicalAddress(
+              context.parseAddress(address.address(), "/selector/address")));
     }
-    ListingFlowOverrideScopes.ResolvedScope scope = scopes.resolve(selected);
+    ListingFlowOverrideScopes.ResolvedScope scope = scopes.resolve(selected, "/selector");
     List<String> candidates = new ArrayList<>();
     for (Instruction instruction :
         context.currentProgram().getListing().getInstructions(scope.addresses(), true)) {
@@ -56,7 +58,7 @@ final class ListingFlowOverrideMutations {
   }
 
   private void patchOne(String rawAddress, Set<FlowOverride> expected, FlowOverride target) {
-    Address address = context.parseAddress(rawAddress);
+    Address address = context.parseAddress(rawAddress, "/selector/address");
     Instruction instruction = context.currentProgram().getListing().getInstructionAt(address);
     if (instruction == null) throw new NoSuchElementException("no instruction at address");
     FlowOverride current = instruction.getFlowOverride();

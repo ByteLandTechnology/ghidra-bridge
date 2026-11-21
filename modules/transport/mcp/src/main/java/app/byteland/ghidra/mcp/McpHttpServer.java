@@ -5,6 +5,7 @@ import app.byteland.ghidra.JsonRpc;
 import app.byteland.ghidra.JsonUtil;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
+import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.api.ApiFailures;
 import app.byteland.ghidra.network.NetworkBinding;
 import com.sun.net.httpserver.HttpExchange;
@@ -460,14 +461,22 @@ public final class McpHttpServer implements AutoCloseable {
     if (!toolRegistry.hasTool(name)) {
       throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "Unknown tool: " + name);
     }
-    Map<String, Object> arguments = requireArguments(params.get("arguments"), id);
     try {
+      Map<String, Object> arguments = requireArguments(params.get("arguments"), "/arguments");
       if (toolRegistry.isHelpTool(name)) {
         log.ok().status(200);
         return toolResult(toolRegistry.help(arguments), false, statelessProtocol);
       }
-      if (!List.of("operation", "params").containsAll(arguments.keySet())) {
-        throw new IllegalArgumentException("Unknown domain tool argument");
+      List<String> allowedArguments = List.of("operation", "params");
+      for (String key : arguments.keySet()) {
+        if (!allowedArguments.contains(key)) {
+          String escaped = key.replace("~", "~0").replace("/", "~1");
+          throw ApiException.badRequest(
+              "unknown_field",
+              "/arguments/" + escaped + " is not allowed; allowed fields: [operation, params]",
+              "/arguments/" + escaped,
+              Map.of("allowed_fields", allowedArguments));
+        }
       }
       String operation = requireString(arguments.get("operation"), "operation", id);
       MethodDescriptor tool = toolRegistry.findTool(name, operation);
@@ -475,13 +484,15 @@ public final class McpHttpServer implements AutoCloseable {
         throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
             "Unknown operation " + operation + " for " + name);
       }
-      Map<String, Object> operationParams = requireArguments(arguments.get("params"), id);
+      Map<String, Object> operationParams = requireArguments(arguments.get("params"), "/params");
       Object result = dispatcher.dispatch(tool.name(), operationParams);
       if (dispatcher.isShuttingDown()) {
         closeSoon();
       }
       log.ok().status(200);
       return toolResult(Map.of("operation", operation, "result", result), false, statelessProtocol);
+    } catch (JsonRpcError error) {
+      throw error;
     } catch (Exception error) {
       log.error().status(200);
       return toolResult(errorPayload(error), true, statelessProtocol);
@@ -664,7 +675,7 @@ public final class McpHttpServer implements AutoCloseable {
     throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "params must be a JSON object");
   }
 
-  private static Map<String, Object> requireArguments(Object arguments, Object id) {
+  static Map<String, Object> requireArguments(Object arguments, String target) {
     if (arguments == null) {
       return Map.of();
     }
@@ -673,8 +684,24 @@ public final class McpHttpServer implements AutoCloseable {
       Map<String, Object> cast = (Map<String, Object>) map;
       return cast;
     }
-    throw new JsonRpcError(
-        400, id, JSONRPC_INVALID_PARAMS, "tools/call arguments must be a JSON object");
+    if (arguments instanceof String text) {
+      Object parsed;
+      try {
+        parsed = JsonUtil.parse(text);
+      } catch (IllegalArgumentException invalid) {
+        ApiException error =
+            ApiException.badRequest("invalid_type", target + " must be a JSON object", target);
+        error.initCause(invalid);
+        throw error;
+      }
+      if (parsed instanceof Map<?, ?> map) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cast = (Map<String, Object>) map;
+        return cast;
+      }
+      throw ApiException.badRequest("invalid_type", target + " must be a JSON object", target);
+    }
+    throw ApiException.badRequest("invalid_type", target + " must be a JSON object", target);
   }
 
   private static String requireString(Object value, String field, Object id) {

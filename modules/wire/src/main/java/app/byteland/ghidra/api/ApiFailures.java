@@ -1,7 +1,6 @@
 package app.byteland.ghidra.api;
 
 import app.byteland.ghidra.service.DomainException;
-import app.byteland.ghidra.service.TransactionExecutionException;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeoutException;
@@ -16,9 +15,13 @@ public final class ApiFailures {
       return new Failure(error.status(), error.error());
     }
     if (failure instanceof DomainException domain) {
-      Map<String, Object> details =
-          domain instanceof TransactionExecutionException tex ? tex.details() : Map.of();
-      return failure(domain.status(), domain.code(), failure, pointer(domain.target()), details);
+      Map<String, Object> details = domain.details();
+      return failure(
+          domain.status(),
+          domain.code(),
+          failure,
+          pointer(domain.target()),
+          details == null ? Map.of() : details);
     }
     if (failure instanceof IllegalArgumentException) {
       return failure(400, "invalid_request", failure, null);

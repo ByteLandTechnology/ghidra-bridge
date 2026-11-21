@@ -23,7 +23,7 @@ final class ListingCodeUnitQueries {
       AddressScanOptions options, int limit, String kind, String direction, String cursorRaw) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
-    Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
+    Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw, "/page/cursor");
     boolean forward = !"backward".equalsIgnoreCase(direction);
 
     BoundedAddressScan<CodeUnitResource> scan =
@@ -52,8 +52,8 @@ final class ListingCodeUnitQueries {
     return scan.finish();
   }
 
-  private Address parseAddress(String rawAddress) {
-    return context.parseAddress(rawAddress);
+  private Address parseAddress(String rawAddress, String target) {
+    return context.parseAddress(rawAddress, target);
   }
 
   private static boolean matchesKind(String requestedKind, CodeUnitResource.Kind actualKind) {

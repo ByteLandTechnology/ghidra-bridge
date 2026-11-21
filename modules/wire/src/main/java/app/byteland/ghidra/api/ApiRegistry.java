@@ -706,7 +706,13 @@ public final class ApiRegistry {
     return new AddressScanOptions(
         rangeStart == null ? legacyStart : rangeStart,
         rangeEnd == null ? legacyEnd : rangeEnd,
-        integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS));
+        integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS),
+        rangeStart == null && legacyStart != null
+            ? "/filter/" + legacyStartField
+            : AddressScanOptions.DEFAULT_START_TARGET,
+        rangeEnd == null && legacyEnd != null
+            ? "/filter/" + legacyEndField
+            : AddressScanOptions.DEFAULT_END_TARGET);
   }
 
   private static void rejectRangeConflict(
