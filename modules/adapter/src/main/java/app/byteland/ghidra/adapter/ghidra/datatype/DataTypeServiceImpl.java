@@ -12,14 +12,24 @@ import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.Structure;
+import ghidra.program.model.data.TypeDef;
 import ghidra.program.model.data.Union;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 public final class DataTypeServiceImpl implements DataTypeService {
-  private final GhidraSession context;
+  private final Supplier<DataTypeManager> dataTypeManagerSupplier;
 
   public DataTypeServiceImpl(GhidraSession context) {
-    this.context = context;
+    Objects.requireNonNull(context, "context");
+    this.dataTypeManagerSupplier = () -> context.currentProgram().getDataTypeManager();
+  }
+
+  DataTypeServiceImpl(DataTypeManager dataTypeManager) {
+    Objects.requireNonNull(dataTypeManager, "dataTypeManager");
+    this.dataTypeManagerSupplier = () -> dataTypeManager;
   }
 
   @Override
@@ -47,7 +57,9 @@ public final class DataTypeServiceImpl implements DataTypeService {
       String name,
       DataTypeReference baseType,
       int size,
-      FunctionSignature signature) {
+      FunctionSignature signature,
+      List<DataTypePatch.CompositeField> fields,
+      List<DataTypePatch.EnumValue> values) {
     DataTypeMutations.createDataType(
         dataTypeManager(),
         categoryPath,
@@ -56,6 +68,8 @@ public final class DataTypeServiceImpl implements DataTypeService {
         baseType,
         size,
         signature,
+        fields,
+        values,
         this::resolveDataTypeReference);
   }
 
@@ -81,6 +95,13 @@ public final class DataTypeServiceImpl implements DataTypeService {
         }
         EnumMutations.edit(enumType, enumPatch);
       }
+      case DataTypePatch.Typedef typedefPatch -> {
+        if (!(dataType instanceof TypeDef typeDef)) {
+          throw new IllegalArgumentException("not a typedef: " + dataType.getName());
+        }
+        DataTypeMutations.replaceTypedef(
+            dataTypeManager(), typeDef, typedefPatch.baseType(), this::resolveDataTypeReference);
+      }
     }
   }
 
@@ -96,7 +117,7 @@ public final class DataTypeServiceImpl implements DataTypeService {
   }
 
   private DataTypeManager dataTypeManager() {
-    return context.currentProgram().getDataTypeManager();
+    return dataTypeManagerSupplier.get();
   }
 
   private DataType resolveDataTypeReference(DataTypeReference reference) {

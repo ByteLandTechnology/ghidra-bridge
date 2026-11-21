@@ -1,0 +1,867 @@
+package app.byteland.ghidra.adapter.ghidra.datatype;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
+import app.byteland.ghidra.api.ApiException;
+import app.byteland.ghidra.api.ApiFailures;
+import app.byteland.ghidra.api.ApiRegistry;
+import app.byteland.ghidra.service.BridgeServices;
+import app.byteland.ghidra.service.TransactionRunner;
+import app.byteland.ghidra.service.address.AddressService;
+import app.byteland.ghidra.service.analysis.AnalysisResource;
+import app.byteland.ghidra.service.analysis.AnalysisService;
+import app.byteland.ghidra.service.comment.CommentService;
+import app.byteland.ghidra.service.datatype.DataTypePatch;
+import app.byteland.ghidra.service.datatype.DataTypeReference;
+import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.decompilation.DecompilationService;
+import app.byteland.ghidra.service.function.FunctionService;
+import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
+import app.byteland.ghidra.service.listing.ListingService;
+import app.byteland.ghidra.service.memory.MemoryService;
+import app.byteland.ghidra.service.program.ProgramService;
+import app.byteland.ghidra.service.reference.ReferenceService;
+import app.byteland.ghidra.service.symbol.SymbolService;
+import ghidra.framework.Application;
+import ghidra.framework.ApplicationConfiguration;
+import ghidra.program.model.data.ByteDataType;
+import ghidra.program.model.data.CategoryPath;
+import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.DataTypeConflictHandler;
+import ghidra.program.model.data.DataTypeDependencyException;
+import ghidra.program.model.data.DataTypeManager;
+import ghidra.program.model.data.IntegerDataType;
+import ghidra.program.model.data.StandAloneDataTypeManager;
+import ghidra.program.model.data.Structure;
+import ghidra.program.model.data.TypeDef;
+import ghidra.program.model.data.TypedefDataType;
+import ghidra.program.model.data.UnsignedIntegerDataType;
+import ghidra.program.model.data.UnsignedLongLongDataType;
+import ghidra.program.model.data.UnsignedShortDataType;
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import utility.application.DummyApplicationLayout;
+
+class DataTypeMutationsTest {
+  private StandAloneDataTypeManager manager;
+  private int transactionId;
+  private DataTypeServiceImpl service;
+  private ApiRegistry registry;
+
+  @BeforeAll
+  static void initializeGhidra() throws Exception {
+    if (!Application.isInitialized()) {
+      ApplicationConfiguration config = new ApplicationConfiguration();
+      config.setInitializeLogging(false);
+      Application.initializeApplication(new DummyApplicationLayout("ghidra-datatype-test"), config);
+    }
+  }
+
+  @BeforeEach
+  void setUp() {
+    manager = new StandAloneDataTypeManager("test");
+    transactionId = manager.startTransaction("test");
+    for (DataType builtin :
+        List.of(
+            ByteDataType.dataType,
+            IntegerDataType.dataType,
+            UnsignedShortDataType.dataType,
+            UnsignedIntegerDataType.dataType,
+            UnsignedLongLongDataType.dataType)) {
+      manager.addDataType(builtin, DataTypeConflictHandler.DEFAULT_HANDLER);
+    }
+    service = new DataTypeServiceImpl(manager);
+    AnalysisService analysis =
+        unusedWith(
+            AnalysisService.class,
+            "getStatus",
+            new AnalysisResource(
+                AnalysisResource.Kind.GHIDRA,
+                AnalysisResource.Status.IDLE,
+                false,
+                null,
+                null,
+                null,
+                null));
+    TransactionRunner transactionRunner =
+        new TransactionRunner() {
+          @Override
+          public <T> T run(Operation<T> operation) {
+            try {
+              return operation.execute();
+            } catch (RuntimeException runtime) {
+              throw runtime;
+            } catch (Exception checked) {
+              throw new IllegalStateException(checked);
+            }
+          }
+        };
+    BridgeServices services =
+        new BridgeServices(
+            unused(ProgramService.class),
+            unused(AddressService.class),
+            unused(CommentService.class),
+            unused(ReferenceService.class),
+            unused(MemoryService.class),
+            unused(ListingService.class),
+            unused(FunctionService.class),
+            unused(GlobalVariableService.class),
+            analysis,
+            unused(DecompilationService.class),
+            unused(SymbolService.class),
+            service,
+            transactionRunner,
+            "test-session");
+    registry = new ApiRegistry(services, "test-session", Map::of, () -> {});
+  }
+
+  @AfterEach
+  void tearDown() {
+    if (manager != null) {
+      manager.endTransaction(transactionId, true);
+      manager.close();
+    }
+  }
+
+  @Test
+  void unpackedStructPatchesPreserveFixedOffsetsAndClearRemovedFields() throws Exception {
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of("kind", "struct", "category_path", "/Test", "name", "Packet", "size", 0)));
+
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Packet"),
+            "patch",
+            Map.of(
+                "kind",
+                "struct",
+                "add_fields",
+                List.of(
+                    Map.of(
+                        "name",
+                        "magic",
+                        "offset",
+                        0,
+                        "data_type",
+                        named("uint"),
+                        "comment",
+                        "header magic"),
+                    Map.of(
+                        "name",
+                        "payload_len",
+                        "offset",
+                        8,
+                        "data_type",
+                        named("ushort"),
+                        "comment",
+                        "payload bytes")))));
+
+    DataTypeResource afterSparseAdd = service.getDataType("/Test/Packet");
+    assertEquals(10, afterSparseAdd.size());
+    assertEquals(6, afterSparseAdd.fields().size());
+    assertField(afterSparseAdd.fields().get(0), "magic", 0, 4, false, "header magic");
+    assertTrue(afterSparseAdd.fields().get(1).isUndefined());
+    assertEquals(4, afterSparseAdd.fields().get(1).offset());
+    assertField(afterSparseAdd.fields().get(5), "payload_len", 8, 2, false, "payload bytes");
+
+    // Populate an interior gap via add_fields without shifting payload_len from offset 8.
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Packet"),
+            "patch",
+            Map.of(
+                "kind",
+                "struct",
+                "add_fields",
+                List.of(
+                    Map.of(
+                        "name",
+                        "flags",
+                        "offset",
+                        4,
+                        "data_type",
+                        named("ushort"),
+                        "comment",
+                        "packet flags")))));
+
+    DataTypeResource afterGapFill = service.getDataType("/Test/Packet");
+    assertEquals(10, afterGapFill.size());
+    assertField(findFieldByOffset(afterGapFill, 0), "magic", 0, 4, false, "header magic");
+    assertField(findFieldByOffset(afterGapFill, 4), "flags", 4, 2, false, "packet flags");
+    assertTrue(findFieldByOffset(afterGapFill, 6).isUndefined());
+    assertTrue(findFieldByOffset(afterGapFill, 7).isUndefined());
+    assertField(findFieldByOffset(afterGapFill, 8), "payload_len", 8, 2, false, "payload bytes");
+
+    // Removing a field in an unpacked struct clears its bytes to undefined without shifting later
+    // fields backward.
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Packet"),
+            "patch",
+            Map.of("kind", "struct", "remove_fields", List.of(Map.of("name", "magic")))));
+
+    DataTypeResource afterRemove = service.getDataType("/Test/Packet");
+    assertEquals(10, afterRemove.size());
+    for (int offset = 0; offset < 4; offset++) {
+      assertTrue(findFieldByOffset(afterRemove, offset).isUndefined());
+    }
+    assertField(findFieldByOffset(afterRemove, 4), "flags", 4, 2, false, "packet flags");
+    assertField(findFieldByOffset(afterRemove, 8), "payload_len", 8, 2, false, "payload bytes");
+  }
+
+  @Test
+  void undefinedSlotsCanBePopulatedExpandedAtTailAndAnnotated() throws Exception {
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of("kind", "struct", "category_path", "/Test", "name", "Slots", "size", 8)));
+
+    // Populate undefined slot at offset 2 and expand undefined slot at offset 6 past initial size.
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Slots"),
+            "patch",
+            Map.of(
+                "kind",
+                "struct",
+                "update_fields",
+                List.of(
+                    Map.of(
+                        "offset",
+                        2,
+                        "new_name",
+                        "kind_code",
+                        "data_type",
+                        named("ushort"),
+                        "comment",
+                        "slot two"),
+                    Map.of(
+                        "offset",
+                        6,
+                        "new_name",
+                        "tail_word",
+                        "data_type",
+                        named("uint"),
+                        "comment",
+                        "grows tail")))));
+
+    DataTypeResource populated = service.getDataType("/Test/Slots");
+    assertEquals(10, populated.size());
+    assertField(findFieldByOffset(populated, 2), "kind_code", 2, 2, false, "slot two");
+    assertField(findFieldByOffset(populated, 6), "tail_word", 6, 4, false, "grows tail");
+
+    // Rename and comment an undefined slot without providing an explicit data_type.
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Slots"),
+            "patch",
+            Map.of(
+                "kind",
+                "struct",
+                "rename_fields",
+                List.of(
+                    Map.of(
+                        "offset", 0, "new_name", "reserved_0", "comment", "reserved byte")))));
+
+    DataTypeResource annotated = service.getDataType("/Test/Slots");
+    DataTypeResource.Field slotZero = findFieldByOffset(annotated, 0);
+    assertEquals("reserved_0", slotZero.name());
+    assertEquals(1, slotZero.length());
+    assertEquals("reserved byte", slotZero.comment());
+  }
+
+  @Test
+  void packedStructsAndAppendOnlyAdditionsRemainUnchanged() throws Exception {
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of("kind", "struct", "category_path", "/Test", "name", "Appended", "size", 0)));
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Appended"),
+            "patch",
+            Map.of(
+                "kind",
+                "struct",
+                "add_fields",
+                List.of(
+                    Map.of("name", "a", "data_type", named("uint")),
+                    Map.of("name", "b", "data_type", named("ushort"))))));
+    DataTypeResource appended = service.getDataType("/Test/Appended");
+    assertEquals(6, appended.size());
+    assertField(appended.fields().get(0), "a", 0, 4, false, null);
+    assertField(appended.fields().get(1), "b", 4, 2, false, null);
+
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of("kind", "struct", "category_path", "/Test", "name", "Packed", "size", 0)));
+    Structure packed = (Structure) manager.getDataType("/Test/Packed");
+    packed.setPackingEnabled(true);
+    service.patchDataType(
+        "/Test/Packed",
+        new DataTypePatch.Struct(
+            List.of(
+                new DataTypePatch.CompositeField(
+                    "first", null, null, null, DataTypeReference.named("uint"), "c1", true),
+                new DataTypePatch.CompositeField(
+                    "second", null, null, null, DataTypeReference.named("uint"), "c2", true)),
+            null,
+            null,
+            null));
+    service.patchDataType(
+        "/Test/Packed",
+        new DataTypePatch.Struct(
+            null,
+            null,
+            null,
+            List.of(new DataTypePatch.CompositeField("first", null, null, null, null))));
+    DataTypeResource packedAfterDelete = service.getDataType("/Test/Packed");
+    assertEquals(4, packedAfterDelete.size());
+    assertEquals(1, packedAfterDelete.fields().size());
+    assertField(packedAfterDelete.fields().getFirst(), "second", 0, 4, false, "c2");
+  }
+
+  @Test
+  void overlappingAdditionsAndExpansionsMapToHttp400() throws Exception {
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "struct",
+                "category_path",
+                "/Test",
+                "name",
+                "Overlap",
+                "fields",
+                List.of(
+                    Map.of("name", "first", "offset", 0, "data_type", named("uint")),
+                    Map.of("name", "second", "offset", 6, "data_type", named("uint"))))));
+
+    assertBadRequest(
+        () ->
+            registry.dispatch(
+                "data_type.patch",
+                Map.of(
+                    "selector",
+                    Map.of("path", "/Test/Overlap"),
+                    "patch",
+                    Map.of(
+                        "kind",
+                        "struct",
+                        "add_fields",
+                        List.of(
+                            Map.of(
+                                "name", "collide", "offset", 0, "data_type", named("byte")))))));
+
+    assertBadRequest(
+        () ->
+            registry.dispatch(
+                "data_type.patch",
+                Map.of(
+                    "selector",
+                    Map.of("path", "/Test/Overlap"),
+                    "patch",
+                    Map.of(
+                        "kind",
+                        "struct",
+                        "add_fields",
+                        List.of(
+                            Map.of(
+                                "name", "spill", "offset", 4, "data_type", named("uint")))))));
+
+    assertBadRequest(
+        () ->
+            registry.dispatch(
+                "data_type.patch",
+                Map.of(
+                    "selector",
+                    Map.of("path", "/Test/Overlap"),
+                    "patch",
+                    Map.of(
+                        "kind",
+                        "struct",
+                        "update_fields",
+                        List.of(
+                            Map.of(
+                                "name", "first", "data_type", named("ulonglong")))))));
+
+    // Verify original fields remained intact after all rejected patches.
+    DataTypeResource unchanged = service.getDataType("/Test/Overlap");
+    assertEquals(10, unchanged.size());
+    assertField(findFieldByOffset(unchanged, 0), "first", 0, 4, false, null);
+    assertField(findFieldByOffset(unchanged, 6), "second", 6, 4, false, null);
+  }
+
+  @Test
+  void memberCommentsRoundTripAcrossStructUnionAndEnum() throws Exception {
+    // Union create + comment round-trip (preserve on rename/update, edit, clear with null).
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "union",
+                "category_path",
+                "/Test",
+                "name",
+                "ValueUnion",
+                "fields",
+                List.of(
+                    Map.of(
+                        "name",
+                        "as_u32",
+                        "data_type",
+                        named("uint"),
+                        "comment",
+                        "32-bit view"),
+                    Map.of("name", "as_u64", "data_type", named("ulonglong"))))));
+
+    DataTypeResource createdUnion = service.getDataType("/Test/ValueUnion");
+    assertEquals("32-bit view", createdUnion.fields().get(0).comment());
+    assertNull(createdUnion.fields().get(1).comment());
+
+    // Rename without comment preserves existing comment; update_fields with comment sets comment.
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/ValueUnion"),
+            "patch",
+            Map.of(
+                "kind",
+                "union",
+                "rename_fields",
+                List.of(Map.of("name", "as_u32", "new_name", "u32_val")),
+                "update_fields",
+                List.of(Map.of("name", "as_u64", "comment", "64-bit view")))));
+
+    DataTypeResource updatedUnion = service.getDataType("/Test/ValueUnion");
+    assertEquals("u32_val", updatedUnion.fields().get(0).name());
+    assertEquals("32-bit view", updatedUnion.fields().get(0).comment());
+    assertEquals("64-bit view", updatedUnion.fields().get(1).comment());
+
+    // Clear comment with explicit null while updating type.
+    Map<String, Object> clearFieldComment = new HashMap<>();
+    clearFieldComment.put("name", "u32_val");
+    clearFieldComment.put("data_type", named("int"));
+    clearFieldComment.put("comment", null);
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/ValueUnion"),
+            "patch",
+            Map.of("kind", "union", "update_fields", List.of(clearFieldComment))));
+    assertNull(service.getDataType("/Test/ValueUnion").fields().get(0).comment());
+
+    // Enum create + comment round-trip (add, preserve on rename/value update, comment-only edit,
+    // clear with null).
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "enum",
+                "category_path",
+                "/Test",
+                "name",
+                "Status",
+                "size",
+                4,
+                "values",
+                List.of(
+                    Map.of("name", "OK", "value", 0, "comment", "success"),
+                    Map.of("name", "ERR", "value", 1)))));
+
+    DataTypeResource createdEnum = service.getDataType("/Test/Status");
+    assertEquals("success", createdEnum.values().get(0).comment());
+    assertEquals("", createdEnum.values().get(1).comment());
+
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Status"),
+            "patch",
+            Map.of(
+                "kind",
+                "enum",
+                "rename_values",
+                List.of(Map.of("name", "OK", "new_name", "STATUS_OK")),
+                "update_values",
+                List.of(Map.of("name", "ERR", "comment", "general failure")))));
+
+    DataTypeResource updatedEnum = service.getDataType("/Test/Status");
+    assertEquals("STATUS_OK", updatedEnum.values().get(0).name());
+    assertEquals("success", updatedEnum.values().get(0).comment());
+    assertEquals("general failure", updatedEnum.values().get(1).comment());
+
+    Map<String, Object> clearEnumComment = new HashMap<>();
+    clearEnumComment.put("name", "STATUS_OK");
+    clearEnumComment.put("comment", null);
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Status"),
+            "patch",
+            Map.of("kind", "enum", "update_values", List.of(clearEnumComment))));
+    assertEquals("", service.getDataType("/Test/Status").values().get(0).comment());
+  }
+
+  @Test
+  void createDataTypeSupportsSelfReferentialInitialFieldsAndCleansUpOnInvalidMembers()
+      throws Exception {
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "struct",
+                "category_path",
+                "/Test",
+                "name",
+                "Node",
+                "fields",
+                List.of(
+                    Map.of(
+                        "name",
+                        "value",
+                        "offset",
+                        0,
+                        "data_type",
+                        named("uint"),
+                        "comment",
+                        "payload"),
+                    Map.of(
+                        "name",
+                        "next",
+                        "offset",
+                        8,
+                        "data_type",
+                        Map.of("kind", "pointer", "target", named("/Test/Node")),
+                        "comment",
+                        "next node")))));
+
+    DataTypeResource node = service.getDataType("/Test/Node");
+    assertField(findFieldByOffset(node, 0), "value", 0, 4, false, "payload");
+    DataTypeResource.Field next = findFieldByOffset(node, 8);
+    assertEquals("next", next.name());
+    assertEquals("next node", next.comment());
+    assertEquals(
+        DataTypeReference.pointerTo(DataTypeReference.named("/Test/Node")), next.dataType());
+
+    // Invalid initial fields (union does not allow offset) must roll back the newly created union.
+    assertBadRequest(
+        () ->
+            registry.dispatch(
+                "data_type.create",
+                Map.of(
+                    "resource",
+                    Map.of(
+                        "kind",
+                        "union",
+                        "category_path",
+                        "/Test",
+                        "name",
+                        "BrokenUnion",
+                        "fields",
+                        List.of(
+                            Map.of("name", "bad", "offset", 0, "data_type", named("uint")))))));
+    assertNull(manager.getDataType("/Test/BrokenUnion"));
+  }
+
+  @Test
+  void typedefPatchAndUpsertReplaceInPlaceAndRejectCyclicDependencies() throws Exception {
+    // Create a typedef via upsert and reference it from a struct field.
+    registry.dispatch(
+        "data_type.upsert",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "typedef",
+                "category_path",
+                "/Test",
+                "name",
+                "Handle",
+                "base_type",
+                named("uint"))));
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "struct",
+                "category_path",
+                "/Test",
+                "name",
+                "Holder",
+                "fields",
+                List.of(Map.of("name", "handle", "offset", 0, "data_type", named("/Test/Handle"))))));
+
+    assertEquals(4, service.getDataType("/Test/Holder").size());
+
+    // Patch /Test/Handle in place to ulonglong and verify dependent struct updates automatically.
+    registry.dispatch(
+        "data_type.patch",
+        Map.of(
+            "selector",
+            Map.of("path", "/Test/Handle"),
+            "patch",
+            Map.of("kind", "typedef", "base_type", named("ulonglong"))));
+
+    DataTypeResource patchedHandle = service.getDataType("/Test/Handle");
+    assertEquals(DataTypeReference.named("/ulonglong"), patchedHandle.baseType());
+    assertEquals(8, patchedHandle.length());
+    DataTypeResource updatedHolder = service.getDataType("/Test/Holder");
+    assertEquals(8, updatedHolder.size());
+    assertEquals(
+        DataTypeReference.named("/Test/Handle"), updatedHolder.fields().getFirst().dataType());
+
+    // Upsert existing typedef to ushort (and repeat idempotently).
+    for (int attempt = 0; attempt < 2; attempt++) {
+      registry.dispatch(
+          "data_type.upsert",
+          Map.of(
+              "resource",
+              Map.of(
+                  "kind",
+                  "typedef",
+                  "category_path",
+                  "/Test",
+                  "name",
+                  "Handle",
+                  "base_type",
+                  named("ushort"))));
+    }
+    assertEquals(DataTypeReference.named("/ushort"), service.getDataType("/Test/Handle").baseType());
+
+    // Function upsert continues to work unchanged.
+    registry.dispatch(
+        "data_type.upsert",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "function",
+                "category_path",
+                "/Test",
+                "name",
+                "Callback",
+                "signature",
+                Map.of(
+                    "return_type",
+                    named("int"),
+                    "parameters",
+                    List.of(Map.of("name", "arg", "data_type", named("/Test/Handle"))),
+                    "calling_convention",
+                    "default",
+                    "has_var_args",
+                    false,
+                    "has_no_return",
+                    false))));
+    assertEquals(DataTypeResource.Kind.FUNCTION, service.getDataType("/Test/Callback").kind());
+
+    // Reject direct, indirect, and pointer typedef cycles with HTTP 400 and no .conflict artifacts.
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "typedef",
+                "category_path",
+                "/Test",
+                "name",
+                "SubHandle",
+                "base_type",
+                named("/Test/Handle"))));
+
+    assertBadRequest(
+        () ->
+            registry.dispatch(
+                "data_type.patch",
+                Map.of(
+                    "selector",
+                    Map.of("path", "/Test/Handle"),
+                    "patch",
+                    Map.of("kind", "typedef", "base_type", named("/Test/Handle")))));
+    assertBadRequest(
+        () ->
+            registry.dispatch(
+                "data_type.patch",
+                Map.of(
+                    "selector",
+                    Map.of("path", "/Test/Handle"),
+                    "patch",
+                    Map.of("kind", "typedef", "base_type", named("/Test/SubHandle")))));
+    assertBadRequest(
+        () ->
+            registry.dispatch(
+                "data_type.upsert",
+                Map.of(
+                    "resource",
+                    Map.of(
+                        "kind",
+                        "typedef",
+                        "category_path",
+                        "/Test",
+                        "name",
+                        "Handle",
+                        "base_type",
+                        Map.of("kind", "pointer", "target", named("/Test/SubHandle"))))));
+
+    List<String> names = new ArrayList<>();
+    Iterator<DataType> allTypes = manager.getAllDataTypes();
+    while (allTypes.hasNext()) names.add(allTypes.next().getPathName());
+    assertFalse(names.stream().anyMatch(path -> path.contains(".conflict")), names::toString);
+
+    // Non-typedef path collision on upsert maps to HTTP 400.
+    assertBadRequest(
+        () ->
+            registry.dispatch(
+                "data_type.upsert",
+                Map.of(
+                    "resource",
+                    Map.of(
+                        "kind",
+                        "typedef",
+                        "category_path",
+                        "/Test",
+                        "name",
+                        "Holder",
+                        "base_type",
+                        named("uint")))));
+
+    // Also verify DataTypeDependencyException thrown by DataTypeManager.replaceDataType is caught
+    // and translated to IllegalArgumentException (HTTP 400).
+    TypeDef existingTypedef =
+        (TypeDef)
+            manager.addDataType(
+                new TypedefDataType(
+                    new CategoryPath("/Test"),
+                    "DepCheck",
+                    UnsignedIntegerDataType.dataType,
+                    manager),
+                DataTypeConflictHandler.DEFAULT_HANDLER);
+    DataTypeManager throwingManager =
+        (DataTypeManager)
+            Proxy.newProxyInstance(
+                DataTypeManager.class.getClassLoader(),
+                new Class<?>[] {DataTypeManager.class},
+                (proxy, method, args) -> {
+                  if ("replaceDataType".equals(method.getName())) {
+                    throw new DataTypeDependencyException("simulated cycle");
+                  }
+                  return method.invoke(manager, args);
+                });
+    IllegalArgumentException dependencyError =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                DataTypeMutations.replaceTypedef(
+                    throwingManager,
+                    existingTypedef,
+                    DataTypeReference.named("ulonglong"),
+                    ref -> GhidraDataTypeReferences.resolve(manager, ref)));
+    assertEquals(400, ApiFailures.normalize(dependencyError).status());
+  }
+
+  private static Map<String, Object> named(String name) {
+    return Map.of("kind", "named", "name", name);
+  }
+
+  private static DataTypeResource.Field findFieldByOffset(DataTypeResource resource, int offset) {
+    return resource.fields().stream()
+        .filter(field -> field.offset() == offset)
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("No field at offset " + offset));
+  }
+
+  private static void assertField(
+      DataTypeResource.Field field,
+      String expectedName,
+      int expectedOffset,
+      int expectedLength,
+      boolean expectedUndefined,
+      String expectedComment) {
+    assertNotNull(field);
+    assertEquals(expectedName, field.name());
+    assertEquals(expectedOffset, field.offset());
+    assertEquals(expectedLength, field.length());
+    assertEquals(expectedUndefined, field.isUndefined());
+    assertEquals(expectedComment, field.comment());
+  }
+
+  private static void assertBadRequest(Executable action) {
+    Throwable thrown = assertThrows(Throwable.class, action);
+    if (thrown instanceof ApiException apiError) {
+      assertEquals(400, apiError.status());
+      return;
+    }
+    var normalized = ApiFailures.normalize(thrown);
+    assertEquals(400, normalized.status(), () -> "Unexpected failure: " + thrown);
+  }
+
+  private static <T> T unused(Class<T> type) {
+    return type.cast(
+        Proxy.newProxyInstance(
+            type.getClassLoader(),
+            new Class<?>[] {type},
+            (proxy, method, args) -> {
+              throw new AssertionError("Unexpected call: " + method.getName());
+            }));
+  }
+
+  private static <T> T unusedWith(Class<T> type, String allowedMethod, Object returnValue) {
+    return type.cast(
+        Proxy.newProxyInstance(
+            type.getClassLoader(),
+            new Class<?>[] {type},
+            (proxy, method, args) -> {
+              if (allowedMethod.equals(method.getName())) return returnValue;
+              throw new AssertionError("Unexpected call: " + method.getName());
+            }));
+  }
+}

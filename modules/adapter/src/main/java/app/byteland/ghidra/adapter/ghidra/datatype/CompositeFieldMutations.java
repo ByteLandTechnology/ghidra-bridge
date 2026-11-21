@@ -4,6 +4,7 @@ import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
+import ghidra.program.model.data.Undefined;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.function.Function;
@@ -36,10 +37,13 @@ final class CompositeFieldMutations {
     for (DataTypePatch.CompositeField update : updates) {
       DataTypeComponent component = resolveSingle(composite, update);
       String newName = update.newName() == null ? component.getFieldName() : update.newName();
-      if (mode.replacesComponent(update)) {
+      boolean undefinedMetadataEdit =
+          component.isUndefined() && (update.newName() != null || update.commentPresent());
+      if (mode.replacesComponent(update) || undefinedMetadataEdit) {
         replaceComponent(composite, component, update, newName, resolver);
-      } else if (update.newName() != null) {
-        DataTypeMutationSupport.applyMetadataPatch(component, newName, component.getComment());
+      } else if (update.newName() != null || update.commentPresent()) {
+        DataTypeMutationSupport.applyMetadataPatch(
+            component, newName, update.comment(), update.commentPresent());
       }
     }
   }
@@ -50,15 +54,29 @@ final class CompositeFieldMutations {
       DataTypePatch.CompositeField update,
       String newName,
       Function<DataTypeReference, DataType> resolver) {
-    DataType replacement =
-        update.dataType() == null
-            ? component.getDataType()
-            : DataTypeMutationSupport.requireDataType(resolver, update.dataType());
-    int length =
-        DataTypeMutationSupport.fieldLength(
-            replacement, update.length(), update.dataType() == null ? component.getLength() : null);
-    composite.replace(
-        component, new Replacement(replacement, length, newName, component.getComment()));
+    int fallbackLength = component.getLength() > 0 ? component.getLength() : 1;
+    DataType replacement;
+    int length;
+    if (update.dataType() != null) {
+      replacement = DataTypeMutationSupport.requireDataType(resolver, update.dataType());
+      length = DataTypeMutationSupport.fieldLength(replacement, update.length(), null);
+    } else if (component.isUndefined()) {
+      int requestedLength =
+          update.length() != null
+              ? DataTypeMutationSupport.fieldLength(
+                  Undefined.getUndefinedDataType(1), update.length(), null)
+              : fallbackLength;
+      replacement = Undefined.getUndefinedDataType(requestedLength);
+      length = requestedLength;
+    } else {
+      replacement = component.getDataType();
+      length = DataTypeMutationSupport.fieldLength(replacement, update.length(), fallbackLength);
+    }
+    String comment =
+        update.commentPresent()
+            ? DataTypeMutationSupport.normalizeComment(update.comment())
+            : component.getComment();
+    composite.replace(component, new Replacement(replacement, length, newName, comment));
   }
 
   private static DataTypeComponent resolveSingle(
