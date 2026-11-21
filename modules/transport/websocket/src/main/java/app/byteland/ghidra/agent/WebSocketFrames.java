@@ -15,6 +15,7 @@ final class WebSocketFrames {
   static final int CLOSE_OPCODE = 0x8;
   static final int PING_OPCODE = 0x9;
   static final int PONG_OPCODE = 0xA;
+  static final long MAX_FRAME_PAYLOAD_BYTES = 16L * 1024 * 1024; // 16 MiB
 
   private static final int FINAL_FRAGMENT_FLAG = 0x80;
   private static final int OPCODE_MASK = 0x0F;
@@ -26,7 +27,6 @@ final class WebSocketFrames {
   private static final int MAX_UNSIGNED_SHORT = 0xFFFF;
   private static final int MASK_KEY_LENGTH = 4;
   private static final int NORMAL_CLOSE_STATUS = 1000;
-  private static final long MAX_FRAME_PAYLOAD_BYTES = 16L * 1024 * 1024; // 16 MiB
 
   private WebSocketFrames() {}
 
