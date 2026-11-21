@@ -4,7 +4,9 @@ import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import app.byteland.ghidra.service.datatype.DataTypeSelector;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
+import app.byteland.ghidra.service.function.FunctionSelector;
 import app.byteland.ghidra.service.function.VariableStorageReference;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -315,12 +317,23 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
+    list(name, description, input, fields, identityFields, identityFields, handler);
+  }
+
+  void list(
+      String name,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> requiredFields,
+      List<String> identityFields,
+      PagedHandler handler) {
     register(
         name,
         MethodEffects.readOnlyMethod(),
         description,
         input,
-        ApiSchemaCatalog.listSchema(fields, identityFields),
+        ApiSchemaCatalog.listSchema(fields, requiredFields),
         fields,
         identityFields,
         request -> {
@@ -933,5 +946,28 @@ public final class ApiRegistry {
     String category = optionalText(resource, ApiVocabulary.CATEGORY_PATH, "/");
     return (category.endsWith("/") ? category : category + "/")
         + text(resource, ApiVocabulary.NAME);
+  }
+
+  static FunctionSelector functionSelector(Map<String, Object> selected) {
+    if (selected.containsKey(ApiVocabulary.ENTRY)) {
+      return new FunctionSelector.Entry(text(selected, ApiVocabulary.ENTRY));
+    }
+    if (selected.containsKey(ApiVocabulary.ADDRESS)) {
+      return new FunctionSelector.Containing(text(selected, ApiVocabulary.ADDRESS));
+    }
+    if (selected.containsKey(ApiVocabulary.NAME)) {
+      return new FunctionSelector.Symbol(
+          text(selected, ApiVocabulary.NAME), optionalText(selected, ApiVocabulary.NAMESPACE));
+    }
+    return new FunctionSelector.Symbol(
+        text(selected, ApiVocabulary.SYMBOL), optionalText(selected, ApiVocabulary.NAMESPACE));
+  }
+
+  static DataTypeSelector dataTypeSelector(Map<String, Object> selected) {
+    if (selected.containsKey(ApiVocabulary.PATH)) {
+      return new DataTypeSelector.ByPath(text(selected, ApiVocabulary.PATH));
+    }
+    return new DataTypeSelector.ByName(
+        text(selected, ApiVocabulary.NAME), optionalText(selected, ApiVocabulary.CATEGORY_PATH));
   }
 }

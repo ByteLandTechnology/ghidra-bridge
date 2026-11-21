@@ -1,10 +1,10 @@
 package app.byteland.ghidra.api;
 
 import static app.byteland.ghidra.api.ApiRegistry.bool;
+import static app.byteland.ghidra.api.ApiRegistry.functionSelector;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 import static app.byteland.ghidra.api.ApiRegistry.selector;
-import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
@@ -22,10 +22,9 @@ final class DecompilationMethods implements ApiMethodProvider {
   @Override
   public void register() {
     Map<String, Object> fields = ApiRegistry.fieldsSchema();
-    Map<String, Object> entrySelector = ApiRegistry.selectorSchema(ApiVocabulary.ENTRY);
     registry.read(
         "decompilation.get",
-        "Decompile the function at an entry point. Set scan.timeout_ms between 100 and 300000."
+        "Decompile a function by entry, address, or symbol. Set scan.timeout_ms between 100 and 300000."
             + " The default is 30000 milliseconds; Ghidra rounds up to whole seconds."
             + " Format document returns GUI lines and cursor addresses from one decompilation."
             + " By default, only pre comments and the plate comment at the entry show."
@@ -34,7 +33,7 @@ final class DecompilationMethods implements ApiMethodProvider {
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
                 ApiVocabulary.SELECTOR,
-                entrySelector,
+                ApiSchemaCatalog.functionLookupSelector(),
                 "format",
                 WireSchema.stringEnum(ApiVocabulary.TEXT, "tokens", "document"),
                 "include_comments",
@@ -65,7 +64,7 @@ final class DecompilationMethods implements ApiMethodProvider {
                 .services()
                 .decompilationService()
                 .decompileFunction(
-                    text(selector(request), ApiVocabulary.ENTRY),
+                    functionSelector(selector(request)),
                     switch (optionalText(request, "format", ApiVocabulary.TEXT)) {
                       case "tokens" -> DecompilationResource.Format.TOKENS;
                       case "document" -> DecompilationResource.Format.DOCUMENT;

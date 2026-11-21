@@ -40,6 +40,11 @@ public final class ListingServiceImpl implements ListingService {
   }
 
   @Override
+  public Page<InstructionResource> listInstructions(InstructionListQuery query) {
+    return instructionQueries.listInstructions(query);
+  }
+
+  @Override
   public InstructionResource getInstruction(String rawAddress) {
     return instructionQueries.getInstruction(rawAddress);
   }
@@ -48,6 +53,11 @@ public final class ListingServiceImpl implements ListingService {
   public Page<DataUnitResource> listDataUnits(
       AddressScanOptions scan, int limit, String direction, String cursor) {
     return dataQueries.listDataUnits(scan, limit, direction, cursor);
+  }
+
+  @Override
+  public Page<DataUnitResource> listDataUnits(DataUnitListQuery query) {
+    return dataQueries.listDataUnits(query);
   }
 
   @Override

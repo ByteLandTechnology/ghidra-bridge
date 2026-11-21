@@ -16,6 +16,7 @@
 | `memory_block.list` | `read-only` | List memory block data in the active program. |
 | `memory.read` | `read-only` | Read up to 65536 bytes at an address as hex or base64. The default length is 256 and the default encoding is hex. |
 | `memory.write` | `destructive mutation` | Write hex or base64 bytes at an address. |
+| `memory.search` | `read-only` | Search initialized memory blocks for hex patterns, masked bytes, or text. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `code_unit.list` | `read-only` | List each code unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `data_unit.list` | `read-only` | List each data unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `global_variable.get` | `read-only` | Get the global variable at one address. |
@@ -40,7 +41,7 @@
 | `function_call.list` | `read-only` | List the callers or callees of a function. The default direction is callees. |
 | `analysis.get` | `read-only` | Get analysis data from the active program. |
 | `analysis.start` | `mutation` | Start automatic analysis of the active program. |
-| `decompilation.get` | `read-only` | Decompile the function at an entry point. Set scan.timeout_ms between 100 and 300000. The default is 30000 milliseconds; Ghidra rounds up to whole seconds. Format document returns GUI lines and cursor addresses from one decompilation. By default, only pre comments and the plate comment at the entry show. Set include_comments to show all comments and to return repeatable comments; then check comments_complete and warnings. |
+| `decompilation.get` | `read-only` | Decompile a function by entry, address, or symbol. Set scan.timeout_ms between 100 and 300000. The default is 30000 milliseconds; Ghidra rounds up to whole seconds. Format document returns GUI lines and cursor addresses from one decompilation. By default, only pre comments and the plate comment at the entry show. Set include_comments to show all comments and to return repeatable comments; then check comments_complete and warnings. |
 | `symbol.demangle` | `mutation` | Apply native C++ names to primary symbols. Keep other names and current types. |
 | `symbol.get` | `read-only` | Get symbol data from the active program. |
 | `symbol.list` | `read-only` | List each symbol in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |

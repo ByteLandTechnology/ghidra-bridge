@@ -25,6 +25,19 @@ public interface DataTypeService {
   DataTypeResource getDataType(String path);
 
   /**
+   * Returns metadata for a data type by path or bare name selector.
+   *
+   * @param selector data type selector
+   * @return data type resource metadata
+   */
+  default DataTypeResource getDataType(DataTypeSelector selector) {
+    if (selector instanceof DataTypeSelector.ByPath byPath) {
+      return getDataType(byPath.path());
+    }
+    throw new UnsupportedOperationException("selector lookup is not implemented");
+  }
+
+  /**
    * Searches for data types that match query filters.
    *
    * @param query text filter for name search
@@ -36,6 +49,19 @@ public interface DataTypeService {
    */
   Page<DataTypeResource> searchDataTypes(
       String query, String categoryPath, String kind, int limit, String cursor);
+
+  /**
+   * Searches for data types with optional composite member details.
+   */
+  default Page<DataTypeResource> searchDataTypes(
+      String query,
+      String categoryPath,
+      String kind,
+      boolean includeDetails,
+      int limit,
+      String cursor) {
+    return searchDataTypes(query, categoryPath, kind, limit, cursor);
+  }
 
   /**
    * Creates a data type in the program data manager.

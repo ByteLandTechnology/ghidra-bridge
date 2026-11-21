@@ -5,6 +5,7 @@ import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.VariableStorageReference;
+import ghidra.program.model.address.AddressRange;
 import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Parameter;
@@ -23,12 +24,7 @@ final class FunctionDescriptions {
         AddressUtil.canonicalAddress(function.getEntryPoint()),
         function.getName(),
         String.valueOf(function.getParentNamespace()),
-        body.isEmpty()
-            ? null
-            : new FunctionResource.Body(
-                AddressUtil.canonicalAddress(body.getMinAddress()),
-                AddressUtil.canonicalAddress(body.getMaxAddress()),
-                body.getNumAddresses()),
+        body.isEmpty() ? null : describeBody(body),
         String.valueOf(function.getSignature()),
         GhidraDataTypeReferences.toReference(function.getReturnType()),
         describeStorage(function.getReturn().getVariableStorage()),
@@ -78,6 +74,21 @@ final class FunctionDescriptions {
 
   private static VariableStorageReference describeStorage(VariableStorage storage) {
     return VariableStorageReference.serialization(storage.getSerializationString());
+  }
+
+  private static FunctionResource.Body describeBody(AddressSetView body) {
+    List<FunctionResource.AddressRange> ranges = new ArrayList<>();
+    for (AddressRange range : body.getAddressRanges()) {
+      ranges.add(
+          new FunctionResource.AddressRange(
+              AddressUtil.canonicalAddress(range.getMinAddress()),
+              AddressUtil.canonicalAddress(range.getMaxAddress())));
+    }
+    return new FunctionResource.Body(
+        AddressUtil.canonicalAddress(body.getMinAddress()),
+        AddressUtil.canonicalAddress(body.getMaxAddress()),
+        body.getNumAddresses(),
+        List.copyOf(ranges));
   }
 
   private static List<String> describeTags(Function function) {

@@ -60,6 +60,20 @@ public interface FunctionService {
    */
   FunctionResource getFunction(String rawAddress, Set<String> includes);
 
+  /**
+   * Returns function details by entry, containing address, or symbol selector.
+   *
+   * @param selector function target selector
+   * @param includes optional field projection set
+   * @return function resource details
+   */
+  default FunctionResource getFunction(FunctionSelector selector, Set<String> includes) {
+    if (selector instanceof FunctionSelector.Entry entry) {
+      return getFunction(entry.entry(), includes);
+    }
+    throw new UnsupportedOperationException("selector lookup is not implemented");
+  }
+
   /** Creates a function at an entry address. */
   FunctionResource createFunction(String rawAddress, String name, boolean disassemble);
 

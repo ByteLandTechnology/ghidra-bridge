@@ -6,6 +6,7 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import app.byteland.ghidra.service.function.FunctionResource;
+import app.byteland.ghidra.service.function.FunctionSelector;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.function.VariableStorageReference;
 import ghidra.app.cmd.function.CreateFunctionCmd;
@@ -49,6 +50,12 @@ public final class FunctionServiceImpl implements FunctionService {
   public FunctionResource getFunction(String rawAddress, Set<String> includes) {
     return FunctionDescriptions.describe(
         lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes));
+  }
+
+  @Override
+  public FunctionResource getFunction(FunctionSelector selector, Set<String> includes) {
+    return FunctionDescriptions.describe(
+        lookupQueries.resolveFunction(selector), FunctionIncludes.normalize(includes));
   }
 
   @Override

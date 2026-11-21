@@ -5,6 +5,7 @@ import static app.byteland.ghidra.api.ApiRegistry.addressScan;
 import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
+import static app.byteland.ghidra.api.ApiRegistry.functionSelector;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
 import static app.byteland.ghidra.api.ApiRegistry.nullableText;
 import static app.byteland.ghidra.api.ApiRegistry.optionalInteger;
@@ -38,15 +39,14 @@ final class FunctionMethods implements ApiMethodProvider {
     Map<String, Object> entrySelector = ApiRegistry.selectorSchema(ApiVocabulary.ENTRY);
     registry.read(
         "function.get",
-        ApiSchemaCatalog.selectorInput(entrySelector),
+        ApiSchemaCatalog.selectorInput(ApiSchemaCatalog.functionLookupSelector()),
         ApiSchemaCatalog.functionFields(),
         List.of(ApiVocabulary.ENTRY),
         request ->
             registry
                 .services()
                 .functionService()
-                .getFunction(
-                    text(selector(request), ApiVocabulary.ENTRY), requestedIncludes(request)));
+                .getFunction(functionSelector(selector(request)), requestedIncludes(request)));
     Map<String, Object> functionFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
@@ -141,6 +141,7 @@ final class FunctionMethods implements ApiMethodProvider {
     registerFunctionVariableMethods(entrySelector);
     registry.list(
         "function_call.list",
+        null,
         ApiSchemaCatalog.requiredListInput(
             WireSchema.object(
                 ApiSchemaCatalog.props(
@@ -150,6 +151,7 @@ final class FunctionMethods implements ApiMethodProvider {
         Set.of(ApiVocabulary.ENTRY, ApiVocabulary.NAME, "call_site", ApiVocabulary.DIRECTION,
             ApiVocabulary.NAMESPACE, "demangled_name"),
         List.of(ApiVocabulary.ENTRY),
+        List.of(ApiVocabulary.ENTRY, "call_site"),
         (request, page) -> {
           Map<String, Object> filter = filter(request);
           String entry = text(filter, ApiVocabulary.ENTRY);

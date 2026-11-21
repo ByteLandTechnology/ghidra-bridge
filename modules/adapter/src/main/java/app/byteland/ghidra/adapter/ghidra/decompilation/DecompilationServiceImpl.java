@@ -2,8 +2,11 @@ package app.byteland.ghidra.adapter.ghidra.decompilation;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.function.FunctionLookupQueries;
+import app.byteland.ghidra.adapter.ghidra.function.FunctionResolver;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
+import app.byteland.ghidra.service.function.FunctionSelector;
 import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.DecompInterface;
@@ -13,18 +16,18 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.WeakHashMap;
 
 public final class DecompilationServiceImpl implements DecompilationService {
-  private final GhidraSession context;
+  private final FunctionResolver functionResolver;
   private final LeasePool<DecompInterface> decompilerPool;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
 
   public DecompilationServiceImpl(GhidraSession context) {
-    this.context = Objects.requireNonNull(context, "context");
+    Objects.requireNonNull(context, "context");
+    this.functionResolver = new FunctionLookupQueries(context);
     this.decompilerPool = DecompilerPoolFactory.create(context.currentProgram());
   }
 
@@ -32,15 +35,22 @@ public final class DecompilationServiceImpl implements DecompilationService {
   public DecompilationResource decompileFunction(
       String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
       boolean includeComments) {
+    return decompileFunction(
+        new FunctionSelector.Entry(rawAddress), format, timeoutMs, includeComments);
+  }
+
+  @Override
+  public DecompilationResource decompileFunction(
+      FunctionSelector selector,
+      DecompilationResource.Format format,
+      Integer timeoutMs,
+      boolean includeComments) {
     int timeout = timeoutMs == null ? DEFAULT_TIMEOUT_MS : timeoutMs;
     if (timeout < MIN_TIMEOUT_MS || timeout > MAX_TIMEOUT_MS) {
       throw new IllegalArgumentException(
           "timeoutMs must be in " + MIN_TIMEOUT_MS + ".." + MAX_TIMEOUT_MS);
     }
-    Function function = context.script().getFunctionAt(context.parseAddress(rawAddress));
-    if (function == null) {
-      throw new NoSuchElementException("function not found");
-    }
+    Function function = functionResolver.resolveFunction(selector);
     return decompile(function, timeout, format, includeComments);
   }
 

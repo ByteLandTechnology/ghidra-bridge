@@ -167,6 +167,44 @@ final class ApiSchemaCatalog {
         FILTER);
   }
 
+  static Map<String, Object> requiredRangeScanListInput(Map<String, Object> filter) {
+    return input(
+        props(
+            FILTER,
+            filter,
+            "range",
+            ADDRESS_RANGE_SCHEMA,
+            "timeout_ms",
+            scanTimeoutSchema(),
+            LIMIT,
+            ApiRegistry.limitSchema(),
+            CURSOR,
+            ApiRegistry.cursorSchema(),
+            FIELDS,
+            ApiRegistry.fieldsSchema()),
+        FILTER);
+  }
+
+  static Map<String, Object> functionLookupSelector() {
+    return WireSchema.oneOf(
+        WireSchema.object(props(ENTRY, WireSchema.nonBlankString()), ENTRY),
+        WireSchema.object(props(ADDRESS, WireSchema.nonBlankString()), ADDRESS),
+        WireSchema.object(
+            props(NAME, WireSchema.nonBlankString(), NAMESPACE, WireSchema.nonBlankString()), NAME),
+        WireSchema.object(
+            props(SYMBOL, WireSchema.nonBlankString(), NAMESPACE, WireSchema.nonBlankString()),
+            SYMBOL));
+  }
+
+  static Map<String, Object> dataTypeLookupSelector() {
+    return WireSchema.oneOf(
+        WireSchema.object(
+            props(ApiVocabulary.PATH, WireSchema.nonBlankString()), ApiVocabulary.PATH),
+        WireSchema.object(
+            props(NAME, WireSchema.nonBlankString(), CATEGORY_PATH, WireSchema.nonBlankString()),
+            NAME));
+  }
+
   static Map<String, Object> selectorInput(Map<String, Object> selector) {
     return input(
         props(ApiVocabulary.SELECTOR, selector, FIELDS, ApiRegistry.fieldsSchema()),
@@ -503,10 +541,17 @@ final class ApiSchemaCatalog {
               END,
               WireSchema.string(),
               "num_addresses",
-              WireSchema.integer(0, Long.MAX_VALUE)),
+              WireSchema.integer(0, Long.MAX_VALUE),
+              "ranges",
+              WireSchema.array(
+                  WireSchema.object(
+                      props(START, WireSchema.string(), END, WireSchema.string()), START, END),
+                  0,
+                  Integer.MAX_VALUE)),
           START,
           END,
-          "num_addresses");
+          "num_addresses",
+          "ranges");
     }
     if (PARAMETERS.equals(field)) {
       return WireSchema.array(
@@ -579,7 +624,7 @@ final class ApiSchemaCatalog {
     if (SIGNATURE.equals(field)) {
       return WireSchema.oneOf(WireSchema.string(), functionSignatureSchema());
     }
-    if (Set.of("operands", "tags", "warnings").contains(field)) {
+    if (Set.of("operands", "tags", "warnings", "flows").contains(field)) {
       return WireSchema.array(WireSchema.string(), 0, Integer.MAX_VALUE);
     }
     if (REFERENCES.equals(field)) {
@@ -714,6 +759,11 @@ final class ApiSchemaCatalog {
         COMMENT);
   }
 
+  static Set<String> memorySearchFields() {
+    return Set.of(
+        ADDRESS, LENGTH, BYTES, "bytes.encoding", "bytes.data", "bytes.length", "block_name");
+  }
+
   static Set<String> instructionFields() {
     return Set.of(
         ADDRESS,
@@ -724,7 +774,8 @@ final class ApiSchemaCatalog {
         "flow_override",
         "default_flow_type",
         "flow_type",
-        "fall_through");
+        "fall_through",
+        "flows");
   }
 
   static Set<String> functionFields() {
@@ -737,6 +788,9 @@ final class ApiSchemaCatalog {
         "body.start",
         "body.end",
         "body.num_addresses",
+        "body.ranges",
+        "body.ranges.start",
+        "body.ranges.end",
         SIGNATURE,
         RETURN_TYPE,
         "return_storage",

@@ -1,5 +1,6 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.addressScan;
 import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.byteEncoding;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
@@ -147,5 +148,59 @@ final class MemoryMethods implements ApiMethodProvider {
               ApiVocabulary.LENGTH,
               integer(bytes, ApiVocabulary.LENGTH, -1));
         });
+    Map<String, Object> searchFilter =
+        WireSchema.oneOf(
+            WireSchema.object(
+                ApiSchemaCatalog.props("pattern", WireSchema.nonBlankString()), "pattern"),
+            WireSchema.object(
+                ApiSchemaCatalog.props(
+                    ApiVocabulary.BYTES,
+                    WireSchema.nonBlankString(),
+                    "mask",
+                    WireSchema.nonBlankString()),
+                ApiVocabulary.BYTES),
+            WireSchema.object(
+                ApiSchemaCatalog.props(
+                    ApiVocabulary.TEXT,
+                    WireSchema.nonBlankString(),
+                    ApiVocabulary.ENCODING,
+                    WireSchema.stringEnum("utf-8", "ascii", "utf-16le", "utf-16be"),
+                    ApiVocabulary.CASE_SENSITIVE,
+                    WireSchema.bool()),
+                ApiVocabulary.TEXT));
+    registry.scanList(
+        "memory.search",
+        "Search initialized memory blocks for hex patterns, masked bytes, or text."
+            + " Set a range or time limit if necessary."
+            + " Use next_cursor to get the next page.",
+        ApiSchemaCatalog.requiredRangeScanListInput(searchFilter),
+        ApiSchemaCatalog.memorySearchFields(),
+        List.of(ApiVocabulary.ADDRESS),
+        (request, page) -> {
+          Map<String, Object> filter = filter(request);
+          return registry
+              .services()
+              .memoryService()
+              .searchMemory(
+                  new MemoryService.MemorySearchQuery(
+                      addressScan(request, null, null),
+                      searchTarget(filter),
+                      page.limit(),
+                      page.cursor()));
+        });
+  }
+
+  private static MemoryService.SearchTarget searchTarget(Map<String, Object> filter) {
+    if (filter.containsKey("pattern")) {
+      return new MemoryService.HexPattern(text(filter, "pattern"));
+    }
+    if (filter.containsKey(ApiVocabulary.BYTES)) {
+      return new MemoryService.MaskedBytes(
+          text(filter, ApiVocabulary.BYTES), optionalText(filter, "mask"));
+    }
+    return new MemoryService.EncodedText(
+        text(filter, ApiVocabulary.TEXT),
+        optionalText(filter, ApiVocabulary.ENCODING, "utf-8"),
+        bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(true));
   }
 }

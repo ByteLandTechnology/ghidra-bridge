@@ -51,7 +51,26 @@ public record FunctionResource(
     return values == null ? null : List.copyOf(values);
   }
 
-  public record Body(String start, String end, long numAddresses) {}
+  public record AddressRange(String start, String end) {}
+
+  public record Body(String start, String end, long numAddresses, List<AddressRange> ranges) {
+    public Body {
+      ranges = immutableCopyOrNull(ranges);
+    }
+
+    public Body(String start, String end, long numAddresses) {
+      this(
+          start,
+          end,
+          numAddresses,
+          start != null && end != null ? List.of(new AddressRange(start, end)) : List.of());
+    }
+
+    @Override
+    public List<AddressRange> ranges() {
+      return immutableCopyOrNull(ranges);
+    }
+  }
 
   public record ParameterResource(
       int ordinal, String name, DataTypeReference dataType, VariableStorageReference storage) {}

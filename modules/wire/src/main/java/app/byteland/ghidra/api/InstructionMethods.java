@@ -6,6 +6,7 @@ import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.flowOverrides;
 import static app.byteland.ghidra.api.ApiRegistry.flowScope;
 import static app.byteland.ghidra.api.ApiRegistry.object;
+import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 import static app.byteland.ghidra.api.ApiRegistry.patch;
 import static app.byteland.ghidra.api.ApiRegistry.selector;
 import static app.byteland.ghidra.api.ApiRegistry.text;
@@ -14,6 +15,7 @@ import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
+import app.byteland.ghidra.service.listing.ListingService;
 import java.util.List;
 import java.util.Map;
 
@@ -45,18 +47,30 @@ final class InstructionMethods implements ApiMethodProvider {
                     ApiVocabulary.START,
                     WireSchema.string(),
                     ApiVocabulary.END,
+                    WireSchema.string(),
+                    "mnemonic",
+                    WireSchema.string(),
+                    "flow_type",
+                    WireSchema.string(),
+                    ApiVocabulary.FUNCTION,
                     WireSchema.string()))),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) ->
-            registry
-                .services()
-                .listingService()
-                .listInstructions(
-                    addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
-                    page.limit(),
-                    "forward",
-                    page.cursor()));
+        (request, page) -> {
+          Map<String, Object> filter = filter(request);
+          return registry
+              .services()
+              .listingService()
+              .listInstructions(
+                  new ListingService.InstructionListQuery(
+                      addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
+                      page.limit(),
+                      "forward",
+                      page.cursor(),
+                      optionalText(filter, "mnemonic"),
+                      optionalText(filter, "flow_type"),
+                      optionalText(filter, ApiVocabulary.FUNCTION)));
+        });
     Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
     Map<String, Object> flowFilter =
         WireSchema.object(

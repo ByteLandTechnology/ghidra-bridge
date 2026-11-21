@@ -1,7 +1,9 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.dataTypePath;
+import static app.byteland.ghidra.api.ApiRegistry.dataTypeSelector;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.functionSignature;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
@@ -50,14 +52,14 @@ final class DataTypeMethods implements ApiMethodProvider {
                     page.cursor()));
     registry.read(
         "data_type.get",
-        ApiSchemaCatalog.selectorInput(pathSelector),
+        ApiSchemaCatalog.selectorInput(ApiSchemaCatalog.dataTypeLookupSelector()),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
         request ->
             registry
                 .services()
                 .dataTypeService()
-                .getDataType(text(selector(request), ApiVocabulary.PATH)));
+                .getDataType(dataTypeSelector(selector(request))));
     registry.list(
         "data_type.list",
         ApiSchemaCatalog.listInput(
@@ -68,11 +70,15 @@ final class DataTypeMethods implements ApiMethodProvider {
                     ApiVocabulary.CATEGORY_PATH,
                     WireSchema.string(),
                     ApiVocabulary.KIND,
-                    WireSchema.string()))),
+                    WireSchema.string(),
+                    "include_details",
+                    WireSchema.bool()))),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
         (request, page) -> {
           Map<String, Object> filter = filter(request);
+          boolean includeDetails =
+              bool(filter, "include_details").orElseGet(() -> requestsDetailFields(request));
           return registry
               .services()
               .dataTypeService()
@@ -80,6 +86,7 @@ final class DataTypeMethods implements ApiMethodProvider {
                   optionalText(filter, "query", ""),
                   optionalText(filter, ApiVocabulary.CATEGORY_PATH),
                   optionalText(filter, ApiVocabulary.KIND),
+                  includeDetails,
                   page.limit(),
                   page.cursor());
         });
@@ -238,5 +245,23 @@ final class DataTypeMethods implements ApiMethodProvider {
               value.get("value") instanceof Number number ? number.longValue() : null));
     }
     return List.copyOf(result);
+  }
+
+  private static boolean requestsDetailFields(Map<String, Object> request) {
+    Object raw = request.get(ApiVocabulary.FIELDS);
+    if (!(raw instanceof List<?> fields)) {
+      return false;
+    }
+    for (Object item : fields) {
+      String path = String.valueOf(item);
+      if (ApiVocabulary.SIZE.equals(path)
+          || ApiVocabulary.FIELDS.equals(path)
+          || ApiVocabulary.VALUES.equals(path)
+          || ApiVocabulary.BASE_TYPE.equals(path)
+          || path.startsWith(ApiVocabulary.SIGNATURE)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

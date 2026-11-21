@@ -7,6 +7,7 @@ import app.byteland.ghidra.service.datatype.DataTypeCategoryResource;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeSelector;
 import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.DataType;
@@ -34,10 +35,30 @@ public final class DataTypeServiceImpl implements DataTypeService {
   }
 
   @Override
+  public DataTypeResource getDataType(DataTypeSelector selector) {
+    DataType dataType = DataTypeResolver.resolve(dataTypeManager(), selector, "/selector");
+    if (dataType == null) {
+      throw new NoSuchElementException("data type not found: " + selector);
+    }
+    return DataTypeDescriptions.detail(dataType);
+  }
+
+  @Override
   public Page<DataTypeResource> searchDataTypes(
       String query, String categoryPath, String kind, int limit, String cursor) {
+    return searchDataTypes(query, categoryPath, kind, false, limit, cursor);
+  }
+
+  @Override
+  public Page<DataTypeResource> searchDataTypes(
+      String query,
+      String categoryPath,
+      String kind,
+      boolean includeDetails,
+      int limit,
+      String cursor) {
     return DataTypeQueries.searchDataTypes(
-        dataTypeManager(), query, categoryPath, kind, limit, cursor);
+        dataTypeManager(), query, categoryPath, kind, includeDetails, limit, cursor);
   }
 
   @Override

@@ -39,6 +39,7 @@ final class DataTypeQueries {
       String query,
       String categoryPath,
       String kind,
+      boolean includeDetails,
       int limit,
       String cursor) {
     String lowerQuery = query == null ? "" : query.toLowerCase(Locale.ROOT);
@@ -47,10 +48,10 @@ final class DataTypeQueries {
     while (iterator.hasNext()) {
       DataType dataType = iterator.next();
       if (!dataType.getName().toLowerCase(Locale.ROOT).contains(lowerQuery)) continue;
-      DataTypeResource resource = DataTypeDescriptions.summarize(dataType);
-      if (categoryPath != null && !categoryPath.equals(resource.categoryPath())) continue;
-      if (kind != null && !kind.equalsIgnoreCase(resource.kind().name())) continue;
-      all.add(resource);
+      DataTypeResource summary = DataTypeDescriptions.summarize(dataType);
+      if (categoryPath != null && !categoryPath.equals(summary.categoryPath())) continue;
+      if (kind != null && !kind.equalsIgnoreCase(summary.kind().name())) continue;
+      all.add(includeDetails ? DataTypeDescriptions.detail(dataType) : summary);
     }
     all.sort(Comparator.comparing(DataTypeResource::path));
     return Page.paginate(all, limit, cursor, DataTypeResource::path);

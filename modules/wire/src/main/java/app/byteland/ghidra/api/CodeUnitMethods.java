@@ -1,9 +1,11 @@
 package app.byteland.ghidra.api;
 
 import static app.byteland.ghidra.api.ApiRegistry.addressScan;
+import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 
+import app.byteland.ghidra.service.listing.ListingService;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,7 +57,15 @@ final class CodeUnitMethods implements ApiMethodProvider {
                     ApiVocabulary.START,
                     WireSchema.string(),
                     ApiVocabulary.END,
-                    WireSchema.string()))),
+                    WireSchema.string(),
+                    ApiVocabulary.DATA_TYPE,
+                    WireSchema.string(),
+                    "string_only",
+                    WireSchema.bool(),
+                    "value_contains",
+                    WireSchema.string(),
+                    ApiVocabulary.CASE_SENSITIVE,
+                    WireSchema.bool()))),
         Set.of(
             ApiVocabulary.ADDRESS,
             ApiVocabulary.LENGTH,
@@ -64,14 +74,21 @@ final class CodeUnitMethods implements ApiMethodProvider {
             "representation",
             ApiVocabulary.BYTES),
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) ->
-            registry
-                .services()
-                .listingService()
-                .listDataUnits(
-                    addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
-                    page.limit(),
-                    "forward",
-                    page.cursor()));
+        (request, page) -> {
+          Map<String, Object> filter = filter(request);
+          return registry
+              .services()
+              .listingService()
+              .listDataUnits(
+                  new ListingService.DataUnitListQuery(
+                      addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
+                      page.limit(),
+                      "forward",
+                      page.cursor(),
+                      optionalText(filter, ApiVocabulary.DATA_TYPE),
+                      bool(filter, "string_only").orElse(false),
+                      optionalText(filter, "value_contains"),
+                      bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(false)));
+        });
   }
 }

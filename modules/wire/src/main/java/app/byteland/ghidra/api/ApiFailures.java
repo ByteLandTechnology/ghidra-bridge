@@ -16,9 +16,8 @@ public final class ApiFailures {
       return new Failure(error.status(), error.error());
     }
     if (failure instanceof DomainException domain) {
-      Map<String, Object> details =
-          domain instanceof TransactionExecutionException tex ? tex.details() : Map.of();
-      return failure(domain.status(), domain.code(), failure, pointer(domain.target()), details);
+      return failure(
+          domain.status(), domain.code(), failure, pointer(domain.target()), domain.details());
     }
     if (failure instanceof IllegalArgumentException) {
       return failure(400, "invalid_request", failure, null);

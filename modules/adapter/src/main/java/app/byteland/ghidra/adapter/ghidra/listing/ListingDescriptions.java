@@ -8,6 +8,7 @@ import app.byteland.ghidra.service.listing.CodeUnitResource;
 import app.byteland.ghidra.service.listing.DataUnitResource;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import app.byteland.ghidra.service.listing.InstructionResource;
+import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Data;
 import ghidra.program.model.listing.Instruction;
@@ -47,7 +48,8 @@ final class ListingDescriptions {
         FlowOverrideValue.valueOf(instruction.getFlowOverride().name()),
         instruction.getPrototype().getFlowType(instruction.getInstructionContext()).getName(),
         instruction.getFlowType().getName(),
-        AddressUtil.canonicalAddress(instruction.getFallThrough()));
+        AddressUtil.canonicalAddress(instruction.getFallThrough()),
+        flowsOf(instruction));
   }
 
   static DataUnitResource toDataItem(Data data, GhidraSession context) {
@@ -80,6 +82,20 @@ final class ListingDescriptions {
       operands.add(String.valueOf(instruction.getDefaultOperandRepresentation(index)));
     }
     return List.copyOf(operands);
+  }
+
+  private static List<String> flowsOf(Instruction instruction) {
+    Address[] rawFlows = instruction.getFlows();
+    if (rawFlows == null || rawFlows.length == 0) {
+      return List.of();
+    }
+    List<String> flows = new ArrayList<>(rawFlows.length);
+    for (Address target : rawFlows) {
+      if (target != null) {
+        flows.add(AddressUtil.canonicalAddress(target));
+      }
+    }
+    return List.copyOf(flows);
   }
 
   /**
