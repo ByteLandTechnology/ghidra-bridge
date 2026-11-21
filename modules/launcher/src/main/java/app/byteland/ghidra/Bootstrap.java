@@ -9,9 +9,15 @@ import app.byteland.ghidra.mcp.McpHttpServer;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.program.ProgramService;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.script.GhidraState;
+import ghidra.app.services.ConsoleService;
+import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.listing.Program;
+import java.io.Console;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +33,9 @@ public final class Bootstrap {
   private static final String LOOPBACK_HOST = "127.0.0.1";
 
   private static final String SESSION_ID_ARGUMENT = "session_id";
+  private static final String TOKEN_ARGUMENT = "token";
+  private static final int GENERATED_TOKEN_BYTES = 32;
+  private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
   private Bootstrap() {}
 
@@ -66,8 +75,7 @@ public final class Bootstrap {
               + ":"
               + config.port()
               + config.path());
-      script.println(
-          "[ghidra-bridge]   Auth Token: " + (config.token() == null ? "disabled" : "configured"));
+      reportServerAuthToken(script, effectiveConfig.generatedToken());
       script.println("[ghidra-bridge] Starting embedded bridge listener...");
     }
     script.println("[ghidra-bridge]   Session ID: " + config.sessionId());
@@ -127,16 +135,6 @@ public final class Bootstrap {
       throw e;
     }
 
-    AgentConfig dispatcherConfig =
-        new AgentConfig(
-            null,
-            mcpConfig.host(),
-            mcpConfig.port(),
-            mcpConfig.path(),
-            mcpConfig.token(),
-            mcpConfig.sessionId(),
-            null);
-
     saveCheckpoint(script, program, "[ghidra-mcp]");
 
     script.println("[ghidra-mcp] Starting MCP HTTP service");
@@ -150,7 +148,7 @@ public final class Bootstrap {
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
         gracefulExit(services.programService(), script, "[ghidra-mcp]")) {
-      try (AgentDispatcher dispatcher = new AgentDispatcher(services, dispatcherConfig);
+      try (AgentDispatcher dispatcher = new AgentDispatcher(services, mcpConfig.sessionId());
           McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher, script::println)) {
         if (onShutdown != null) {
           gracefulExit.installShutdownHook(server::close, onShutdown);
@@ -216,7 +214,7 @@ public final class Bootstrap {
   private static void printUsage(GhidraScript script) {
     script.printerr("[ghidra-bridge] Invalid startup arguments.");
     script.printerr(
-        "[ghidra-bridge] Defaults are used when ws_url, port, and session_id are omitted.");
+        "[ghidra-bridge] Defaults are used when ws_url, port, token, and session_id are omitted.");
     script.printerr(
         "[ghidra-bridge] If you configure transport manually, use ws_url or host/port/path.");
     script.printerr(
@@ -245,7 +243,7 @@ public final class Bootstrap {
             + " token=secret");
   }
 
-  private static EffectiveConfig resolveConfig(String[] args, Program program) {
+  static EffectiveConfig resolveConfig(String[] args, Program program) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
     List<String> defaultMessages = new ArrayList<>();
 
@@ -264,7 +262,59 @@ public final class Bootstrap {
       defaultMessages.add("session_id=" + defaultSessionId);
     }
 
-    return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages);
+    String generatedToken = null;
+    if (isBlank(parsedArgs.get("ws_url")) && !parsedArgs.containsKey(TOKEN_ARGUMENT)) {
+      generatedToken = generateSessionToken();
+      parsedArgs.put(TOKEN_ARGUMENT, generatedToken);
+      defaultMessages.add("token=<generated>");
+    }
+
+    return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages, generatedToken);
+  }
+
+  static String generateSessionToken() {
+    byte[] bytes = new byte[GENERATED_TOKEN_BYTES];
+    SECURE_RANDOM.nextBytes(bytes);
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+  }
+
+  static boolean reportServerAuthToken(GhidraScript script, String generatedToken) {
+    return reportServerAuthToken(script, findConsoleService(script), System.console(), generatedToken);
+  }
+
+  static boolean reportServerAuthToken(
+      GhidraScript script,
+      ConsoleService guiConsole,
+      Console systemConsole,
+      String generatedToken) {
+    if (generatedToken == null) {
+      script.println("[ghidra-bridge]   Auth Token: configured");
+      return true;
+    }
+    if (guiConsole != null) {
+      script.println("[ghidra-bridge]   Auth Token: generated (printed to console)");
+      guiConsole.println("[ghidra-bridge]   Session Token: " + generatedToken);
+      return true;
+    }
+    if (systemConsole != null) {
+      script.println("[ghidra-bridge]   Auth Token: generated (printed to console)");
+      systemConsole.writer().println("[ghidra-bridge]   Session Token: " + generatedToken);
+      systemConsole.flush();
+      return true;
+    }
+    script.println(
+        "[ghidra-bridge]   Auth Token: generated (no interactive console; pass token=<secret> in"
+            + " headless mode)");
+    return false;
+  }
+
+  private static ConsoleService findConsoleService(GhidraScript script) {
+    GhidraState state = script.getState();
+    if (state == null) {
+      return null;
+    }
+    PluginTool tool = state.getTool();
+    return tool == null ? null : tool.getService(ConsoleService.class);
   }
 
   private static String defaultSessionId(Program program) {
@@ -287,7 +337,8 @@ public final class Bootstrap {
     return value == null || value.isBlank();
   }
 
-  record EffectiveConfig(AgentConfig config, List<String> defaultMessages) {
+  record EffectiveConfig(
+      AgentConfig config, List<String> defaultMessages, String generatedToken) {
     EffectiveConfig {
       defaultMessages = List.copyOf(defaultMessages);
     }

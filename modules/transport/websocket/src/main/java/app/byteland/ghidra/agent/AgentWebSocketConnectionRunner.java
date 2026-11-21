@@ -37,49 +37,57 @@ final class AgentWebSocketConnectionRunner {
     AgentServerConnection connection = null;
     CloseState closeState = new CloseState(NORMAL_CLOSE_CODE, NORMAL_CLOSE_REASON);
     try (socket) {
-      socket.setTcpNoDelay(true);
-      socket.setSoTimeout(10_000);
-      WebSocketHandshake.HandshakeRequest request =
-          WebSocketHandshake.readHandshake(socket.getInputStream());
-      WebSocketHandshakeValidator.validate(config, request);
-      socket.setSoTimeout(0);
-      connection = new AgentServerConnection(socket);
-      if (!activeConnection.compareAndSet(
-          AgentWebSocketServer.RESERVED_CONNECTION_SLOT, connection)) {
-        connection.markClosed();
-        closeState.reason = "server shutdown";
-        return;
-      }
-      pendingSocket.compareAndSet(socket, null);
-      WebSocketHandshake.writeHandshakeResponse(socket.getOutputStream(), request.acceptKey());
-      handler.onOpen(connection);
-      runFrameLoop(connection, closeState);
-    } catch (WebSocketHandshake.HttpHandshakeException e) {
-      closeState.reason = e.getMessage();
       try {
-        WebSocketHandshake.writeHttpResponse(
-            socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
-      } catch (IOException responseFailure) {
-        e.addSuppressed(responseFailure);
+        socket.setTcpNoDelay(true);
+        socket.setSoTimeout(10_000);
+        WebSocketHandshake.HandshakeRequest request =
+            WebSocketHandshake.readHandshake(socket.getInputStream());
+        WebSocketHandshakeValidator.validate(config, request);
+        socket.setSoTimeout(0);
+        connection = new AgentServerConnection(socket);
+        if (!activeConnection.compareAndSet(
+            AgentWebSocketServer.RESERVED_CONNECTION_SLOT, connection)) {
+          connection.markClosed();
+          closeState.reason = "server shutdown";
+          return;
+        }
+        pendingSocket.compareAndSet(socket, null);
+        WebSocketHandshake.writeHandshakeResponse(socket.getOutputStream(), request.acceptKey());
+        handler.onOpen(connection);
+        runFrameLoop(connection, closeState);
+      } catch (WebSocketHandshake.HttpHandshakeException e) {
+        closeState.reason = e.getMessage();
+        try {
+          WebSocketHandshake.writeHttpResponse(
+              socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
+        } catch (IOException responseFailure) {
+          e.addSuppressed(responseFailure);
+          handler.onConnectionError(connection, e);
+        }
+      } catch (EOFException ignored) {
+        closeState.reason = "peer disconnected";
+      } catch (IOException e) {
+        closeState.reason = e.getMessage() == null ? "io error" : e.getMessage();
+        if (running.get()) {
+          handler.onConnectionError(connection, e);
+        }
+      } catch (RuntimeException e) {
+        closeState.reason = e.getMessage() == null ? "runtime error" : e.getMessage();
         handler.onConnectionError(connection, e);
+      } finally {
+        pendingSocket.compareAndSet(socket, null);
+        activeConnection.compareAndSet(
+            connection != null ? connection : AgentWebSocketServer.RESERVED_CONNECTION_SLOT, null);
+        if (connection != null) {
+          connection.markClosed();
+        }
       }
-    } catch (EOFException ignored) {
-      closeState.reason = "peer disconnected";
     } catch (IOException e) {
       closeState.reason = e.getMessage() == null ? "io error" : e.getMessage();
       if (running.get()) {
         handler.onConnectionError(connection, e);
       }
-    } catch (RuntimeException e) {
-      closeState.reason = e.getMessage() == null ? "runtime error" : e.getMessage();
-      handler.onConnectionError(connection, e);
     } finally {
-      pendingSocket.compareAndSet(socket, null);
-      activeConnection.compareAndSet(
-          connection != null ? connection : AgentWebSocketServer.RESERVED_CONNECTION_SLOT, null);
-      if (connection != null) {
-        connection.markClosed();
-      }
       if (connection != null) {
         handler.onClose(connection, closeState.code, closeState.reason);
       }

@@ -42,9 +42,8 @@ final class WebSocketHandshakeValidator {
       throw new WebSocketHandshake.HttpHandshakeException(
           400, BAD_REQUEST_REASON, "Query-string tokens are not supported");
     }
-    if (config.token() != null
-        && !NetworkBinding.bearerTokenMatches(
-            request.headers().get("authorization"), config.token())) {
+    if (!NetworkBinding.bearerTokenMatches(
+        request.headers().get("authorization"), config.token())) {
       throw new WebSocketHandshake.HttpHandshakeException(401, "Unauthorized", "Invalid token");
     }
   }

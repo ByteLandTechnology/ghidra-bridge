@@ -16,7 +16,7 @@ public final class NetworkBinding {
   }
 
   public static boolean bearerTokenMatches(String authorizationHeader, String expectedToken) {
-    if (authorizationHeader == null) {
+    if (authorizationHeader == null || expectedToken == null || expectedToken.isBlank()) {
       return false;
     }
     return MessageDigest.isEqual(

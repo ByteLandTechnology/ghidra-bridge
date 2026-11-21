@@ -279,8 +279,9 @@ An unknown operation, or an argument other than `operation` and `params`, return
 
 ## Authentication and Security
 
-- **Loopback Default**: Listeners bind to `127.0.0.1` by default. A loopback listener without `token` does not require authentication.
-- **External Listener**: A listener on an external network interface requires `token`.
+- **Loopback Default**: Listeners bind to `127.0.0.1` by default.
+- **Mandatory WebSocket Token**: Every embedded WebSocket listener requires a non-blank `token`, including loopback bindings. When `Bridge.java` starts in server mode without `token`, it generates a 256-bit random session token and prints it only to the Ghidra console. Unauthenticated WebSocket upgrades return HTTP `401`.
+- **MCP HTTP Listener**: An MCP HTTP listener on an external network interface requires `token`. A loopback MCP HTTP listener without `token` enforces loopback `Origin` checks.
 - **Authorization Header**: Send credentials through `Authorization: Bearer <token>`.
 - **Query Token Rejection**: The server rejects tokens in query strings with HTTP 400.
 - **Log Redaction**: Secret tokens never appear in server log files.

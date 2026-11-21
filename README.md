@@ -79,7 +79,7 @@ The launcher rejects unknown arguments, duplicate arguments, and camelCase keys.
 
 ```text
 # Embedded WebSocket server
-host=127.0.0.1 port=8765 path=/ws/agent session_id=demo
+host=127.0.0.1 port=8765 path=/ws/agent session_id=demo token=secret
 
 # Outbound WebSocket client
 ws_url=ws://127.0.0.1:8765/ws/agent session_id=demo token=secret
@@ -99,7 +99,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `port` | `8765` (WS) / `8766` (MCP) | TCP port number for the HTTP or WebSocket server. WebSocket uses the default only when `ws_url` is not set. |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | URL path endpoint for request dispatch. |
 | `session_id` | Program name | Unique identifier string for this active session. |
-| `token` | *(none)* | Shared secret token for bearer authentication. |
+| `token` | Random (WS server) / *(none)* | Shared secret token for bearer authentication. `Bridge.java` generates a 256-bit random session token in server mode when omitted. |
 | `ws_url` | *(none)* | Remote WebSocket URL in outbound client mode. |
 | `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra.program`. Use a different value for each server that one client connects to. |
 | `jar` | *(auto)* | Path to `ghidra-bridge.jar` when the JAR is not beside the script file. |
@@ -110,10 +110,10 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 The bridge enforces strict security boundaries:
 
 - **Loopback Default**: Listeners bind to `127.0.0.1` by default.
-- **Mandatory Token**: A listener on a non-loopback interface requires `token`.
-- **Bearer Header**: Inbound requests must send `Authorization: Bearer <token>`.
+- **Mandatory Token**: Every embedded WebSocket listener requires `token`, including loopback bindings. When `Bridge.java` starts in server mode without `token`, it generates a 256-bit random session token and prints it only to the Ghidra console. An MCP HTTP listener on a non-loopback interface also requires `token`.
+- **Bearer Header**: Inbound WebSocket upgrades and token-protected HTTP requests must send `Authorization: Bearer <token>`.
 - **Query Token Rejection**: The server rejects tokens in URL query strings with HTTP 400.
-- **Log Privacy**: The server never writes secret tokens to log files or consoles.
+- **Log Privacy**: The server never writes secret tokens to persistent log files. Configured tokens are never printed, and generated session tokens print only to the console.
 
 ## API and Transports
 

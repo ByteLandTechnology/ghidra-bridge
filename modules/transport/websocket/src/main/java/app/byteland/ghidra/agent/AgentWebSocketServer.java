@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -23,8 +24,11 @@ public final class AgentWebSocketServer implements AutoCloseable {
   private ServerSocket serverSocket;
 
   public AgentWebSocketServer(AgentConfig config, Handler handler) {
-    this.config = config;
-    this.handler = handler;
+    this.config = Objects.requireNonNull(config, "config");
+    this.handler = Objects.requireNonNull(handler, "handler");
+    if (!config.isServerMode()) {
+      throw new IllegalArgumentException("server-mode AgentConfig is required");
+    }
   }
 
   @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})

@@ -79,7 +79,7 @@ mkdir -p /path/to/projects
 
 ```text
 # 内嵌 WebSocket 服务端
-host=127.0.0.1 port=8765 path=/ws/agent session_id=demo
+host=127.0.0.1 port=8765 path=/ws/agent session_id=demo token=secret
 
 # 主动出站 WebSocket 客户端
 ws_url=ws://127.0.0.1:8765/ws/agent session_id=demo token=secret
@@ -99,7 +99,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `port` | `8765` (WS) / `8766` (MCP) | HTTP 或 WebSocket 服务的 TCP 端口号。WebSocket 仅在未设置 `ws_url` 时使用默认值。 |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | 请求分发所使用的 URL 路径端点。 |
 | `session_id` | 程序名 | 当前活跃会话的唯一标识字符串。 |
-| `token` | *(无)* | Bearer 认证所需的共享密钥 Token。 |
+| `token` | 随机生成 (WS 服务端) / *(无)* | Bearer 认证所需的共享密钥 Token。`Bridge.java` 在服务端模式下未指定该参数时会自动生成 256 位随机安全会话 Token。 |
 | `ws_url` | *(无)* | 出站客户端模式中的远程 WebSocket URL。 |
 | `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra.program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
 | `jar` | *(自动)* | 当 `ghidra-bridge.jar` 不在脚本文件旁边时使用的路径。 |
@@ -110,10 +110,10 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 桥接服务强制执行严格的安全边界：
 
 - **默认回环**：监听服务默认绑定至 `127.0.0.1`。
-- **强制 Token**：非回环网络接口上的监听器必须配置 `token`。
-- **Bearer 请求头**：入站请求必须携带 `Authorization: Bearer <token>` 头部。
+- **强制 Token**：所有内嵌 WebSocket 监听器（包括回环地址绑定）都必须配置 `token`。当 `Bridge.java` 在服务端模式下未指定 `token` 启动时，会生成 256 位随机安全会话 Token 并仅输出到 Ghidra 控制台。非回环网络接口上的 MCP HTTP 监听器同样必须配置 `token`。
+- **Bearer 请求头**：入站 WebSocket 升级请求及受 Token 保护的 HTTP 请求必须携带 `Authorization: Bearer <token>` 头部。
 - **拒绝 URL Token**：服务端直接以 HTTP 400 拒绝在 URL 查询参数中传递 Token。
-- **日志脱敏**：服务端绝不会把安全 Token 写入日志文件或输出控制台。
+- **日志脱敏**：服务端绝不会把安全 Token 写入持久化日志文件；显式配置的 Token 绝不会打印，自动生成的会话 Token 仅输出到控制台。
 
 ## API 与传输协议
 

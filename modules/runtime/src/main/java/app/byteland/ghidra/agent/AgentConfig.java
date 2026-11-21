@@ -1,6 +1,5 @@
 package app.byteland.ghidra.agent;
 
-import app.byteland.ghidra.network.NetworkBinding;
 import java.net.InetAddress;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -38,7 +37,7 @@ public record AgentConfig(
     }
     if (port != null) requireValidPort(port);
     if (port != null && host == null) host = DEFAULT_LOOPBACK_HOST;
-    if (port != null) NetworkBinding.requireTokenForNonLoopback(host, token);
+    if (port != null) token = required(token, "token");
     if (exitDeadlineSeconds != null && wsUrl == null) {
       throw new IllegalArgumentException("exit_deadline_sec requires ws_url");
     }

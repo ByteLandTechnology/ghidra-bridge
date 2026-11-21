@@ -79,7 +79,7 @@ mkdir -p /path/to/projects
 
 ```text
 # 内蔵 WebSocket サーバー
-host=127.0.0.1 port=8765 path=/ws/agent session_id=demo
+host=127.0.0.1 port=8765 path=/ws/agent session_id=demo token=secret
 
 # 送信型 WebSocket クライアント
 ws_url=ws://127.0.0.1:8765/ws/agent session_id=demo token=secret
@@ -99,7 +99,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `port` | `8765` (WS) / `8766` (MCP) | HTTP または WebSocket サーバーの TCP ポート番号。WebSocket は `ws_url` 未指定時のみデフォルト値を使用します。 |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | リクエストディスパッチ用の URL パスエンドポイント。 |
 | `session_id` | プログラム名 | 現在のアクティブセッションを一意に識別する文字列。 |
-| `token` | *(なし)* | Bearer 認証用の共有シークレットトークン。 |
+| `token` | ランダム生成 (WS サーバー) / *(なし)* | Bearer 認証用の共有シークレットトークン。サーバーモードの `Bridge.java` で省略された場合、256 ビットのランダムなセッショントークンを生成します。 |
 | `ws_url` | *(なし)* | 送信型クライアントモードのリモート WebSocket URL。 |
 | `tool_prefix` | `ghidra` | MCP 専用。すべてのツール名の先頭部分（`ghidra.program` の `ghidra` など）。1 つのクライアントが複数のサーバーに接続する場合、サーバーごとに異なる値を指定します。 |
 | `jar` | *(自動)* | `ghidra-bridge.jar` がスクリプトファイルの隣にない場合のパス。 |
@@ -110,10 +110,10 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 ブリッジは厳格なセキュリティ境界を適用します:
 
 - **ループバック既定**: リスナーはデフォルトで `127.0.0.1` にバインドされます。
-- **トークン必須**: ループバック以外のネットワークインターフェース上のリスナーには `token` が必要です。
-- **Bearer ヘッダー**: 受信リクエストは `Authorization: Bearer <token>` を送信する必要があります。
+- **トークン必須**: ループバックバインドを含むすべての内蔵 WebSocket リスナーには `token` が必要です。`Bridge.java` がサーバーモードで `token` なしに起動した場合、256 ビットのランダムなセッショントークンを生成し、Ghidra コンソールにのみ出力します。ループバック以外のネットワークインターフェース上の MCP HTTP リスナーにも `token` が必要です。
+- **Bearer ヘッダー**: 受信 WebSocket アップグレードおよびトークン保護された HTTP リクエストは `Authorization: Bearer <token>` を送信する必要があります。
 - **URL トークンの拒否**: URL クエリ文字列に含まれるトークンは HTTP 400 で拒否されます。
-- **ログの機密保護**: サーバーはシークレットトークンをログファイルやコンソールに出力しません。
+- **ログの機密保護**: サーバーはシークレットトークンを永続ログファイルに出力しません。設定されたトークンは出力されず、生成されたセッショントークンはコンソールにのみ出力されます。
 
 ## API とトランスポート仕様
 

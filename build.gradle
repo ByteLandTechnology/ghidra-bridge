@@ -73,6 +73,7 @@ project(':launcher') {
         implementation project(':transport:websocket')
         implementation project(':transport:mcp')
         compileOnly ghidraJars
+        testImplementation ghidraJars
     }
 }
 
@@ -215,5 +216,6 @@ tasks.register('verifyArchitecture') {
 
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture',
+        ':runtime:test', ':transport:websocket:test', ':launcher:test'
 }
