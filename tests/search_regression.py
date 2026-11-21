@@ -66,6 +66,7 @@ SECTIONS
   .rodata : { *(.rodata) }
   . = 0x404000;
   .bss : { *(.bss) }
+  /DISCARD/ : { *(.note*) *(.comment*) *(.eh_frame*) }
 }
 """
 
@@ -83,6 +84,8 @@ def run_test(headless, root):
             "gcc",
             "-nostdlib",
             "-no-pie",
+            "-Wl,--build-id=none",
+            "-Wl,-z,noexecstack",
             "-Wl,-T," + str(linker),
             "-o",
             str(binary),
