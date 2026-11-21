@@ -10,8 +10,8 @@ WebSocket JSON-RPC 2.0 と MCP Streamable HTTP `2026-07-28` の 2 つのトラ�
 ## 主な機能
 
 - **デュアルトランスポート**: WebSocket JSON-RPC 2.0 または MCP Streamable HTTP 経由で Ghidra にアクセスできます。
-- **統一されたメソッドカタログ**: 型定義された単一のレジストリが 56 個のドット記法メソッドを定義します。
-  WebSocket は 56 個すべてを公開します。MCP は 55 個を公開し、`interface.get` は公開しません。
+- **統一されたメソッドカタログ**: 型定義された単一のレジストリが 57 個のドット記法メソッドを定義します。
+  WebSocket は 57 個すべてを公開します。MCP は 56 個を公開し、`interface.get` は公開しません。
 - **有界アドレススキャン**: アドレス順のリスト結果は、協調的なキャンセルとカーソルページネーションをサポートします。
 - **アトミックトランザクション**: ブリッジはバッチ処理を実行します。
   エラー発生後にトランザクションをロールバックします。
@@ -117,7 +117,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 
 ## API とトランスポート仕様
 
-公開 API には、`interface.get` から `batch.execute` まで 56 個のドット記法メソッドが存在します。
+公開 API には、`interface.get` から `batch.execute` まで 57 個のドット記法メソッドが存在します。
 
 ### WebSocket JSON-RPC 2.0
 
@@ -131,16 +131,17 @@ WebSocket では標準的な JSON-RPC 2.0 形式でリクエストを送信し�
 
 ### Model Context Protocol (MCP)
 
-MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 15 個のツールとして公開します:
-- `ghidra.help`: ドメインの探索、操作一覧の取得、スキーマの確認。
-- 14 個のドメインツール: `ghidra.program`、`ghidra.memory`、`ghidra.function`、および他のドメインツール。
+MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 26 個のツールとして公開します:
+- `ghidra_help`: ドメインの探索、操作一覧の取得、スキーマの確認。
+- 14 個の読み取り専用ドメインツール: `ghidra_program`、`ghidra_memory`、`ghidra_function`、`ghidra_batch`、および他の読み取り専用ドメインツール。
+- 11 個の書き込みドメインツール: `ghidra_program_write`、`ghidra_memory_write`、`ghidra_function_write`、`ghidra_batch_write`、および他の `_write` ドメインツール。
 
 操作名とパラメータを指定してドメインツールを呼び出します。
-たとえば、`program.get` メソッドは `ghidra.program` の `get` 操作です:
+たとえば、`program.get` メソッドは `ghidra_program` の `get` 操作です:
 
 ```json
 {
-  "name": "ghidra.program",
+  "name": "ghidra_program",
   "arguments": {
     "operation": "get",
     "params": {}

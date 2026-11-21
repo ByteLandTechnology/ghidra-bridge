@@ -1,9 +1,9 @@
 # Protocol Specification
 
 Ghidra Bridge supports two transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
-The unified registry defines 56 public dotted methods.
-WebSocket publishes all 56 methods.
-MCP publishes 55 methods, and does not publish `interface.get`.
+The unified registry defines 57 public dotted methods.
+WebSocket publishes all 57 methods.
+MCP publishes 56 methods, and does not publish `interface.get`.
 
 ## WebSocket JSON-RPC 2.0
 
@@ -26,7 +26,7 @@ Clients send requests as JSON objects:
 The server validates every field:
 - `jsonrpc` must equal `"2.0"`.
 - `id` must be a string or integer identifier.
-- `method` must match one of the 56 public dotted methods.
+- `method` must match one of the 57 public dotted methods.
 - `params` must be a JSON object that matches the method schema.
 - The server rejects unknown fields and invalid data types.
 
@@ -178,7 +178,7 @@ The server handles these MCP methods:
 - `server/discover`: Returns server identification and capabilities.
 - `ping`: Checks server health in initialization-based versions.
   The bridge keeps this compatibility method in `2026-07-28`.
-- `tools/list`: Returns tool schemas for all 15 bridge tools.
+- `tools/list`: Returns tool schemas for all 26 bridge tools.
 - `tools/call`: Executes a tool operation and returns structured content.
 - `resources/list`: Lists available resources, such as `ghidra-bridge://contracts/mcp-tools`.
 - `resources/read`: Reads contract resource content.
@@ -196,11 +196,13 @@ The MCP error schema for that version cannot represent this case.
 
 ### Tool Call Convention
 
-MCP organizes operations into 15 tools:
-- `ghidra.help`: Finds domains, lists operations, and shows schemas.
-- 14 Domain Tools: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`.
+MCP organizes operations into 26 tools:
+- `ghidra_help`: Finds domains, lists operations, and shows schemas.
+- 14 Read-Only Domain Tools: `ghidra_bridge`, `ghidra_program`, `ghidra_address`, `ghidra_memory`, `ghidra_listing`, `ghidra_global_variable`, `ghidra_function`, `ghidra_analysis`, `ghidra_decompilation`, `ghidra_symbol`, `ghidra_reference`, `ghidra_comment`, `ghidra_data_type`, `ghidra_batch`.
+- 11 Write Domain Tools: `ghidra_bridge_write`, `ghidra_program_write`, `ghidra_memory_write`, `ghidra_listing_write`, `ghidra_global_variable_write`, `ghidra_function_write`, `ghidra_analysis_write`, `ghidra_symbol_write`, `ghidra_comment_write`, `ghidra_data_type_write`, `ghidra_batch_write`.
 
-The domain tools expose 55 methods. `interface.get` is available only through WebSocket.
+The domain tools expose 56 methods. `interface.get` is available only through WebSocket.
+Read-only tools reject write operations with JSON-RPC error `-32602` before dispatch.
 
 ### Tool Name Prefix
 

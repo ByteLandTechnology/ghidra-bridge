@@ -10,8 +10,8 @@ The runtime JAR has zero third-party dependencies.
 ## Key Features
 
 - **Dual Transports**: Access Ghidra through WebSocket JSON-RPC 2.0 or MCP Streamable HTTP.
-- **Unified Catalog**: One typed registry defines 56 public dotted methods.
-  WebSocket exposes all 56. MCP exposes 55 and does not expose `interface.get`.
+- **Unified Catalog**: One typed registry defines 57 public dotted methods.
+  WebSocket exposes all 57. MCP exposes 56 and does not expose `interface.get`.
 - **Bounded Scans**: Address-ordered list results support cooperative cancellation and cursor pagination.
 - **Atomic Transactions**: The bridge executes batch operations.
   It reverts a transaction after an error.
@@ -117,7 +117,7 @@ The bridge enforces strict security boundaries:
 
 ## API and Transports
 
-The public API has 56 dotted methods, from `interface.get` to `batch.execute`.
+The public API has 57 dotted methods, from `interface.get` to `batch.execute`.
 
 ### WebSocket JSON-RPC 2.0
 
@@ -131,16 +131,17 @@ Call `interface.get` to discover all methods and schemas that the server support
 
 ### Model Context Protocol (MCP)
 
-MCP exposes the same operations, except `interface.get`, through 15 tools over Streamable HTTP:
-- `ghidra.help`: Discover domains, list operations, or view schemas.
-- 14 Domain Tools: `ghidra.program`, `ghidra.memory`, `ghidra.function`, and other domain tools.
+MCP exposes the same operations, except `interface.get`, through 26 tools over Streamable HTTP:
+- `ghidra_help`: Discover domains, list operations, or view schemas.
+- 14 Read-Only Domain Tools: `ghidra_program`, `ghidra_memory`, `ghidra_function`, `ghidra_batch`, and other read-only domain tools.
+- 11 Write Domain Tools: `ghidra_program_write`, `ghidra_memory_write`, `ghidra_function_write`, `ghidra_batch_write`, and other `_write` domain tools.
 
 Call a domain tool with an operation name and its parameters.
-For example, the `program.get` method is the `get` operation of `ghidra.program`:
+For example, the `program.get` method is the `get` operation of `ghidra_program`:
 
 ```json
 {
-  "name": "ghidra.program",
+  "name": "ghidra_program",
   "arguments": {
     "operation": "get",
     "params": {}

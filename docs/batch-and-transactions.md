@@ -1,7 +1,9 @@
 # Batch and Transactions
 
-The `batch.execute` method executes multiple API operations in a single request.
-It accepts a transaction mode and a list of 1 to 1000 items.
+The `batch.query` and `batch.execute` methods execute multiple API operations in a single request.
+`batch.query` accepts only read-only batchable operations.
+`batch.execute` accepts both read-only and mutation batchable operations.
+Each method accepts an optional transaction mode and a list of 1 to 1000 items.
 
 ## Request Structure
 
@@ -58,9 +60,11 @@ Batches cannot nest these operations:
 - `program.save`
 - `analysis.start`
 - `session.shutdown`
+- `batch.query`
 - `batch.execute`
 
 A batch that includes one of these methods fails prevalidation.
+In addition, `batch.query` rejects any mutation method with `code=validation_failed` during prevalidation.
 
 ## Transaction Modes
 

@@ -86,8 +86,17 @@ def run_test(headless, root):
             raise AssertionError(f"Unexpected result for {name}: {result}")
         return result.get("structuredContent", {})
 
+    def call_error(message):
+        request = urllib.request.Request(url, json.dumps(message).encode(), headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                raise AssertionError(f"Expected HTTP error, got {response.status}")
+        except urllib.error.HTTPError as error:
+            return error.code, json.loads(error.read().decode())
+
     def function(call_id, operation, params, success=True):
-        return tool(call_id, "ghidra_function", {"operation": operation, "params": params}, success)
+        tool_name = "ghidra_function" if operation in ("get", "list", "call.list") else "ghidra_function_write"
+        return tool(call_id, tool_name, {"operation": operation, "params": params}, success)
 
     def selector(label):
         return {"selector": {"entry": symbols[label]}}
@@ -121,6 +130,20 @@ def run_test(headless, root):
             if not ready:
                 raise RuntimeError("Ghidra did not start")
             call({"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+            status_code, rpc_err = call_error({
+                "jsonrpc": "2.0",
+                "id": 19,
+                "method": "tools/call",
+                "params": {
+                    "name": "ghidra_function",
+                    "arguments": {
+                        "operation": "create",
+                        "params": {"resource": {"entry": symbols["func_a"], "name": "func_a"}},
+                    },
+                },
+            })
+            assert status_code == 400 and rpc_err["error"]["code"] == -32602, rpc_err
 
             first = function(2, "create", {
                 "resource": {"entry": symbols["func_a"], "name": "func_a"},
@@ -171,7 +194,7 @@ def run_test(headless, root):
         finally:
             if ready:
                 try:
-                    tool(20, "ghidra_bridge", {"operation": "shutdown"})
+                    tool(20, "ghidra_bridge_write", {"operation": "shutdown"})
                 except (OSError, TimeoutError, urllib.error.URLError):
                     pass
             try:

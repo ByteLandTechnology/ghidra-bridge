@@ -8,10 +8,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Groups the API methods into MCP tools named {@code <prefix>_<domain>}, plus
- * {@code <prefix>_help}.
+ * Groups the API methods into read-only {@code <prefix>_<domain>} tools and mutation
+ * {@code <prefix>_<domain>_write} tools, plus {@code <prefix>_help}.
  */
 final class McpToolRegistry {
+  private static final String WRITE_SUFFIX = "_write";
+
   private final String prefix;
   private final Map<String, Map<String, MethodDescriptor>> domains = new LinkedHashMap<>();
   private final List<Map<String, Object>> listedTools;
@@ -22,11 +24,31 @@ final class McpToolRegistry {
 
   McpToolRegistry(ApiCatalog catalog, String prefix) {
     this.prefix = McpConfig.requireToolPrefix(prefix);
+    Map<String, Map<String, MethodDescriptor>> readsByDomain = new LinkedHashMap<>();
+    Map<String, Map<String, MethodDescriptor>> writesByDomain = new LinkedHashMap<>();
+    List<String> domainOrder = new ArrayList<>();
     for (MethodDescriptor method : catalog.methods()) {
       if (method.name().equals("interface.get")) continue;
       String[] target = target(method.name());
-      domains.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>())
+      if (!domainOrder.contains(target[0])) {
+        domainOrder.add(target[0]);
+      }
+      Map<String, Map<String, MethodDescriptor>> bucket =
+          method.readOnly() ? readsByDomain : writesByDomain;
+      bucket.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>())
           .put(target[1], method);
+    }
+    for (String baseDomain : domainOrder) {
+      Map<String, MethodDescriptor> reads = readsByDomain.get(baseDomain);
+      Map<String, MethodDescriptor> writes = writesByDomain.get(baseDomain);
+      if (reads != null && !reads.isEmpty()) {
+        domains.put(baseDomain, reads);
+      }
+      if (writes != null && !writes.isEmpty()) {
+        String writeDomain =
+            reads != null && !reads.isEmpty() ? baseDomain + WRITE_SUFFIX : baseDomain;
+        domains.put(writeDomain, writes);
+      }
     }
     List<Map<String, Object>> tools = new ArrayList<>();
     tools.add(Map.of("name", helpToolName(), "description", "Get domains, operations, schemas, and effects.",
@@ -74,14 +96,27 @@ final class McpToolRegistry {
         "properties", properties,
         "required", List.of("operation"));
 
-    String purpose = "listing".equals(domain)
-        ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
+    String base = baseDomain(domain);
+    String purpose = "listing".equals(base)
+        ? "for code units, instructions, and flow overrides" : "for " + base + " data";
+    boolean readOnlyHint =
+        operations.values().stream().allMatch(MethodDescriptor::readOnlyHint);
+    boolean destructiveHint =
+        operations.values().stream().anyMatch(MethodDescriptor::destructiveHint);
+    boolean idempotentHint =
+        operations.values().stream().allMatch(MethodDescriptor::idempotentHint);
     return Map.of("name", toolName(domain),
         "description", "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
         "inputSchema", inputSchema,
-        "annotations", Map.of("readOnlyHint", false, "destructiveHint", true,
-            "idempotentHint", false, "openWorldHint", false));
+        "annotations", Map.of("readOnlyHint", readOnlyHint, "destructiveHint", destructiveHint,
+            "idempotentHint", idempotentHint, "openWorldHint", false));
+  }
+
+  private static String baseDomain(String domain) {
+    return domain.endsWith(WRITE_SUFFIX)
+        ? domain.substring(0, domain.length() - WRITE_SUFFIX.length())
+        : domain;
   }
 
   List<Map<String, Object>> listTools() { return listedTools; }
@@ -90,6 +125,23 @@ final class McpToolRegistry {
     String domain = domainOf(name);
     Map<String, MethodDescriptor> methods = domain == null ? null : domains.get(domain);
     return methods == null ? null : methods.get(operation);
+  }
+
+  boolean isReadOnlyTool(String name) {
+    if (isHelpTool(name)) return true;
+    String domain = domainOf(name);
+    Map<String, MethodDescriptor> methods = domain == null ? null : domains.get(domain);
+    return methods != null
+        && !methods.isEmpty()
+        && methods.values().stream().allMatch(MethodDescriptor::readOnlyHint);
+  }
+
+  boolean isWriteOperationForReadOnlyTool(String name, String operation) {
+    if (!isReadOnlyTool(name) || isHelpTool(name)) return false;
+    String domain = domainOf(name);
+    Map<String, MethodDescriptor> writeMethods =
+        domain == null ? null : domains.get(domain + WRITE_SUFFIX);
+    return writeMethods != null && writeMethods.containsKey(operation);
   }
 
   boolean hasTool(String name) {

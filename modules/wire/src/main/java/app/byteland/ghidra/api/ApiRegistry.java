@@ -477,6 +477,17 @@ public final class ApiRegistry {
                 return ApiRegistry.this.inTransaction(operation);
               }
             });
+    BatchMethod.Registration queryRegistration = batchMethod.queryRegistration();
+    registerWithCodec(
+        BatchMethod.QUERY_NAME,
+        queryRegistration.effects(),
+        "Check a read-only batch. Run its items in order. Use per_item to keep item errors."
+            + " Use all_or_none to stop after an error.",
+        queryRegistration.requestCodec(),
+        queryRegistration.responseSchema(),
+        Set.of(),
+        List.of(),
+        queryRegistration.handler());
     BatchMethod.Registration registration = batchMethod.registration();
     registerWithCodec(
         BatchMethod.NAME,
@@ -607,6 +618,7 @@ public final class ApiRegistry {
       case "save" -> "Save the active program to its project file.";
       case ApiVocabulary.START -> "Start automatic analysis of the active program.";
       case "shutdown" -> "Stop the current Ghidra Bridge session.";
+      case "query" -> "Run a read-only batch of methods in order.";
       case "execute" -> "Run a batch of methods in order.";
       default -> "Run the " + name + " method.";
     };

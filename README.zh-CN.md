@@ -10,8 +10,8 @@ Ghidra Bridge 为正在运行的 Ghidra 程序提供网络访问接口。
 ## 主要特性
 
 - **双传输通道**：支持通过 WebSocket JSON-RPC 2.0 或 MCP Streamable HTTP 访问 Ghidra。
-- **统一方法目录**：一个类型严格的注册表定义 56 个点分方法。
-  WebSocket 暴露全部 56 个。MCP 暴露 55 个，且不暴露 `interface.get`。
+- **统一方法目录**：一个类型严格的注册表定义 57 个点分方法。
+  WebSocket 暴露全部 57 个。MCP 暴露 56 个，且不暴露 `interface.get`。
 - **有界地址扫描**：按地址排序的列表结果支持协作取消与游标分页。
 - **原子事务控制**：桥接执行批量操作。
   它在发生错误后回滚事务。
@@ -117,7 +117,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 
 ## API 与传输协议
 
-公共 API 包含 56 个严格的点分方法，从 `interface.get` 到 `batch.execute`。
+公共 API 包含 57 个严格的点分方法，从 `interface.get` 到 `batch.execute`。
 
 ### WebSocket JSON-RPC 2.0
 
@@ -131,16 +131,17 @@ WebSocket 采用标准的 JSON-RPC 2.0 格式进行请求交互：
 
 ### Model Context Protocol (MCP)
 
-MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映射为 15 个工具：
-- `ghidra.help`：发现领域、列出操作或查看操作 Schema。
-- 14 个领域工具：`ghidra.program`、`ghidra.memory`、`ghidra.function` 和其他领域工具。
+MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映射为 26 个工具：
+- `ghidra_help`：发现领域、列出操作或查看操作 Schema。
+- 14 个只读领域工具：`ghidra_program`、`ghidra_memory`、`ghidra_function`、`ghidra_batch` 和其他只读领域工具。
+- 11 个写入领域工具：`ghidra_program_write`、`ghidra_memory_write`、`ghidra_function_write`、`ghidra_batch_write` 和其他 `_write` 领域工具。
 
 使用操作名及其参数调用领域工具。
-例如，`program.get` 方法对应 `ghidra.program` 的 `get` 操作：
+例如，`program.get` 方法对应 `ghidra_program` 的 `get` 操作：
 
 ```json
 {
-  "name": "ghidra.program",
+  "name": "ghidra_program",
   "arguments": {
     "operation": "get",
     "params": {}
