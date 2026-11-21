@@ -16,6 +16,7 @@ import ghidra.program.model.address.AddressRangeIterator;
 import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.data.StringDataInstance;
+import ghidra.program.model.data.Undefined;
 import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Data;
 import ghidra.program.model.listing.Instruction;
@@ -440,6 +441,12 @@ final class ListingStringQueries {
           gapEnd = nextInstruction.getMinAddress().previous();
         }
         Data nextDefinedData = listing.getDefinedDataAfter(gapCursor);
+        while (nextDefinedData != null
+            && nextDefinedData.getMinAddress().getAddressSpace().equals(gapCursor.getAddressSpace())
+            && nextDefinedData.getMinAddress().compareTo(gapEnd) <= 0
+            && isUndefinedPlaceholder(nextDefinedData)) {
+          nextDefinedData = listing.getDefinedDataAfter(nextDefinedData.getMaxAddress());
+        }
         if (nextDefinedData != null
             && nextDefinedData.getMinAddress().getAddressSpace().equals(gapCursor.getAddressSpace())
             && nextDefinedData.getMinAddress().compareTo(gapEnd) <= 0) {
@@ -455,7 +462,16 @@ final class ListingStringQueries {
       if (inst != null) {
         return inst;
       }
-      return listing.getDefinedDataContaining(address);
+      Data data = listing.getDefinedDataContaining(address);
+      if (data != null && !isUndefinedPlaceholder(data)) {
+        return data;
+      }
+      return null;
+    }
+
+    private static boolean isUndefinedPlaceholder(Data data) {
+      return Undefined.isUndefined(data.getDataType())
+          || Undefined.isUndefinedArray(data.getDataType());
     }
 
     private StreamItem toStreamItem(Address start, CandidateMatch match) {

@@ -41,6 +41,12 @@ defined_banner:
 .global candidate_secret
 candidate_secret:
   .byte 'c', 'a', 'n', 'd', 'i', 'd', 'a', 't', 'e', '_', 'f', 'l', 'a', 'g', 0
+  .byte 0xff, 0xfe
+.global sized_undef_blob
+.type sized_undef_blob, @object
+sized_undef_blob:
+  .byte 0xfd, 0xfc, 's', 'i', 'z', 'e', 'd', '_', 'b', 'l', 'o', 'b', '_', 'f', 'l', 'a', 'g', 0, 0xfb, 0xfa
+.size sized_undef_blob, . - sized_undef_blob
 
 .section .bss
 .global uninit_buf
@@ -198,6 +204,7 @@ def run_test(headless, root):
             assert values_and_flags == [
                 ("https://update.example.invalid/v1", True),
                 ("candidate_flag", False),
+                ("sized_blob_flag", False),
             ], with_candidates
 
             # Invalid regex must fail before scan.
