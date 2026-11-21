@@ -488,27 +488,36 @@ public final class McpHttpServer implements AutoCloseable {
     }
   }
 
-  private Map<String, Object> toolResult(Object result, boolean isError, boolean statelessProtocol) {
+  static Map<String, Object> toolResult(
+      Object result, boolean isError, boolean statelessProtocol) {
     Map<String, Object> content = new LinkedHashMap<>();
     content.put("type", "text");
-    content.put("text", result instanceof String string ? string : JsonUtil.toJson(result));
+    Object structured;
+    if (result instanceof String string) {
+      content.put("text", string);
+      structured = structuredContent(result, string);
+    } else {
+      String json = JsonUtil.toJson(result);
+      content.put("text", json);
+      structured = structuredContent(result, JsonUtil.rawJson(json));
+    }
 
     Map<String, Object> response = new LinkedHashMap<>();
     if (statelessProtocol) {
       response.put("resultType", "complete");
     }
     response.put("content", List.of(content));
-    response.put("structuredContent", structuredContent(result));
+    response.put("structuredContent", structured);
     response.put("isError", isError);
     return response;
   }
 
-  private Object structuredContent(Object result) {
-    if (result instanceof Map<?, ?>) {
-      return result;
+  private static Object structuredContent(Object original, Object encoded) {
+    if (original instanceof Map<?, ?>) {
+      return encoded;
     }
     Map<String, Object> wrapper = new LinkedHashMap<>();
-    wrapper.put("value", result);
+    wrapper.put("value", encoded);
     return wrapper;
   }
 
