@@ -39,13 +39,11 @@ jobs:
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
 
-      - name: Run clean repository verification
-        run: ./gradlew --no-daemon clean verify
+      - name: Run repository verification and tests
+        run: ./gradlew --no-daemon verify :wire:test :contracts:test
 
       - name: Test function mutations
-        run: |
-          ./gradlew --no-daemon :wire:test :contracts:test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
   release:
     # Update the release PR or create a release after main passes verification.
