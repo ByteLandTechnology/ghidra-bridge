@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra.listing;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.scan.AddressScopeResolver;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.listing.CodeUnitResource;
@@ -19,8 +20,9 @@ public final class ListingServiceImpl implements ListingService {
   private final ListingFlowOverrideMutations flowOverrideMutations;
 
   public ListingServiceImpl(GhidraSession context) {
+    AddressScopeResolver scopeResolver = new AddressScopeResolver(context);
     this.codeUnitQueries = new ListingCodeUnitQueries(context);
-    this.instructionQueries = new ListingInstructionQueries(context);
+    this.instructionQueries = new ListingInstructionQueries(context, scopeResolver);
     this.dataQueries = new ListingDataQueries(context);
     ListingFlowOverrideScopes flowOverrideScopes = new ListingFlowOverrideScopes(context);
     this.flowOverrideQueries = new ListingFlowOverrideQueries(context, flowOverrideScopes);
@@ -35,8 +37,8 @@ public final class ListingServiceImpl implements ListingService {
 
   @Override
   public Page<InstructionResource> listInstructions(
-      AddressScanOptions scan, int limit, String direction, String cursor) {
-    return instructionQueries.listInstructions(scan, limit, direction, cursor);
+      FlowOverrideScope scope, AddressScanOptions scan, int limit, String direction, String cursor) {
+    return instructionQueries.listInstructions(scope, scan, limit, direction, cursor);
   }
 
   @Override

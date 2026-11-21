@@ -35,7 +35,9 @@ final class CodeUnitMethods implements ApiMethodProvider {
             ApiVocabulary.TEXT,
             "mnemonic",
             "operands",
-            ApiVocabulary.DATA_TYPE),
+            ApiVocabulary.DATA_TYPE,
+            "value",
+            "representation"),
         List.of(ApiVocabulary.ADDRESS),
         (request, page) ->
             registry

@@ -48,6 +48,7 @@ Ghidra 的后台自动分析在独立线程中运行。
 - `symbol.list`
 - `comment.list`
 - `flow_override.list`
+- `reference.list`
 
 扫描操作接受 `scan` 对象。
 `scan.range` 对象指定 `start` 和 `end` 地址。

@@ -37,6 +37,7 @@ final class InstructionMethods implements ApiMethodProvider {
                 .services()
                 .listingService()
                 .getInstruction(text(selector(request), ApiVocabulary.ADDRESS)));
+    Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
     registry.scanList(
         "instruction.list",
         ApiSchemaCatalog.scanListInput(
@@ -45,19 +46,28 @@ final class InstructionMethods implements ApiMethodProvider {
                     ApiVocabulary.START,
                     WireSchema.string(),
                     ApiVocabulary.END,
-                    WireSchema.string()))),
+                    WireSchema.string(),
+                    ApiVocabulary.SELECTOR,
+                    flowSelector))),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) ->
-            registry
-                .services()
-                .listingService()
-                .listInstructions(
-                    addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
-                    page.limit(),
-                    "forward",
-                    page.cursor()));
-    Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
+        (request, page) -> {
+          Map<String, Object> filter = filter(request);
+          Object rawSelector = filter.get(ApiVocabulary.SELECTOR);
+          FlowOverrideScope scope =
+              rawSelector instanceof Map<?, ?>
+                  ? flowScope(object(filter, ApiVocabulary.SELECTOR))
+                  : null;
+          return registry
+              .services()
+              .listingService()
+              .listInstructions(
+                  scope,
+                  addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
+                  page.limit(),
+                  "forward",
+                  page.cursor());
+        });
     Map<String, Object> flowFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(

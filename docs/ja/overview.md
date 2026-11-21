@@ -48,6 +48,7 @@ Ghidra のバックグラウンド解析は独立したスレッドで実行さ�
 - `symbol.list`
 - `comment.list`
 - `flow_override.list`
+- `reference.list`
 
 スキャン操作は `scan` オブジェクトを受け取ります。
 `scan.range` オブジェクトで `start` と `end` アドレスを指定します。

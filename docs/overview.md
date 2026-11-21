@@ -48,6 +48,7 @@ Applicable list operations are:
 - `symbol.list`.
 - `comment.list`.
 - `flow_override.list`.
+- `reference.list`.
 
 Scan operations accept a `scan` object.
 The `scan.range` object supplies `start` and `end` addresses.
