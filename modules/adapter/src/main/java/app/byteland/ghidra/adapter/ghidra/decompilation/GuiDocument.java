@@ -41,10 +41,17 @@ record GuiDocument(String code, List<Line> lines) {
           Function target = DecompilerUtils.getFunction(program, nameToken);
           if (target != null) symbol = SymbolDescriptions.describe(target.getSymbol());
         }
-        tokens.add(new LocatedToken(
-            DecompilationServiceImpl.tokenKind(token), text, column, column + text.length(),
-            canonical(token.getMinAddress()), canonical(token.getMaxAddress()),
-            canonical(closest), unit == null ? null : canonical(unit.getMinAddress()), symbol));
+        tokens.add(
+            new LocatedToken(
+                DecompilationServiceImpl.tokenKind(token),
+                text,
+                column,
+                column + text.length(),
+                canonical(token.getMinAddress()),
+                canonical(token.getMaxAddress()),
+                canonical(closest),
+                unit == null ? null : canonical(unit.getMinAddress()),
+                symbol));
         column += text.length();
       }
       lines.add(new Line(line.getLineNumber() - 1, line.getIndentString().length(), tokens));

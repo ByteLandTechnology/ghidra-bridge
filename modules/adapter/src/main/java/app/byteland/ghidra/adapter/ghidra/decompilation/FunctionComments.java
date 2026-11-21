@@ -25,8 +25,9 @@ record FunctionComments(List<CommentResource> items, boolean complete) {
         }
         String text = listing.getComment(CommentType.REPEATABLE, address);
         if (text != null) {
-          comments.add(new CommentResource(
-              AddressUtil.canonicalAddress(address), CommentResource.Type.REPEATABLE, text));
+          comments.add(
+              new CommentResource(
+                  AddressUtil.canonicalAddress(address), CommentResource.Type.REPEATABLE, text));
         }
       }
       return new FunctionComments(List.copyOf(comments), true);

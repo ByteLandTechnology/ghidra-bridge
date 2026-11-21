@@ -39,6 +39,18 @@ jobs:
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
 
+      - name: Install Ruff
+        uses: astral-sh/ruff-action@v4.1.0
+        with:
+          version: "0.17.2"
+          args: "--version"
+
+      - name: Lint Python tests
+        run: ruff check --select E,F,I,EXE tests/
+
+      - name: Check Python test formatting
+        run: ruff format --check tests/
+
       - name: Run clean repository verification
         run: ./gradlew --no-daemon clean verify
 

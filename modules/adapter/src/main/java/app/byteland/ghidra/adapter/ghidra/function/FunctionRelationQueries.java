@@ -44,7 +44,8 @@ final class FunctionRelationQueries {
                   : FunctionCallResource.Direction.CALLEES,
               relatedFunction.getParentNamespace().getName(true),
               CppSymbolNames.demangled(
-                  relatedFunction.getProgram(), relatedFunction.getName(),
+                  relatedFunction.getProgram(),
+                  relatedFunction.getName(),
                   relatedFunction.getEntryPoint())));
     }
     rows.sort(Comparator.comparing(FunctionCallResource::entry));

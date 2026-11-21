@@ -4,13 +4,9 @@ import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 
-/**
- * Coordinates defined data items and primary labels.
- */
+/** Coordinates defined data items and primary labels. */
 public interface GlobalVariableService {
-  /**
-   * Search criteria for global variable queries.
-   */
+  /** Search criteria for global variable queries. */
   record Query(
       AddressScanOptions scan,
       String name,
@@ -24,9 +20,7 @@ public interface GlobalVariableService {
     }
   }
 
-  /**
-   * Mutation data to create or patch a global variable.
-   */
+  /** Mutation data to create or patch a global variable. */
   record Mutation(String address, String name, DataTypeReference dataType) {
     public Mutation {
       if (address == null || address.isBlank()) {
@@ -40,32 +34,22 @@ public interface GlobalVariableService {
     }
   }
 
-  /**
-   * Write mode for global variable mutations.
-   */
+  /** Write mode for global variable mutations. */
   enum WriteMode {
     CREATE,
     PATCH,
     UPSERT
   }
 
-  /**
-   * Returns a global variable definition by address.
-   */
+  /** Returns a global variable definition by address. */
   GlobalVariableResource getGlobalVariable(String address);
 
-  /**
-   * Returns one page of global variables that match the query.
-   */
+  /** Returns one page of global variables that match the query. */
   Page<GlobalVariableResource> listGlobalVariables(Query query);
 
-  /**
-   * Writes global variable definitions as specified by the write mode.
-   */
+  /** Writes global variable definitions as specified by the write mode. */
   void writeGlobalVariable(Mutation mutation, WriteMode mode);
 
-  /**
-   * Deletes a global variable definition at the given address.
-   */
+  /** Deletes a global variable definition at the given address. */
   void deleteGlobalVariable(String address, boolean deleteSymbol);
 }

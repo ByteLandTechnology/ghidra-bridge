@@ -82,15 +82,30 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
+Format Java, Gradle, and Python files locally before you commit:
+
+```bash
+./gradlew --no-daemon spotlessApply
+ruff format tests/
+ruff check --select E,F,I,EXE --fix tests/
+```
+
 Before you submit a change, run the verification suite:
 
 ```bash
+./gradlew --no-daemon spotlessCheck
+ruff check --select E,F,I,EXE tests/
+ruff format --check tests/
 ./gradlew --no-daemon clean verify
 bash .github/scripts/verify-repository-hygiene.sh
 ```
 
 The verification tasks check:
-- **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
+- **Formatting**: `spotlessCheck` checks 2-space formatting and the 100-character line limit on
+  Java and Gradle files.
+- **Python Style**: Ruff checks imports, executable headers, lint rules, and formatting in `tests/`.
+- **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra
+  classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.

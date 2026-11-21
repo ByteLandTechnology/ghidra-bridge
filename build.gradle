@@ -1,219 +1,302 @@
 plugins {
-    id 'base'
+  id 'base'
+  id 'com.diffplug.spotless' version '8.8.0'
+}
+
+class LineWidthCheck implements com.diffplug.spotless.FormatterFunc, Serializable {
+  private static final long serialVersionUID = 1L
+  private final int maxColumns
+
+  LineWidthCheck(int maxColumns) {
+    this.maxColumns = maxColumns
+  }
+
+  @Override
+  String apply(String input) {
+    int lineNumber = 0
+    for (String line : input.split('\n', -1)) {
+      lineNumber++
+      String clean = line.endsWith('\r') ? line.substring(0, line.length() - 1) : line
+      int width = clean.codePointCount(0, clean.length())
+      if (width > maxColumns) {
+        throw new AssertionError("Line ${lineNumber} exceeds ${maxColumns} characters (${width})")
+      }
+    }
+    return input
+  }
 }
 
 group = 'app.byteland'
 // Release pull requests update version.txt. CI sets the same value with releaseVersion.
 version = providers.gradleProperty('releaseVersion').getOrElse(file('version.txt').text.trim())
 
+repositories { mavenCentral() }
+
 apply from: 'gradle/ghidra-detect.gradle'
 
-subprojects {
-    group = rootProject.group
-    version = rootProject.version
-
-    if (project.path == ':transport') {
-        apply plugin: 'base'
-        return
+spotless {
+  lineEndings = 'UNIX'
+  java {
+    target fileTree('modules') {
+      include '**/src/**/*.java'
+      exclude '**/build/**'
     }
-
-    apply plugin: 'java-library'
-    java {
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(21)
-        }
-    }
-    repositories { mavenCentral() }
-    dependencies {
-        testImplementation platform('org.junit:junit-bom:6.1.2')
-        testImplementation 'org.junit.jupiter:junit-jupiter'
-        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    }
-    tasks.withType(Test).configureEach {
-        useJUnitPlatform()
-    }
-    tasks.withType(JavaCompile).configureEach {
-        options.encoding = 'UTF-8'
-    }
+    googleJavaFormat('1.35.0').reflowLongStrings()
+    trimTrailingWhitespace()
+    endWithNewline()
+    custom 'lineWidth', new LineWidthCheck(100)
+  }
+  groovyGradle {
+    target '*.gradle', 'gradle/*.gradle'
+    greclipse().configProperties(
+        'org.eclipse.jdt.core.formatter.tabulation.char=space',
+        'org.eclipse.jdt.core.formatter.tabulation.size=2',
+        'org.eclipse.jdt.core.formatter.indentation.size=2',
+        'groovy.formatter.multiline.indentation=2',
+        'groovy.formatter.line.maxlength=100'
+        )
+    trimTrailingWhitespace()
+    endWithNewline()
+    custom 'lineWidth', new LineWidthCheck(100)
+  }
 }
 
-def ghidraJars = ghidraInstallDir == null ? files() : fileTree(dir: ghidraInstallDir, include: ['**/*.jar'])
+subprojects {
+  group = rootProject.group
+  version = rootProject.version
+
+  if (project.path == ':transport') {
+    apply plugin: 'base'
+    return
+  }
+
+  apply plugin: 'java-library'
+  java {
+    toolchain {
+      languageVersion = JavaLanguageVersion.of(21)
+    }
+  }
+  repositories { mavenCentral() }
+  dependencies {
+    testImplementation platform('org.junit:junit-bom:6.1.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+  }
+  tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+  }
+  tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+  }
+}
+
+def ghidraJars = ghidraInstallDir == null
+    ? files()
+    : fileTree(dir: ghidraInstallDir, include: ['**/*.jar'])
 
 project(':wire') {
-    dependencies { api project(':domain') }
+  dependencies { api project(':domain') }
 }
 project(':contracts') {
-    dependencies {
-        implementation project(':wire')
-        implementation 'org.snakeyaml:snakeyaml-engine:2.10'
-    }
+  dependencies {
+    implementation project(':wire')
+    implementation 'org.snakeyaml:snakeyaml-engine:2.10'
+  }
 }
 project(':runtime') {
-    dependencies { api project(':wire') }
+  dependencies { api project(':wire') }
 }
 project(':adapter') {
-    dependencies {
-        api project(':domain')
-        implementation project(':wire')
-        implementation project(':runtime')
-        compileOnly ghidraJars
-        compileOnly 'com.github.spotbugs:spotbugs-annotations:4.9.8'
-        testImplementation ghidraJars
-    }
+  dependencies {
+    api project(':domain')
+    implementation project(':wire')
+    implementation project(':runtime')
+    compileOnly ghidraJars
+    compileOnly 'com.github.spotbugs:spotbugs-annotations:4.9.8'
+    testImplementation ghidraJars
+  }
 }
 project(':transport:websocket') {
-    dependencies { api project(':runtime') }
+  dependencies { api project(':runtime') }
 }
 project(':transport:mcp') {
-    dependencies { api project(':runtime') }
+  dependencies { api project(':runtime') }
 }
 project(':launcher') {
-    dependencies {
-        implementation project(':adapter')
-        implementation project(':transport:websocket')
-        implementation project(':transport:mcp')
-        compileOnly ghidraJars
-    }
+  dependencies {
+    implementation project(':adapter')
+    implementation project(':transport:websocket')
+    implementation project(':transport:mcp')
+    compileOnly ghidraJars
+  }
 }
 
 tasks.register('verifyGhidraInstallDir') {
-    doLast {
-        if (ghidraInstallDir == null) {
-            throw new GradleException('Ghidra installation not found. Set GHIDRA_INSTALL_DIR or -PghidraInstallDir.')
-        }
+  doLast {
+    if (ghidraInstallDir == null) {
+      throw new GradleException(
+      'Ghidra installation not found. Set GHIDRA_INSTALL_DIR or -PghidraInstallDir.')
     }
+  }
 }
-project(':adapter').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
-project(':launcher').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+project(':adapter').tasks.named('compileJava') {
+  dependsOn rootProject.tasks.named('verifyGhidraInstallDir')
+}
+project(':launcher').tasks.named('compileJava') {
+  dependsOn rootProject.tasks.named('verifyGhidraInstallDir')
+}
 
 project(':launcher') {
-    tasks.register('runtimeJar', Jar) {
-        dependsOn tasks.named('classes'), configurations.runtimeClasspath
-        archiveFileName = 'ghidra-bridge.jar'
-        destinationDirectory = layout.buildDirectory.dir('runtime-libs')
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-        preserveFileTimestamps = false
-        reproducibleFileOrder = true
-        from(sourceSets.main.output)
-        from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
-        exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
-        manifest { attributes 'Main-Class': 'app.byteland.ghidra.Bootstrap',
-            'Implementation-Version': rootProject.version }
+  tasks.register('runtimeJar', Jar) {
+    dependsOn tasks.named('classes'), configurations.runtimeClasspath
+    archiveFileName = 'ghidra-bridge.jar'
+    destinationDirectory = layout.buildDirectory.dir('runtime-libs')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from(sourceSets.main.output)
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+    manifest {
+      attributes 'Main-Class': 'app.byteland.ghidra.Bootstrap',
+      'Implementation-Version': rootProject.version
     }
+  }
 
-    def generateScript = { String taskName, String className, String bootstrapMethod, String logPrefix ->
-        tasks.register(taskName, Copy) {
-            from 'src/main/templates/GhidraLauncher.java.template'
-            into layout.buildDirectory.dir('generated/scripts')
-            rename { className + '.java' }
-            filter { String line ->
-                line.replace('__CLASS__', className)
-                    .replace('__BOOTSTRAP_METHOD__', bootstrapMethod)
-                    .replace('__LOG_PREFIX__', logPrefix)
-            }
-        }
+  def generateScript = { String taskName, String className, String method, String logPrefix ->
+    tasks.register(taskName, Copy) {
+      from 'src/main/templates/GhidraLauncher.java.template'
+      into layout.buildDirectory.dir('generated/scripts')
+      rename { className + '.java' }
+      filter { String line ->
+        line.replace('__CLASS__', className)
+        .replace('__BOOTSTRAP_METHOD__', method)
+        .replace('__LOG_PREFIX__', logPrefix)
+      }
     }
-    generateScript('generateBridgeScript', 'Bridge', 'startFromScript', 'ghidra-bridge')
-    generateScript('generateMcpScript', 'GhidraMcp', 'startMcpFromScript', 'ghidra-mcp')
+  }
+  generateScript('generateBridgeScript', 'Bridge', 'startFromScript', 'ghidra-bridge')
+  generateScript('generateMcpScript', 'GhidraMcp', 'startMcpFromScript', 'ghidra-mcp')
 
-    tasks.register('buildGhidraScript', Sync) {
-        dependsOn tasks.named('runtimeJar'), tasks.named('generateBridgeScript'), tasks.named('generateMcpScript')
-        into rootProject.layout.buildDirectory.dir('ghidra-script')
-        from layout.buildDirectory.dir('generated/scripts')
-        from tasks.named('runtimeJar')
-    }
+  tasks.register('buildGhidraScript', Sync) {
+    dependsOn tasks.named('runtimeJar'),
+    tasks.named('generateBridgeScript'),
+    tasks.named('generateMcpScript')
+    into rootProject.layout.buildDirectory.dir('ghidra-script')
+    from layout.buildDirectory.dir('generated/scripts')
+    from tasks.named('runtimeJar')
+  }
 }
 
 tasks.register('buildGhidraScript') {
-    dependsOn ':launcher:buildGhidraScript'
+  dependsOn ':launcher:buildGhidraScript'
 }
 
-def contractOutputs = ['docs/asyncapi.yaml', 'docs/mcp-tools.json', 'docs/api.md']
+def contractOutputs = [
+  'docs/asyncapi.yaml',
+  'docs/mcp-tools.json',
+  'docs/api.md'
+]
 def contractGenerators = [
-    [name: 'Api', projectPath: ':contracts',
-        mainClass: 'app.byteland.ghidra.api.ApiContractGenerator'],
-    [name: 'Mcp', projectPath: ':transport:mcp', mainClass: 'app.byteland.ghidra.mcp.McpContractGenerator']
+  [name: 'Api', projectPath: ':contracts',
+    mainClass: 'app.byteland.ghidra.api.ApiContractGenerator'],
+  [name: 'Mcp', projectPath: ':transport:mcp',
+    mainClass: 'app.byteland.ghidra.mcp.McpContractGenerator']
 ]
 contractGenerators.each { generator ->
-    tasks.register("generate${generator.name}Contract", JavaExec) {
-        group = 'documentation'
-        dependsOn project(generator.projectPath).tasks.named('classes')
-        classpath = project(generator.projectPath).sourceSets.main.runtimeClasspath
-        mainClass = generator.mainClass
-        args rootDir.absolutePath
-    }
-    tasks.register("stage${generator.name}Contract", JavaExec) {
-        group = 'verification'
-        dependsOn project(generator.projectPath).tasks.named('classes')
-        classpath = project(generator.projectPath).sourceSets.main.runtimeClasspath
-        mainClass = generator.mainClass
-        args layout.buildDirectory.dir('generated-contracts').get().asFile.absolutePath
-    }
+  tasks.register("generate${generator.name}Contract", JavaExec) {
+    group = 'documentation'
+    dependsOn project(generator.projectPath).tasks.named('classes')
+    classpath = project(generator.projectPath).sourceSets.main.runtimeClasspath
+    mainClass = generator.mainClass
+    args rootDir.absolutePath
+  }
+  tasks.register("stage${generator.name}Contract", JavaExec) {
+    group = 'verification'
+    dependsOn project(generator.projectPath).tasks.named('classes')
+    classpath = project(generator.projectPath).sourceSets.main.runtimeClasspath
+    mainClass = generator.mainClass
+    args layout.buildDirectory.dir('generated-contracts').get().asFile.absolutePath
+  }
 }
 tasks.register('generateApiContracts') {
-    group = 'documentation'
-    dependsOn 'generateApiContract', 'generateMcpContract'
+  group = 'documentation'
+  dependsOn 'generateApiContract', 'generateMcpContract'
 }
 tasks.register('verifyApiContracts') {
-    group = 'verification'
-    dependsOn 'stageApiContract', 'stageMcpContract'
-    doLast {
-        contractOutputs.each { relative ->
-            def checkedIn = file(relative)
-            def generated = layout.buildDirectory.file("generated-contracts/${relative}").get().asFile
-            if (!checkedIn.isFile() || !generated.isFile() || checkedIn.text != generated.text) {
-                throw new GradleException("Generated contract drift: ${relative}; run ./gradlew generateApiContracts")
-            }
-        }
+  group = 'verification'
+  dependsOn 'stageApiContract', 'stageMcpContract'
+  doLast {
+    contractOutputs.each { relative ->
+      def checkedIn = file(relative)
+      def generated = layout.buildDirectory.file("generated-contracts/${relative}").get().asFile
+      if (!checkedIn.isFile() || !generated.isFile() || checkedIn.text != generated.text) {
+        throw new GradleException(
+        "Generated contract drift: ${relative}; run ./gradlew generateApiContracts")
+      }
     }
+  }
 }
 
 tasks.register('verifyDistribution') {
-    group = 'verification'
-    dependsOn 'buildGhidraScript', 'compileGeneratedScripts'
-    doLast {
-        def output = layout.buildDirectory.dir('ghidra-script').get().asFile
-        def names = output.listFiles().collect { it.name }.sort()
-        if (names != ['Bridge.java', 'GhidraMcp.java', 'ghidra-bridge.jar']) {
-            throw new GradleException("Unexpected distribution contents: ${names}")
-        }
-        new java.util.jar.JarFile(new File(output, 'ghidra-bridge.jar')).withCloseable { jar ->
-            if (jar.getJarEntry('app/byteland/ghidra/Bootstrap.class') == null) {
-                throw new GradleException('Runtime jar is missing Bootstrap.class')
-            }
-            if (jar.entries().find { it.name.startsWith('org/snakeyaml/') } != null) {
-                throw new GradleException('Runtime jar contains the contract YAML library')
-            }
-        }
+  group = 'verification'
+  dependsOn 'buildGhidraScript', 'compileGeneratedScripts'
+  doLast {
+    def output = layout.buildDirectory.dir('ghidra-script').get().asFile
+    def names = output.listFiles().collect { it.name }.sort()
+    if (names != [
+          'Bridge.java',
+          'GhidraMcp.java',
+          'ghidra-bridge.jar'
+        ]) {
+      throw new GradleException("Unexpected distribution contents: ${names}")
     }
+    new java.util.jar.JarFile(new File(output, 'ghidra-bridge.jar')).withCloseable { jar ->
+      if (jar.getJarEntry('app/byteland/ghidra/Bootstrap.class') == null) {
+        throw new GradleException('Runtime jar is missing Bootstrap.class')
+      }
+      if (jar.entries().find { it.name.startsWith('org/snakeyaml/') } != null) {
+        throw new GradleException('Runtime jar contains the contract YAML library')
+      }
+    }
+  }
 }
 
 tasks.register('compileGeneratedScripts', JavaCompile) {
-    group = 'verification'
-    dependsOn ':launcher:generateBridgeScript', ':launcher:generateMcpScript', 'verifyGhidraInstallDir'
-    source project(':launcher').layout.buildDirectory.dir('generated/scripts')
-    classpath = ghidraJars
-    destinationDirectory = layout.buildDirectory.dir('compiled-scripts')
-    sourceCompatibility = '21'
-    targetCompatibility = '21'
-    options.encoding = 'UTF-8'
+  group = 'verification'
+  dependsOn ':launcher:generateBridgeScript',
+      ':launcher:generateMcpScript',
+      'verifyGhidraInstallDir'
+  source project(':launcher').layout.buildDirectory.dir('generated/scripts')
+  classpath = ghidraJars
+  destinationDirectory = layout.buildDirectory.dir('compiled-scripts')
+  sourceCompatibility = '21'
+  targetCompatibility = '21'
+  options.encoding = 'UTF-8'
 }
 
 tasks.register('verifyArchitecture') {
-    group = 'verification'
-    doLast {
-        ['domain', 'wire', 'contracts', 'runtime', 'transport/websocket', 'transport/mcp']
-            .each { module ->
-            fileTree("modules/${module}/src/main/java") { include '**/*.java' }.each { source ->
-                if (source.readLines().any { it ==~ /^import ghidra\..*/ }) {
-                    throw new GradleException("Ghidra API import outside adapter/launcher: ${source}")
-                }
-            }
+  group = 'verification'
+  doLast {
+    [
+      'domain',
+      'wire',
+      'contracts',
+      'runtime',
+      'transport/websocket',
+      'transport/mcp'
+    ]
+    .each { module ->
+      fileTree("modules/${module}/src/main/java") { include '**/*.java' }.each { source ->
+        if (source.readLines().any { it ==~ /^import ghidra\..*/ }) {
+          throw new GradleException("Ghidra API import outside adapter/launcher: ${source}")
         }
+      }
     }
+  }
 }
 
 tasks.register('verify') {
-    group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+  group = 'verification'
+  dependsOn 'spotlessCheck', 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
 }

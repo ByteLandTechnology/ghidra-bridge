@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Check function mutations in an isolated headless Ghidra project."""
 
 import argparse
@@ -14,7 +12,6 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-
 
 FIXTURE = """
 .global _start
@@ -49,7 +46,15 @@ def run_test(headless, root):
     source.write_text(FIXTURE)
     binary = root / "fixture"
     subprocess.run(
-        ["gcc", "-nostdlib", "-no-pie", "-Wl,-e,_start", "-o", str(binary), str(source)],
+        [
+            "gcc",
+            "-nostdlib",
+            "-no-pie",
+            "-Wl,-e,_start",
+            "-o",
+            str(binary),
+            str(source),
+        ],
         check=True,
     )
     symbols = {}
@@ -62,16 +67,25 @@ def run_test(headless, root):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
     url = f"http://127.0.0.1:{port}/mcp"
-    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
 
     def call(message):
-        request = urllib.request.Request(url, json.dumps(message).encode(), headers, method="POST")
+        request = urllib.request.Request(
+            url, json.dumps(message).encode(), headers, method="POST"
+        )
         with urllib.request.urlopen(request, timeout=5) as response:
             body = response.read().decode()
         if not body:
             return {}
         if body.startswith(("event:", "data:")):
-            body = next(line[5:].strip() for line in body.splitlines() if line.startswith("data:"))
+            body = next(
+                line[5:].strip()
+                for line in body.splitlines()
+                if line.startswith("data:")
+            )
         return json.loads(body)
 
     def tool(call_id, name, arguments, success=True):
@@ -87,31 +101,53 @@ def run_test(headless, root):
         return result.get("structuredContent", {})
 
     def function(call_id, operation, params, success=True):
-        return tool(call_id, "ghidra_function", {"operation": operation, "params": params}, success)
+        return tool(
+            call_id,
+            "ghidra_function",
+            {"operation": operation, "params": params},
+            success,
+        )
 
     def selector(label):
         return {"selector": {"entry": symbols[label]}}
 
     scripts = pathlib.Path(__file__).resolve().parents[1] / "build" / "ghidra-script"
     command = [
-        str(headless), str(project), "test", "-import", str(binary), "-noanalysis",
-        "-scriptPath", str(scripts), "-postScript", "GhidraMcp.java",
-        "host=127.0.0.1", f"port={port}",
+        str(headless),
+        str(project),
+        "test",
+        "-import",
+        str(binary),
+        "-noanalysis",
+        "-scriptPath",
+        str(scripts),
+        "-postScript",
+        "GhidraMcp.java",
+        "host=127.0.0.1",
+        f"port={port}",
     ]
     log_path = root / "headless.log"
     with log_path.open("w") as log:
-        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                   start_new_session=True)
+        process = subprocess.Popen(
+            command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+        )
         ready = False
         try:
             initialize = {
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {"protocolVersion": "2025-03-26", "capabilities": {},
-                           "clientInfo": {"name": "function-test", "version": "1"}},
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "function-test", "version": "1"},
+                },
             }
             for _ in range(120):
                 if process.poll() is not None:
-                    raise RuntimeError("Ghidra stopped: " + log_path.read_text()[-2000:])
+                    raise RuntimeError(
+                        "Ghidra stopped: " + log_path.read_text()[-2000:]
+                    )
                 try:
                     if call(initialize).get("result"):
                         ready = True
@@ -122,50 +158,97 @@ def run_test(headless, root):
                 raise RuntimeError("Ghidra did not start")
             call({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
-            first = function(2, "create", {
-                "resource": {"entry": symbols["func_a"], "name": "func_a"},
-                "disassemble": True,
-            })["result"]
-            function(3, "create", {
-                "resource": {"entry": symbols["func_b"], "name": "func_b"},
-                "disassemble": True,
-            }, success=False)
-            assert function(4, "get", selector("func_a"))["result"]["body"] == first["body"]
+            first = function(
+                2,
+                "create",
+                {
+                    "resource": {"entry": symbols["func_a"], "name": "func_a"},
+                    "disassemble": True,
+                },
+            )["result"]
+            function(
+                3,
+                "create",
+                {
+                    "resource": {"entry": symbols["func_b"], "name": "func_b"},
+                    "disassemble": True,
+                },
+                success=False,
+            )
+            assert (
+                function(4, "get", selector("func_a"))["result"]["body"]
+                == first["body"]
+            )
             function(5, "get", selector("func_b"), success=False)
-            tool(16, "ghidra_listing", {
-                "operation": "instruction.get",
-                "params": {"selector": {"address": symbols["func_b"]}},
-            }, success=False)
+            tool(
+                16,
+                "ghidra_listing",
+                {
+                    "operation": "instruction.get",
+                    "params": {"selector": {"address": symbols["func_b"]}},
+                },
+                success=False,
+            )
 
-            jump = function(6, "create", {
-                "resource": {"entry": symbols["jump_entry"], "name": "jump_name"},
-                "disassemble": True,
-            })["result"]
+            jump = function(
+                6,
+                "create",
+                {
+                    "resource": {"entry": symbols["jump_entry"], "name": "jump_name"},
+                    "disassemble": True,
+                },
+            )["result"]
             assert jump["name"] == "jump_name"
             function(7, "get", selector("jump_target"), success=False)
-            instruction = {"operation": "instruction.get",
-                           "params": {"selector": {"address": symbols["jump_entry"]}}}
+            instruction = {
+                "operation": "instruction.get",
+                "params": {"selector": {"address": symbols["jump_entry"]}},
+            }
             before = tool(8, "ghidra_listing", instruction)["result"]
-            assert function(9, "delete", selector("jump_entry"))["result"] == {"deleted": True}
+            assert function(9, "delete", selector("jump_entry"))["result"] == {
+                "deleted": True
+            }
             assert tool(10, "ghidra_listing", instruction)["result"] == before
             function(11, "delete", selector("jump_entry"), success=False)
-            recreated = function(12, "create", {
-                "resource": {"entry": symbols["jump_entry"], "name": "recreated"},
-            })["result"]
+            recreated = function(
+                12,
+                "create",
+                {
+                    "resource": {"entry": symbols["jump_entry"], "name": "recreated"},
+                },
+            )["result"]
             assert recreated["name"] == "recreated"
 
-            function(13, "create", {
-                "resource": {"entry": symbols["reserved_entry"], "name": "FUN_12345678"},
-                "disassemble": True,
-            }, success=False)
+            function(
+                13,
+                "create",
+                {
+                    "resource": {
+                        "entry": symbols["reserved_entry"],
+                        "name": "FUN_12345678",
+                    },
+                    "disassemble": True,
+                },
+                success=False,
+            )
             function(14, "get", selector("reserved_entry"), success=False)
-            tool(17, "ghidra_listing", {
-                "operation": "instruction.get",
-                "params": {"selector": {"address": symbols["reserved_entry"]}},
-            }, success=False)
-            label = function(15, "create", {
-                "resource": {"entry": symbols["label_only"]}, "disassemble": True,
-            })["result"]
+            tool(
+                17,
+                "ghidra_listing",
+                {
+                    "operation": "instruction.get",
+                    "params": {"selector": {"address": symbols["reserved_entry"]}},
+                },
+                success=False,
+            )
+            label = function(
+                15,
+                "create",
+                {
+                    "resource": {"entry": symbols["label_only"]},
+                    "disassemble": True,
+                },
+            )["result"]
             assert label["name"] == "label_only"
             print("Function mutation regression checks passed")
         finally:

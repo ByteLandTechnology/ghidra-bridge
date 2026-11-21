@@ -21,17 +21,13 @@ public record AnalysisResource(
     Instant startedAt,
     Instant finishedAt,
     Double progress) {
-  /**
-   * Represents the initiator of the analysis task.
-   */
+  /** Represents the initiator of the analysis task. */
   public enum Kind {
     GHIDRA,
     BRIDGE
   }
 
-  /**
-   * Lifecycle execution status of the analysis task.
-   */
+  /** Lifecycle execution status of the analysis task. */
   public enum Status {
     IDLE,
     RUNNING,

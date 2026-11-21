@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Groups the API methods into MCP tools named {@code <prefix>_<domain>}, plus
- * {@code <prefix>_help}.
+ * Groups the API methods into MCP tools named {@code <prefix>_<domain>}, plus {@code
+ * <prefix>_help}.
  */
 final class McpToolRegistry {
   private final String prefix;
@@ -25,16 +25,33 @@ final class McpToolRegistry {
     for (MethodDescriptor method : catalog.methods()) {
       if (method.name().equals("interface.get")) continue;
       String[] target = target(method.name());
-      domains.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>())
-          .put(target[1], method);
+      domains.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>()).put(target[1], method);
     }
     List<Map<String, Object>> tools = new ArrayList<>();
-    tools.add(Map.of("name", helpToolName(), "description", "Get domains, operations, schemas, and effects.",
-        "inputSchema", Map.of("type", "object", "properties", Map.of(
-            "domain", Map.of("type", "string"), "operation", Map.of("type", "string")),
-            "additionalProperties", false),
-        "annotations", Map.of("readOnlyHint", true, "destructiveHint", false,
-            "idempotentHint", true, "openWorldHint", false)));
+    tools.add(
+        Map.of(
+            "name",
+            helpToolName(),
+            "description",
+            "Get domains, operations, schemas, and effects.",
+            "inputSchema",
+            Map.of(
+                "type",
+                "object",
+                "properties",
+                Map.of("domain", Map.of("type", "string"), "operation", Map.of("type", "string")),
+                "additionalProperties",
+                false),
+            "annotations",
+            Map.of(
+                "readOnlyHint",
+                true,
+                "destructiveHint",
+                false,
+                "idempotentHint",
+                true,
+                "openWorldHint",
+                false)));
     domains.forEach((domain, operations) -> tools.add(groupTool(domain, operations)));
     listedTools = List.copyOf(tools);
   }
@@ -58,33 +75,53 @@ final class McpToolRegistry {
     };
   }
 
-  private Map<String, Object> groupTool(
-      String domain, Map<String, MethodDescriptor> operations) {
+  private Map<String, Object> groupTool(String domain, Map<String, MethodDescriptor> operations) {
     Map<String, Object> properties = new LinkedHashMap<>();
-    properties.put("operation", Map.of(
-        "type", "string",
-        "description", "The operation to perform",
-        "enum", List.copyOf(operations.keySet())));
-    properties.put("params", Map.of(
-        "type", "object",
-        "description", "Parameters for the operation"));
+    properties.put(
+        "operation",
+        Map.of(
+            "type", "string",
+            "description", "The operation to perform",
+            "enum", List.copyOf(operations.keySet())));
+    properties.put(
+        "params",
+        Map.of(
+            "type", "object",
+            "description", "Parameters for the operation"));
 
-    Map<String, Object> inputSchema = Map.of(
-        "type", "object",
-        "properties", properties,
-        "required", List.of("operation"));
+    Map<String, Object> inputSchema =
+        Map.of("type", "object", "properties", properties, "required", List.of("operation"));
 
-    String purpose = "listing".equals(domain)
-        ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
-    return Map.of("name", toolName(domain),
-        "description", "Use this tool " + purpose + ". Select an operation: "
-            + String.join(", ", operations.keySet()) + ".",
-        "inputSchema", inputSchema,
-        "annotations", Map.of("readOnlyHint", false, "destructiveHint", true,
-            "idempotentHint", false, "openWorldHint", false));
+    String purpose =
+        "listing".equals(domain)
+            ? "for code units, instructions, and flow overrides"
+            : "for " + domain + " data";
+    return Map.of(
+        "name",
+        toolName(domain),
+        "description",
+        "Use this tool "
+            + purpose
+            + ". Select an operation: "
+            + String.join(", ", operations.keySet())
+            + ".",
+        "inputSchema",
+        inputSchema,
+        "annotations",
+        Map.of(
+            "readOnlyHint",
+            false,
+            "destructiveHint",
+            true,
+            "idempotentHint",
+            false,
+            "openWorldHint",
+            false));
   }
 
-  List<Map<String, Object>> listTools() { return listedTools; }
+  List<Map<String, Object>> listTools() {
+    return listedTools;
+  }
 
   MethodDescriptor findTool(String name, String operation) {
     String domain = domainOf(name);
@@ -113,14 +150,26 @@ final class McpToolRegistry {
     Map<String, MethodDescriptor> operations = domains.get(domain);
     if (operations == null) throw new IllegalArgumentException("Unknown domain: " + domainValue);
     Object operationValue = arguments.get("operation");
-    if (operationValue == null) return Map.of("domain", toolName(domain),
-        "operations", List.copyOf(operations.keySet()));
+    if (operationValue == null)
+      return Map.of("domain", toolName(domain), "operations", List.copyOf(operations.keySet()));
     MethodDescriptor descriptor = operations.get(operationValue.toString());
-    if (descriptor == null) throw new IllegalArgumentException("Unknown operation: " + operationValue);
-    return Map.of("domain", toolName(domain), "operation", operationValue,
-        "method", descriptor.name(), "description", descriptor.description(),
-        "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
-        "effects", descriptor.contractValue().get("effects"));
+    if (descriptor == null)
+      throw new IllegalArgumentException("Unknown operation: " + operationValue);
+    return Map.of(
+        "domain",
+        toolName(domain),
+        "operation",
+        operationValue,
+        "method",
+        descriptor.name(),
+        "description",
+        descriptor.description(),
+        "inputSchema",
+        descriptor.inputSchema(),
+        "outputSchema",
+        descriptor.outputSchema(),
+        "effects",
+        descriptor.contractValue().get("effects"));
   }
 
   boolean isHelpTool(String name) {

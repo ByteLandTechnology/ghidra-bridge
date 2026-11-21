@@ -24,8 +24,7 @@ final class AnalysisTaskMonitor implements TaskMonitor {
   }
 
   @Override
-  public void setShowProgressValue(boolean showProgressValue) {
-  }
+  public void setShowProgressValue(boolean showProgressValue) {}
 
   @Override
   public void setMessage(String message) {

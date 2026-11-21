@@ -1,0 +1,18 @@
+# Enforce LF line endings on tracked text files by default.
+* text=auto eol=lf
+
+# Enforce LF on generated API contracts.
+docs/api.md text eol=lf
+docs/asyncapi.yaml text eol=lf
+docs/mcp-tools.json text eol=lf
+
+# Enforce LF on Unix shell scripts and the Gradle wrapper.
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Keep Windows batch scripts in CRLF.
+*.bat text eol=crlf
+gradlew.bat text eol=crlf
+
+# Treat JAR archives as binary.
+*.jar binary

@@ -3,8 +3,8 @@ package app.byteland.ghidra.agent;
 import java.util.Objects;
 
 /**
- * Counts in-flight dispatches and rejects new dispatches after close.
- * Waits for in-flight dispatches to finish.
+ * Counts in-flight dispatches and rejects new dispatches after close. Waits for in-flight
+ * dispatches to finish.
  */
 final class DispatchBarrier {
   @FunctionalInterface

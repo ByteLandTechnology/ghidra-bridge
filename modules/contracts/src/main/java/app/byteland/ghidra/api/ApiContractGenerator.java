@@ -161,8 +161,9 @@ public final class ApiContractGenerator {
           .append(method.description())
           .append(" |\n");
     }
-    output.append("\nUse the input schema for each method. "
-        + "The bridge rejects unknown fields and type conversions.\n");
+    output.append(
+        "\nUse the input schema for each method. "
+            + "The bridge rejects unknown fields and type conversions.\n");
     return output.toString();
   }
 

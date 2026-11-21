@@ -57,7 +57,6 @@ public record BridgeServices(
   @SuppressWarnings("try")
   public void close() {
     try (decompilationService;
-        analysisService) {
-    }
+        analysisService) {}
   }
 }

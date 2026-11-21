@@ -1,8 +1,6 @@
 package app.byteland.ghidra.service;
 
-/**
- * Runs an operation inside a program transaction.
- */
+/** Runs an operation inside a program transaction. */
 @FunctionalInterface
 public interface TransactionRunner {
   /**

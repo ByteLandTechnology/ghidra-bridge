@@ -1,7 +1,6 @@
 package app.byteland.ghidra.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,7 +47,9 @@ class ApiFailuresAdversarialTest {
     var failureBlank = ApiFailures.normalize(exBlank);
     assertEquals(500, failureBlank.status());
     assertEquals("transaction_failed", failureBlank.error().code());
-    assertEquals("app.byteland.ghidra.service.TransactionExecutionException", failureBlank.error().message());
+    assertEquals(
+        "app.byteland.ghidra.service.TransactionExecutionException",
+        failureBlank.error().message());
   }
 
   @Test
@@ -70,7 +71,9 @@ class ApiFailuresAdversarialTest {
   @Test
   @DisplayName("Adversarial: Special characters, emojis, newlines, and JSON delimiters in messages")
   void testSpecialCharactersInMessages() {
-    String special = "Error \u0000 with \"quotes\", \\backslashes\\, \nnewlines, \t tabs, and emojis: 🚀🔥💥 and unicode \u2028 \u2029";
+    String special =
+        "Error \u0000 with \"quotes\", \\backslashes\\, \n"
+            + "newlines, \t tabs, and emojis: 🚀🔥💥 and unicode \u2028 \u2029";
     var ex = new TransactionExecutionException(special);
     var failure = ApiFailures.normalize(ex);
 
@@ -113,8 +116,12 @@ class ApiFailuresAdversarialTest {
     assertEquals("   ", ApiFailures.normalize(ex3).error().target());
 
     // Deep nested array indexes and CamelCase.
-    var ex4 = new TransactionExecutionException("err", "deeplyNestedObject.subFieldList[12].itemProperty");
-    assertEquals("/deeply_nested_object/sub_field_list/12/item_property", ApiFailures.normalize(ex4).error().target());
+    var ex4 =
+        new TransactionExecutionException(
+            "err", "deeplyNestedObject.subFieldList[12].itemProperty");
+    assertEquals(
+        "/deeply_nested_object/sub_field_list/12/item_property",
+        ApiFailures.normalize(ex4).error().target());
 
     // The path has multiple adjacent separators.
     var ex5 = new TransactionExecutionException("err", "foo..bar[[3]]");
@@ -131,7 +138,9 @@ class ApiFailuresAdversarialTest {
     details.put("boolValue", true);
     details.put("longValue", 9876543210L);
 
-    var ex = new TransactionExecutionException("detailed failure", "params[0]", details, new IOException("io"));
+    var ex =
+        new TransactionExecutionException(
+            "detailed failure", "params[0]", details, new IOException("io"));
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
@@ -151,8 +160,7 @@ class ApiFailuresAdversarialTest {
 
     // The BridgeError constructor uses Map.copyOf(details), which prohibits null values.
     org.junit.jupiter.api.Assertions.assertThrows(
-        NullPointerException.class,
-        () -> ApiFailures.normalize(ex));
+        NullPointerException.class, () -> ApiFailures.normalize(ex));
   }
 
   @Test
@@ -170,9 +178,20 @@ class ApiFailuresAdversarialTest {
         this.target = target;
       }
 
-      @Override public int status() { return status; }
-      @Override public String code() { return code; }
-      @Override public String target() { return target; }
+      @Override
+      public int status() {
+        return status;
+      }
+
+      @Override
+      public String code() {
+        return code;
+      }
+
+      @Override
+      public String target() {
+        return target;
+      }
     }
 
     var ex409 = new CustomDomainException(409, "conflict_error", "session_id", "conflict detected");
@@ -218,7 +237,8 @@ class ApiFailuresAdversarialTest {
   }
 
   @Test
-  @DisplayName("Adversarial: High-concurrency normalization stress test (100 threads, 10,000 operations)")
+  @DisplayName(
+      "Adversarial: High-concurrency normalization stress test (100 threads, 10,000 operations)")
   void testConcurrentNormalizationStress() throws Exception {
     int threadCount = 100;
     int opsPerThread = 100;
@@ -228,29 +248,32 @@ class ApiFailuresAdversarialTest {
 
     for (int t = 0; t < threadCount; t++) {
       final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            Throwable ex;
-            switch ((threadId + i) % 6) {
-              case 0 -> ex = new IllegalArgumentException("arg error " + i);
-              case 1 -> ex = new TransactionExecutionException("tx error " + i, "target." + i);
-              case 2 -> ex = new IllegalStateException("state error " + i);
-              case 3 -> ex = new NoSuchElementException("not found " + i);
-              case 4 -> ex = new TimeoutException("timeout " + i);
-              default -> ex = new RuntimeException("generic " + i);
-            }
-            var failure = ApiFailures.normalize(ex);
-            assertNotNull(failure);
-            assertTrue(failure.status() >= 400 && failure.status() <= 500);
-            assertNotNull(failure.error().code());
-            assertNotNull(failure.error().message());
-          }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
+      futures.add(
+          executor.submit(
+              () -> {
+                try {
+                  startLatch.await();
+                  for (int i = 0; i < opsPerThread; i++) {
+                    Throwable ex;
+                    switch ((threadId + i) % 6) {
+                      case 0 -> ex = new IllegalArgumentException("arg error " + i);
+                      case 1 ->
+                          ex = new TransactionExecutionException("tx error " + i, "target." + i);
+                      case 2 -> ex = new IllegalStateException("state error " + i);
+                      case 3 -> ex = new NoSuchElementException("not found " + i);
+                      case 4 -> ex = new TimeoutException("timeout " + i);
+                      default -> ex = new RuntimeException("generic " + i);
+                    }
+                    var failure = ApiFailures.normalize(ex);
+                    assertNotNull(failure);
+                    assertTrue(failure.status() >= 400 && failure.status() <= 500);
+                    assertNotNull(failure.error().code());
+                    assertNotNull(failure.error().message());
+                  }
+                } catch (Exception e) {
+                  throw new RuntimeException(e);
+                }
+              }));
     }
 
     startLatch.countDown();

@@ -85,8 +85,7 @@ final class WireValues {
           result.put("element", normalize(array.element()));
           result.put("count", array.count());
         }
-        case DataTypeReference.UntypedPointer ignored -> {
-        }
+        case DataTypeReference.UntypedPointer ignored -> {}
       }
       return result;
     }

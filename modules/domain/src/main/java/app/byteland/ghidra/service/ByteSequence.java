@@ -14,9 +14,7 @@ public record ByteSequence(Encoding encoding, String data, int length) {
     if (length < 0) throw new IllegalArgumentException("length must be non-negative");
   }
 
-  /**
-   * Supported wire formats for byte transfer.
-   */
+  /** Supported wire formats for byte transfer. */
   public enum Encoding {
     HEX,
     BASE64

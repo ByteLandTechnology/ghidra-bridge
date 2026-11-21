@@ -16,9 +16,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
-/**
- * Central registry that defines and dispatches all public API methods.
- */
+/** Central registry that defines and dispatches all public API methods. */
 public final class ApiRegistry {
   public static final String INTERFACE_VERSION = "0.2.0";
   public static final int DEFAULT_LIMIT = 100;

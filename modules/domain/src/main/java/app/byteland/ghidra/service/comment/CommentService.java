@@ -3,13 +3,9 @@ package app.byteland.ghidra.service.comment;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 
-/**
- * Manages comments at memory addresses.
- */
+/** Manages comments at memory addresses. */
 public interface CommentService {
-  /**
-   * Search criteria and limits for comment queries.
-   */
+  /** Search criteria and limits for comment queries. */
   record CommentQuery(
       AddressScanOptions scan, CommentResource.Type type, String text, int limit, String cursor) {
     public CommentQuery {
