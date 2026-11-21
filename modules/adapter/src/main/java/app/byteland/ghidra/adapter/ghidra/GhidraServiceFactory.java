@@ -5,6 +5,7 @@ import app.byteland.ghidra.adapter.ghidra.analysis.AnalysisServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.comment.CommentServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.datatype.DataTypeServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.decompilation.DecompilationServiceImpl;
+import app.byteland.ghidra.adapter.ghidra.decompilation.DecompilerPool;
 import app.byteland.ghidra.adapter.ghidra.function.FunctionServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.globalvariable.GlobalVariableServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.listing.ListingServiceImpl;
@@ -44,13 +45,15 @@ public final class GhidraServiceFactory {
   public static BridgeServices create(GhidraScript script) {
     Objects.requireNonNull(script, "script");
     GhidraSession context = new GhidraSession(script);
+    DecompilerPool decompilerPool = DecompilerPool.create(context.currentProgram());
 
     ProgramService programService = new ProgramServiceImpl(context);
-    FunctionService functionService = new FunctionServiceImpl(context);
+    FunctionService functionService = new FunctionServiceImpl(context, decompilerPool);
     GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
     MemoryService memoryService = new MemoryServiceImpl(context);
     ListingService listingService = new ListingServiceImpl(context);
-    DecompilationService decompilationService = new DecompilationServiceImpl(context);
+    DecompilationService decompilationService =
+        new DecompilationServiceImpl(context, decompilerPool);
     AnalysisService analysisService = new AnalysisServiceImpl(context);
     SymbolService symbolService = new SymbolServiceImpl(context);
     ReferenceService referenceService = new ReferenceServiceImpl(context);

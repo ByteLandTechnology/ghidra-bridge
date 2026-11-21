@@ -21,6 +21,7 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
+import app.byteland.ghidra.service.function.VariableStorageReference;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -262,7 +263,8 @@ final class FunctionMethods implements ApiMethodProvider {
         WireSchema.object(
             ApiSchemaCatalog.props(
                 ApiVocabulary.ENTRY, WireSchema.nonBlankString(),
-                ApiVocabulary.NAME, WireSchema.nonBlankString()),
+                ApiVocabulary.NAME, WireSchema.nonBlankString(),
+                ApiVocabulary.STORAGE, storage),
             ApiVocabulary.ENTRY,
             ApiVocabulary.NAME);
     Map<String, Object> localPatch =
@@ -283,8 +285,10 @@ final class FunctionMethods implements ApiMethodProvider {
         localVariableFields,
         List.of(ApiVocabulary.NAME),
         request -> {
-          String entry = text(selector(request), ApiVocabulary.ENTRY);
-          String oldName = text(selector(request), ApiVocabulary.NAME);
+          Map<String, Object> localSel = selector(request);
+          String entry = text(localSel, ApiVocabulary.ENTRY);
+          String oldName = text(localSel, ApiVocabulary.NAME);
+          VariableStorageReference selectorStorage = storage(localSel.get(ApiVocabulary.STORAGE));
           String newName = optionalText(patch(request), ApiVocabulary.NAME);
           registry
               .services()
@@ -292,9 +296,10 @@ final class FunctionMethods implements ApiMethodProvider {
               .patchLocalVariable(
                   entry,
                   oldName,
+                  selectorStorage,
                   newName,
                   dataType(patch(request).get(ApiVocabulary.DATA_TYPE), PATCH_DATA_TYPE_TARGET));
-          return functionLocalVariable(entry, newName == null ? oldName : newName);
+          return functionLocalVariable(entry, newName == null ? oldName : newName, selectorStorage);
         });
   }
 
@@ -333,14 +338,54 @@ final class FunctionMethods implements ApiMethodProvider {
     throw new NoSuchElementException("function parameter was not found after mutation");
   }
 
-  private FunctionResource.LocalVariableResource functionLocalVariable(String entry, String name) {
+  private FunctionResource.LocalVariableResource functionLocalVariable(
+      String entry, String name, VariableStorageReference selectorStorage) {
     FunctionResource function =
         registry.services().functionService().getFunction(entry, Set.of(ApiVocabulary.LOCALS));
     if (function.localVariables() != null) {
+      if (selectorStorage != null) {
+        for (FunctionResource.LocalVariableResource variable : function.localVariables()) {
+          if (name.equals(variable.name())
+              && matchesStorage(selectorStorage, variable.storage(), false)) {
+            return variable;
+          }
+        }
+        for (FunctionResource.LocalVariableResource variable : function.localVariables()) {
+          if (name.equals(variable.name())
+              && matchesStorage(selectorStorage, variable.storage(), true)) {
+            return variable;
+          }
+        }
+      }
       for (FunctionResource.LocalVariableResource variable : function.localVariables()) {
         if (name.equals(variable.name())) return variable;
       }
     }
     throw new NoSuchElementException("function local variable was not found after mutation");
+  }
+
+  private static boolean matchesStorage(
+      VariableStorageReference expected, VariableStorageReference actual, boolean ignoreSize) {
+    if (expected == null || actual == null) return false;
+    if (expected.equals(actual)) return true;
+    if (expected instanceof VariableStorageReference.Register register
+        && actual instanceof VariableStorageReference.Serialization serialization) {
+      String raw = serialization.serialization();
+      int separator = raw.indexOf(':');
+      String prefix = separator >= 0 ? raw.substring(0, separator) : raw;
+      return register.register().equalsIgnoreCase(prefix);
+    }
+    if (ignoreSize
+        && expected instanceof VariableStorageReference.Serialization expSer
+        && actual instanceof VariableStorageReference.Serialization actSer) {
+      return stripTrailingSize(expSer.serialization())
+          .equals(stripTrailingSize(actSer.serialization()));
+    }
+    return false;
+  }
+
+  private static String stripTrailingSize(String serialization) {
+    int lastColon = serialization.lastIndexOf(':');
+    return lastColon > 0 ? serialization.substring(0, lastColon) : serialization;
   }
 }

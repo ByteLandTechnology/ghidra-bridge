@@ -49,7 +49,37 @@ final class FunctionStorageSupport {
               yield new VariableStorage(program, register);
             }
           };
-      requireRealStorage(storage, field);
+      requireRealStorage(storage, field, false);
+      return new ParsedStorage(storage, storage.getSerializationString());
+    } catch (InvalidInputException ex) {
+      throw new IllegalArgumentException(field + " is invalid: " + failureDetail(ex), ex);
+    }
+  }
+
+  static ParsedStorage parseLocalSelector(
+      Program program, VariableStorageReference input, String field) {
+    if (input == null) {
+      return null;
+    }
+    try {
+      VariableStorage storage =
+          switch (input) {
+            case VariableStorageReference.Serialization serialization ->
+                VariableStorage.deserialize(program, serialization.serialization());
+            case VariableStorageReference.Register namedRegister -> {
+              Register register = program.getLanguage().getRegister(namedRegister.register());
+              if (register == null) {
+                throw new IllegalArgumentException(
+                    field + ".register names an unknown register: " + namedRegister.register());
+              }
+              if (register.isProcessorContext()) {
+                throw new IllegalArgumentException(
+                    field + ".register must not identify a processor context register");
+              }
+              yield new VariableStorage(program, register);
+            }
+          };
+      requireRealStorage(storage, field, true);
       return new ParsedStorage(storage, storage.getSerializationString());
     } catch (InvalidInputException ex) {
       throw new IllegalArgumentException(field + " is invalid: " + failureDetail(ex), ex);
@@ -60,7 +90,7 @@ final class FunctionStorageSupport {
     if (isVoid(dataType)) {
       throw new IllegalArgumentException(field + " cannot be assigned to a void data type");
     }
-    requireRealStorage(storage, field);
+    requireRealStorage(storage, field, false);
     int dataTypeSize = dataType.getLength();
     if (dataTypeSize <= 0) {
       throw new IllegalArgumentException(
@@ -278,7 +308,8 @@ final class FunctionStorageSupport {
     return baseType;
   }
 
-  private static void requireRealStorage(VariableStorage storage, String field) {
+  private static void requireRealStorage(
+      VariableStorage storage, String field, boolean allowHashStorage) {
     if (storage == null
         || !storage.isValid()
         || storage.isBadStorage()
@@ -296,7 +327,12 @@ final class FunctionStorageSupport {
     }
     for (Varnode varnode : varnodes) {
       Address address = varnode.getAddress();
-      if (!address.isRegisterAddress() && !address.isStackAddress() && !address.isMemoryAddress()) {
+      boolean supported =
+          address.isRegisterAddress()
+              || address.isStackAddress()
+              || address.isMemoryAddress()
+              || (allowHashStorage && address.isHashAddress());
+      if (!supported) {
         throw new IllegalArgumentException(
             field + " uses unsupported address space " + address.getAddressSpace().getName());
       }

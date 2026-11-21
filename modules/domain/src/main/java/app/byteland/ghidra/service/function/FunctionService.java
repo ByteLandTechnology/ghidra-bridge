@@ -118,5 +118,9 @@ public interface FunctionService {
    * Updates a local variable in a function.
    */
   void patchLocalVariable(
-      String rawAddress, String variableName, String newName, DataTypeReference newDataType);
+      String rawAddress,
+      String variableName,
+      VariableStorageReference selectorStorage,
+      String newName,
+      DataTypeReference newDataType);
 }
