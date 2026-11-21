@@ -1,0 +1,42 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "enabledManagers": [
+    "github-actions"
+  ],
+  "packageRules": [
+    {
+      "description": "Group minor, patch, and digest GitHub Actions updates weekly",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "github-actions (non-major)",
+      "groupSlug": "github-actions-non-major",
+      "schedule": [
+        "before 4am on monday"
+      ]
+    },
+    {
+      "description": "Schedule major GitHub Actions updates weekly in separate pull requests",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "separateMajorMinor": true,
+      "separateMultipleMajor": true,
+      "schedule": [
+        "before 4am on monday"
+      ]
+    }
+  ]
+}
