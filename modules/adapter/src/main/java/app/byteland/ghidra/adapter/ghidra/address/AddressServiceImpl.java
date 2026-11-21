@@ -21,9 +21,9 @@ public final class AddressServiceImpl implements AddressService {
   @Override
   public AddressResource resolveAddress(String rawAddress) {
     Address address = context.parseAddress(rawAddress);
-    MemoryBlock block = context.script().getMemoryBlock(address);
-    Function function = context.script().getFunctionContaining(address);
-    Symbol symbol = context.script().getSymbolAt(address);
+    MemoryBlock block = context.flatApi().getMemoryBlock(address);
+    Function function = context.flatApi().getFunctionContaining(address);
+    Symbol symbol = context.flatApi().getSymbolAt(address);
     CodeUnit unit = context.currentProgram().getListing().getCodeUnitContaining(address);
     return new AddressResource(
         AddressUtil.canonicalAddress(address),

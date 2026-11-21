@@ -47,7 +47,7 @@ final class ListingInstructionQueries {
 
   InstructionResource getInstruction(String rawAddress) {
     Address address = parseAddress(rawAddress);
-    Instruction instruction = context.script().getInstructionAt(address);
+    Instruction instruction = context.flatApi().getInstructionAt(address);
     if (instruction == null) {
       throw new NoSuchElementException("no instruction at address");
     }
@@ -59,24 +59,24 @@ final class ListingInstructionQueries {
   }
 
   private Instruction firstInstruction(Address start, boolean forward) {
-    Instruction instruction = context.script().getInstructionAt(start);
+    Instruction instruction = context.flatApi().getInstructionAt(start);
     if (instruction != null) {
       return instruction;
     }
     return forward
-        ? context.script().getInstructionAfter(start)
-        : context.script().getInstructionBefore(start);
+        ? context.flatApi().getInstructionAfter(start)
+        : context.flatApi().getInstructionBefore(start);
   }
 
   private Instruction nextInstruction(Instruction instruction, boolean forward) {
     return forward
-        ? context.script().getInstructionAfter(instruction)
-        : context.script().getInstructionBefore(instruction);
+        ? context.flatApi().getInstructionAfter(instruction)
+        : context.flatApi().getInstructionBefore(instruction);
   }
 
   private Instruction nextInstruction(Address address, boolean forward) {
     return forward
-        ? context.script().getInstructionAfter(address)
-        : context.script().getInstructionBefore(address);
+        ? context.flatApi().getInstructionAfter(address)
+        : context.flatApi().getInstructionBefore(address);
   }
 }

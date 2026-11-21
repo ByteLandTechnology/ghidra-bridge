@@ -44,20 +44,22 @@ final class ListingDataQueries {
   }
 
   private Data firstData(Address start, boolean forward) {
-    Data data = context.script().getDataAt(start);
+    Data data = context.flatApi().getDataAt(start);
     if (data != null) {
       return data;
     }
-    return forward ? context.script().getDataAfter(start) : context.script().getDataBefore(start);
+    return forward
+        ? context.flatApi().getDataAfter(start)
+        : context.flatApi().getDataBefore(start);
   }
 
   private Data nextData(Data data, boolean forward) {
-    return forward ? context.script().getDataAfter(data) : context.script().getDataBefore(data);
+    return forward ? context.flatApi().getDataAfter(data) : context.flatApi().getDataBefore(data);
   }
 
   private Data nextData(Address address, boolean forward) {
     return forward
-        ? context.script().getDataAfter(address)
-        : context.script().getDataBefore(address);
+        ? context.flatApi().getDataAfter(address)
+        : context.flatApi().getDataBefore(address);
   }
 }

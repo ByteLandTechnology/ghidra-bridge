@@ -38,6 +38,18 @@ subprojects {
 }
 
 def ghidraJars = ghidraInstallDir == null ? files() : fileTree(dir: ghidraInstallDir, include: ['**/*.jar'])
+def resolveGhidraApplicationVersion = {
+    if (ghidraInstallDir == null) {
+        return '12.1'
+    }
+    def propsFile = new File(ghidraInstallDir, 'Ghidra/application.properties')
+    if (!propsFile.isFile()) {
+        return '12.1'
+    }
+    def props = new Properties()
+    propsFile.withInputStream { props.load(it) }
+    return props.getProperty('application.version', '12.1').trim()
+}
 
 project(':wire') {
     dependencies { api project(':domain') }
@@ -73,6 +85,7 @@ project(':launcher') {
         implementation project(':transport:websocket')
         implementation project(':transport:mcp')
         compileOnly ghidraJars
+        testImplementation ghidraJars
     }
 }
 
@@ -101,7 +114,7 @@ project(':launcher') {
             'Implementation-Version': rootProject.version }
     }
 
-    def generateScript = { String taskName, String className, String bootstrapMethod, String logPrefix ->
+    def generateScript = { String taskName, String className, String bootstrapMethod, String logPrefix, String defaultPromptArgs ->
         tasks.register(taskName, Copy) {
             from 'src/main/templates/GhidraLauncher.java.template'
             into layout.buildDirectory.dir('generated/scripts')
@@ -110,11 +123,17 @@ project(':launcher') {
                 line.replace('__CLASS__', className)
                     .replace('__BOOTSTRAP_METHOD__', bootstrapMethod)
                     .replace('__LOG_PREFIX__', logPrefix)
+                    .replace('__DEFAULT_PROMPT_ARGS__', defaultPromptArgs)
             }
         }
     }
-    generateScript('generateBridgeScript', 'Bridge', 'startFromScript', 'ghidra-bridge')
-    generateScript('generateMcpScript', 'GhidraMcp', 'startMcpFromScript', 'ghidra-mcp')
+    generateScript('generateBridgeScript', 'Bridge', 'startFromScript', 'ghidra-bridge',
+        'host=127.0.0.1 port=8765 path=/ws/agent')
+    generateScript('generateMcpScript', 'GhidraMcp', 'startMcpFromScript', 'ghidra-mcp',
+        'host=127.0.0.1 port=8766 path=/mcp tool_prefix=ghidra')
+    tasks.named('test') {
+        dependsOn tasks.named('generateBridgeScript'), tasks.named('generateMcpScript')
+    }
 
     tasks.register('buildGhidraScript', Sync) {
         dependsOn tasks.named('runtimeJar'), tasks.named('generateBridgeScript'), tasks.named('generateMcpScript')
@@ -122,10 +141,67 @@ project(':launcher') {
         from layout.buildDirectory.dir('generated/scripts')
         from tasks.named('runtimeJar')
     }
+
+    tasks.register('buildGhidraExtension') {
+        dependsOn tasks.named('runtimeJar'), tasks.named('generateBridgeScript'), tasks.named('generateMcpScript'), rootProject.tasks.named('verifyGhidraInstallDir')
+        def stageRoot = rootProject.layout.buildDirectory.dir('ghidra-extension/ghidra-bridge')
+        outputs.dir(stageRoot)
+        doLast {
+            def targetDir = stageRoot.get().asFile
+            project.delete(targetDir)
+            new File(targetDir, 'lib').mkdirs()
+            new File(targetDir, 'ghidra_scripts').mkdirs()
+            project.copy {
+                from tasks.named('runtimeJar')
+                into new File(targetDir, 'lib')
+            }
+            project.copy {
+                from layout.buildDirectory.dir('generated/scripts')
+                into new File(targetDir, 'ghidra_scripts')
+            }
+            project.copy {
+                from rootProject.files('LICENSE', 'README.md')
+                into targetDir
+            }
+            def ghidraVer = resolveGhidraApplicationVersion()
+            new File(targetDir, 'extension.properties').setText(
+                [
+                    'name=ghidra-bridge',
+                    'description=MCP HTTP and WebSocket bridge plugin and scripts for Ghidra.',
+                    'author=ByteLand Technology Limited',
+                    'createdOn=2026-11-20',
+                    "version=${ghidraVer}",
+                    ''
+                ].join('\n'),
+                'UTF-8'
+            )
+            new File(targetDir, 'Module.manifest').setText(
+                'MODULE FILE LICENSE: lib/ghidra-bridge.jar MIT\n',
+                'UTF-8'
+            )
+        }
+    }
+
+    tasks.register('packageGhidraExtension', Zip) {
+        dependsOn tasks.named('buildGhidraExtension')
+        archiveFileName = 'ghidra-bridge.zip'
+        destinationDirectory = rootProject.layout.buildDirectory.dir('distributions')
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+        from rootProject.layout.buildDirectory.dir('ghidra-extension')
+    }
 }
 
 tasks.register('buildGhidraScript') {
     dependsOn ':launcher:buildGhidraScript'
+}
+
+tasks.register('buildGhidraExtension') {
+    dependsOn ':launcher:buildGhidraExtension'
+}
+
+tasks.register('packageGhidraExtension') {
+    dependsOn ':launcher:packageGhidraExtension'
 }
 
 def contractOutputs = ['docs/asyncapi.yaml', 'docs/mcp-tools.json', 'docs/api.md']
@@ -170,7 +246,7 @@ tasks.register('verifyApiContracts') {
 
 tasks.register('verifyDistribution') {
     group = 'verification'
-    dependsOn 'buildGhidraScript', 'compileGeneratedScripts'
+    dependsOn 'buildGhidraScript', 'packageGhidraExtension', 'compileGeneratedScripts'
     doLast {
         def output = layout.buildDirectory.dir('ghidra-script').get().asFile
         def names = output.listFiles().collect { it.name }.sort()
@@ -181,8 +257,30 @@ tasks.register('verifyDistribution') {
             if (jar.getJarEntry('app/byteland/ghidra/Bootstrap.class') == null) {
                 throw new GradleException('Runtime jar is missing Bootstrap.class')
             }
+            if (jar.getJarEntry('app/byteland/ghidra/plugin/GhidraBridgePlugin.class') == null) {
+                throw new GradleException('Runtime jar is missing GhidraBridgePlugin.class')
+            }
             if (jar.entries().find { it.name.startsWith('org/snakeyaml/') } != null) {
                 throw new GradleException('Runtime jar contains the contract YAML library')
+            }
+        }
+        def extensionZip = layout.buildDirectory.file('distributions/ghidra-bridge.zip').get().asFile
+        if (!extensionZip.isFile()) {
+            throw new GradleException("Missing Ghidra extension archive: ${extensionZip}")
+        }
+        new java.util.zip.ZipFile(extensionZip).withCloseable { zip ->
+            [
+                'ghidra-bridge/extension.properties',
+                'ghidra-bridge/Module.manifest',
+                'ghidra-bridge/LICENSE',
+                'ghidra-bridge/README.md',
+                'ghidra-bridge/lib/ghidra-bridge.jar',
+                'ghidra-bridge/ghidra_scripts/Bridge.java',
+                'ghidra-bridge/ghidra_scripts/GhidraMcp.java'
+            ].each { requiredEntry ->
+                if (zip.getEntry(requiredEntry) == null) {
+                    throw new GradleException("Extension archive is missing ${requiredEntry}")
+                }
             }
         }
     }

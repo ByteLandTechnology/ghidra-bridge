@@ -13,18 +13,22 @@ import java.util.Objects;
  */
 public final class AgentDispatcher implements AutoCloseable {
   private final AgentConfig config;
-  private final String programName;
   private final BridgeServices services;
+  private final boolean closeServicesOnClose;
   private final ApiRegistry apiRegistry;
   private final DispatchBarrier dispatchBarrier = new DispatchBarrier();
   private final Object sequenceLock = new Object();
   private volatile boolean shuttingDown;
 
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
-    Objects.requireNonNull(services, "services");
+    this(services, config, true);
+  }
+
+  public AgentDispatcher(
+      BridgeServices services, AgentConfig config, boolean closeServicesOnClose) {
+    this.services = Objects.requireNonNull(services, "services");
     this.config = Objects.requireNonNull(config, "config");
-    this.services = services;
-    this.programName = services.programName();
+    this.closeServicesOnClose = closeServicesOnClose;
     this.apiRegistry =
         new ApiRegistry(services, config.sessionId(), this::sessionInfo, this::markShuttingDown);
   }
@@ -32,7 +36,9 @@ public final class AgentDispatcher implements AutoCloseable {
   @Override
   public void close() {
     if (!dispatchBarrier.closeAndAwait()) return;
-    services.close();
+    if (closeServicesOnClose) {
+      services.close();
+    }
   }
 
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
@@ -56,14 +62,14 @@ public final class AgentDispatcher implements AutoCloseable {
   }
 
   public String getProgramName() {
-    return programName;
+    return services.currentProgramName();
   }
 
   private Map<String, Object> sessionInfo() {
     Map<String, Object> info = new LinkedHashMap<>();
     info.put("id", config.sessionId());
     info.put("status", shuttingDown ? "shutting_down" : "active");
-    info.put("program_name", programName);
+    info.put("program_name", services.currentProgramName());
     return info;
   }
 

@@ -9,8 +9,10 @@ import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.Program;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -19,13 +21,15 @@ import java.util.WeakHashMap;
 
 public final class DecompilationServiceImpl implements DecompilationService {
   private final GhidraSession context;
-  private final LeasePool<DecompInterface> decompilerPool;
+  private final Object poolLock = new Object();
+  private final Map<Program, LeasePool<DecompInterface>> decompilerPools =
+      new IdentityHashMap<>();
+  private boolean closed;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
 
   public DecompilationServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
-    this.decompilerPool = DecompilerPoolFactory.create(context.currentProgram());
   }
 
   @Override
@@ -37,23 +41,53 @@ public final class DecompilationServiceImpl implements DecompilationService {
       throw new IllegalArgumentException(
           "timeoutMs must be in " + MIN_TIMEOUT_MS + ".." + MAX_TIMEOUT_MS);
     }
-    Function function = context.script().getFunctionAt(context.parseAddress(rawAddress));
+    Function function = context.flatApi().getFunctionAt(context.parseAddress(rawAddress));
     if (function == null) {
       throw new NoSuchElementException("function not found");
     }
     return decompile(function, timeout, format, includeComments);
   }
 
+  /** Closes and removes the decompiler pool for a closed program. */
+  public void releaseProgram(Program program) {
+    if (program == null) {
+      return;
+    }
+    LeasePool<DecompInterface> pool;
+    synchronized (poolLock) {
+      pool = decompilerPools.remove(program);
+    }
+    if (pool != null) {
+      pool.close();
+    }
+  }
+
   @Override
   public void close() {
-    if (decompilerPool != null) {
-      decompilerPool.close();
+    List<LeasePool<DecompInterface>> pools;
+    synchronized (poolLock) {
+      closed = true;
+      pools = List.copyOf(decompilerPools.values());
+      decompilerPools.clear();
+    }
+    for (LeasePool<DecompInterface> pool : pools) {
+      pool.close();
+    }
+  }
+
+  private LeasePool<DecompInterface> poolFor(Program program) {
+    synchronized (poolLock) {
+      if (closed) {
+        throw new IllegalStateException("decompilation service is closed");
+      }
+      return decompilerPools.computeIfAbsent(program, DecompilerPoolFactory::create);
     }
   }
 
   private DecompilationResource decompile(
       Function function, int timeoutMs, DecompilationResource.Format format,
       boolean includeComments) {
+    LeasePool<DecompInterface> decompilerPool = poolFor(function.getProgram());
     try (LeasePool.Lease<DecompInterface> lease = decompilerPool.acquire()) {
       long startedAt = System.nanoTime();
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);

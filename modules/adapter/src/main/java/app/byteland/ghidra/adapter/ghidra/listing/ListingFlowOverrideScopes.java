@@ -32,7 +32,7 @@ final class ListingFlowOverrideScopes {
 
   private ResolvedScope resolveFunction(String entryRaw) {
     Address entry = context.parseAddress(entryRaw);
-    Function function = context.script().getFunctionAt(entry);
+    Function function = context.flatApi().getFunctionAt(entry);
     if (function == null) {
       throw new NoSuchElementException("no function at entry address");
     }

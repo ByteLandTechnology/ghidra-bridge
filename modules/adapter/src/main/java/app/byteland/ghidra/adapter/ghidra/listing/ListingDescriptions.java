@@ -91,7 +91,7 @@ final class ListingDescriptions {
       return null;
     }
     try {
-      byte[] values = context.script().getBytes(codeUnit.getAddress(), codeUnit.getLength());
+      byte[] values = context.flatApi().getBytes(codeUnit.getAddress(), codeUnit.getLength());
       return new ByteSequence(
           ByteSequence.Encoding.HEX, java.util.HexFormat.of().formatHex(values), values.length);
     } catch (MemoryAccessException exception) {

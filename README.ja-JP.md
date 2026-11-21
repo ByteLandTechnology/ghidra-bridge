@@ -16,17 +16,25 @@ WebSocket JSON-RPC 2.0 と MCP Streamable HTTP `2026-07-28` の 2 つのトラ�
 - **アトミックトランザクション**: ブリッジはバッチ処理を実行します。
   エラー発生後にトランザクションをロールバックします。
 - **ヘッドレスモード**: ブリッジは GUI を使用せず、Ghidra のヘッドレススクリプトで実行します。
+- **GUI 拡張プラグイン**: 単一のアーカイブを Ghidra にインストールするだけで、CodeBrowser バックグラウンドプラグインとスクリプトを利用できます。
 
-## スクリプトのビルド
+## 拡張機能とスクリプトのビルド
 
 `GHIDRA_INSTALL_DIR` 環境変数に Ghidra のインストールパスを設定します。
-次に、Gradle Wrapper を使用してスクリプトをビルドします:
+インストール可能な Ghidra 拡張アーカイブをビルドします:
+
+```bash
+./gradlew packageGhidraExtension
+```
+
+このタスクにより `build/distributions/ghidra-bridge.zip` が生成されます。
+スタンドアロンのスクリプトディレクトリのみをビルドする場合は次を実行します:
 
 ```bash
 ./gradlew buildGhidraScript
 ```
 
-ビルドタスクにより、`build/ghidra-script/` 配下に次の 3 つのファイルが生成されます:
+スクリプトビルドタスクにより、`build/ghidra-script/` 配下に次の 3 つのファイルが生成されます:
 
 ```text
 Bridge.java
@@ -34,16 +42,26 @@ GhidraMcp.java
 ghidra-bridge.jar
 ```
 
-これら 3 つのファイルは同じディレクトリに保持してください。
-スクリプトローダーは、自身のファイルパスからの相対パスで `ghidra-bridge.jar` を検索します。
+スタンドアロンスクリプトを使用する場合は、これら 3 つのファイルを同じディレクトリに保持してください。
+スクリプトローダーは同階層または拡張機能内の `../lib/` から `ghidra-bridge.jar` を検索します。
 
 ## ブリッジの起動
 
-### Ghidra GUI での実行
+### Ghidra 拡張プラグインのインストール
+
+1. Ghidra プロジェクトウィンドウを開き、`File -> Install Extensions` を選択します。
+2. `build/distributions/ghidra-bridge.zip` または `ghidra-bridge-<version>.zip` を追加して Ghidra を再起動します。
+3. CodeBrowser でバイナリを開くと、プラグインがバックグラウンドで起動し、ステータスバーにアクティブなポートを表示します。
+4. `Edit -> Tool Options -> Ghidra Bridge` でトランスポートモード、ポート、パス、ツールプレフィックス、自動起動を設定できます。
+5. `Tools -> Ghidra Bridge` メニューから開始、再起動、停止、またはローカルの `ghidra-mcp` デーモンへの接続を実行できます。
+
+2 つ目の CodeBrowser ウィンドウでループバックポートが使用中の場合、リスナーは次の空きポートを自動選択します。
+
+### Script Manager からの実行
 
 1. Ghidra CodeBrowser で対象のバイナリを開きます。
 2. Script Manager（スクリプトマネージャ）ウィンドウを開きます。
-3. スクリプトパス一覧に `build/ghidra-script/` を追加します。
+3. 拡張機能をインストールしていない場合は、スクリプトパス一覧に `build/ghidra-script/` を追加します。
 4. `Bridge.java`（WebSocket）または `GhidraMcp.java`（MCP）を実行します。
 5. プロンプトウィンドウに設定引数を入力します。
 

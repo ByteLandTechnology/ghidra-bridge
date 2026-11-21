@@ -71,15 +71,15 @@ final class ListingCodeUnitQueries {
   }
 
   private CodeUnit codeUnitAt(Address address) {
-    Instruction instruction = context.script().getInstructionAt(address);
+    Instruction instruction = context.flatApi().getInstructionAt(address);
     if (instruction != null) {
       return instruction;
     }
-    Data data = context.script().getDataAt(address);
+    Data data = context.flatApi().getDataAt(address);
     if (data != null) {
       return data;
     }
-    return context.script().getUndefinedDataAt(address);
+    return context.flatApi().getUndefinedDataAt(address);
   }
 
   private CodeUnit nextCodeUnit(CodeUnit codeUnit, boolean forward) {
@@ -93,15 +93,15 @@ final class ListingCodeUnitQueries {
   }
 
   private CodeUnit nextCodeUnitAfter(Address address) {
-    CodeUnit nearest = context.script().getInstructionAfter(address);
-    nearest = nearest(nearest, context.script().getDataAfter(address), true);
-    return nearest(nearest, context.script().getUndefinedDataAfter(address), true);
+    CodeUnit nearest = context.flatApi().getInstructionAfter(address);
+    nearest = nearest(nearest, context.flatApi().getDataAfter(address), true);
+    return nearest(nearest, context.flatApi().getUndefinedDataAfter(address), true);
   }
 
   private CodeUnit nextCodeUnitBefore(Address address) {
-    CodeUnit nearest = context.script().getInstructionBefore(address);
-    nearest = nearest(nearest, context.script().getDataBefore(address), false);
-    return nearest(nearest, context.script().getUndefinedDataBefore(address), false);
+    CodeUnit nearest = context.flatApi().getInstructionBefore(address);
+    nearest = nearest(nearest, context.flatApi().getDataBefore(address), false);
+    return nearest(nearest, context.flatApi().getUndefinedDataBefore(address), false);
   }
 
   private static CodeUnit nearest(CodeUnit current, CodeUnit candidate, boolean forward) {

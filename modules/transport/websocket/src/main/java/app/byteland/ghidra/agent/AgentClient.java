@@ -33,6 +33,10 @@ public final class AgentClient {
   public interface LifecycleListener {
     default void onListening() {}
 
+    default void onListening(String listenUri, int port) {
+      onListening();
+    }
+
     default void onConnected() {}
   }
 
@@ -40,18 +44,27 @@ public final class AgentClient {
   private final AgentDispatcher dispatcher;
   private final LifecycleListener lifecycleListener;
   private final Duration connectTimeout;
+  private final boolean allowLoopbackPortFallback;
   private final CountDownLatch disconnectLatch = new CountDownLatch(1);
   private final AtomicReference<AgentClientChannels.MessageChannel> channelRef =
       new AtomicReference<>();
   private final AtomicReference<AgentWebSocketServer> serverRef = new AtomicReference<>();
 
   public AgentClient(AgentConfig config, AgentDispatcher dispatcher) {
-    this(config, dispatcher, new LifecycleListener() {});
+    this(config, dispatcher, new LifecycleListener() {}, DEFAULT_CONNECT_TIMEOUT, false);
   }
 
   public AgentClient(
       AgentConfig config, AgentDispatcher dispatcher, LifecycleListener lifecycleListener) {
-    this(config, dispatcher, lifecycleListener, DEFAULT_CONNECT_TIMEOUT);
+    this(config, dispatcher, lifecycleListener, DEFAULT_CONNECT_TIMEOUT, false);
+  }
+
+  public AgentClient(
+      AgentConfig config,
+      AgentDispatcher dispatcher,
+      LifecycleListener lifecycleListener,
+      boolean allowLoopbackPortFallback) {
+    this(config, dispatcher, lifecycleListener, DEFAULT_CONNECT_TIMEOUT, allowLoopbackPortFallback);
   }
 
   AgentClient(
@@ -59,10 +72,20 @@ public final class AgentClient {
       AgentDispatcher dispatcher,
       LifecycleListener lifecycleListener,
       Duration connectTimeout) {
+    this(config, dispatcher, lifecycleListener, connectTimeout, false);
+  }
+
+  AgentClient(
+      AgentConfig config,
+      AgentDispatcher dispatcher,
+      LifecycleListener lifecycleListener,
+      Duration connectTimeout,
+      boolean allowLoopbackPortFallback) {
     this.config = config;
     this.dispatcher = dispatcher;
     this.lifecycleListener = lifecycleListener;
     this.connectTimeout = connectTimeout;
+    this.allowLoopbackPortFallback = allowLoopbackPortFallback;
   }
 
   public void connect() throws Exception {
@@ -169,10 +192,12 @@ public final class AgentClient {
         new AgentMessageHandler(config, dispatcher, this::disconnect);
     AgentWebSocketServer server =
         new AgentWebSocketServer(
-            config, new AgentClientServerHandler(channelRef, disconnectLatch, messageHandler));
+            config,
+            new AgentClientServerHandler(channelRef, disconnectLatch, messageHandler),
+            allowLoopbackPortFallback);
     serverRef.set(server);
     server.start();
-    lifecycleListener.onListening();
+    lifecycleListener.onListening(server.listenUri(), server.port());
     awaitDisconnect(cancellationRequested);
   }
 

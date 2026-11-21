@@ -56,6 +56,7 @@ public final class McpHttpServer implements AutoCloseable {
   private static final String HTTP_POST_METHOD = "POST";
   private static final String NAME_FIELD = "name";
   private static final String URI_FIELD = "uri";
+  private static final int MAX_LOOPBACK_PORT_ATTEMPTS = 64;
   private static final String SESSION_ID_PARAM = "sessionId";
 
   private final McpConfig config;
@@ -70,13 +71,22 @@ public final class McpHttpServer implements AutoCloseable {
   private final ConcurrentHashMap<String, SseSession> sseSessions = new ConcurrentHashMap<>();
 
   public McpHttpServer(McpConfig config, AgentDispatcher dispatcher) throws IOException {
-    this(config, dispatcher, McpHttpServer::discardRequestLog);
+    this(config, dispatcher, McpHttpServer::discardRequestLog, false);
   }
 
   public McpHttpServer(
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
-    this.config = Objects.requireNonNull(config, "config");
+    this(config, dispatcher, requestLogSink, false);
+  }
+
+  public McpHttpServer(
+      McpConfig config,
+      AgentDispatcher dispatcher,
+      Consumer<String> requestLogSink,
+      boolean allowLoopbackPortFallback)
+      throws IOException {
+    Objects.requireNonNull(config, "config");
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
     this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
@@ -84,26 +94,57 @@ public final class McpHttpServer implements AutoCloseable {
     toolContract.put("protocol_version", MCP_PROTOCOL_VERSION);
     toolContract.put("tools", toolRegistry.listTools());
     this.toolContractJson = JsonUtil.toJson(toolContract);
-    this.server = createServer(config);
+    BoundHttpServer bound = createServer(config, allowLoopbackPortFallback);
+    this.config = bound.config();
+    this.server = bound.server();
     this.executor = Executors.newCachedThreadPool();
     this.server.setExecutor(executor);
-    this.server.createContext(config.path(), new JsonRpcHandler());
+    this.server.createContext(this.config.path(), new JsonRpcHandler());
   }
 
-  private static HttpServer createServer(McpConfig config) throws IOException {
-    try {
-      return HttpServer.create(new InetSocketAddress(config.host(), config.port()), 0);
-    } catch (BindException error) {
-      BindException friendly =
-          new BindException(
-              "MCP endpoint "
-                  + config.endpoint()
-                  + " is already in use. Stop the existing Bridge/GhidraMcp script, close the old"
-                  + " Ghidra session, or pass a different port value.");
-      friendly.addSuppressed(error);
-      throw friendly;
+  private static BoundHttpServer createServer(
+      McpConfig config, boolean allowLoopbackPortFallback) throws IOException {
+    int maxAttempts =
+        allowLoopbackPortFallback && NetworkBinding.isLoopback(config.host())
+            ? Math.min(MAX_LOOPBACK_PORT_ATTEMPTS, 65535 - config.port() + 1)
+            : 1;
+    BindException firstBindError = null;
+    for (int offset = 0; offset < maxAttempts; offset++) {
+      int candidatePort = config.port() + offset;
+      try {
+        HttpServer httpServer =
+            HttpServer.create(new InetSocketAddress(config.host(), candidatePort), 0);
+        int actualPort = httpServer.getAddress().getPort();
+        McpConfig effectiveConfig =
+            actualPort == config.port()
+                ? config
+                : new McpConfig(
+                    config.host(),
+                    actualPort,
+                    config.path(),
+                    config.token(),
+                    config.sessionId(),
+                    config.toolPrefix());
+        return new BoundHttpServer(httpServer, effectiveConfig);
+      } catch (BindException error) {
+        if (firstBindError == null) {
+          firstBindError = error;
+        }
+      }
     }
+    BindException friendly =
+        new BindException(
+            "MCP endpoint "
+                + config.endpoint()
+                + " is already in use. Stop the existing Bridge/GhidraMcp script, close the old"
+                + " Ghidra session, or pass a different port value.");
+    if (firstBindError != null) {
+      friendly.addSuppressed(firstBindError);
+    }
+    throw friendly;
   }
+
+  private record BoundHttpServer(HttpServer server, McpConfig config) {}
 
   public void start() {
     server.start();
@@ -115,6 +156,10 @@ public final class McpHttpServer implements AutoCloseable {
 
   public boolean awaitShutdown(BooleanSupplier cancelRequested) throws InterruptedException {
     return awaitShutdown(shutdownLatch, cancelRequested, this::close, 250L);
+  }
+
+  public int port() {
+    return config.port();
   }
 
   public String endpoint() {

@@ -16,17 +16,25 @@ The runtime JAR has zero third-party dependencies.
 - **Atomic Transactions**: The bridge executes batch operations.
   It reverts a transaction after an error.
 - **Headless Mode**: The bridge runs in Ghidra headless scripts without GUI interaction.
+- **GUI Extension**: Install one archive in Ghidra to load the background CodeBrowser plugin and scripts.
 
-## Build the Scripts
+## Build the Extension and Scripts
 
 Set `GHIDRA_INSTALL_DIR` to your Ghidra installation path.
-Then build the scripts with the Gradle wrapper:
+Build the installable Ghidra extension archive:
+
+```bash
+./gradlew packageGhidraExtension
+```
+
+The task creates `build/distributions/ghidra-bridge.zip`.
+To build only the standalone script directory, run:
 
 ```bash
 ./gradlew buildGhidraScript
 ```
 
-The build task creates three files in `build/ghidra-script/`:
+The script task creates three files in `build/ghidra-script/`:
 
 ```text
 Bridge.java
@@ -34,16 +42,26 @@ GhidraMcp.java
 ghidra-bridge.jar
 ```
 
-Keep these three files in the same directory.
-The loader scripts locate `ghidra-bridge.jar` relative to their file path.
+Keep these three files in the same directory when you use standalone scripts.
+The loader scripts locate `ghidra-bridge.jar` beside the script or inside `../lib/` in an extension.
 
 ## Start the Bridge
 
-### Run in the Ghidra GUI
+### Install the Ghidra Extension
+
+1. Open the Ghidra project window and select `File -> Install Extensions`.
+2. Add `build/distributions/ghidra-bridge.zip` or `ghidra-bridge-<version>.zip` and restart Ghidra.
+3. Open a binary in CodeBrowser. The plugin starts in the background and shows the active port in the status bar.
+4. Open `Edit -> Tool Options -> Ghidra Bridge` to configure transport mode, port, path, tool prefix, or auto-start.
+5. Use `Tools -> Ghidra Bridge` to start, restart, stop, or attach the active program to `ghidra-mcp`.
+
+When a second CodeBrowser window opens on a busy loopback port, the listener selects the next free port automatically.
+
+### Run in Script Manager
 
 1. Open a binary in the Ghidra CodeBrowser tool.
 2. Open the Script Manager window.
-3. Add `build/ghidra-script/` to your script directories.
+3. Add `build/ghidra-script/` to your script directories if the extension is not installed.
 4. Run `Bridge.java` for WebSocket or `GhidraMcp.java` for MCP.
 5. Enter configuration arguments in the prompt window.
 

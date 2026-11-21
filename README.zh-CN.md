@@ -16,17 +16,25 @@ Ghidra Bridge 为正在运行的 Ghidra 程序提供网络访问接口。
 - **原子事务控制**：桥接执行批量操作。
   它在发生错误后回滚事务。
 - **Headless 命令行模式**：桥接在 Ghidra 无头模式脚本中运行，无需图形界面。
+- **GUI 扩展插件**：在 Ghidra 中安装单个扩展压缩包即可加载 CodeBrowser 后台插件与启动脚本。
 
-## 构建脚本
+## 构建扩展与脚本
 
 将 `GHIDRA_INSTALL_DIR` 环境变量设置为您的 Ghidra 安装目录。
-然后使用 Gradle Wrapper 构建脚本：
+构建可直接安装的 Ghidra 扩展包：
+
+```bash
+./gradlew packageGhidraExtension
+```
+
+该任务会生成 `build/distributions/ghidra-bridge.zip`。
+若仅需构建独立脚本目录，请运行：
 
 ```bash
 ./gradlew buildGhidraScript
 ```
 
-构建任务会在 `build/ghidra-script/` 目录下生成三个文件：
+脚本构建任务会在 `build/ghidra-script/` 目录下生成三个文件：
 
 ```text
 Bridge.java
@@ -34,16 +42,26 @@ GhidraMcp.java
 ghidra-bridge.jar
 ```
 
-请将这三个文件保存在同一目录下。
-脚本加载器会根据相对路径自动定位 `ghidra-bridge.jar`。
+单独使用脚本目录时，请将这三个文件保存在同一目录下。
+脚本加载器会在脚本同级目录或扩展的 `../lib/` 目录中定位 `ghidra-bridge.jar`。
 
 ## 启动桥接服务
 
-### 在 Ghidra 图形界面中运行
+### 安装 Ghidra 扩展插件
+
+1. 打开 Ghidra 项目窗口并选择 `File -> Install Extensions`。
+2. 添加 `build/distributions/ghidra-bridge.zip` 或 `ghidra-bridge-<version>.zip` 并重启 Ghidra。
+3. 在 CodeBrowser 中打开二进制文件，后台插件会自动启动并在底部状态栏显示当前监听端口。
+4. 打开 `Edit -> Tool Options -> Ghidra Bridge` 配置传输模式、端口、路径、工具前缀及自动启动行为。
+5. 通过 `Tools -> Ghidra Bridge` 菜单手动启动、重启、停止服务或将当前程序接入本地 `ghidra-mcp` 守护进程。
+
+当第二个 CodeBrowser 窗口遇到已被占用的回环端口时，监听器会自动递增并选择下一个空闲回环端口。
+
+### 在 Script Manager 中运行
 
 1. 在 Ghidra CodeBrowser 中打开目标二进制程序。
 2. 打开 Script Manager（脚本管理器）窗口。
-3. 将 `build/ghidra-script/` 目录添加到脚本目录列表中。
+3. 若未安装扩展插件，请将 `build/ghidra-script/` 目录添加到脚本目录列表中。
 4. 运行 `Bridge.java`（WebSocket）或 `GhidraMcp.java`（MCP）。
 5. 在弹出的参数窗口中输入配置参数。
 

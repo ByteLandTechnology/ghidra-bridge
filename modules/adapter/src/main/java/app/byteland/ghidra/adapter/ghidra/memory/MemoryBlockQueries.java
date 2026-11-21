@@ -38,7 +38,7 @@ final class MemoryBlockQueries {
   }
 
   MemoryBlockResource getMemoryBlockByName(String rawName) {
-    MemoryBlock block = context.script().getMemoryBlock(rawName);
+    MemoryBlock block = context.flatApi().getMemoryBlock(rawName);
     if (block == null) {
       throw new NoSuchElementException("memory block not found: " + rawName);
     }
@@ -72,6 +72,6 @@ final class MemoryBlockQueries {
   }
 
   private MemoryBlock[] memoryBlocks() {
-    return context.script().getMemoryBlocks();
+    return context.flatApi().getMemoryBlocks();
   }
 }

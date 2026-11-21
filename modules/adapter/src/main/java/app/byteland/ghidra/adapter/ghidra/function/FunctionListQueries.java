@@ -78,16 +78,16 @@ final class FunctionListQueries {
 
   private Function firstFunction(Address address, boolean resumeStrictlyAfter) {
     return resumeStrictlyAfter
-        ? context.script().getFunctionAfter(address)
+        ? context.flatApi().getFunctionAfter(address)
         : firstFunctionAtOrAfter(address);
   }
 
   private Function nextFunction(Function function) {
-    return context.script().getFunctionAfter(function);
+    return context.flatApi().getFunctionAfter(function);
   }
 
   private Function firstFunctionAtOrAfter(Address cursorAddress) {
-    Function function = context.script().getFunctionAt(cursorAddress);
-    return function == null ? context.script().getFunctionAfter(cursorAddress) : function;
+    Function function = context.flatApi().getFunctionAt(cursorAddress);
+    return function == null ? context.flatApi().getFunctionAfter(cursorAddress) : function;
   }
 }
