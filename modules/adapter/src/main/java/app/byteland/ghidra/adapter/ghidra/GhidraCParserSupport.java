@@ -155,8 +155,8 @@ public final class GhidraCParserSupport {
   }
 
   /**
-   * Rewrites C99 and GNU restrict qualifiers to Ghidra CParser's {@code __restrict} keyword while
-   * preserving comments, string literals, and character literals.
+   * Rewrites C99 and GNU restrict qualifiers to Ghidra CParser's {@code __restrict} keyword and
+   * keeps comments, string literals, and character literals intact.
    */
   public static String normalizeCSource(String source) {
     if (source == null || source.isEmpty()) {

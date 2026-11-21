@@ -11,7 +11,7 @@ public interface DataTypeService {
   int MAX_DECLARATIONS_BYTES = 65_536;
 
   /**
-   * Conflict resolution policy when parsed C declarations match existing data types.
+   * Conflict resolution policy when parsed C declarations match prior data types.
    */
   enum ConflictMode {
     REPLACE,
@@ -77,11 +77,11 @@ public interface DataTypeService {
   void patchDataType(String path, DataTypePatch patch);
 
   /**
-   * Parses C declarations and stores the resulting data types in the program data manager.
+   * Parses C declarations and stores the parsed data types in the program data manager.
    *
-   * @param declarations C header text containing type declarations
+   * @param declarations C header text with type declarations
    * @param categoryPath destination category folder
-   * @param conflictMode conflict handling mode for existing definitions
+   * @param conflictMode conflict resolution mode for prior definitions
    * @return created or resolved data type resources
    */
   List<DataTypeResource> parseCDeclarations(

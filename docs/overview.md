@@ -121,7 +121,7 @@ Read results always return canonical structured `data_type_reference` objects.
 
 `data_type.parse_c` parses C declarations (`struct`, `union`, `enum`, and `typedef`) in one transaction and stores the created types in a target category.
 `function.patch` accepts an optional `patch.signature` string to apply a C function prototype in one step.
-The prototype sets the return type, name, calling convention, varargs flag, and parameter list.
+The prototype sets the return type, name, `calling_convention`, varargs flag, and parameter list.
 
 ## Next Steps
 

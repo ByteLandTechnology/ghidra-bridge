@@ -151,7 +151,7 @@ class GhidraCDeclarationsAndReferencesTest {
         dtm.endTransaction(keepTx, true);
       }
 
-      // ConflictMode.RENAME adds a .conflict suffix while preserving the existing type
+      // ConflictMode.RENAME adds a .conflict suffix and keeps the prior type
       int renameTx = dtm.startTransaction("rename");
       try {
         List<DataTypeResource> renamed =
@@ -167,7 +167,7 @@ class GhidraCDeclarationsAndReferencesTest {
         dtm.endTransaction(renameTx, true);
       }
 
-      // Malformed C throws DataTypeMutationValidationException (400) without leaking sub-transactions
+      // Malformed C throws DataTypeMutationValidationException (400) and closes all sub-transactions
       DataTypeMutationValidationException syntaxError =
           assertThrows(
               DataTypeMutationValidationException.class,

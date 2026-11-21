@@ -280,7 +280,7 @@ class CDeclarationsAndPrototypesWireTest {
     assertEquals(400, badConflict.status());
     assertEquals("/conflict_mode", badConflict.error().target());
 
-    // 4. Reject mutations while auto-analysis runs without opening a transaction
+    // 4. Reject mutations while auto-analysis runs and do not open a transaction
     int txBeforeBusy = transactions.get();
     analysisRunning.set(true);
     ApiException busy =
