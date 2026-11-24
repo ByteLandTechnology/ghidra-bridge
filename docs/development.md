@@ -115,7 +115,6 @@ On Linux and macOS:
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
-./gradlew --no-daemon :wire:test :contracts:test
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
@@ -124,17 +123,17 @@ On Windows in PowerShell (run the hygiene script in Git Bash):
 ```powershell
 bash .github/scripts/verify-repository-hygiene.sh
 .\gradlew.bat --no-daemon clean verify
-.\gradlew.bat --no-daemon :wire:test :contracts:test
 python tests/function_mutation_regression.py "$env:GHIDRA_INSTALL_DIR\support\analyzeHeadless.bat"
 ```
 
 The verification tasks check:
 - **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, and the `docs/api.md` method count.
+- **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
-- **Headless Regression**: `function_mutation_regression.py` verifies function creation and deletion in headless Ghidra.
+- **Headless Regression**: `function_mutation_regression.py` verifies function mutations in headless Ghidra.
 
 ## Releases
 

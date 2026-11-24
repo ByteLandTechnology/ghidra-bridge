@@ -60,9 +60,7 @@ jobs:
         run: ${{ runner.os == 'Windows' && './gradlew.bat' || './gradlew' }} --no-daemon clean verify
 
       - name: Test function mutations
-        run: |
-          ${{ runner.os == 'Windows' && './gradlew.bat' || './gradlew' }} --no-daemon :wire:test :contracts:test
-          ${{ runner.os == 'Windows' && 'python' || 'python3' }} tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/${{ runner.os == 'Windows' && 'analyzeHeadless.bat' || 'analyzeHeadless' }}"
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/${{ runner.os == 'Windows' && 'analyzeHeadless.bat' || 'analyzeHeadless' }}"
 
   verify:
     needs: verify-matrix
