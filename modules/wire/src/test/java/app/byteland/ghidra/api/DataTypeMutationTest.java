@@ -108,7 +108,7 @@ class DataTypeMutationTest {
     assertNull(fields.get(1).comment());
     assertTrue(fields.get(1).commentPresent());
 
-    // Duplicate create returns 409 data_type_exists.
+    // Duplicate create returns 409 `data_type_exists`.
     ApiException duplicate =
         assertThrows(
             ApiException.class,
@@ -208,7 +208,7 @@ class DataTypeMutationTest {
     assertTrue(structPatch.updateFields().get(1).commentPresent());
     assertEquals("note", structPatch.updateFields().get(1).comment());
 
-    // Enum patch decodes comment and commentPresent.
+    // Enum patch decodes `comment` and `commentPresent`.
     registry.dispatch(
         "data_type.patch",
         Map.of(
@@ -228,7 +228,7 @@ class DataTypeMutationTest {
     assertTrue(enumPatch.updateValues().get(1).commentPresent());
     assertEquals("writable", enumPatch.updateValues().get(1).comment());
 
-    // Typedef patch and typedef upsert decode base_type; struct upsert is rejected with 400.
+    // Typedef patch and upsert decode `base_type`; struct upsert returns HTTP 400.
     registry.dispatch(
         "data_type.patch",
         Map.of(

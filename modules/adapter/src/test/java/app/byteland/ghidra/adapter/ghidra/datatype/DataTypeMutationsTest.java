@@ -188,7 +188,7 @@ class DataTypeMutationsTest {
       assertTrue(rawPacket.getComponentAt(offset).isUndefined());
     }
 
-    // Populate an interior gap via add_fields without shifting payload_len from offset 8.
+    // Populate an inner gap with `add_fields` and keep `payload_len` at offset 8.
     registry.dispatch(
         "data_type.patch",
         Map.of(
@@ -219,8 +219,7 @@ class DataTypeMutationsTest {
     assertTrue(rawPacket.getComponentAt(7).isUndefined());
     assertField(findFieldByOffset(afterGapFill, 8), "payload_len", 8, 2, false, "payload bytes");
 
-    // Removing a field in an unpacked struct clears its bytes to undefined without shifting later
-    // fields backward.
+    // Field removal on an unpacked struct clears its bytes to undefined and keeps later offsets.
     registry.dispatch(
         "data_type.patch",
         Map.of(
@@ -283,7 +282,7 @@ class DataTypeMutationsTest {
     assertField(findFieldByOffset(populated, 2), "kind_code", 2, 2, false, "slot two");
     assertField(findFieldByOffset(populated, 6), "tail_word", 6, 4, false, "grows tail");
 
-    // Rename and comment an undefined slot without providing an explicit data_type.
+    // Set a new name and comment on an undefined slot without an explicit `data_type`.
     registry.dispatch(
         "data_type.patch",
         Map.of(
@@ -427,7 +426,7 @@ class DataTypeMutationsTest {
                             Map.of(
                                 "name", "first", "data_type", named("ulonglong")))))));
 
-    // Verify original fields remained intact after all rejected patches.
+    // Verify initial fields stay unchanged after all rejected patches.
     DataTypeResource unchanged = service.getDataType("/Test/Overlap");
     assertEquals(10, unchanged.size());
     assertField(findFieldByOffset(unchanged, 0), "first", 0, 4, false, null);
@@ -436,7 +435,7 @@ class DataTypeMutationsTest {
 
   @Test
   void memberCommentsRoundTripAcrossStructUnionAndEnum() throws Exception {
-    // Union create + comment round-trip (preserve on rename/update, edit, clear with null).
+    // Union create and comment round-trip (keep on rename or update, edit, and clear with null).
     registry.dispatch(
         "data_type.create",
         Map.of(
@@ -463,7 +462,7 @@ class DataTypeMutationsTest {
     assertEquals("32-bit view", createdUnion.fields().get(0).comment());
     assertNull(createdUnion.fields().get(1).comment());
 
-    // Rename without comment preserves existing comment; update_fields with comment sets comment.
+    // Rename without `comment` keeps the prior comment; `update_fields` with `comment` sets it.
     registry.dispatch(
         "data_type.patch",
         Map.of(
@@ -483,7 +482,7 @@ class DataTypeMutationsTest {
     assertEquals("32-bit view", updatedUnion.fields().get(0).comment());
     assertEquals("64-bit view", updatedUnion.fields().get(1).comment());
 
-    // Clear comment with explicit null while updating type.
+    // Clear the comment with null and update the field type.
     Map<String, Object> clearFieldComment = new HashMap<>();
     clearFieldComment.put("name", "u32_val");
     clearFieldComment.put("data_type", named("int"));
@@ -497,8 +496,7 @@ class DataTypeMutationsTest {
             Map.of("kind", "union", "update_fields", List.of(clearFieldComment))));
     assertNull(service.getDataType("/Test/ValueUnion").fields().get(0).comment());
 
-    // Enum create + comment round-trip (add, preserve on rename/value update, comment-only edit,
-    // clear with null).
+    // Enum create and comment round-trip (add, keep on rename or value update, edit, and clear).
     registry.dispatch(
         "data_type.create",
         Map.of(
@@ -596,7 +594,7 @@ class DataTypeMutationsTest {
     assertEquals(
         DataTypeReference.pointerTo(DataTypeReference.named("/Test/Node")), next.dataType());
 
-    // Invalid initial fields (union does not allow offset) must roll back the newly created union.
+    // Invalid initial fields (union rejects `offset`) must remove the new union.
     assertBadRequest(
         () ->
             registry.dispatch(
@@ -618,7 +616,7 @@ class DataTypeMutationsTest {
 
   @Test
   void typedefPatchAndUpsertReplaceInPlaceAndRejectCyclicDependencies() throws Exception {
-    // Create a typedef via upsert and reference it from a struct field.
+    // Create a typedef with `upsert` and reference it from a struct field.
     registry.dispatch(
         "data_type.upsert",
         Map.of(
@@ -648,7 +646,7 @@ class DataTypeMutationsTest {
 
     assertEquals(4, service.getDataType("/Test/Holder").size());
 
-    // Patch /Test/Handle in place to ulonglong and verify dependent struct updates automatically.
+    // Patch `/Test/Handle` in place to `ulonglong` and verify the dependent struct updates.
     registry.dispatch(
         "data_type.patch",
         Map.of(
@@ -665,7 +663,7 @@ class DataTypeMutationsTest {
     assertEquals(
         DataTypeReference.named("/Test/Handle"), updatedHolder.fields().getFirst().dataType());
 
-    // Upsert existing typedef to ushort (and repeat idempotently).
+    // Upsert the typedef to `ushort` twice to check idempotence.
     for (int attempt = 0; attempt < 2; attempt++) {
       registry.dispatch(
           "data_type.upsert",
@@ -683,7 +681,7 @@ class DataTypeMutationsTest {
     }
     assertEquals(DataTypeReference.named("/ushort"), service.getDataType("/Test/Handle").baseType());
 
-    // Function upsert continues to work unchanged.
+    // Function `upsert` keeps its prior behavior.
     registry.dispatch(
         "data_type.upsert",
         Map.of(
@@ -709,7 +707,7 @@ class DataTypeMutationsTest {
                     false))));
     assertEquals(DataTypeResource.Kind.FUNCTION, service.getDataType("/Test/Callback").kind());
 
-    // Reject direct, indirect, and pointer typedef cycles with HTTP 400 and no .conflict artifacts.
+    // Reject direct, indirect, and pointer typedef cycles with HTTP 400 and no `.conflict` types.
     registry.dispatch(
         "data_type.create",
         Map.of(
@@ -780,8 +778,7 @@ class DataTypeMutationsTest {
                         "base_type",
                         named("uint")))));
 
-    // Also verify DataTypeDependencyException thrown by DataTypeManager.replaceDataType is caught
-    // and translated to IllegalArgumentException (HTTP 400).
+    // Verify `DataTypeDependencyException` from `replaceDataType` maps to HTTP 400.
     TypeDef existingTypedef =
         (TypeDef)
             manager.addDataType(
@@ -816,7 +813,7 @@ class DataTypeMutationsTest {
 
   @Test
   void sparseStructsOmitFillerBytesAvoidPerByteScansAndEnforceBounds() throws Exception {
-    // Sparse create + initial field at offset 25_000 succeeds without overflowing maxItems: 1000.
+    // Sparse create with an initial field at offset 25000 stays within `maxItems: 1000`.
     registry.dispatch(
         "data_type.create",
         Map.of(
@@ -838,7 +835,7 @@ class DataTypeMutationsTest {
     assertEquals(25_000, sparse.fields().getFirst().ordinal());
     assertField(sparse.fields().getFirst(), "tail_word", 25_000, 4, false, null);
 
-    // Explicit Undefined1DataType component stays visible while virtual filler slots are omitted.
+    // Explicit `Undefined1DataType` component stays in `fields` and default filler bytes do not.
     StructureDataType delegate = new StructureDataType(CategoryPath.ROOT, "GuardedSparse", 25_000);
     delegate.replaceAtOffset(100, Undefined1DataType.dataType, 1, "explicit_undef", "marker");
     Structure guarded = forbidPerByteGetComponent(delegate);
@@ -859,7 +856,7 @@ class DataTypeMutationsTest {
         ref -> ByteDataType.dataType);
     assertEquals(2, DataTypeDescriptions.detail(guarded).fields().size());
 
-    // Enforce MAX_STRUCT_SIZE across create, initial fields, add_fields, update_fields, and overflow.
+    // Check `MAX_STRUCT_SIZE` across `create`, initial fields, `add_fields`, and integer overflow.
     DataTypeMutationValidationException createTooLarge =
         assertThrows(
             DataTypeMutationValidationException.class,
@@ -919,7 +916,7 @@ class DataTypeMutationsTest {
                     ref -> ByteDataType.dataType));
     assertEquals("/patch/add_fields/0/offset", overflowError.target());
 
-    // Enforce MAX_DEFINED_COMPONENTS across add_fields, undefined-slot promotion, and detail().
+    // Check `MAX_DEFINED_COMPONENTS` across `add_fields`, undefined-slot updates, and `detail()`.
     StructureDataType dense = new StructureDataType(CategoryPath.ROOT, "Dense", 1_005);
     for (int index = 0; index < DataTypeService.MAX_DEFINED_COMPONENTS; index++) {
       dense.replaceAtOffset(index, ByteDataType.dataType, 1, "f_" + index, null);
@@ -955,7 +952,7 @@ class DataTypeMutationsTest {
     dense.replaceAtOffset(1_000, ByteDataType.dataType, 1, "f_1000", null);
     assertThrows(IllegalArgumentException.class, () -> DataTypeDescriptions.detail(dense));
 
-    // Consolidated CompositeFieldMutations preserves union pre-resolution offset check.
+    // Consolidated `CompositeFieldMutations` checks union `offset` before type resolution.
     UnionDataType union = new UnionDataType("OffsetOrderUnion");
     IllegalArgumentException unionOffsetError =
         assertThrows(
@@ -974,6 +971,44 @@ class DataTypeMutationsTest {
                       throw new AssertionError("resolver must not run before union offset check");
                     }));
     assertEquals("union add_fields does not support offset", unionOffsetError.getMessage());
+
+    // Default `CompositeAccess.addField` appends without `offset` and rejects `offset != null`.
+    CompositeFieldMutations.CompositeAccess defaultUnionAccess =
+        new CompositeFieldMutations.CompositeAccess() {
+          @Override
+          public CompositeFieldMutations.CompositeKind kind() {
+            return CompositeFieldMutations.CompositeKind.UNION;
+          }
+
+          @Override
+          public ghidra.program.model.data.Composite composite() {
+            return union;
+          }
+
+          @Override
+          public List<Integer> locate(DataTypePatch.CompositeField selector) {
+            return CompositeFieldMutations.findOrdinalsByName(union, selector.name());
+          }
+
+          @Override
+          public void replace(
+              DataTypeComponent component, CompositeFieldMutations.Replacement replacement) {}
+        };
+    CompositeFieldMutations.addFields(
+        defaultUnionAccess,
+        List.of(new DataTypePatch.CompositeField("ok", null, null, null, null, "note", true)),
+        ref -> ByteDataType.dataType);
+    assertEquals(1, union.getNumComponents());
+    assertEquals("note", union.getComponent(0).getComment());
+    IllegalArgumentException defaultOffsetError =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                CompositeFieldMutations.addFields(
+                    defaultUnionAccess,
+                    List.of(new DataTypePatch.CompositeField("bad", null, 0, null, null)),
+                    ref -> ByteDataType.dataType));
+    assertEquals("union add_fields does not support offset", defaultOffsetError.getMessage());
   }
 
   private static Structure forbidPerByteGetComponent(Structure delegate) {

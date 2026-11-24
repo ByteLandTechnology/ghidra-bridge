@@ -47,17 +47,17 @@ final class CompositeFieldMutations {
   }
 
   static void renameFields(
-      CompositeAccess access,
+      CompositeAccess composite,
       List<DataTypePatch.CompositeField> updates,
       Function<DataTypeReference, DataType> resolver) {
-    patch(access, updates, PatchMode.RENAME, resolver);
+    patch(composite, updates, PatchMode.RENAME, resolver);
   }
 
   static void updateFields(
-      CompositeAccess access,
+      CompositeAccess composite,
       List<DataTypePatch.CompositeField> updates,
       Function<DataTypeReference, DataType> resolver) {
-    patch(access, updates, PatchMode.UPDATE, resolver);
+    patch(composite, updates, PatchMode.UPDATE, resolver);
   }
 
   static void addFields(
@@ -72,11 +72,7 @@ final class CompositeFieldMutations {
       DataType dataType = DataTypeMutationSupport.resolveFieldDataType(field.dataType(), resolver);
       int length = DataTypeMutationSupport.fieldLength(dataType, field.length(), null);
       String comment = DataTypeMutationSupport.normalizeComment(field.comment());
-      if (field.offset() == null) {
-        access.append(dataType, length, name, comment, index);
-      } else {
-        access.insertAtOffset(field.offset(), dataType, length, name, comment, index);
-      }
+      access.addField(index, field.offset(), new Replacement(dataType, length, name, comment));
     }
   }
 
@@ -89,18 +85,18 @@ final class CompositeFieldMutations {
   }
 
   private static void patch(
-      CompositeAccess access,
+      CompositeAccess composite,
       List<DataTypePatch.CompositeField> updates,
       PatchMode mode,
       Function<DataTypeReference, DataType> resolver) {
     if (updates == null) return;
     for (DataTypePatch.CompositeField update : updates) {
-      DataTypeComponent component = resolveSingle(access, update);
+      DataTypeComponent component = resolveSingle(composite, update);
       String newName = update.newName() == null ? component.getFieldName() : update.newName();
       boolean undefinedMetadataEdit =
           component.isUndefined() && (update.newName() != null || update.commentPresent());
       if (mode.replacesComponent(update) || undefinedMetadataEdit) {
-        replaceComponent(access, component, update, newName, resolver);
+        replaceComponent(composite, component, update, newName, resolver);
       } else if (update.newName() != null || update.commentPresent()) {
         DataTypeMutationSupport.applyMetadataPatch(
             component, newName, update.comment(), update.commentPresent());
@@ -109,7 +105,7 @@ final class CompositeFieldMutations {
   }
 
   private static void replaceComponent(
-      CompositeAccess access,
+      CompositeAccess composite,
       DataTypeComponent component,
       DataTypePatch.CompositeField update,
       String newName,
@@ -136,7 +132,7 @@ final class CompositeFieldMutations {
         update.commentPresent()
             ? DataTypeMutationSupport.normalizeComment(update.comment())
             : component.getComment();
-    access.replace(component, new Replacement(replacement, length, newName, comment));
+    composite.replace(component, new Replacement(replacement, length, newName, comment));
   }
 
   private static DataTypeComponent resolveSingle(
@@ -167,20 +163,14 @@ final class CompositeFieldMutations {
       composite().delete(ordinal);
     }
 
-    default void validateAddOffset(Integer offset) {}
+    default void validateBeforeAdd(DataTypePatch.CompositeField field, int index) {}
 
-    default void validateBeforeAdd(DataTypePatch.CompositeField field, int index) {
-      validateAddOffset(field.offset());
-    }
-
-    default void append(DataType dataType, int length, String name, String comment, int index) {
-      composite().add(dataType, length, name, comment);
-    }
-
-    default void insertAtOffset(
-        int offset, DataType dataType, int length, String name, String comment, int index) {
-      throw new IllegalArgumentException(
-          kind().displayName() + " add_fields does not support offset");
+    default void addField(int index, Integer offset, Replacement field) {
+      if (offset != null) {
+        throw new IllegalArgumentException(
+            kind().displayName() + " add_fields does not support offset");
+      }
+      composite().add(field.dataType(), field.length(), field.name(), field.comment());
     }
 
     void replace(DataTypeComponent component, Replacement replacement);

@@ -151,7 +151,17 @@ final class StructMutations {
     }
 
     @Override
-    public void append(DataType dataType, int length, String name, String comment, int index) {
+    public void addField(
+        int index, Integer offset, CompositeFieldMutations.Replacement field) {
+      if (offset == null) {
+        append(field.dataType(), field.length(), field.name(), field.comment(), index);
+      } else {
+        insertAtOffset(
+            offset, field.dataType(), field.length(), field.name(), field.comment(), index);
+      }
+    }
+
+    private void append(DataType dataType, int length, String name, String comment, int index) {
       String target = addTargetPrefix + "/" + index;
       int checkLength =
           composite.isPackingEnabled()
@@ -167,8 +177,7 @@ final class StructMutations {
       }
     }
 
-    @Override
-    public void insertAtOffset(
+    private void insertAtOffset(
         int offset, DataType dataType, int length, String name, String comment, int index) {
       String target = addTargetPrefix + "/" + index + "/offset";
       if (offset < 0) {
