@@ -77,6 +77,7 @@ project(':launcher') {
         implementation project(':transport:websocket')
         implementation project(':transport:mcp')
         compileOnly ghidraJars
+        testImplementation ghidraJars
     }
 }
 
@@ -89,6 +90,7 @@ tasks.register('verifyGhidraInstallDir') {
 }
 project(':adapter').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
 project(':launcher').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+project(':launcher').tasks.named('compileTestJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
 
 project(':launcher') {
     tasks.register('runtimeJar', Jar) {
@@ -174,7 +176,7 @@ tasks.register('verifyApiContracts') {
 
 tasks.register('verifyDistribution') {
     group = 'verification'
-    dependsOn 'buildGhidraScript', 'compileGeneratedScripts'
+    dependsOn 'buildGhidraScript', 'compileGeneratedScripts', ':launcher:test'
     doLast {
         def output = layout.buildDirectory.dir('ghidra-script').get().asFile
         def names = output.listFiles().collect { it.name }.sort()
@@ -201,6 +203,10 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     sourceCompatibility = '21'
     targetCompatibility = '21'
     options.encoding = 'UTF-8'
+}
+
+project(':launcher').tasks.named('test', Test) {
+    classpath += files(tasks.named('compileGeneratedScripts'))
 }
 
 tasks.register('verifyArchitecture') {
