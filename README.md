@@ -102,7 +102,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `token` | *(none)* | Shared secret token for bearer authentication. |
 | `ws_url` | *(none)* | Remote WebSocket URL in outbound client mode. |
 | `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra.program`. Use a different value for each server that one client connects to. |
-| `allowed_origins` | *(none)* | MCP only. Comma-separated list of allowed browser origins (`scheme://host[:port]`). Rejects wildcards, `null`, paths, queries, fragments, and non-HTTP schemes. Non-loopback origins require `token`. |
+| `allowed_origins` | *(none)* | MCP only. Comma-separated list of permitted browser origins (`scheme://host[:port]`). Rejects wildcards, `null`, paths, queries, fragments, and non-HTTP schemes. Non-loopback origins require `token`. |
 | `jar` | *(auto)* | Path to `ghidra-bridge.jar` when the JAR is not beside the script file. |
 | `exit_deadline_sec` | *(none)* | Outbound only. Halt the JVM if Ghidra does not exit this many seconds after the session ends. An active save completes first. Use it only for a headless Ghidra that a host starts. |
 

@@ -363,7 +363,7 @@ class McpHttpServerOriginTest {
 
   @Test
   void matchesExplicitAllowedOriginsCaseInsensitivelyWithoutDns() {
-    // Hostname matching without DNS resolution (.invalid is RFC 2606 guaranteed non-resolvable)
+    // Hostname match without DNS resolution (.invalid is RFC 2606 guaranteed non-resolvable)
     McpConfig externalAllowlist =
         McpConfig.fromMap(
             Map.of("token", "secret", "allowed_origins", "https://ghidra-host.invalid:8443"));
@@ -375,7 +375,7 @@ class McpHttpServerOriginTest {
             List.of("https://other-host.invalid:8443"), externalAllowlist.allowedOrigins()));
     assertFalse(McpHttpServer.isAllowedOrigin(List.of("https://untrusted.invalid"), Set.of()));
 
-    // Configured non-loopback IPv4 and IPv6 literal matching
+    // Configured non-loopback IPv4 and IPv6 literal match
     McpConfig ipAllowlist =
         McpConfig.fromMap(
             Map.of(

@@ -218,7 +218,7 @@ class McpOriginSecurityTest {
       assertTrue(sseResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
       assertEquals(0, programCalls.get());
 
-      // CLI and desktop clients omitting Origin succeed without CORS headers.
+      // CLI and desktop clients that omit Origin succeed without CORS headers.
       HttpRequest cliPost =
           HttpRequest.newBuilder(endpoint)
               .header("Content-Type", "application/json")
@@ -262,7 +262,7 @@ class McpOriginSecurityTest {
       URI endpoint = URI.create(running.server().endpoint());
       String programGetBody = programGetRequestBody();
 
-      // OPTIONS preflight for allowlisted origin
+      // OPTIONS preflight for a permitted origin
       HttpRequest allowedPreflight =
           HttpRequest.newBuilder(endpoint)
               .header("Origin", ALLOWED_INSPECTOR_ORIGIN)
@@ -280,7 +280,7 @@ class McpOriginSecurityTest {
       assertFalse(
           allowedPreflightResp.headers().firstValue("Access-Control-Allow-Methods").isEmpty());
 
-      // HEAD for allowlisted origin
+      // HEAD for a permitted origin
       HttpRequest allowedHead =
           HttpRequest.newBuilder(endpoint)
               .header("Origin", ALLOWED_INSPECTOR_ORIGIN)
@@ -294,7 +294,7 @@ class McpOriginSecurityTest {
           allowedHeadResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
       assertEquals("Origin", allowedHeadResp.headers().firstValue("Vary").orElse(null));
 
-      // POST for allowlisted origin
+      // POST for a permitted origin
       HttpRequest allowedPost =
           HttpRequest.newBuilder(endpoint)
               .header("Origin", ALLOWED_INSPECTOR_ORIGIN)
@@ -313,7 +313,7 @@ class McpOriginSecurityTest {
       assertEquals("Origin", allowedPostResp.headers().firstValue("Vary").orElse(null));
       assertEquals(1, programCalls.get());
 
-      // GET SSE for allowlisted origin
+      // GET SSE for a permitted origin
       HttpRequest allowedSse =
           HttpRequest.newBuilder(endpoint)
               .header("Origin", ALLOWED_INSPECTOR_ORIGIN)
@@ -333,7 +333,7 @@ class McpOriginSecurityTest {
         assertEquals("event: endpoint", reader.readLine());
       }
 
-      // Non-matching origins (different host, scheme, port, null, trailing slash, comma-joined)
+      // Unlisted or invalid origins (different host, scheme, port, null, path slash, or comma list)
       for (String disallowed :
           List.of(
               "https://untrusted.example",
