@@ -167,6 +167,187 @@ def run_test(headless, root):
                 "resource": {"entry": symbols["label_only"]}, "disassemble": True,
             })["result"]
             assert label["name"] == "label_only"
+
+            first_param = function(21, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert first_param == {
+                "ordinal": 0,
+                "name": "first_param",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "register:00000038:4"},
+            }
+
+            zero_param = function(22, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "zero_param",
+                    "data_type": {"kind": "pointer", "target": {"kind": "named", "name": "/char"}},
+                },
+            })["result"]
+            assert zero_param == {
+                "ordinal": 0,
+                "name": "zero_param",
+                "data_type": {"kind": "pointer", "target": {"kind": "named", "name": "/char"}},
+                "storage": {"kind": "serialization", "serialization": "register:00000038:8"},
+            }
+
+            func_a_with_params = function(23, "get", selector("func_a"))["result"]
+            assert func_a_with_params["has_custom_variable_storage"] is False
+            assert func_a_with_params["parameter_count"] == 2
+            assert func_a_with_params["parameters"] == [
+                zero_param,
+                {
+                    "ordinal": 1,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                    "storage": {"kind": "serialization", "serialization": "register:00000030:4"},
+                },
+            ]
+
+            function(24, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 2,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+            function(25, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 5,
+                    "name": "out_of_range",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+            assert function(26, "get", selector("func_a"))["result"]["parameter_count"] == 2
+
+            patched_recreated = function(27, "patch", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "patch": {
+                    "return_type": {"kind": "named", "name": "/int"},
+                    "return_storage": {"kind": "register", "register": "EAX"},
+                },
+            })["result"]
+            assert patched_recreated["has_custom_variable_storage"] is True
+
+            custom_reg = function(28, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "custom_reg",
+                    "data_type": {"kind": "named", "name": "/longlong"},
+                    "storage": {"kind": "register", "register": "R12"},
+                },
+            })["result"]
+            assert custom_reg == {
+                "ordinal": 0,
+                "name": "custom_reg",
+                "data_type": {"kind": "named", "name": "/longlong"},
+                "storage": {"kind": "serialization", "serialization": "register:000000a0:8"},
+            }
+
+            unassigned_tail = function(29, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 1,
+                    "name": "unassigned_tail",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert unassigned_tail == {
+                "ordinal": 1,
+                "name": "unassigned_tail",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+            }
+
+            unassigned_head = function(30, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "unassigned_head",
+                    "data_type": {"kind": "named", "name": "/short"},
+                },
+            })["result"]
+            assert unassigned_head == {
+                "ordinal": 0,
+                "name": "unassigned_head",
+                "data_type": {"kind": "named", "name": "/short"},
+                "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+            }
+
+            custom_with_params = function(31, "get", selector("jump_entry"))["result"]
+            assert custom_with_params["has_custom_variable_storage"] is True
+            assert custom_with_params["return_storage"] == {
+                "kind": "serialization",
+                "serialization": "register:00000000:4",
+            }
+            assert custom_with_params["parameter_count"] == 3
+            assert custom_with_params["parameters"] == [
+                unassigned_head,
+                {
+                    "ordinal": 1,
+                    "name": "custom_reg",
+                    "data_type": {"kind": "named", "name": "/longlong"},
+                    "storage": {"kind": "serialization", "serialization": "register:000000a0:8"},
+                },
+                {
+                    "ordinal": 2,
+                    "name": "unassigned_tail",
+                    "data_type": {"kind": "named", "name": "/int"},
+                    "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+                },
+            ]
+
+            tool(32, "ghidra_data_type", {
+                "operation": "create",
+                "params": {"resource": {"kind": "struct", "name": "big_ret", "size": 24}},
+            })
+            auto_patched = function(33, "patch", {
+                "selector": {"entry": symbols["label_only"]},
+                "patch": {"return_type": {"kind": "named", "name": "/big_ret"}},
+            })["result"]
+            assert auto_patched["parameter_count"] == 1
+            assert auto_patched["parameters"][0]["name"] == "__return_storage_ptr__"
+
+            function(34, "parameter.create", {
+                "selector": {"entry": symbols["label_only"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "before_auto",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+
+            after_auto = function(35, "parameter.create", {
+                "selector": {"entry": symbols["label_only"]},
+                "resource": {
+                    "ordinal": 1,
+                    "name": "after_auto",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert after_auto == {
+                "ordinal": 1,
+                "name": "after_auto",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "register:00000030:4"},
+            }
+            auto_with_params = function(36, "get", selector("label_only"))["result"]
+            assert auto_with_params["has_custom_variable_storage"] is False
+            assert auto_with_params["parameter_count"] == 2
+            assert [p["name"] for p in auto_with_params["parameters"]] == [
+                "__return_storage_ptr__",
+                "after_auto",
+            ]
             print("Function mutation regression checks passed")
         finally:
             if ready:

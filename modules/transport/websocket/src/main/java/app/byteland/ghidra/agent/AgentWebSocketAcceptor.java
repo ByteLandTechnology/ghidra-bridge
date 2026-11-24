@@ -6,7 +6,6 @@ import java.net.Socket;
 import java.util.List;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 final class AgentWebSocketAcceptor implements Runnable {
   private static final ThreadFactory CONNECTION_THREADS =
@@ -15,8 +14,7 @@ final class AgentWebSocketAcceptor implements Runnable {
   private final ServerSocket serverSocket;
   private final AgentWebSocketServer.Handler handler;
   private final AtomicBoolean running;
-  private final AtomicReference<Object> activeConnection;
-  private final AtomicReference<Socket> pendingSocket;
+  private final AgentWebSocketServer.PendingSockets pendingSockets;
   private final AgentWebSocketConnectionRunner connectionRunner;
   private final ThreadFactory connectionThreadFactory;
 
@@ -24,15 +22,13 @@ final class AgentWebSocketAcceptor implements Runnable {
       ServerSocket serverSocket,
       AgentWebSocketServer.Handler handler,
       AtomicBoolean running,
-      AtomicReference<Object> activeConnection,
-      AtomicReference<Socket> pendingSocket,
+      AgentWebSocketServer.PendingSockets pendingSockets,
       AgentWebSocketConnectionRunner connectionRunner) {
     this(
         serverSocket,
         handler,
         running,
-        activeConnection,
-        pendingSocket,
+        pendingSockets,
         connectionRunner,
         CONNECTION_THREADS);
   }
@@ -41,15 +37,13 @@ final class AgentWebSocketAcceptor implements Runnable {
       ServerSocket serverSocket,
       AgentWebSocketServer.Handler handler,
       AtomicBoolean running,
-      AtomicReference<Object> activeConnection,
-      AtomicReference<Socket> pendingSocket,
+      AgentWebSocketServer.PendingSockets pendingSockets,
       AgentWebSocketConnectionRunner connectionRunner,
       ThreadFactory connectionThreadFactory) {
     this.serverSocket = serverSocket;
     this.handler = handler;
     this.running = running;
-    this.activeConnection = activeConnection;
-    this.pendingSocket = pendingSocket;
+    this.pendingSockets = pendingSockets;
     this.connectionRunner = connectionRunner;
     this.connectionThreadFactory = connectionThreadFactory;
   }
@@ -60,8 +54,8 @@ final class AgentWebSocketAcceptor implements Runnable {
     while (running.get()) {
       try {
         Socket socket = serverSocket.accept();
-        if (!activeConnection.compareAndSet(null, AgentWebSocketServer.RESERVED_CONNECTION_SLOT)) {
-          rejectBusy(socket);
+        if (!pendingSockets.tryAdd(socket)) {
+          rejectOverloaded(socket);
           continue;
         }
         startConnectionThread(socket);
@@ -74,29 +68,31 @@ final class AgentWebSocketAcceptor implements Runnable {
     }
   }
 
-  private void rejectBusy(Socket socket) {
+  private void rejectOverloaded(Socket socket) {
     try (socket) {
-      WebSocketHandshake.writeHttpResponse(
-          socket.getOutputStream(),
-          409,
-          "Conflict",
-          List.of(),
-          "Bridge already has an active client");
+      if (running.get()) {
+        WebSocketHandshake.writeHttpResponse(
+            socket.getOutputStream(),
+            503,
+            "Service Unavailable",
+            List.of(),
+            "Too many pending handshakes");
+      }
     } catch (IOException failure) {
-      handler.onConnectionError(null, failure);
+      if (running.get()) {
+        handler.onConnectionError(null, failure);
+      }
     }
   }
 
   @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void startConnectionThread(Socket socket) {
-    pendingSocket.set(socket);
     try {
       Thread connectionThread =
           connectionThreadFactory.newThread(() -> connectionRunner.runConnection(socket));
       connectionThread.start();
     } catch (RuntimeException e) {
-      pendingSocket.compareAndSet(socket, null);
-      activeConnection.compareAndSet(AgentWebSocketServer.RESERVED_CONNECTION_SLOT, null);
+      pendingSockets.remove(socket);
       closeAfterFailedStart(socket, e);
       throw e;
     }

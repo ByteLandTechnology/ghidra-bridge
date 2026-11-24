@@ -6,6 +6,9 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.Socket;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -25,6 +28,7 @@ final class WebSocketHandshake {
   private static final int MIN_REQUEST_LINE_FIELDS = 2;
   private static final int INITIAL_HTTP_RESPONSE_CAPACITY = 128;
   private static final int MAX_HANDSHAKE_BYTES = 64 * 1024;
+  private static final long NANOS_PER_MILLI = 1_000_000L;
 
   private WebSocketHandshake() {}
 
@@ -43,17 +47,55 @@ final class WebSocketHandshake {
             431, "Request Header Fields Too Large", "Handshake header exceeds maximum size");
       }
       buffer.write(b);
-      matched =
-          switch (matched) {
-            case 0 -> b == '\r' ? 1 : 0;
-            case 1 -> b == '\n' ? 2 : 0;
-            case 2 -> b == '\r' ? 3 : 0;
-            case 3 -> b == '\n' ? 4 : 0;
-            default -> matched;
-          };
+      matched = advanceHeaderTerminatorMatch(matched, b);
     }
+    return parseHandshake(buffer.toString(StandardCharsets.US_ASCII));
+  }
 
-    String requestText = buffer.toString(StandardCharsets.US_ASCII);
+  static HandshakeRequest readHandshake(Socket socket, long deadlineNanos) throws IOException {
+    InputStream input = socket.getInputStream();
+    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    int matched = 0;
+    int totalBytes = 0;
+    while (matched < 4) {
+      updateReadTimeout(socket, deadlineNanos);
+      int b;
+      try {
+        b = input.read();
+      } catch (SocketTimeoutException timeout) {
+        if (deadlineNanos - System.nanoTime() <= 0) {
+          throw handshakeTimeout(timeout);
+        }
+        continue;
+      }
+      if (deadlineNanos - System.nanoTime() <= 0) {
+        throw handshakeTimeout(null);
+      }
+      if (b < 0) {
+        throw new EOFException("EOF during handshake");
+      }
+      totalBytes++;
+      if (totalBytes > MAX_HANDSHAKE_BYTES) {
+        throw new HttpHandshakeException(
+            431, "Request Header Fields Too Large", "Handshake header exceeds maximum size");
+      }
+      buffer.write(b);
+      matched = advanceHeaderTerminatorMatch(matched, b);
+    }
+    return parseHandshake(buffer.toString(StandardCharsets.US_ASCII));
+  }
+
+  private static int advanceHeaderTerminatorMatch(int matched, int b) {
+    return switch (matched) {
+      case 0 -> b == '\r' ? 1 : 0;
+      case 1 -> b == '\n' ? 2 : 0;
+      case 2 -> b == '\r' ? 3 : 0;
+      case 3 -> b == '\n' ? 4 : 0;
+      default -> matched;
+    };
+  }
+
+  private static HandshakeRequest parseHandshake(String requestText) {
     List<String> lines = splitLiteral(requestText, "\r\n", 0);
     if (lines.isEmpty()) {
       throw new HttpHandshakeException(400, "Bad Request", "Missing request line");
@@ -107,6 +149,19 @@ final class WebSocketHandshake {
     String query = queryIndex >= 0 ? target.substring(queryIndex + 1) : "";
     return new HandshakeRequest(
         requestLine.getFirst(), path, parseQuery(query), headers, hostHeaders);
+  }
+
+  private static void updateReadTimeout(Socket socket, long deadlineNanos) throws SocketException {
+    long remainingNanos = deadlineNanos - System.nanoTime();
+    if (remainingNanos <= 0) {
+      throw handshakeTimeout(null);
+    }
+    long remainingMillis = (remainingNanos - 1L) / NANOS_PER_MILLI + 1L;
+    socket.setSoTimeout((int) Math.min(Integer.MAX_VALUE, remainingMillis));
+  }
+
+  private static HttpHandshakeException handshakeTimeout(Throwable cause) {
+    return new HttpHandshakeException(408, "Request Timeout", "Handshake timed out", cause);
   }
 
   static void writeHandshakeResponse(OutputStream output, String acceptKey) throws IOException {
@@ -248,6 +303,12 @@ final class WebSocketHandshake {
 
     HttpHandshakeException(int status, String reason, String message) {
       super(message);
+      this.statusCode = status;
+      this.reasonPhrase = reason;
+    }
+
+    HttpHandshakeException(int status, String reason, String message, Throwable cause) {
+      super(message, cause);
       this.statusCode = status;
       this.reasonPhrase = reason;
     }

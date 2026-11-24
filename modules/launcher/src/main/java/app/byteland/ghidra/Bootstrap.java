@@ -127,16 +127,6 @@ public final class Bootstrap {
       throw e;
     }
 
-    AgentConfig dispatcherConfig =
-        new AgentConfig(
-            null,
-            mcpConfig.host(),
-            mcpConfig.port(),
-            mcpConfig.path(),
-            mcpConfig.token(),
-            mcpConfig.sessionId(),
-            null);
-
     saveCheckpoint(script, program, "[ghidra-mcp]");
 
     script.println("[ghidra-mcp] Starting MCP HTTP service");
@@ -150,7 +140,7 @@ public final class Bootstrap {
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
         gracefulExit(services.programService(), script, "[ghidra-mcp]")) {
-      try (AgentDispatcher dispatcher = new AgentDispatcher(services, dispatcherConfig);
+      try (AgentDispatcher dispatcher = new AgentDispatcher(services, mcpConfig.sessionId());
           McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher, script::println)) {
         if (onShutdown != null) {
           gracefulExit.installShutdownHook(server::close, onShutdown);
