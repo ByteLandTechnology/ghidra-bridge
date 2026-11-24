@@ -11,6 +11,7 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
+import ghidra.program.model.listing.FunctionManager;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -38,15 +39,30 @@ final class FunctionListQueries {
         query.contains() == null || query.contains().isBlank()
             ? null
             : parseAddress(query.contains());
-    if (targetsExternalSpace(query, cursorAddress, entryFunction)) {
+    Address explicitStart =
+        query.scan().start() == null || query.scan().start().isBlank()
+            ? null
+            : parseAddress(query.scan().start());
+    Address explicitEnd =
+        query.scan().end() == null || query.scan().end().isBlank()
+            ? null
+            : parseAddress(query.scan().end());
+    if (targetsExternalSpace(query, explicitStart, explicitEnd, cursorAddress, entryFunction)) {
       return listExternalFunctions(
-          query, normalizedLimit, normalizedName, cursorAddress, entryFunction, containsAddress);
+          query,
+          normalizedLimit,
+          normalizedName,
+          explicitStart,
+          explicitEnd,
+          cursorAddress,
+          entryFunction,
+          containsAddress);
     }
     AddressScanRanges.Resolved range =
         entryFunction != null
                 && containsAddress == null
-                && query.scan().start() == null
-                && query.scan().end() == null
+                && explicitStart == null
+                && explicitEnd == null
             ? AddressScanRanges.of(entryFunction.getEntryPoint(), entryFunction.getEntryPoint())
             : AddressScanRanges.resolve(context, query.scan(), false);
 
@@ -58,70 +74,83 @@ final class FunctionListQueries {
         cursorAddress != null && cursorAddress.compareTo(range.start()) > 0
             ? cursorAddress
             : range.start();
-    for (Function function = firstFunction(firstAddress, cursorAddress != null);
-        function != null;
-        function = nextFunction(function)) {
-      if (range.afterEnd(function.getEntryPoint())) break;
-      FunctionResource match =
-          matchesFunction(function, query, normalizedName, entryFunction, containsAddress)
-              ? FunctionDescriptions.describe(function, query.includes())
-              : null;
-      String address = AddressUtil.canonicalAddress(function.getEntryPoint());
-      scan.visit(address, address, match);
+    if (range.afterEnd(firstAddress)) {
+      return scan.finish();
+    }
+    FunctionManager functionManager = context.currentProgram().getFunctionManager();
+    FunctionIterator functions = functionManager.getFunctions(firstAddress, true);
+    while (functions.hasNext()) {
+      Function function = functions.next();
+      Address entryPoint = function.getEntryPoint();
+      if (cursorAddress != null && entryPoint.compareTo(cursorAddress) <= 0) continue;
+      if (range.afterEnd(entryPoint)) break;
+      visitFunction(scan, function, normalizedName, entryFunction, containsAddress, query);
       if (scan.stopped()) break;
     }
     return scan.finish();
   }
 
-  private boolean targetsExternalSpace(
-      FunctionQuery query, Address cursorAddress, Function entryFunction) {
+  private static boolean targetsExternalSpace(
+      FunctionQuery query,
+      Address explicitStart,
+      Address explicitEnd,
+      Address cursorAddress,
+      Function entryFunction) {
+    if (explicitStart != null || explicitEnd != null) {
+      boolean startExt = explicitStart != null && explicitStart.isExternalAddress();
+      boolean endExt = explicitEnd != null && explicitEnd.isExternalAddress();
+      if (explicitStart != null && explicitEnd != null && startExt != endExt) {
+        throw new IllegalArgumentException("start and end must be in the same address space");
+      }
+      return startExt || endExt;
+    }
     if (Boolean.TRUE.equals(query.external())) return true;
     if (cursorAddress != null && cursorAddress.isExternalAddress()) return true;
-    if (entryFunction != null && entryFunction.isExternal()) return true;
-    Address rawStart =
-        query.scan().start() == null || query.scan().start().isBlank()
-            ? null
-            : parseAddress(query.scan().start());
-    Address rawEnd =
-        query.scan().end() == null || query.scan().end().isBlank()
-            ? null
-            : parseAddress(query.scan().end());
-    return (rawStart != null && rawStart.isExternalAddress())
-        || (rawEnd != null && rawEnd.isExternalAddress());
+    return entryFunction != null && entryFunction.isExternal();
   }
 
   private Page<FunctionResource> listExternalFunctions(
       FunctionQuery query,
       int normalizedLimit,
       String normalizedName,
+      Address explicitStart,
+      Address explicitEnd,
       Address cursorAddress,
       Function entryFunction,
       Address containsAddress) {
-    Address explicitStart =
-        query.scan().start() == null || query.scan().start().isBlank()
-            ? null
-            : parseAddress(query.scan().start());
-    Address explicitEnd =
-        query.scan().end() == null || query.scan().end().isBlank()
-            ? null
-            : parseAddress(query.scan().end());
-    if ((explicitStart != null && !explicitStart.isExternalAddress())
-        || (explicitEnd != null && !explicitEnd.isExternalAddress())) {
-      if (Boolean.TRUE.equals(query.external())
-          && (explicitStart == null || !explicitStart.isExternalAddress())
-          && (explicitEnd == null || !explicitEnd.isExternalAddress())) {
-        return BoundedAddressScan.<FunctionResource>start(
-                normalizedLimit,
-                query.scan().timeoutMs(),
-                AddressUtil.canonicalAddress(explicitStart),
-                AddressUtil.canonicalAddress(explicitEnd))
-            .finish();
-      }
-      throw new IllegalArgumentException(
-          "range start and end must use the same address space");
-    }
     if (explicitStart != null && explicitEnd != null && explicitStart.compareTo(explicitEnd) > 0) {
-      throw new IllegalArgumentException("range start must be at or before range end");
+      throw new IllegalArgumentException("start must not be greater than end");
+    }
+
+    Address singleTarget = null;
+    if (explicitStart != null && explicitStart.equals(explicitEnd)) {
+      singleTarget = explicitStart;
+    } else if (explicitStart == null
+        && explicitEnd == null
+        && entryFunction != null
+        && entryFunction.isExternal()
+        && containsAddress == null) {
+      singleTarget = entryFunction.getEntryPoint();
+    }
+    if (singleTarget != null) {
+      String targetText = AddressUtil.canonicalAddress(singleTarget);
+      BoundedAddressScan<FunctionResource> scan =
+          BoundedAddressScan.start(
+              normalizedLimit, query.scan().timeoutMs(), targetText, targetText);
+      if (cursorAddress == null || singleTarget.compareTo(cursorAddress) > 0) {
+        Function externalFunction =
+            context.currentProgram().getFunctionManager().getFunctionAt(singleTarget);
+        if (externalFunction == null
+            && entryFunction != null
+            && singleTarget.equals(entryFunction.getEntryPoint())) {
+          externalFunction = entryFunction;
+        }
+        if (externalFunction != null) {
+          visitFunction(
+              scan, externalFunction, normalizedName, entryFunction, containsAddress, query);
+        }
+      }
+      return scan.finish();
     }
 
     List<Function> externals = collectExternalFunctions();
@@ -134,16 +163,7 @@ final class FunctionListQueries {
     Address maxExt =
         explicitEnd != null
             ? explicitEnd
-            : (externals.isEmpty()
-                ? minExt
-                : externals.getLast().getEntryPoint());
-    if (entryFunction != null
-        && containsAddress == null
-        && explicitStart == null
-        && explicitEnd == null) {
-      minExt = entryFunction.getEntryPoint();
-      maxExt = entryFunction.getEntryPoint();
-    }
+            : (externals.isEmpty() ? minExt : externals.getLast().getEntryPoint());
 
     BoundedAddressScan<FunctionResource> scan =
         BoundedAddressScan.start(
@@ -157,12 +177,7 @@ final class FunctionListQueries {
       if (entry.compareTo(minExt) < 0) continue;
       if (cursorAddress != null && entry.compareTo(cursorAddress) <= 0) continue;
       if (entry.compareTo(maxExt) > 0) break;
-      FunctionResource match =
-          matchesFunction(function, query, normalizedName, entryFunction, containsAddress)
-              ? FunctionDescriptions.describe(function, query.includes())
-              : null;
-      String address = AddressUtil.canonicalAddress(entry);
-      scan.visit(address, address, match);
+      visitFunction(scan, function, normalizedName, entryFunction, containsAddress, query);
       if (scan.stopped()) break;
     }
     return scan.finish();
@@ -170,7 +185,8 @@ final class FunctionListQueries {
 
   private List<Function> collectExternalFunctions() {
     List<Function> externals = new ArrayList<>();
-    FunctionIterator iterator = context.currentProgram().getFunctionManager().getExternalFunctions();
+    FunctionIterator iterator =
+        context.currentProgram().getFunctionManager().getExternalFunctions();
     while (iterator.hasNext()) {
       externals.add(iterator.next());
     }
@@ -178,44 +194,30 @@ final class FunctionListQueries {
     return externals;
   }
 
-  private static boolean matchesFunction(
+  private static void visitFunction(
+      BoundedAddressScan<FunctionResource> scan,
       Function function,
-      FunctionQuery query,
       String normalizedName,
       Function entryFunction,
-      Address containsAddress) {
+      Address containsAddress,
+      FunctionQuery query) {
+    FunctionResource match = null;
     if (normalizedName != null
         && !function.getName().toLowerCase(Locale.ROOT).contains(normalizedName)) {
-      return false;
+    } else if (entryFunction != null
+        && !function.equals(entryFunction)
+        && containsAddress == null) {
+    } else if (containsAddress != null && !function.getBody().contains(containsAddress)) {
+    } else if (query.external() != null && function.isExternal() != query.external()) {
+    } else if (query.thunk() != null && function.isThunk() != query.thunk()) {
+    } else {
+      match = FunctionDescriptions.describe(function, query.includes());
     }
-    if (entryFunction != null && !function.equals(entryFunction) && containsAddress == null) {
-      return false;
-    }
-    if (containsAddress != null && !function.getBody().contains(containsAddress)) {
-      return false;
-    }
-    if (query.external() != null && function.isExternal() != query.external()) {
-      return false;
-    }
-    return query.thunk() == null || function.isThunk() == query.thunk();
+    String address = AddressUtil.canonicalAddress(function.getEntryPoint());
+    scan.visit(address, address, match);
   }
 
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);
-  }
-
-  private Function firstFunction(Address address, boolean resumeStrictlyAfter) {
-    return resumeStrictlyAfter
-        ? context.script().getFunctionAfter(address)
-        : firstFunctionAtOrAfter(address);
-  }
-
-  private Function nextFunction(Function function) {
-    return context.script().getFunctionAfter(function);
-  }
-
-  private Function firstFunctionAtOrAfter(Address cursorAddress) {
-    Function function = context.script().getFunctionAt(cursorAddress);
-    return function == null ? context.script().getFunctionAfter(cursorAddress) : function;
   }
 }
