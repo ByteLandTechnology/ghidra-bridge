@@ -28,6 +28,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
@@ -57,10 +58,12 @@ public final class McpHttpServer implements AutoCloseable {
   private static final String NAME_FIELD = "name";
   private static final String URI_FIELD = "uri";
   private static final String SESSION_ID_PARAM = "sessionId";
+  private static final long DEFAULT_SSE_KEEPALIVE_MILLIS = TimeUnit.SECONDS.toMillis(15);
 
   private final McpConfig config;
   private final AgentDispatcher dispatcher;
   private final Consumer<String> requestLogSink;
+  private final long sseKeepaliveMillis;
   private final McpToolRegistry toolRegistry;
   private final String toolContractJson;
   private final HttpServer server;
@@ -76,16 +79,29 @@ public final class McpHttpServer implements AutoCloseable {
   public McpHttpServer(
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
+    this(config, dispatcher, requestLogSink, DEFAULT_SSE_KEEPALIVE_MILLIS);
+  }
+
+  McpHttpServer(
+      McpConfig config,
+      AgentDispatcher dispatcher,
+      Consumer<String> requestLogSink,
+      long sseKeepaliveMillis)
+      throws IOException {
+    if (sseKeepaliveMillis <= 0L) {
+      throw new IllegalArgumentException("sseKeepaliveMillis must be positive");
+    }
     this.config = Objects.requireNonNull(config, "config");
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
+    this.sseKeepaliveMillis = sseKeepaliveMillis;
     this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
     Map<String, Object> toolContract = new LinkedHashMap<>();
     toolContract.put("protocol_version", MCP_PROTOCOL_VERSION);
     toolContract.put("tools", toolRegistry.listTools());
     this.toolContractJson = JsonUtil.toJson(toolContract);
     this.server = createServer(config);
-    this.executor = Executors.newCachedThreadPool();
+    this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.server.setExecutor(executor);
     this.server.createContext(config.path(), new JsonRpcHandler());
   }
@@ -303,7 +319,12 @@ public final class McpHttpServer implements AutoCloseable {
 
         while (session.isActive() && !closed.get()) {
           try {
-            Thread.sleep(15000L);
+            if (session.awaitClose(sseKeepaliveMillis, TimeUnit.MILLISECONDS)) {
+              break;
+            }
+            if (closed.get()) {
+              break;
+            }
             session.sendComment("keepalive");
           } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
@@ -314,7 +335,7 @@ public final class McpHttpServer implements AutoCloseable {
         // The SSE client disconnected.
       } finally {
         sseSessions.remove(sessionId);
-        session.close();
+        session.closeAndAwaitStream();
       }
     }
   }
@@ -885,11 +906,14 @@ public final class McpHttpServer implements AutoCloseable {
     return null;
   }
 
-  private static final class SseSession implements AutoCloseable {
+  static final class SseSession implements AutoCloseable {
     private final String id;
     private final HttpExchange exchange;
     private final OutputStream output;
     private final AtomicBoolean active = new AtomicBoolean(true);
+    private final AtomicBoolean streamClosed = new AtomicBoolean(false);
+    private final CountDownLatch closeLatch = new CountDownLatch(1);
+    private final ReentrantLock writeLock = new ReentrantLock();
 
     SseSession(String id, HttpExchange exchange) throws IOException {
       this.id = id;
@@ -902,41 +926,84 @@ public final class McpHttpServer implements AutoCloseable {
       this.output = exchange.getResponseBody();
     }
 
-    synchronized void sendEvent(String event, String data) throws IOException {
-      if (!active.get()) {
-        return;
+    void sendEvent(String event, String data) throws IOException {
+      writeLock.lock();
+      try {
+        if (!active.get()) {
+          return;
+        }
+        StringBuilder sb = new StringBuilder();
+        if (event != null && !event.isBlank()) {
+          sb.append("event: ").append(event).append("\n");
+        }
+        for (String line : data.split("\r?\n")) {
+          sb.append("data: ").append(line).append("\n");
+        }
+        sb.append("\n");
+        output.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        output.flush();
+      } finally {
+        writeLock.unlock();
       }
-      StringBuilder sb = new StringBuilder();
-      if (event != null && !event.isBlank()) {
-        sb.append("event: ").append(event).append("\n");
-      }
-      for (String line : data.split("\r?\n")) {
-        sb.append("data: ").append(line).append("\n");
-      }
-      sb.append("\n");
-      output.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-      output.flush();
     }
 
-    synchronized void sendComment(String comment) throws IOException {
-      if (!active.get()) {
-        return;
+    void sendComment(String comment) throws IOException {
+      writeLock.lock();
+      try {
+        if (!active.get()) {
+          return;
+        }
+        String payload = ": " + comment + "\n\n";
+        output.write(payload.getBytes(StandardCharsets.UTF_8));
+        output.flush();
+      } finally {
+        writeLock.unlock();
       }
-      String payload = ": " + comment + "\n\n";
-      output.write(payload.getBytes(StandardCharsets.UTF_8));
-      output.flush();
+    }
+
+    boolean awaitClose(long timeout, TimeUnit unit) throws InterruptedException {
+      return closeLatch.await(timeout, unit);
     }
 
     @Override
     public void close() {
-      if (active.compareAndSet(true, false)) {
+      active.set(false);
+      closeLatch.countDown();
+      if (writeLock.tryLock()) {
         try {
-          output.close();
-        } catch (IOException ignored) {}
-        try {
-          exchange.close();
-        } catch (Exception ignored) {}
+          closeStream();
+        } finally {
+          writeLock.unlock();
+        }
       }
+    }
+
+    void closeAndAwaitStream() {
+      active.set(false);
+      closeLatch.countDown();
+      boolean interrupted = Thread.interrupted();
+      writeLock.lock();
+      try {
+        closeStream();
+      } finally {
+        writeLock.unlock();
+        if (interrupted) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
+
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
+    private void closeStream() {
+      if (!streamClosed.compareAndSet(false, true)) {
+        return;
+      }
+      try {
+        output.close();
+      } catch (IOException ignored) {}
+      try {
+        exchange.close();
+      } catch (Exception ignored) {}
     }
 
     boolean isActive() {
