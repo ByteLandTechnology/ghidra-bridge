@@ -3,6 +3,7 @@ package app.byteland.ghidra.api;
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.BridgeServices;
+import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import app.byteland.ghidra.service.function.VariableStorageReference;
@@ -22,7 +23,7 @@ import java.util.function.Supplier;
 public final class ApiRegistry {
   public static final String INTERFACE_VERSION = "0.2.0";
   public static final int DEFAULT_LIMIT = 100;
-  public static final int MAX_LIMIT = app.byteland.ghidra.service.Page.MAX_LIMIT;
+  public static final int MAX_LIMIT = Page.MAX_LIMIT;
   public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
@@ -227,7 +228,7 @@ public final class ApiRegistry {
 
   @FunctionalInterface
   interface PagedHandler {
-    Object handle(Map<String, Object> request, PageRequest page) throws Exception;
+    Page<?> handle(Map<String, Object> request, PageRequest page) throws Exception;
   }
 
   void read(
@@ -433,7 +434,7 @@ public final class ApiRegistry {
       Map<String, Object> input,
       Set<String> fields,
       List<String> identityFields,
-      ApiMethod.Handler<Map<String, Object>, Object> handler) {
+      ApiMethod.Handler<Map<String, Object>, Page<?>> handler) {
     register(
         name,
         effects,
@@ -451,7 +452,7 @@ public final class ApiRegistry {
         fields,
         identityFields,
         request -> {
-          Map<String, Object> normalizedList = WireValues.list(handler.handle(request), MAX_LIMIT);
+          Map<String, Object> normalizedList = WireValues.list(handler.handle(request));
           return Map.of(
               ApiVocabulary.ITEMS, restrictAndSortItems(normalizedList, fields, identityFields));
         });
@@ -614,11 +615,11 @@ public final class ApiRegistry {
   private Map<String, Object> canonicalList(
       String resource,
       Map<String, Object> request,
-      Object raw,
+      Page<?> raw,
       PageRequest page,
       Set<String> fields,
       List<String> identityFields) {
-    Map<String, Object> result = WireValues.list(raw, page.limit());
+    Map<String, Object> result = WireValues.list(raw);
     List<Map<String, Object>> normalizedItems =
         restrictAndSortItems(result, fields, identityFields);
     Optional<Object> next = Optional.ofNullable(result.get("next_cursor"));
