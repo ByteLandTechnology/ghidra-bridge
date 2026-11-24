@@ -32,7 +32,6 @@ final class DecompilerPoolFactory {
     return options;
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static void destroyDecompiler(DecompInterface decomp) {
     if (decomp == null) {
       return;
@@ -57,7 +56,6 @@ final class DecompilerPoolFactory {
     }
   }
 
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
   private static void addDistinctSuppressed(
       RuntimeException failure, RuntimeException suppressedFailure) {
     if (failure != suppressedFailure) {

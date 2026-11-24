@@ -87,11 +87,12 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-请遵守 [AGENTS.md](../../AGENTS.md) 中的仓库规则与[提交消息规则](../../AGENTS.md#commit-messages)。
+请遵守 [AGENTS.md](../../AGENTS.md) 中的仓库规则与[提交消息规则](../../AGENTS.md#commit-messages)。在 Linux x86-64 上，CI 还会在 `clean verify` 之后运行 `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`。
 
 验证套件执行以下检查：
 - **仓库卫生**：`pre-commit` 与 `verify-repository-hygiene.sh` 拒绝空文件、重复文件和生成产物，并校验 `docs/api.md` 的方法数量。
 - **提交消息**：`commit-msg` 钩子与拉取请求检查校验 Conventional Commit 标题、作用域、72 字符行宽以及 `- ` 列表正文。
+- **单元测试**：`check` 在所有 Java 模块上运行 JUnit 测试。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。
 - **生成脚本编译**：`compileGeneratedScripts` 确保生成的启动脚本编译通过。

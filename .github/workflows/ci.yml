@@ -106,14 +106,17 @@ jobs:
       - name: Verify pull request commit messages
         if: github.event_name == 'pull_request'
         env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          if git rev-parse --verify --quiet HEAD^2 >/dev/null; then
-            commit_range="HEAD^1..HEAD^2"
+          if [[ "$(git rev-parse --verify --quiet HEAD^2 || true)" == "$HEAD_SHA" ]]; then
+            commits="$(git rev-list --reverse HEAD^1..HEAD^2)"
+          elif git rev-parse --verify --quiet "refs/remotes/origin/${BASE_REF}" >/dev/null; then
+            commits="$(git rev-list --reverse "$HEAD_SHA" --not "$BASE_SHA" "refs/remotes/origin/${BASE_REF}")"
           else
-            commit_range="${BASE_SHA}..${HEAD_SHA}"
+            commits="$(git rev-list --reverse "${BASE_SHA}..${HEAD_SHA}")"
           fi
           msg_file="$(mktemp)"
           trap 'rm -f "$msg_file"' EXIT
@@ -122,7 +125,7 @@ jobs:
             printf 'Commit check: %s\n' "$sha"
             git log -1 --format=%B "$sha" >"$msg_file"
             pre-commit run --hook-stage commit-msg --commit-msg-filename "$msg_file"
-          done < <(git rev-list --reverse "$commit_range")
+          done <<< "$commits"
 
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
@@ -131,9 +134,7 @@ jobs:
         run: ./gradlew --no-daemon clean verify
 
       - name: Test function mutations
-        run: |
-          ./gradlew --no-daemon :wire:test :contracts:test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
   release:
     # Update the release PR or create a release after main passes verification.

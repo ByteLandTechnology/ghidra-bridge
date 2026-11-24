@@ -34,7 +34,9 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-State the behavior change and its effect on users in the pull request. Follow the repository rules in [AGENTS.md](AGENTS.md).
+`verify` runs JUnit tests across all Java modules (`check`), contract checks, script compilation, distribution checks, and architecture checks. On Linux x86-64, also run `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify` when you change function or runtime behavior.
+
+State the behavior change and its effect on users in the pull request. Obey the repository rules in [AGENTS.md](AGENTS.md).
 
 ## Commit messages
 

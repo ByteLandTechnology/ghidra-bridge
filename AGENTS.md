@@ -12,6 +12,14 @@ Local hooks and CI checks verify compliance with these rules.
 - Do not use contractions or phrasal verbs.
 - Write "for example" and "that is" instead of Latin abbreviations.
 
+## Build environment
+
+- Use Java 21 (JDK 21).
+- Use Ghidra 12.1 or newer. CI uses Ghidra `12.1.2`.
+- Set `GHIDRA_INSTALL_DIR` to the local Ghidra installation directory, or pass `-PghidraInstallDir=/path/to/ghidra`.
+- Gradle needs Ghidra to compile `:adapter`, `:launcher`, and generated scripts, and to run Ghidra tests.
+- Run `./gradlew` from the repository root. Do not use a system Gradle binary.
+
 ## Modules and files
 
 - All Java modules live in `modules/` and follow the one-way dependency graph in [docs/architecture.md](docs/architecture.md):
@@ -81,6 +89,14 @@ Install the `pre-commit` and `commit-msg` Git hooks once per clone:
 pre-commit install --install-hooks
 ```
 
+Run JUnit tests across all Java modules or for one module during iteration:
+
+```bash
+./gradlew --no-daemon check
+./gradlew --no-daemon :domain:test
+./gradlew --no-daemon :adapter:test
+```
+
 Run the repository verification suite before you commit or open a pull request:
 
 ```bash
@@ -89,10 +105,9 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-Run unit tests and headless regression checks when you change wire, contract, or function mutation code:
+On Linux x86-64, run the headless regression test after `clean verify` (requires `gcc` and `nm`):
 
 ```bash
-./gradlew --no-daemon :wire:test :contracts:test
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
@@ -105,6 +120,7 @@ bash .github/scripts/package-release.sh
 The verification tasks check:
 
 - `pre-commit run --all-files`: runs `.github/scripts/verify-repository-hygiene.sh` for tracked file hygiene and `docs/api.md` method counts.
+- `check`: runs JUnit tests and module checks across all Java modules.
 - `verifyArchitecture`: verifies that only `modules/adapter` and `modules/launcher` import `ghidra.*` classes.
 - `verifyApiContracts`: verifies that `docs/api.md`, `docs/asyncapi.yaml`, and `docs/mcp-tools.json` match the code.
 - `compileGeneratedScripts`: verifies that generated `Bridge.java` and `GhidraMcp.java` scripts compile.

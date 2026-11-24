@@ -88,7 +88,7 @@ Install the `pre-commit` and `commit-msg` Git hooks once per clone:
 pre-commit install --install-hooks
 ```
 
-Before you submit a change, run the verification suite:
+Before you submit a change, run the verification suite that matches CI:
 
 ```bash
 pre-commit run --all-files
@@ -96,11 +96,12 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-Follow the repository rules in [AGENTS.md](../AGENTS.md) and the [commit message rules](../AGENTS.md#commit-messages).
+On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`. Obey the repository rules in [AGENTS.md](../AGENTS.md) and the [commit message rules](../AGENTS.md#commit-messages).
 
 The verification tasks check:
 - **Repository Hygiene**: `pre-commit` and `verify-repository-hygiene.sh` reject empty, duplicate, and generated files and verify `docs/api.md` method counts.
 - **Commit Messages**: `commit-msg` hooks and pull request checks validate Conventional Commit headers, scopes, 72-character lines, and `- ` list bodies.
+- **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
