@@ -21,8 +21,8 @@ The build defines 8 Java subprojects under `modules/`:
 - `:transport:websocket` (`modules/transport/websocket`)
 - `:transport:mcp` (`modules/transport/mcp`)
 
-Follow these repository rules when editing code:
-- **Ghidra API boundary**: Only `modules/adapter` and `modules/launcher` may import `ghidra.*` packages (`verifyArchitecture` enforces this rule).
+Follow these repository rules when you change code:
+- **Ghidra API boundary**: Only `modules/adapter` and `modules/launcher` can import `ghidra.*` packages (`verifyArchitecture` enforces this rule).
 - **Generated contracts**: Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand. Run `./gradlew generateApiContracts` after public interface changes.
 - **Repository hygiene**: Do not commit build directories, IDE files, generated launcher scripts (`Bridge.java`, `GhidraMcp.java`), zero-byte files, or duplicate tracked files.
 
@@ -45,7 +45,7 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
 
 ### Full Build and Verification (`clean verify`)
 
-Run the full Gradle verification gate used in pull requests and release packaging:
+Run the full Gradle verification gate used in pull requests and release archives:
 
 ```bash
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
