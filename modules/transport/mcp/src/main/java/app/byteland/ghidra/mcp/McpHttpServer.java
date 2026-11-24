@@ -29,14 +29,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.CancellationException;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -46,7 +45,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -56,11 +55,10 @@ import java.util.function.Consumer;
  */
 public final class McpHttpServer implements AutoCloseable {
   static final int MAX_CONCURRENT_REQUESTS = 32;
-  static final int MAX_SSE_SESSIONS = 4;
+  static final int MAX_SSE_SESSIONS = 16;
   static final int MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
   static final Duration DEFAULT_BODY_READ_TIMEOUT = Duration.ofSeconds(10);
   static final Duration DEFAULT_SSE_KEEPALIVE_INTERVAL = Duration.ofSeconds(15);
-  private static final int MAX_BODY_READER_THREADS = 8;
   private static final int LISTEN_BACKLOG = 256;
   private static final int HTTP_PAYLOAD_TOO_LARGE = 413;
   private static final int JSONRPC_PARSE_ERROR = -32700;
@@ -86,10 +84,6 @@ public final class McpHttpServer implements AutoCloseable {
   private static final String NAME_FIELD = "name";
   private static final String URI_FIELD = "uri";
   private static final String SESSION_ID_PARAM = "sessionId";
-  private static final String EVENT_STREAM_MEDIA_TYPE = "text/event-stream";
-  private static final int BODY_READ_IN_PROGRESS = 0;
-  private static final int BODY_READ_COMPLETED = 1;
-  private static final int BODY_READ_TIMED_OUT = 2;
 
   private final McpConfig config;
   private final String normalizedConfiguredHost;
@@ -196,14 +190,19 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   private static ExecutorService createBodyReaderExecutor() {
+    // jdk.httpserver synchronizes LeftOverInputStream.read and Request$ReadStream.read. On Java 21,
+    // blocking for unbuffered request-body bytes on a virtual thread pins its carrier thread
+    // without ForkJoinPool compensation. Offload unbuffered reads to a bounded daemon pool sized to
+    // MAX_CONCURRENT_REQUESTS so stalled POST bodies cannot starve virtual-thread carriers or
+    // head-of-line-block behind a smaller reader pool.
     AtomicInteger threadNumber = new AtomicInteger(1);
     ThreadPoolExecutor pool =
         new ThreadPoolExecutor(
-            MAX_BODY_READER_THREADS,
-            MAX_BODY_READER_THREADS,
+            MAX_CONCURRENT_REQUESTS,
+            MAX_CONCURRENT_REQUESTS,
             5L,
             TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(),
+            new ArrayBlockingQueue<>(MAX_CONCURRENT_REQUESTS),
             runnable -> {
               Thread thread =
                   new Thread(runnable, "ghidra-mcp-body-reader-" + threadNumber.getAndIncrement());
@@ -351,18 +350,6 @@ public final class McpHttpServer implements AutoCloseable {
         }
 
         if (HTTP_GET_METHOD.equalsIgnoreCase(requestMethod)) {
-          if (!acceptsEventStream(exchange)) {
-            exchange.getResponseHeaders().set("Allow", "POST, GET, OPTIONS");
-            log.method(HTTP_GET_METHOD).error().status(405);
-            writeJsonRpcErrorResponse(
-                exchange,
-                405,
-                null,
-                JSONRPC_INVALID_REQUEST,
-                "GET requires Accept: text/event-stream",
-                false);
-            return;
-          }
           handleSseGet(exchange, log);
           return;
         }
@@ -471,11 +458,12 @@ public final class McpHttpServer implements AutoCloseable {
           if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
             closeExchange = false;
             writePayloadTooLargeResponse(exchange, errResponse);
-          } else if (bodyRead || !hasRequestBody(exchange)) {
+          } else if (bodyRead || !hasRequestBody(exchange) || isCompleteBodyBuffered(exchange)) {
             exchange.sendResponseHeaders(202, -1);
           } else {
             exchange.getResponseHeaders().set("Connection", "close");
             exchange.sendResponseHeaders(202, -1);
+            pauseBeforeUnreadClose();
             closeExchange = false;
             throw new UnreadRequestAbortedException();
           }
@@ -978,19 +966,16 @@ public final class McpHttpServer implements AutoCloseable {
     if (isCompleteBodyBuffered(exchange)) {
       return readBody(exchange);
     }
-    AtomicInteger readState = new AtomicInteger(BODY_READ_IN_PROGRESS);
-    AtomicReference<Future<String>> readFutureRef = new AtomicReference<>();
+    AtomicBoolean finished = new AtomicBoolean(false);
+    AtomicBoolean timedOut = new AtomicBoolean(false);
     ScheduledFuture<?> timeoutTask;
     try {
       timeoutTask =
           readTimeoutScheduler.schedule(
               () -> {
-                if (readState.compareAndSet(BODY_READ_IN_PROGRESS, BODY_READ_TIMED_OUT)) {
+                if (finished.compareAndSet(false, true)) {
+                  timedOut.set(true);
                   exchange.close();
-                  Future<String> pendingRead = readFutureRef.get();
-                  if (pendingRead != null) {
-                    pendingRead.cancel(true);
-                  }
                 }
               },
               bodyReadTimeoutMillis,
@@ -999,33 +984,27 @@ public final class McpHttpServer implements AutoCloseable {
       exchange.close();
       throw new IOException("MCP server is shutting down", rejected);
     }
+    Future<String> readFuture = null;
     try {
-      Future<String> readFuture = bodyReaderExecutor.submit(() -> readBody(exchange));
-      readFutureRef.set(readFuture);
-      if (readState.get() == BODY_READ_TIMED_OUT) {
-        readFuture.cancel(true);
-      }
+      readFuture = bodyReaderExecutor.submit(() -> readBody(exchange));
       String body = readFuture.get();
-      if (!readState.compareAndSet(BODY_READ_IN_PROGRESS, BODY_READ_COMPLETED)) {
+      if (!finished.compareAndSet(false, true)) {
         throw new BodyReadTimeoutException(null);
       }
       return body;
     } catch (RejectedExecutionException rejected) {
       exchange.close();
       throw new IOException("MCP server is shutting down", rejected);
-    } catch (CancellationException cancelled) {
-      throw new BodyReadTimeoutException(cancelled);
     } catch (InterruptedException interrupted) {
-      Future<String> pendingRead = readFutureRef.get();
-      if (pendingRead != null) {
-        pendingRead.cancel(true);
+      if (readFuture != null) {
+        readFuture.cancel(true);
       }
       exchange.close();
       Thread.currentThread().interrupt();
       throw new IOException("Interrupted while reading request body", interrupted);
     } catch (ExecutionException failed) {
       Throwable cause = failed.getCause();
-      if (readState.get() == BODY_READ_TIMED_OUT) {
+      if (timedOut.get()) {
         throw new BodyReadTimeoutException(cause);
       }
       if (cause instanceof IOException ioError) {
@@ -1036,7 +1015,7 @@ public final class McpHttpServer implements AutoCloseable {
       }
       throw new IOException("Failed to read request body", cause);
     } finally {
-      readState.compareAndSet(BODY_READ_IN_PROGRESS, BODY_READ_COMPLETED);
+      finished.set(true);
       timeoutTask.cancel(false);
     }
   }
@@ -1082,41 +1061,6 @@ public final class McpHttpServer implements AutoCloseable {
         }
       }
     }
-  }
-
-  private static boolean acceptsEventStream(HttpExchange exchange) {
-    List<String> values = exchange.getRequestHeaders().get("Accept");
-    if (values == null) {
-      return false;
-    }
-    for (String header : values) {
-      if (header == null) {
-        continue;
-      }
-      for (String part : header.split(",")) {
-        int semicolon = part.indexOf(';');
-        String mediaType = (semicolon >= 0 ? part.substring(0, semicolon) : part).trim();
-        if (EVENT_STREAM_MEDIA_TYPE.equalsIgnoreCase(mediaType)
-            && (semicolon < 0 || !isZeroQuality(part.substring(semicolon + 1)))) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  private static boolean isZeroQuality(String parameters) {
-    for (String parameter : parameters.split(";")) {
-      int separator = parameter.indexOf('=');
-      if (separator > 0 && "q".equalsIgnoreCase(parameter.substring(0, separator).trim())) {
-        try {
-          return Double.parseDouble(parameter.substring(separator + 1).trim()) == 0.0d;
-        } catch (NumberFormatException ignored) {
-          return false;
-        }
-      }
-    }
-    return false;
   }
 
   static void validateContentLength(Headers headers) {
@@ -1193,7 +1137,7 @@ public final class McpHttpServer implements AutoCloseable {
     writeJson(exchange, httpStatus, mcpErrorResponse(exchange, id, code, message, null));
   }
 
-  private static void writeJsonRpcErrorResponse(
+  private void writeJsonRpcErrorResponse(
       HttpExchange exchange,
       int httpStatus,
       Object id,
@@ -1226,9 +1170,9 @@ public final class McpHttpServer implements AutoCloseable {
     return JsonRpc.success(id, result);
   }
 
-  private static void writeJsonResponse(
+  private void writeJsonResponse(
       HttpExchange exchange, int statusCode, Object payload, boolean bodyRead) throws IOException {
-    if (bodyRead || !hasRequestBody(exchange)) {
+    if (bodyRead || !hasRequestBody(exchange) || isCompleteBodyBuffered(exchange)) {
       writeJson(exchange, statusCode, payload);
       return;
     }
@@ -1238,11 +1182,12 @@ public final class McpHttpServer implements AutoCloseable {
     writeAndAbortUnread(exchange, statusCode, bytes);
   }
 
-  private static void writePlainResponse(
+  private void writePlainResponse(
       HttpExchange exchange, int statusCode, String payload, boolean bodyRead) throws IOException {
     if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())
         || bodyRead
-        || !hasRequestBody(exchange)) {
+        || !hasRequestBody(exchange)
+        || isCompleteBodyBuffered(exchange)) {
       writePlain(exchange, statusCode, payload);
       return;
     }
@@ -1252,13 +1197,20 @@ public final class McpHttpServer implements AutoCloseable {
     writeAndAbortUnread(exchange, statusCode, bytes);
   }
 
-  private static void writeAndAbortUnread(HttpExchange exchange, int statusCode, byte[] bytes)
+  private void writeAndAbortUnread(HttpExchange exchange, int statusCode, byte[] bytes)
       throws IOException {
     exchange.sendResponseHeaders(statusCode, bytes.length);
     OutputStream output = exchange.getResponseBody();
     output.write(bytes);
     output.flush();
+    pauseBeforeUnreadClose();
     throw new UnreadRequestAbortedException();
+  }
+
+  private void pauseBeforeUnreadClose() {
+    if (!closed.get()) {
+      LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(50));
+    }
   }
 
   private static boolean hasRequestBody(HttpExchange exchange) {

@@ -58,7 +58,7 @@ class McpHttpServerSseShutdownTest {
     Thread.setDefaultUncaughtExceptionHandler((thread, error) -> uncaught.add(error));
     List<String> requestLogs = new CopyOnWriteArrayList<>();
     try (ServerHarness harness = ServerHarness.start(requestLogs::add, null)) {
-      int clientCount = McpHttpServer.MAX_SSE_SESSIONS;
+      int clientCount = 8;
       List<SseClient> clients = new ArrayList<>();
       try {
         for (int i = 0; i < clientCount; i++) {

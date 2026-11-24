@@ -133,22 +133,25 @@ class McpHttpServerTest {
         assertEquals(McpHttpServer.MAX_CONCURRENT_REQUESTS, stalledInFlight);
         assertEquals(100 - McpHttpServer.MAX_CONCURRENT_REQUESTS, rejectedPostBusy);
 
-        // Even while SSE and POST permits are saturated, GET without Accept: text/event-stream
-        // must immediately receive HTTP 405.
-        String plainGetReq = "GET /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n";
-        try (Socket plainGet = openRawSocket(port, plainGetReq)) {
-          assertEquals(405, readHttpStatusCode(plainGet));
+        // Even while SSE and POST permits are saturated, non-blocking virtual-thread handlers
+        // respond immediately without carrier-thread pinning.
+        String headReq = "HEAD /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n";
+        try (Socket headSocket = openRawSocket(port, headReq)) {
+          assertEquals(200, readHttpStatusCode(headSocket));
         }
-        String wildcardGetReq =
-            "GET /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nAccept: */*\r\n\r\n";
-        try (Socket wildcardGet = openRawSocket(port, wildcardGetReq)) {
-          assertEquals(405, readHttpStatusCode(wildcardGet));
+        String optionsReq = "OPTIONS /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n";
+        try (Socket optionsSocket = openRawSocket(port, optionsReq)) {
+          assertEquals(204, readHttpStatusCode(optionsSocket));
+        }
+        String putReq = "PUT /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n";
+        try (Socket putSocket = openRawSocket(port, putReq)) {
+          assertEquals(405, readHttpStatusCode(putSocket));
         }
 
         long loadedPlatformThreads = countPlatformThreads();
         long platformThreadGrowth = loadedPlatformThreads - baselinePlatformThreads;
         assertTrue(
-            platformThreadGrowth <= 20,
+            platformThreadGrowth <= McpHttpServer.MAX_CONCURRENT_REQUESTS + 16,
             "Platform threads grew excessively under 180 concurrent sockets: baseline="
                 + baselinePlatformThreads
                 + ", loaded="
@@ -162,7 +165,7 @@ class McpHttpServerTest {
   }
 
   @Test
-  void sseAcceptRulesCapMessageDeliveryAndPermitRelease() throws Exception {
+  void sseCompatibilityCapMessageDeliveryAndPermitRelease() throws Exception {
     Duration fastKeepalive = Duration.ofMillis(100);
     try (TestServerHandle handle =
         startServer(() -> createDispatcher(null), Duration.ofSeconds(2), fastKeepalive)) {
@@ -173,35 +176,30 @@ class McpHttpServerTest {
               .build();
       URI baseUri = URI.create("http://127.0.0.1:" + handle.port() + "/mcp");
 
-      // GET with Accept: application/json or q=0 returns 405 with Allow header.
-      HttpResponse<String> jsonAcceptGet =
+      // Unsupported HTTP methods return 405 with Allow header.
+      HttpResponse<String> deleteResponse =
           client.send(
-              HttpRequest.newBuilder(baseUri).GET().header("Accept", "application/json").build(),
+              HttpRequest.newBuilder(baseUri).DELETE().build(),
               HttpResponse.BodyHandlers.ofString());
-      assertEquals(405, jsonAcceptGet.statusCode());
-      assertEquals("POST, GET, OPTIONS", jsonAcceptGet.headers().firstValue("Allow").orElse(null));
-
-      HttpResponse<String> zeroQualityGet =
-          client.send(
-              HttpRequest.newBuilder(baseUri)
-                  .GET()
-                  .header("Accept", "text/event-stream; q=0")
-                  .build(),
-              HttpResponse.BodyHandlers.ofString());
-      assertEquals(405, zeroQualityGet.statusCode());
+      assertEquals(405, deleteResponse.statusCode());
+      assertEquals("POST, GET, OPTIONS", deleteResponse.headers().firstValue("Allow").orElse(null));
 
       List<Stream<String>> sseStreams = new ArrayList<>();
       List<Iterator<String>> sseIterators = new ArrayList<>();
       List<String> endpointPaths = new ArrayList<>();
       try {
         for (int i = 0; i < McpHttpServer.MAX_SSE_SESSIONS; i++) {
+          HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(baseUri).GET();
+          if (i == 1) {
+            requestBuilder.header("Accept", "*/*");
+          } else if (i == 2) {
+            requestBuilder.header("Accept", "application/json, text/event-stream");
+          } else if (i > 2) {
+            requestBuilder.header("Accept", "text/event-stream");
+          }
+          // Index 0 sends GET /mcp with no Accept header to verify legacy client compatibility.
           HttpResponse<Stream<String>> sseResponse =
-              client.send(
-                  HttpRequest.newBuilder(baseUri)
-                      .GET()
-                      .header("Accept", "application/json, text/event-stream")
-                      .build(),
-                  HttpResponse.BodyHandlers.ofLines());
+              client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofLines());
           assertEquals(200, sseResponse.statusCode());
           Stream<String> lines = sseResponse.body();
           sseStreams.add(lines);
@@ -212,7 +210,7 @@ class McpHttpServerTest {
           endpointPaths.add(endpointUri);
         }
 
-        // Fifth SSE stream receives 503.
+        // Next SSE stream past MAX_SSE_SESSIONS receives 503.
         HttpResponse<String> overflowSse =
             client.send(
                 HttpRequest.newBuilder(baseUri)
@@ -400,14 +398,24 @@ class McpHttpServerTest {
             probe.statusCode(),
             "Expected 33rd concurrent POST request to receive HTTP 503");
 
-        // Complete all 32 in-flight JSON bodies and verify every one succeeds with HTTP 200.
-        for (Socket socket : inFlightSockets) {
-          OutputStream out = socket.getOutputStream();
+        // Keep the first 8 sockets stalled while completing sockets 8..31 first to verify that
+        // stalled reads do not head-of-line-block later concurrent POST requests.
+        for (int i = 8; i < inFlightSockets.size(); i++) {
+          OutputStream out = inFlightSockets.get(i).getOutputStream();
           out.write('}');
           out.flush();
         }
-        for (Socket socket : inFlightSockets) {
-          assertEquals(200, readHttpStatusCode(socket));
+        for (int i = 8; i < inFlightSockets.size(); i++) {
+          assertEquals(200, readHttpStatusCode(inFlightSockets.get(i)));
+        }
+
+        for (int i = 0; i < 8; i++) {
+          OutputStream out = inFlightSockets.get(i).getOutputStream();
+          out.write('}');
+          out.flush();
+        }
+        for (int i = 0; i < 8; i++) {
+          assertEquals(200, readHttpStatusCode(inFlightSockets.get(i)));
         }
       } finally {
         for (Socket socket : inFlightSockets) {

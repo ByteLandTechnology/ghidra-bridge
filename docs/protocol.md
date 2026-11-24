@@ -119,7 +119,7 @@ For legacy SSE clients, the server supports bounded SSE sessions.
 
 The MCP HTTP server handles requests:
 - **POST**: Dispatches JSON-RPC 2.0 requests. Up to 32 POST requests can run at the same time; more requests return status `503`. The server closes a POST exchange if the request body read takes more than 10 seconds. For an active SSE session (`?sessionId=<id>`), POST sends the JSON-RPC response as a `message` event and returns status `202`. An unknown or expired `sessionId` returns status `404`.
-- **GET**: With `Accept: text/event-stream`, opens a legacy compatibility SSE stream and sends an `endpoint` event. Up to 4 SSE sessions can stay open at the same time; more requests return status `503`. Without `Accept: text/event-stream`, the server returns status `405` with `Allow: POST, GET, OPTIONS`.
+- **GET**: Opens a legacy compatibility SSE stream and sends an `endpoint` event. Up to 16 SSE sessions can stay open at the same time; more requests return status `503`.
 - **HEAD**: Returns status `200` with no body.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
 - **Other methods**: The server returns status `405` with `Allow: POST, GET, OPTIONS`.
