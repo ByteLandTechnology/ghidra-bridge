@@ -317,7 +317,7 @@ class McpHttpServerTest {
         }
       }
 
-      // Verify all permits were released by executing MAX_CONCURRENT_REQUESTS valid POST requests.
+      // Verify that all permits were released when you send MAX_CONCURRENT_REQUESTS valid POST requests.
       HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
       URI uri = URI.create("http://127.0.0.1:" + port + "/mcp");
       for (int i = 0; i < McpHttpServer.MAX_CONCURRENT_REQUESTS; i++) {
@@ -376,25 +376,29 @@ class McpHttpServerTest {
 
         // Wait briefly until all 32 virtual threads have entered JsonRpcHandler and acquired permits.
         long waitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-        int observed503 = 0;
-        while (System.nanoTime() < waitDeadline) {
-          HttpResponse<String> probe =
-              client.send(
-                  HttpRequest.newBuilder(uri)
-                      .header("Content-Type", "application/json")
-                      .header("MCP-Protocol-Version", "2025-11-25")
-                      .POST(
-                          HttpRequest.BodyPublishers.ofString(
-                              "{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"ping\",\"params\":{}}"))
-                      .build(),
-                  HttpResponse.BodyHandlers.ofString());
-          if (probe.statusCode() == 503) {
-            observed503++;
-            break;
-          }
-          Thread.sleep(15L);
+        while (handle.server().availableRequestPermits() > 0
+            && System.nanoTime() < waitDeadline) {
+          Thread.sleep(10L);
         }
-        assertEquals(1, observed503, "Expected 33rd concurrent POST request to receive HTTP 503");
+        assertEquals(
+            0,
+            handle.server().availableRequestPermits(),
+            "Expected all 32 in-flight POST requests to hold request permits");
+
+        HttpResponse<String> probe =
+            client.send(
+                HttpRequest.newBuilder(uri)
+                    .header("Content-Type", "application/json")
+                    .header("MCP-Protocol-Version", "2025-11-25")
+                    .POST(
+                        HttpRequest.BodyPublishers.ofString(
+                            "{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"ping\",\"params\":{}}"))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(
+            503,
+            probe.statusCode(),
+            "Expected 33rd concurrent POST request to receive HTTP 503");
 
         // Complete all 32 in-flight JSON bodies and verify every one succeeds with HTTP 200.
         for (Socket socket : inFlightSockets) {

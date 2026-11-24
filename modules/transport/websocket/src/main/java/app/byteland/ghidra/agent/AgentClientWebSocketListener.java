@@ -25,7 +25,6 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
   }
 
   @Override
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
     if (last) {
       String message = pendingText + data;
