@@ -20,8 +20,6 @@ final class AgentClientChannels {
     void sendText(String message);
 
     void close();
-
-    void close(int code, String reason);
   }
 
   static OutboundMessageChannel outbound(WebSocket webSocket) {
@@ -68,7 +66,6 @@ final class AgentClientChannels {
       close(WebSocket.NORMAL_CLOSURE, "agent shutdown");
     }
 
-    @Override
     public synchronized void close(int code, String reason) {
       await(webSocket.sendClose(code, reason), "sendClose", operationTimeout);
     }
@@ -152,11 +149,6 @@ final class AgentClientChannels {
     @Override
     public void close() {
       connection.close(1000, "agent shutdown");
-    }
-
-    @Override
-    public void close(int code, String reason) {
-      connection.close(code, reason);
     }
   }
 }

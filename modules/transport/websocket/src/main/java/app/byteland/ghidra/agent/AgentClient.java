@@ -45,10 +45,6 @@ public final class AgentClient {
       new AtomicReference<>();
   private final AtomicReference<AgentWebSocketServer> serverRef = new AtomicReference<>();
 
-  public AgentClient(AgentConfig config, AgentDispatcher dispatcher) {
-    this(config, dispatcher, new LifecycleListener() {});
-  }
-
   public AgentClient(
       AgentConfig config, AgentDispatcher dispatcher, LifecycleListener lifecycleListener) {
     this(config, dispatcher, lifecycleListener, DEFAULT_CONNECT_TIMEOUT);
@@ -63,10 +59,6 @@ public final class AgentClient {
     this.dispatcher = dispatcher;
     this.lifecycleListener = lifecycleListener;
     this.connectTimeout = connectTimeout;
-  }
-
-  public void connect() throws Exception {
-    connect(() -> false);
   }
 
   public void connect(BooleanSupplier cancellationRequested) throws Exception {

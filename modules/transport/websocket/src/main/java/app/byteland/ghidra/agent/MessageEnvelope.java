@@ -8,27 +8,11 @@ import java.util.Set;
 
 sealed interface MessageEnvelope
     permits MessageEnvelope.Request, MessageEnvelope.Response, MessageEnvelope.Notification {
-  Map<String, Object> toMap();
-
   record Request(Object id, String method, Map<String, Object> params) implements MessageEnvelope {
     public Request {
       id = requiredId(id);
       method = requiredText(method, JsonRpc.METHOD);
       params = params == null ? Map.of() : Map.copyOf(params);
-    }
-
-    @Override
-    public Map<String, Object> toMap() {
-      return new LinkedHashMap<>(
-          Map.of(
-              JsonRpc.VERSION,
-              JsonRpc.VERSION_VALUE,
-              JsonRpc.ID,
-              id,
-              JsonRpc.METHOD,
-              method,
-              JsonRpc.PARAMS,
-              params));
     }
   }
 
@@ -39,7 +23,6 @@ sealed interface MessageEnvelope
       }
     }
 
-    @Override
     public Map<String, Object> toMap() {
       return error == null
           ? JsonRpc.success(id, result)
@@ -53,7 +36,6 @@ sealed interface MessageEnvelope
       params = params == null ? Map.of() : Map.copyOf(params);
     }
 
-    @Override
     public Map<String, Object> toMap() {
       return new LinkedHashMap<>(
           Map.of(
@@ -71,10 +53,6 @@ sealed interface MessageEnvelope
       if (message == null || message.isBlank())
         throw new IllegalArgumentException("message is required");
       data = data == null ? Map.of() : Map.copyOf(data);
-    }
-
-    Map<String, Object> toMap() {
-      return Map.of(JsonRpc.CODE, code, JsonRpc.MESSAGE, message, JsonRpc.DATA, data);
     }
   }
 

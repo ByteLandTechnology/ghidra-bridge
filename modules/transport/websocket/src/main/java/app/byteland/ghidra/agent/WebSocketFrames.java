@@ -6,8 +6,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.Objects;
 
 final class WebSocketFrames {
@@ -107,9 +105,6 @@ final class WebSocketFrames {
   }
 
   static final class Frame {
-    private static final int TO_STRING_PREVIEW_BYTES = 16;
-    private static final HexFormat HEX = HexFormat.of();
-
     private final boolean finalFragment;
     private final int frameOpcode;
     private final byte[] payloadBytes;
@@ -118,10 +113,6 @@ final class WebSocketFrames {
       this.finalFragment = fin;
       this.frameOpcode = opcode;
       this.payloadBytes = payload;
-    }
-
-    static Frame of(boolean fin, int opcode, byte[] payload) {
-      return new Frame(fin, opcode, Objects.requireNonNull(payload, "payload").clone());
     }
 
     private static Frame fromOwnedPayload(boolean fin, int opcode, byte[] payload) {
@@ -136,49 +127,9 @@ final class WebSocketFrames {
       return frameOpcode;
     }
 
-    byte[] payload() {
-      return payloadBytes.clone();
-    }
-
     @SuppressWarnings("PMD.MethodReturnsInternalArray")
     byte[] payloadView() {
       return payloadBytes;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-      if (this == other) {
-        return true;
-      }
-      if (!(other instanceof Frame frame)) {
-        return false;
-      }
-      return finalFragment == frame.finalFragment
-          && frameOpcode == frame.frameOpcode
-          && Arrays.equals(payloadBytes, frame.payloadBytes);
-    }
-
-    @Override
-    public int hashCode() {
-      int result = Boolean.hashCode(finalFragment);
-      result = 31 * result + frameOpcode;
-      return 31 * result + Arrays.hashCode(payloadBytes);
-    }
-
-    @Override
-    public String toString() {
-      int previewLength = Math.min(payloadBytes.length, TO_STRING_PREVIEW_BYTES);
-      String suffix = previewLength < payloadBytes.length ? "..." : "";
-      return "Frame[fin="
-          + finalFragment
-          + ", opcode="
-          + frameOpcode
-          + ", payloadLength="
-          + payloadBytes.length
-          + ", payloadHex="
-          + HEX.formatHex(payloadBytes, 0, previewLength)
-          + suffix
-          + "]";
     }
   }
 }
