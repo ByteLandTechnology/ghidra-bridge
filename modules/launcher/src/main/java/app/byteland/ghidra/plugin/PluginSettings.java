@@ -29,7 +29,6 @@ public record PluginSettings(
   public static final String OPTION_TOOL_PREFIX = "Tool Prefix";
   public static final String OPTION_AUTO_ATTACH_DAEMON = "Auto-Attach to ghidra-mcp";
 
-  @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
   public static final String DEFAULT_HOST = "127.0.0.1";
 
   public static final int DEFAULT_PORT = McpConfig.DEFAULT_PORT;

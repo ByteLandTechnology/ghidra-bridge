@@ -80,7 +80,6 @@ final class ScriptProgramHost implements ProgramHost {
   }
 
   @Override
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public void saveProgram(Program program) throws Exception {
     var monitor = script.getMonitor();
     boolean restoreCancellation = monitor != null && monitor.isCancelled();
@@ -117,7 +116,6 @@ final class DynamicProgramHost implements ProgramHost {
   }
 
   @Override
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
   public synchronized FlatProgramAPI flatApi() {
     Program program = programSupplier.get();
     if (program == null) {

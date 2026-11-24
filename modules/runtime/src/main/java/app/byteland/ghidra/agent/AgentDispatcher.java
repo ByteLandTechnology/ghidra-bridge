@@ -12,7 +12,7 @@ import java.util.Objects;
  * Dispatches API requests to the registry one at a time and blocks new requests during shutdown.
  */
 public final class AgentDispatcher implements AutoCloseable {
-  private final AgentConfig config;
+  private final String sessionId;
   private final BridgeServices services;
   private final boolean closeServicesOnClose;
   private final ApiRegistry apiRegistry;
@@ -26,11 +26,27 @@ public final class AgentDispatcher implements AutoCloseable {
 
   public AgentDispatcher(
       BridgeServices services, AgentConfig config, boolean closeServicesOnClose) {
+    this(
+        Objects.requireNonNull(services, "services"),
+        Objects.requireNonNull(config, "config").sessionId(),
+        closeServicesOnClose);
+  }
+
+  public AgentDispatcher(BridgeServices services, String sessionId) {
+    this(services, sessionId, true);
+  }
+
+  public AgentDispatcher(
+      BridgeServices services, String sessionId, boolean closeServicesOnClose) {
     this.services = Objects.requireNonNull(services, "services");
-    this.config = Objects.requireNonNull(config, "config");
+    String normalizedSessionId = AgentConfig.optionalText(sessionId);
+    if (normalizedSessionId == null) {
+      throw new IllegalArgumentException("sessionId is required");
+    }
+    this.sessionId = normalizedSessionId;
     this.closeServicesOnClose = closeServicesOnClose;
     this.apiRegistry =
-        new ApiRegistry(services, config.sessionId(), this::sessionInfo, this::markShuttingDown);
+        new ApiRegistry(services, this.sessionId, this::sessionInfo, this::markShuttingDown);
   }
 
   @Override
@@ -67,7 +83,7 @@ public final class AgentDispatcher implements AutoCloseable {
 
   private Map<String, Object> sessionInfo() {
     Map<String, Object> info = new LinkedHashMap<>();
-    info.put("id", config.sessionId());
+    info.put("id", sessionId);
     info.put("status", shuttingDown ? "shutting_down" : "active");
     info.put("program_name", services.currentProgramName());
     return info;

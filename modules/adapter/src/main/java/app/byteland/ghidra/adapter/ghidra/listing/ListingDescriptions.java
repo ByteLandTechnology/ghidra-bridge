@@ -32,9 +32,7 @@ final class ListingDescriptions {
         codeUnit.toString(),
         instruction == null ? null : instruction.getMnemonicString(),
         instruction == null ? null : operandsOf(instruction),
-        data == null ? null : GhidraDataTypeReferences.toReference(data.getDataType()),
-        data == null ? null : String.valueOf(data.getValue()),
-        data == null ? null : formatScalar(data));
+        data == null ? null : GhidraDataTypeReferences.toReference(data.getDataType()));
   }
 
   static InstructionResource toInstructionItem(Instruction instruction, GhidraSession context) {

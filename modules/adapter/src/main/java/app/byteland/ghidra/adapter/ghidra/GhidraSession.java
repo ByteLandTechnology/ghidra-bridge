@@ -1,7 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.flatapi.FlatProgramAPI;
@@ -35,9 +34,6 @@ public final class GhidraSession {
     this.host = Objects.requireNonNull(host, "host");
   }
 
-  @SuppressFBWarnings(
-      value = "EI_EXPOSE_REP",
-      justification = "Adapter collaborators require the live GhidraScript execution context")
   public GhidraScript script() {
     GhidraScript script = host.scriptOrNull();
     if (script == null) {
@@ -46,9 +42,6 @@ public final class GhidraSession {
     return script;
   }
 
-  @SuppressFBWarnings(
-      value = "EI_EXPOSE_REP",
-      justification = "Adapter collaborators use FlatProgramAPI for the active program")
   public FlatProgramAPI flatApi() {
     synchronized (executionLock) {
       if (pinnedProgram != null && host.scriptOrNull() == null) {
@@ -92,7 +85,6 @@ public final class GhidraSession {
     }
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public void saveCurrentProgram() {
     synchronized (executionLock) {
       try {
@@ -111,11 +103,16 @@ public final class GhidraSession {
     return AddressUtil.parseAddress(flatApi(), rawAddress);
   }
 
-  public java.util.List<ghidra.program.model.symbol.Reference> references(
-      Address address, boolean to) {
-    FlatProgramAPI api = flatApi();
-    return java.util.Arrays.asList(
-        to ? api.getReferencesTo(address) : api.getReferencesFrom(address));
+  public Iterable<ghidra.program.model.symbol.Reference> references(Address address, boolean to) {
+    ghidra.program.model.symbol.ReferenceManager manager = currentProgram().getReferenceManager();
+    if (to) {
+      return () -> {
+        ghidra.program.model.symbol.ReferenceIterator incoming = manager.getReferencesTo(address);
+        return incoming == null ? java.util.Collections.emptyIterator() : incoming;
+      };
+    }
+    ghidra.program.model.symbol.Reference[] outgoing = manager.getReferencesFrom(address);
+    return outgoing == null ? java.util.List.of() : java.util.Arrays.asList(outgoing);
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
@@ -186,7 +183,6 @@ public final class GhidraSession {
     T run() throws Exception;
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static <T> T runOperation(TransactionalOperation<T> operation) {
     try {
       return operation.run();

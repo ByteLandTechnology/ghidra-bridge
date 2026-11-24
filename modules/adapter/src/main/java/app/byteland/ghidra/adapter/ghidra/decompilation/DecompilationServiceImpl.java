@@ -21,15 +21,24 @@ import java.util.WeakHashMap;
 
 public final class DecompilationServiceImpl implements DecompilationService {
   private final GhidraSession context;
+  private final LeasePool<DecompInterface> injectedPool;
   private final Object poolLock = new Object();
   private final Map<Program, LeasePool<DecompInterface>> decompilerPools =
       new IdentityHashMap<>();
   private boolean closed;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
+  private final Map<DecompInterface, Long> programModifications =
+      Collections.synchronizedMap(new WeakHashMap<>());
 
   public DecompilationServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
+    this.injectedPool = null;
+  }
+
+  DecompilationServiceImpl(GhidraSession context, LeasePool<DecompInterface> decompilerPool) {
+    this.context = Objects.requireNonNull(context, "context");
+    this.injectedPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
   }
 
   @Override
@@ -70,6 +79,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
       pools = List.copyOf(decompilerPools.values());
       decompilerPools.clear();
     }
+    if (injectedPool != null) {
+      injectedPool.close();
+    }
     for (LeasePool<DecompInterface> pool : pools) {
       pool.close();
     }
@@ -79,6 +91,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
     synchronized (poolLock) {
       if (closed) {
         throw new IllegalStateException("decompilation service is closed");
+      }
+      if (injectedPool != null) {
+        return injectedPool;
       }
       return decompilerPools.computeIfAbsent(program, DecompilerPoolFactory::create);
     }
@@ -93,8 +108,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
       DecompInterface decompiler = lease.value();
       applyCommentMode(decompiler, includeComments);
-      // The native process keeps program data. Clear it to show the current names and comments.
-      decompiler.flushCache();
+      // The native process keeps program data. Clear it when program modifications occur.
+      flushCacheIfModified(decompiler, function.getProgram());
       DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
       boolean completed = results.decompileCompleted();
       List<String> warnings = new ArrayList<>();
@@ -104,8 +119,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
       DecompilationResource.Format effectiveFormat =
           format == null ? DecompilationResource.Format.TEXT : format;
       ClangTokenGroup markup = results.getCCodeMarkup();
-      String code =
-          effectiveFormat == DecompilationResource.Format.TEXT ? renderCode(results) : null;
+      String code = effectiveFormat == DecompilationResource.Format.TEXT
+          ? GuiDocument.renderText(function, results)
+          : null;
       List<DecompilationResource.Token> tokens =
           effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
       List<DecompilationResource.Line> lines = null;
@@ -115,7 +131,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
         lines = document.lines();
       }
       FunctionComments comments = includeComments
-          ? FunctionComments.read(function, startedAt, timeoutMs, warnings) : null;
+          ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
+          : null;
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
           function.getName(), effectiveFormat, completed,
@@ -124,13 +141,6 @@ public final class DecompilationServiceImpl implements DecompilationService {
           comments == null ? null : comments.items(),
           comments == null ? null : comments.complete(), warnings);
     }
-  }
-
-  private String renderCode(DecompileResults results) {
-    if (results.getDecompiledFunction() == null || results.getDecompiledFunction().getC() == null) {
-      return "";
-    }
-    return DecompilationFormatter.formatCCode(results.getDecompiledFunction().getC());
   }
 
   private List<DecompilationResource.Token> renderTokens(ClangTokenGroup markup) {
@@ -158,6 +168,22 @@ public final class DecompilationServiceImpl implements DecompilationService {
       throw new IllegalStateException("unable to set decompiler display options");
     }
     commentModes.put(decompiler, includeComments);
+  }
+
+  /** Flushes the native cache only when the modification number of the program changes. */
+  private void flushCacheIfModified(DecompInterface decompiler, Program program) {
+    Program target = program != null ? program : context.currentProgramOrNull();
+    if (target == null) {
+      programModifications.remove(decompiler);
+      decompiler.flushCache();
+      return;
+    }
+    long modificationNumber = target.getModificationNumber();
+    if (Long.valueOf(modificationNumber).equals(programModifications.get(decompiler))) return;
+    programModifications.remove(decompiler);
+    if (decompiler.flushCache() >= 0) {
+      programModifications.put(decompiler, modificationNumber);
+    }
   }
 
   static DecompilationResource.Token.Kind tokenKind(ClangToken token) {

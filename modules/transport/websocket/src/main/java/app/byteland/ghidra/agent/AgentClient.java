@@ -108,12 +108,7 @@ public final class AgentClient {
 
     String wsUrl = config.wsUrl();
     String displayUrl = config.redactedWsUrl();
-    URI uri;
-    try {
-      uri = URI.create(wsUrl);
-    } catch (IllegalArgumentException invalidUrl) {
-      throw new IllegalArgumentException("ws_url is invalid", invalidUrl);
-    }
+    URI uri = parseOutboundUri(wsUrl);
     AgentMessageHandler messageHandler =
         new AgentMessageHandler(config, dispatcher, this::disconnect);
     try (HttpClient client = HttpClient.newBuilder().connectTimeout(connectTimeout).build()) {
@@ -137,6 +132,10 @@ public final class AgentClient {
     }
   }
 
+  static URI parseOutboundUri(String wsUrl) {
+    return AgentConfig.parseWsUri(wsUrl);
+  }
+
   static AgentClientChannels.OutboundMessageChannel activateOutbound(
       WebSocket webSocket,
       AtomicReference<AgentClientChannels.MessageChannel> channelRef,
@@ -152,11 +151,6 @@ public final class AgentClient {
     LOGGER.log(System.Logger.Level.ERROR, message, error);
   }
 
-  @SuppressWarnings({
-    "PMD.AvoidCatchingGenericException",
-    "PMD.CloseResource",
-    "PMD.CompareObjectsWithEquals"
-  })
   public void disconnect() {
     RuntimeException failure = null;
     try {
@@ -186,7 +180,6 @@ public final class AgentClient {
     if (failure != null) throw failure;
   }
 
-  @SuppressWarnings("PMD.CloseResource")
   private void serve(BooleanSupplier cancellationRequested) throws Exception {
     AgentMessageHandler messageHandler =
         new AgentMessageHandler(config, dispatcher, this::disconnect);
@@ -211,7 +204,6 @@ public final class AgentClient {
    * can occur after the host process stops. A ping to such a connection fails. Then the session
    * ends.
    */
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void awaitDisconnect(
       BooleanSupplier cancellationRequested, AgentClientChannels.OutboundMessageChannel channel)
       throws InterruptedException {
@@ -233,7 +225,6 @@ public final class AgentClient {
     }
   }
 
-  @SuppressWarnings("PMD.PreserveStackTrace")
   private static WebSocket awaitHandshake(
       CompletableFuture<WebSocket> wsFuture,
       String wsUrl,

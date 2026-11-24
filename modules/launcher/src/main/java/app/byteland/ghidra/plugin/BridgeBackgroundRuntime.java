@@ -224,16 +224,7 @@ public final class BridgeBackgroundRuntime implements AutoCloseable {
                 null,
                 GUI_SESSION_ID,
                 settings.toolPrefix());
-        AgentConfig dispatcherConfig =
-            new AgentConfig(
-                null,
-                mcpConfig.host(),
-                mcpConfig.port(),
-                mcpConfig.path(),
-                null,
-                GUI_SESSION_ID,
-                null);
-        AgentDispatcher dispatcher = new AgentDispatcher(services, dispatcherConfig, false);
+        AgentDispatcher dispatcher = new AgentDispatcher(services, GUI_SESSION_ID, false);
         McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher, ignored -> {}, true);
         server.start();
         localPort = server.port();
