@@ -8,6 +8,10 @@ Usage: bash .github/scripts/verify-formatting.sh [--fix]
 Options:
   --fix       Format Java and Python files in place before verification.
   -h, --help  Print this help text.
+
+Environment:
+  GJF_CACHE_DIR  Directory for the cached google-java-format JAR.
+                 Default: ${XDG_CACHE_HOME:-$HOME/.cache}/ghidra-bridge/google-java-format
 EOF
 }
 
@@ -58,7 +62,8 @@ gjf_version="2.0.0"
 gjf_sha256="c78feb48c549fa7114b7ea11db3b456808f7b371ffe84e6643a44dd2f9588639"
 gjf_jar_name="google-java-format-${gjf_version}-all-deps.jar"
 gjf_url="https://github.com/google/google-java-format/releases/download/v${gjf_version}/${gjf_jar_name}"
-cache_dir="${GJF_CACHE_DIR:-$repository_root/.cache/google-java-format}"
+default_cache_root="${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}"
+cache_dir="${GJF_CACHE_DIR:-${default_cache_root}/ghidra-bridge/google-java-format}"
 gjf_jar="${cache_dir}/${gjf_jar_name}"
 
 temporary_directory="$(mktemp -d)"

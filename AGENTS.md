@@ -67,6 +67,8 @@ Verify `google-java-format`, the 100-character Java line width, `ruff check`, an
 bash .github/scripts/verify-formatting.sh
 ```
 
+By default, the script stores the `google-java-format` JAR in `${XDG_CACHE_HOME:-$HOME/.cache}/ghidra-bridge/google-java-format`. Set `GJF_CACHE_DIR` to use a different cache directory.
+
 ### Module Checks and Unit Tests (`check`)
 
 Run JUnit Platform test suites and module checks across all 8 Java subprojects:
