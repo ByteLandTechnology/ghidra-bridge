@@ -45,7 +45,6 @@ final class CodeUnitMethods implements ApiMethodProvider {
                     addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
                     page.limit(),
                     optionalText(filter(request), ApiVocabulary.KIND, "all"),
-                    "forward",
                     page.cursor()));
     registry.scanList(
         "data_unit.list",
@@ -71,7 +70,6 @@ final class CodeUnitMethods implements ApiMethodProvider {
                 .listDataUnits(
                     addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
                     page.limit(),
-                    "forward",
                     page.cursor()));
   }
 }

@@ -18,22 +18,21 @@ final class ListingDataQueries {
   }
 
   Page<DataUnitResource> listDataUnits(
-      AddressScanOptions options, int limit, String direction, String cursorRaw) {
+      AddressScanOptions options, int limit, String cursorRaw) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
-    boolean forward = !"backward".equalsIgnoreCase(direction);
 
     BoundedAddressScan<DataUnitResource> scan =
         BoundedAddressScan.start(
             normalizedLimit, options.timeoutMs(), range.startText(), range.endText());
-    Data data = cursor == null ? firstData(range.start(), forward) : nextData(cursor, forward);
+    Data data = cursor == null ? firstData(range.start()) : context.script().getDataAfter(cursor);
     while (data != null) {
-      if (forward ? range.afterEnd(data.getAddress()) : !range.includes(data.getAddress())) break;
+      if (range.afterEnd(data.getAddress())) break;
       String address = AddressUtil.canonicalAddress(data.getAddress());
       scan.visit(address, address, ListingDescriptions.toDataItem(data, context));
       if (scan.stopped()) break;
-      data = nextData(data, forward);
+      data = context.script().getDataAfter(data);
     }
 
     return scan.finish();
@@ -43,21 +42,11 @@ final class ListingDataQueries {
     return context.parseAddress(rawAddress);
   }
 
-  private Data firstData(Address start, boolean forward) {
+  private Data firstData(Address start) {
     Data data = context.script().getDataAt(start);
     if (data != null) {
       return data;
     }
-    return forward ? context.script().getDataAfter(start) : context.script().getDataBefore(start);
-  }
-
-  private Data nextData(Data data, boolean forward) {
-    return forward ? context.script().getDataAfter(data) : context.script().getDataBefore(data);
-  }
-
-  private Data nextData(Address address, boolean forward) {
-    return forward
-        ? context.script().getDataAfter(address)
-        : context.script().getDataBefore(address);
+    return context.script().getDataAfter(start);
   }
 }

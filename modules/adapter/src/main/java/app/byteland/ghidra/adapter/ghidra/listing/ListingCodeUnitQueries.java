@@ -20,22 +20,18 @@ final class ListingCodeUnitQueries {
   }
 
   Page<CodeUnitResource> listCodeUnits(
-      AddressScanOptions options, int limit, String kind, String direction, String cursorRaw) {
+      AddressScanOptions options, int limit, String kind, String cursorRaw) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
-    boolean forward = !"backward".equalsIgnoreCase(direction);
 
     BoundedAddressScan<CodeUnitResource> scan =
         BoundedAddressScan.start(
             normalizedLimit, options.timeoutMs(), range.startText(), range.endText());
-    Address first = cursor == null ? range.start() : cursor;
     CodeUnit codeUnit =
-        cursor == null ? firstCodeUnit(first, forward) : nextCodeUnitFrom(first, forward);
+        cursor == null ? firstCodeUnit(range.start()) : nextCodeUnitAfter(cursor);
     while (codeUnit != null) {
-      if (forward
-          ? range.afterEnd(codeUnit.getAddress())
-          : !range.includes(codeUnit.getAddress())) {
+      if (range.afterEnd(codeUnit.getAddress())) {
         break;
       }
       CodeUnitResource.Kind kindValue = ListingDescriptions.classify(codeUnit);
@@ -46,7 +42,7 @@ final class ListingCodeUnitQueries {
       String address = AddressUtil.canonicalAddress(codeUnit.getAddress());
       scan.visit(address, address, match);
       if (scan.stopped()) break;
-      codeUnit = nextCodeUnit(codeUnit, forward);
+      codeUnit = nextCodeUnitAfter(codeUnit.getAddress());
     }
 
     return scan.finish();
@@ -62,12 +58,12 @@ final class ListingCodeUnitQueries {
         || actualKind.name().equalsIgnoreCase(requestedKind);
   }
 
-  private CodeUnit firstCodeUnit(Address start, boolean forward) {
+  private CodeUnit firstCodeUnit(Address start) {
     CodeUnit codeUnit = codeUnitAt(start);
     if (codeUnit != null) {
       return codeUnit;
     }
-    return forward ? nextCodeUnitAfter(start) : nextCodeUnitBefore(start);
+    return nextCodeUnitAfter(start);
   }
 
   private CodeUnit codeUnitAt(Address address) {
@@ -82,39 +78,19 @@ final class ListingCodeUnitQueries {
     return context.script().getUndefinedDataAt(address);
   }
 
-  private CodeUnit nextCodeUnit(CodeUnit codeUnit, boolean forward) {
-    return forward
-        ? nextCodeUnitAfter(codeUnit.getAddress())
-        : nextCodeUnitBefore(codeUnit.getAddress());
-  }
-
-  private CodeUnit nextCodeUnitFrom(Address address, boolean forward) {
-    return forward ? nextCodeUnitAfter(address) : nextCodeUnitBefore(address);
-  }
-
   private CodeUnit nextCodeUnitAfter(Address address) {
     CodeUnit nearest = context.script().getInstructionAfter(address);
-    nearest = nearest(nearest, context.script().getDataAfter(address), true);
-    return nearest(nearest, context.script().getUndefinedDataAfter(address), true);
+    nearest = nearest(nearest, context.script().getDataAfter(address));
+    return nearest(nearest, context.script().getUndefinedDataAfter(address));
   }
 
-  private CodeUnit nextCodeUnitBefore(Address address) {
-    CodeUnit nearest = context.script().getInstructionBefore(address);
-    nearest = nearest(nearest, context.script().getDataBefore(address), false);
-    return nearest(nearest, context.script().getUndefinedDataBefore(address), false);
-  }
-
-  private static CodeUnit nearest(CodeUnit current, CodeUnit candidate, boolean forward) {
+  private static CodeUnit nearest(CodeUnit current, CodeUnit candidate) {
     if (candidate == null) {
       return current;
     }
     if (current == null) {
       return candidate;
     }
-    int comparison = candidate.getAddress().compareTo(current.getAddress());
-    if (comparison == 0) {
-      return current;
-    }
-    return forward == comparison < 0 ? candidate : current;
+    return candidate.getAddress().compareTo(current.getAddress()) < 0 ? candidate : current;
   }
 }
