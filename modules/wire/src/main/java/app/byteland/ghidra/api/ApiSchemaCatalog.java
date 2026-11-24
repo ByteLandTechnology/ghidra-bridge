@@ -42,6 +42,7 @@ import static app.byteland.ghidra.api.ApiVocabulary.TYPE;
 import static app.byteland.ghidra.api.ApiVocabulary.VALUES;
 
 import app.byteland.ghidra.service.AddressScanOptions;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,6 +51,7 @@ import java.util.Set;
 
 final class ApiSchemaCatalog {
   static final int MAX_NESTED_ITEMS = 1000;
+  static final int MAX_STRUCT_SIZE = DataTypeService.MAX_STRUCT_SIZE;
 
   private ApiSchemaCatalog() {}
 
@@ -272,7 +274,7 @@ final class ApiSchemaCatalog {
                 KIND, WireSchema.stringEnum("struct"),
                 CATEGORY_PATH, WireSchema.string(),
                 NAME, WireSchema.nonBlankString(),
-                SIZE, WireSchema.integer(0, Integer.MAX_VALUE)),
+                SIZE, WireSchema.integer(0, MAX_STRUCT_SIZE)),
             KIND,
             NAME);
     Map<String, Object> union =
@@ -347,9 +349,9 @@ final class ApiSchemaCatalog {
                 "new_name",
                 WireSchema.string(),
                 "offset",
-                WireSchema.integer(0, Integer.MAX_VALUE),
+                WireSchema.integer(0, MAX_STRUCT_SIZE),
                 LENGTH,
-                WireSchema.integer(1, Integer.MAX_VALUE),
+                WireSchema.integer(1, MAX_STRUCT_SIZE),
                 DATA_TYPE,
                 WireSchema.dataTypeReference()));
     Map<String, Object> value =

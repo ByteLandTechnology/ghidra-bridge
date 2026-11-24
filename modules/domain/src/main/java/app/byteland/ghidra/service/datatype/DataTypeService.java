@@ -6,6 +6,9 @@ import app.byteland.ghidra.service.Page;
  * Manages data types, structures, and category hierarchies.
  */
 public interface DataTypeService {
+  int MAX_STRUCT_SIZE = 1_048_576;
+  int MAX_DEFINED_COMPONENTS = 1_000;
+
   /**
    * Returns child categories under a category path.
    *

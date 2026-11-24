@@ -4,6 +4,7 @@ import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
@@ -41,7 +42,14 @@ final class DataTypeMutations {
     CategoryPath path = new CategoryPath(normalizedCategoryPath);
     DataType candidate;
     switch (kind) {
-      case STRUCT -> candidate = new StructureDataType(path, name, Math.max(size, 0), manager);
+      case STRUCT -> {
+        if (size > DataTypeService.MAX_STRUCT_SIZE) {
+          throw new DataTypeMutationValidationException(
+              "/resource/size",
+              "struct size must not exceed " + DataTypeService.MAX_STRUCT_SIZE);
+        }
+        candidate = new StructureDataType(path, name, Math.max(size, 0), manager);
+      }
       case ENUM -> candidate = new EnumDataType(path, name, size > 0 ? size : 4, manager);
       case UNION -> candidate = new UnionDataType(path, name, manager);
       case TYPEDEF -> {
