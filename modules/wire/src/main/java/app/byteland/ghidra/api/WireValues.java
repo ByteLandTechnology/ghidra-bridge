@@ -26,50 +26,18 @@ final class WireValues {
     return normalized;
   }
 
-  static Map<String, Object> list(Object value, int limit) {
-    if (value == null) {
-      throw new IllegalArgumentException("list results must be a Page or a collection: null");
-    }
-    if (value instanceof Page<?> typedPage) {
-      Map<String, Object> result = new LinkedHashMap<>();
-      result.put(ApiVocabulary.ITEMS, normalize(typedPage.items()));
-      if (typedPage.nextCursor() != null) {
-        result.put(ApiVocabulary.NEXT_CURSOR, typedPage.nextCursor());
-      }
-      if (typedPage.scanProgress() != null) {
-        result.put(ApiVocabulary.SCAN, normalize(typedPage.scanProgress()));
-      }
-      return result;
-    }
-    if (value instanceof Iterable<?> || value.getClass().isArray()) {
-      @SuppressWarnings("unchecked")
-      List<Object> items = (List<Object>) normalize(value);
-      return new LinkedHashMap<>(Map.of(ApiVocabulary.ITEMS, items));
-    }
-    throw new IllegalArgumentException(
-        "list results must be a Page or a collection: " + value.getClass().getName());
-  }
-
-  static Map<String, Object> memory(Object value) {
-    Map<String, Object> normalized = resource(value);
-    Object data = normalized.get("bytes");
-    Map<String, Object> bytes;
-    if (data instanceof Map<?, ?> map) {
-      @SuppressWarnings("unchecked")
-      Map<String, Object> existing = (Map<String, Object>) map;
-      bytes = existing;
-    } else if (data instanceof String encoded) {
-      bytes = new LinkedHashMap<>();
-      bytes.put(ApiVocabulary.ENCODING, normalized.get(ApiVocabulary.ENCODING));
-      bytes.put("data", encoded);
-      bytes.put(ApiVocabulary.LENGTH, normalized.get(ApiVocabulary.LENGTH));
-    } else {
-      return normalized;
+  static Map<String, Object> list(Page<?> page) {
+    if (page == null) {
+      throw new IllegalArgumentException("list results must be a Page: null");
     }
     Map<String, Object> result = new LinkedHashMap<>();
-    Object address = normalized.get("address");
-    result.put("address", address != null ? address : normalized.get("start"));
-    result.put("bytes", bytes);
+    result.put(ApiVocabulary.ITEMS, normalize(page.items()));
+    if (page.nextCursor() != null) {
+      result.put(ApiVocabulary.NEXT_CURSOR, page.nextCursor());
+    }
+    if (page.scanProgress() != null) {
+      result.put(ApiVocabulary.SCAN, normalize(page.scanProgress()));
+    }
     return result;
   }
 
@@ -111,10 +79,7 @@ final class WireValues {
               "unable to encode record component " + component.name(), exception);
         }
         if (componentValue == null) continue;
-        String key = component.wireKey();
-        Object normalized = normalize(componentValue);
-        if ("id".equals(key) && normalized instanceof Number) normalized = normalized.toString();
-        result.put(key, normalized);
+        result.put(component.wireKey(), normalize(componentValue));
       }
       return result;
     }
@@ -122,39 +87,7 @@ final class WireValues {
       Map<String, Object> result = new LinkedHashMap<>();
       for (Map.Entry<?, ?> entry : map.entrySet()) {
         if (entry.getValue() == null) continue;
-        String key = snakeCase(String.valueOf(entry.getKey()));
-        Object normalized = normalize(entry.getValue());
-        if ("bytes".equals(key) && normalized instanceof String encoded) {
-          String encoding =
-              map.get(ApiVocabulary.ENCODING) instanceof String text
-                  ? text.toLowerCase(Locale.ROOT)
-                  : ApiVocabulary.HEX;
-          normalized =
-              Map.of(
-                  ApiVocabulary.ENCODING,
-                  encoding,
-                  "data",
-                  encoded,
-                  ApiVocabulary.LENGTH,
-                  encodedLength(encoding, encoded));
-        }
-        if ("id".equals(key) && normalized instanceof Number) {
-          normalized = normalized.toString();
-        }
-        if ((ApiVocabulary.KIND.equals(key)
-                || "flow_override".equals(key)
-                || "source_type".equals(key)
-                || "default_flow_type".equals(key)
-                || "flow_type".equals(key)
-                || "type".equals(key)
-                || "endian".equals(key))
-            && normalized instanceof String text) {
-          normalized = snakeCase(text).toLowerCase(Locale.ROOT);
-        }
-        if (key.endsWith("_at") && normalized instanceof Number epochMillis) {
-          normalized = Instant.ofEpochMilli(epochMillis.longValue()).toString();
-        }
-        result.put(key, normalized);
+        result.put(String.valueOf(entry.getKey()), normalize(entry.getValue()));
       }
       return result;
     }
@@ -163,20 +96,13 @@ final class WireValues {
       for (Object item : iterable) result.add(normalize(item));
       return result;
     }
-    if (value != null && value.getClass().isArray()) {
-      List<Object> result = new ArrayList<>();
-      for (int index = 0; index < java.lang.reflect.Array.getLength(value); index++) {
-        result.add(normalize(java.lang.reflect.Array.get(value, index)));
-      }
-      return result;
-    }
     if (value instanceof Enum<?> enumValue) {
       return enumValue.name().toLowerCase(Locale.ROOT);
     }
     return value;
   }
 
-  static Map<String, Object> restrict(Map<String, Object> value, java.util.Set<String> fields) {
+  static Map<String, Object> restrict(Map<String, Object> value, Set<String> fields) {
     Set<String> roots = new LinkedHashSet<>();
     for (String field : fields) {
       int separator = field.indexOf('.');
@@ -187,17 +113,6 @@ final class WireValues {
       if (value.containsKey(root)) result.put(root, value.get(root));
     }
     return result;
-  }
-
-  private static int encodedLength(String encoding, String data) {
-    if (ApiVocabulary.BASE64.equals(encoding)) {
-      try {
-        return java.util.Base64.getDecoder().decode(data).length;
-      } catch (IllegalArgumentException ignored) {
-        return -1;
-      }
-    }
-    return data.length() % 2 == 0 ? data.length() / 2 : -1;
   }
 
   private record ComponentMeta(String name, String wireKey, Method accessor) {}

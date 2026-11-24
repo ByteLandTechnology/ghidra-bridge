@@ -1,7 +1,11 @@
 package app.byteland.ghidra.service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
+import java.util.PriorityQueue;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
@@ -47,6 +51,10 @@ public record Page<T>(
     return Page.of(items, clamped, next);
   }
 
+  public static <T> Selector<T> selector(int limit, String cursor) {
+    return new Selector<>(limit, cursor);
+  }
+
   public static <T> Page<T> of(List<T> items, int limit, String nextCursor) {
     return new Page<>(items, items.size(), limit, nextCursor, null);
   }
@@ -55,5 +63,86 @@ public record Page<T>(
       List<T> items, int limit, String nextCursor, ScanProgress scanProgress) {
     if (scanProgress == null) throw new IllegalArgumentException("scanProgress is required");
     return new Page<>(items, items.size(), limit, nextCursor, scanProgress);
+  }
+
+  /**
+   * Selects one page of smallest keys after a cursor in a bounded priority queue.
+   *
+   * @param <T> candidate item type
+   */
+  public static final class Selector<T> {
+    private static final int INITIAL_CAPACITY = 32;
+
+    private final int clamped;
+    private final int maxRetained;
+    private final String cursor;
+    private final boolean resuming;
+    private final PriorityQueue<Keyed<T>> heap;
+    private long sequence;
+
+    private Selector(int limit, String cursor) {
+      this.clamped = clampLimit(limit);
+      this.maxRetained = this.clamped + 1;
+      this.resuming = cursor != null && !cursor.isBlank();
+      this.cursor = this.resuming ? cursor : null;
+      this.heap =
+          new PriorityQueue<>(Math.min(this.maxRetained, INITIAL_CAPACITY), Keyed.maxOrder());
+    }
+
+    public void offer(String key, T item) {
+      Objects.requireNonNull(key, "key");
+      if (resuming && key.compareTo(cursor) <= 0) return;
+      long order = sequence++;
+      if (heap.size() == maxRetained) {
+        Keyed<T> largest = heap.peek();
+        if (largest != null && key.compareTo(largest.key()) >= 0) return;
+        heap.poll();
+      }
+      heap.offer(new Keyed<>(key, order, item));
+    }
+
+    public int retainedCount() {
+      return heap.size();
+    }
+
+    public Page<T> finish() {
+      return finish((item, ignoredKey) -> item);
+    }
+
+    public <R> Page<R> finish(Function<T, R> mapper) {
+      Objects.requireNonNull(mapper, "mapper");
+      return finish((item, ignoredKey) -> mapper.apply(item));
+    }
+
+    public <R> Page<R> finish(BiFunction<T, String, R> mapper) {
+      Objects.requireNonNull(mapper, "mapper");
+      List<Keyed<T>> winners = new ArrayList<>(heap);
+      winners.sort(Keyed.minOrder());
+      boolean hasMore = winners.size() > clamped;
+      int pageCount = hasMore ? clamped : winners.size();
+      String next = hasMore ? winners.get(pageCount - 1).key() : null;
+      List<R> items = new ArrayList<>(pageCount);
+      for (int index = 0; index < pageCount; index++) {
+        Keyed<T> winner = winners.get(index);
+        items.add(mapper.apply(winner.item(), winner.key()));
+      }
+      return Page.of(items, clamped, next);
+    }
+  }
+
+  private record Keyed<T>(String key, long sequence, T item) {
+    private static <T> Comparator<Keyed<T>> minOrder() {
+      return (left, right) -> {
+        int byKey = left.key.compareTo(right.key);
+        return byKey != 0 ? byKey : Long.compare(left.sequence, right.sequence);
+      };
+    }
+
+    private static <T> Comparator<Keyed<T>> maxOrder() {
+      return (left, right) -> {
+        int byKey = right.key.compareTo(left.key);
+        return byKey != 0 ? byKey : Long.compare(right.sequence, left.sequence);
+      };
+    }
   }
 }

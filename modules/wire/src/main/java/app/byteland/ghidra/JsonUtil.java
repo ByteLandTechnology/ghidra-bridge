@@ -2,6 +2,7 @@ package app.byteland.ghidra;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /** Serializes objects to compact JSON and parses JSON text. */
 public final class JsonUtil {
@@ -9,6 +10,10 @@ public final class JsonUtil {
 
   public static String toJson(Object value) {
     return JsonWriter.toJson(value);
+  }
+
+  public static Object rawJson(String json) {
+    return new JsonWriter.RawJson(Objects.requireNonNull(json, "json"));
   }
 
   public static Object parse(String json) {

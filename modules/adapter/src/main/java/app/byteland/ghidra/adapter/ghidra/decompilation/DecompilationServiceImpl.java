@@ -9,6 +9,7 @@ import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.Program;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -22,10 +23,18 @@ public final class DecompilationServiceImpl implements DecompilationService {
   private final LeasePool<DecompInterface> decompilerPool;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
+  private final Map<DecompInterface, Long> programModifications =
+      Collections.synchronizedMap(new WeakHashMap<>());
 
   public DecompilationServiceImpl(GhidraSession context) {
+    this(
+        Objects.requireNonNull(context, "context"),
+        DecompilerPoolFactory.create(context.currentProgram()));
+  }
+
+  DecompilationServiceImpl(GhidraSession context, LeasePool<DecompInterface> decompilerPool) {
     this.context = Objects.requireNonNull(context, "context");
-    this.decompilerPool = DecompilerPoolFactory.create(context.currentProgram());
+    this.decompilerPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
   }
 
   @Override
@@ -63,8 +72,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
       DecompInterface decompiler = lease.value();
       applyCommentMode(decompiler, includeComments);
-      // The native process keeps program data. Clear it to show the current names and comments.
-      decompiler.flushCache();
+      // The native process keeps program data. Clear it when program modifications occur.
+      flushCacheIfModified(decompiler, function.getProgram());
       DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
       boolean completed = results.decompileCompleted();
       List<String> warnings = new ArrayList<>();
@@ -75,7 +84,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
           format == null ? DecompilationResource.Format.TEXT : format;
       ClangTokenGroup markup = results.getCCodeMarkup();
       String code =
-          effectiveFormat == DecompilationResource.Format.TEXT ? renderCode(results) : null;
+          effectiveFormat == DecompilationResource.Format.TEXT
+              ? GuiDocument.renderText(function, results)
+              : null;
       List<DecompilationResource.Token> tokens =
           effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
       List<DecompilationResource.Line> lines = null;
@@ -85,7 +96,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
         lines = document.lines();
       }
       FunctionComments comments =
-          includeComments ? FunctionComments.read(function, startedAt, timeoutMs, warnings) : null;
+          includeComments
+              ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
+              : null;
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
           function.getName(),
@@ -99,13 +112,6 @@ public final class DecompilationServiceImpl implements DecompilationService {
           comments == null ? null : comments.complete(),
           warnings);
     }
-  }
-
-  private String renderCode(DecompileResults results) {
-    if (results.getDecompiledFunction() == null || results.getDecompiledFunction().getC() == null) {
-      return "";
-    }
-    return DecompilationFormatter.formatCCode(results.getDecompiledFunction().getC());
   }
 
   private List<DecompilationResource.Token> renderTokens(ClangTokenGroup markup) {
@@ -133,6 +139,22 @@ public final class DecompilationServiceImpl implements DecompilationService {
       throw new IllegalStateException("unable to set decompiler display options");
     }
     commentModes.put(decompiler, includeComments);
+  }
+
+  /** Flushes the native cache only when the modification number of the program changes. */
+  private void flushCacheIfModified(DecompInterface decompiler, Program program) {
+    Program target = program != null ? program : context.currentProgramOrNull();
+    if (target == null) {
+      programModifications.remove(decompiler);
+      decompiler.flushCache();
+      return;
+    }
+    long modificationNumber = target.getModificationNumber();
+    if (Long.valueOf(modificationNumber).equals(programModifications.get(decompiler))) return;
+    programModifications.remove(decompiler);
+    if (decompiler.flushCache() >= 0) {
+      programModifications.put(decompiler, modificationNumber);
+    }
   }
 
   static DecompilationResource.Token.Kind tokenKind(ClangToken token) {

@@ -7,18 +7,24 @@ import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
 import app.byteland.ghidra.api.ApiFailures;
 import app.byteland.ghidra.network.NetworkBinding;
+import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.BindException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -28,11 +34,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /** HTTP server that exposes the bridge API as grouped MCP tools through Streamable HTTP and SSE. */
 public final class McpHttpServer implements AutoCloseable {
+  static final int MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
+  private static final int HTTP_PAYLOAD_TOO_LARGE = 413;
   private static final int JSONRPC_PARSE_ERROR = -32700;
   private static final int JSONRPC_INVALID_REQUEST = -32600;
   private static final int JSONRPC_METHOD_NOT_FOUND = -32601;
@@ -60,10 +69,14 @@ public final class McpHttpServer implements AutoCloseable {
   private static final String NAME_FIELD = "name";
   private static final String URI_FIELD = "uri";
   private static final String SESSION_ID_PARAM = "sessionId";
+  private static final long DEFAULT_SSE_KEEPALIVE_MILLIS = TimeUnit.SECONDS.toMillis(15);
 
   private final McpConfig config;
+  private final String normalizedConfiguredHost;
+  private final InetAddress configuredHostLiteral;
   private final AgentDispatcher dispatcher;
   private final Consumer<String> requestLogSink;
+  private final long sseKeepaliveMillis;
   private final McpToolRegistry toolRegistry;
   private final String toolContractJson;
   private final HttpServer server;
@@ -79,16 +92,31 @@ public final class McpHttpServer implements AutoCloseable {
   public McpHttpServer(
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
+    this(config, dispatcher, requestLogSink, DEFAULT_SSE_KEEPALIVE_MILLIS);
+  }
+
+  McpHttpServer(
+      McpConfig config,
+      AgentDispatcher dispatcher,
+      Consumer<String> requestLogSink,
+      long sseKeepaliveMillis)
+      throws IOException {
+    if (sseKeepaliveMillis <= 0L) {
+      throw new IllegalArgumentException("sseKeepaliveMillis must be positive");
+    }
     this.config = Objects.requireNonNull(config, "config");
+    this.normalizedConfiguredHost = normalizeHost(config.host());
+    this.configuredHostLiteral = parseIpLiteral(this.normalizedConfiguredHost);
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
+    this.sseKeepaliveMillis = sseKeepaliveMillis;
     this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
     Map<String, Object> toolContract = new LinkedHashMap<>();
     toolContract.put("protocol_version", MCP_PROTOCOL_VERSION);
     toolContract.put("tools", toolRegistry.listTools());
     this.toolContractJson = JsonUtil.toJson(toolContract);
     this.server = createServer(config);
-    this.executor = Executors.newCachedThreadPool();
+    this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.server.setExecutor(executor);
     this.server.createContext(config.path(), new JsonRpcHandler());
   }
@@ -162,17 +190,17 @@ public final class McpHttpServer implements AutoCloseable {
 
   private final class JsonRpcHandler implements HttpHandler {
     @Override
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     public void handle(HttpExchange exchange) throws IOException {
       RequestLog log = new RequestLog(requestLogSink);
       try (exchange) {
         try {
-          addCommonHeaders(exchange);
-          if (!isAllowedOrigin(exchange)) {
+          OriginValidation originValidation = validateOrigin(exchange);
+          if (!originValidation.allowed()) {
             log.method(exchange.getRequestMethod()).error().status(403);
             writePlain(exchange, 403, "Forbidden origin");
             return;
           }
+          addCommonHeaders(exchange, originValidation.origin());
 
           String requestMethod = exchange.getRequestMethod();
           if (HTTP_OPTIONS_METHOD.equalsIgnoreCase(requestMethod)) {
@@ -233,6 +261,7 @@ public final class McpHttpServer implements AutoCloseable {
             }
           }
 
+          validateContentLength(exchange.getRequestHeaders());
           if (!String.valueOf(firstHeader(exchange, "Content-Type"))
               .startsWith("application/json")) {
             throw new JsonRpcError(
@@ -267,6 +296,9 @@ public final class McpHttpServer implements AutoCloseable {
               .status(error.httpStatus())
               .id(error.id())
               .cause(error.httpStatus() >= 500 ? rootMessage(error) : null);
+          if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
+            exchange.getResponseHeaders().set("Connection", "close");
+          }
           Map<String, Object> errResponse =
               error.code() == UNSUPPORTED_PROTOCOL_VERSION
                   ? mcpErrorResponse(
@@ -287,7 +319,11 @@ public final class McpHttpServer implements AutoCloseable {
               activeSse.sendEvent("message", JsonUtil.toJson(errResponse));
             } catch (IOException ignored) {
             }
-            exchange.sendResponseHeaders(202, -1);
+            if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
+              writeJson(exchange, error.httpStatus(), errResponse);
+            } else {
+              exchange.sendResponseHeaders(202, -1);
+            }
           } else {
             writeJson(exchange, error.httpStatus(), errResponse);
           }
@@ -318,7 +354,12 @@ public final class McpHttpServer implements AutoCloseable {
 
         while (session.isActive() && !closed.get()) {
           try {
-            Thread.sleep(15000L);
+            if (session.awaitClose(sseKeepaliveMillis, TimeUnit.MILLISECONDS)) {
+              break;
+            }
+            if (closed.get()) {
+              break;
+            }
             session.sendComment("keepalive");
           } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
@@ -329,7 +370,7 @@ public final class McpHttpServer implements AutoCloseable {
         // The SSE client disconnected.
       } finally {
         sseSessions.remove(sessionId);
-        session.close();
+        session.closeAndAwaitStream();
       }
     }
   }
@@ -485,7 +526,6 @@ public final class McpHttpServer implements AutoCloseable {
         : Map.of("contents", List.of(content));
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private Map<String, Object> handleToolCall(
       Object id, Map<String, Object> params, RequestLog log, boolean statelessProtocol) {
     String name = requireString(params.get(NAME_FIELD), NAME_FIELD, id);
@@ -521,28 +561,35 @@ public final class McpHttpServer implements AutoCloseable {
     }
   }
 
-  private Map<String, Object> toolResult(
-      Object result, boolean isError, boolean statelessProtocol) {
+  static Map<String, Object> toolResult(Object result, boolean isError, boolean statelessProtocol) {
     Map<String, Object> content = new LinkedHashMap<>();
     content.put("type", "text");
-    content.put("text", result instanceof String string ? string : JsonUtil.toJson(result));
+    Object structured;
+    if (result instanceof String string) {
+      content.put("text", string);
+      structured = structuredContent(result, string);
+    } else {
+      String json = JsonUtil.toJson(result);
+      content.put("text", json);
+      structured = structuredContent(result, JsonUtil.rawJson(json));
+    }
 
     Map<String, Object> response = new LinkedHashMap<>();
     if (statelessProtocol) {
       response.put("resultType", "complete");
     }
     response.put("content", List.of(content));
-    response.put("structuredContent", structuredContent(result));
+    response.put("structuredContent", structured);
     response.put("isError", isError);
     return response;
   }
 
-  private Object structuredContent(Object result) {
-    if (result instanceof Map<?, ?>) {
-      return result;
+  private static Object structuredContent(Object original, Object encoded) {
+    if (original instanceof Map<?, ?>) {
+      return encoded;
     }
     Map<String, Object> wrapper = new LinkedHashMap<>();
-    wrapper.put("value", result);
+    wrapper.put("value", encoded);
     return wrapper;
   }
 
@@ -763,10 +810,69 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static void discardRequestLog(String ignored) {}
 
-  private static String readBody(HttpExchange exchange) throws IOException {
-    try (InputStream input = exchange.getRequestBody()) {
-      return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+  static void validateContentLength(Headers headers) {
+    List<String> values = headers == null ? null : headers.get("Content-Length");
+    if (values == null || values.isEmpty()) {
+      return;
     }
+    if (values.size() > 1) {
+      throw new JsonRpcError(400, null, JSONRPC_INVALID_REQUEST, "Duplicate Content-Length header");
+    }
+    String raw = values.get(0);
+    if (raw == null) {
+      throw new JsonRpcError(400, null, JSONRPC_INVALID_REQUEST, "Invalid Content-Length header");
+    }
+    String trimmed = raw.trim();
+    if (trimmed.isEmpty() || !isAsciiDigits(trimmed)) {
+      throw new JsonRpcError(400, null, JSONRPC_INVALID_REQUEST, "Invalid Content-Length header");
+    }
+    long contentLength;
+    try {
+      contentLength = Long.parseLong(trimmed);
+    } catch (NumberFormatException error) {
+      throw new JsonRpcError(
+          400, null, JSONRPC_INVALID_REQUEST, "Invalid Content-Length header", error);
+    }
+    if (contentLength > MAX_REQUEST_BODY_BYTES) {
+      throw new JsonRpcError(
+          HTTP_PAYLOAD_TOO_LARGE,
+          null,
+          JSONRPC_INVALID_REQUEST,
+          "Request body exceeds maximum size of " + MAX_REQUEST_BODY_BYTES + " bytes");
+    }
+  }
+
+  private static boolean isAsciiDigits(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      if (ch < '0' || ch > '9') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static String readBody(HttpExchange exchange) throws IOException {
+    InputStream input = exchange.getRequestBody();
+    // Guard len == 0 because jdk.httpserver's ChunkedInputStream reads the next chunk header on a
+    // zero-length read after InputStream.readNBytes fills its final buffer.
+    InputStream boundedView =
+        new FilterInputStream(input) {
+          @Override
+          public int read(byte[] buf, int off, int len) throws IOException {
+            return len == 0 ? 0 : in.read(buf, off, len);
+          }
+        };
+    byte[] bytes = boundedView.readNBytes(MAX_REQUEST_BODY_BYTES + 1);
+    if (bytes.length > MAX_REQUEST_BODY_BYTES) {
+      throw new JsonRpcError(
+          HTTP_PAYLOAD_TOO_LARGE,
+          null,
+          JSONRPC_INVALID_REQUEST,
+          "Request body exceeds maximum size of " + MAX_REQUEST_BODY_BYTES + " bytes");
+    }
+    input.close();
+    return new String(bytes, StandardCharsets.UTF_8);
   }
 
   private static void writeJsonRpcError(
@@ -811,6 +917,10 @@ public final class McpHttpServer implements AutoCloseable {
       throws IOException {
     byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
     exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+    if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+      exchange.sendResponseHeaders(statusCode, -1);
+      return;
+    }
     exchange.sendResponseHeaders(statusCode, bytes.length);
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
@@ -821,13 +931,10 @@ public final class McpHttpServer implements AutoCloseable {
     exchange.sendResponseHeaders(statusCode, -1);
   }
 
-  private void addCommonHeaders(HttpExchange exchange) {
-    String origin = firstHeader(exchange, "Origin");
-    if (origin != null && !origin.isBlank()) {
-      exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
+  private void addCommonHeaders(HttpExchange exchange, String validatedOrigin) {
+    if (validatedOrigin != null) {
+      exchange.getResponseHeaders().set("Access-Control-Allow-Origin", validatedOrigin);
       exchange.getResponseHeaders().set("Vary", "Origin");
-    } else {
-      exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
     }
     exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS");
     exchange
@@ -838,18 +945,252 @@ public final class McpHttpServer implements AutoCloseable {
     exchange.getResponseHeaders().set("Access-Control-Expose-Headers", "MCP-Protocol-Version");
   }
 
-  private boolean isAllowedOrigin(HttpExchange exchange) {
-    String origin = firstHeader(exchange, "Origin");
-    if (origin == null || origin.isBlank()) {
-      return true;
+  private record OriginValidation(boolean allowed, String origin) {
+    static final OriginValidation ABSENT_ALLOWED = new OriginValidation(true, null);
+    static final OriginValidation REJECTED = new OriginValidation(false, null);
+  }
+
+  private OriginValidation validateOrigin(HttpExchange exchange) {
+    return validateOriginHeaders(
+        exchange.getRequestHeaders().get("Origin"),
+        normalizedConfiguredHost,
+        configuredHostLiteral);
+  }
+
+  boolean isAllowedOrigin(HttpExchange exchange) {
+    return validateOrigin(exchange).allowed();
+  }
+
+  static boolean isAllowedOrigin(List<String> originHeaders, String configuredHost) {
+    String normalizedConfigHost =
+        normalizeHost(Objects.requireNonNull(configuredHost, "configuredHost"));
+    return validateOriginHeaders(
+            originHeaders, normalizedConfigHost, parseIpLiteral(normalizedConfigHost))
+        .allowed();
+  }
+
+  private static OriginValidation validateOriginHeaders(
+      List<String> values, String normalizedConfigHost, InetAddress configHostLiteral) {
+    if (values == null || values.isEmpty()) {
+      return OriginValidation.ABSENT_ALLOWED;
+    }
+    if (values.size() != 1) {
+      return OriginValidation.REJECTED;
+    }
+    String rawOrigin = values.get(0);
+    if (rawOrigin == null) {
+      return OriginValidation.REJECTED;
+    }
+    String origin = rawOrigin.trim();
+    if (origin.isEmpty()
+        || "null".equalsIgnoreCase(origin)
+        || origin.indexOf(',') >= 0
+        || origin.indexOf('?') >= 0
+        || origin.indexOf('#') >= 0) {
+      return OriginValidation.REJECTED;
+    }
+
+    final URI uri;
+    try {
+      uri = URI.create(origin);
+    } catch (IllegalArgumentException invalidOrigin) {
+      return OriginValidation.REJECTED;
+    }
+
+    String scheme = uri.getScheme();
+    if (scheme == null
+        || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))
+        || uri.isOpaque()) {
+      return OriginValidation.REJECTED;
+    }
+
+    String rawAuthority = uri.getRawAuthority();
+    if (rawAuthority == null
+        || rawAuthority.isEmpty()
+        || uri.getRawUserInfo() != null
+        || uri.getUserInfo() != null
+        || rawAuthority.indexOf('@') >= 0
+        || rawAuthority.endsWith(":")) {
+      return OriginValidation.REJECTED;
+    }
+
+    int port = uri.getPort();
+    if (port != -1 && (port < 1 || port > 65535)) {
+      return OriginValidation.REJECTED;
+    }
+
+    String rawPath = uri.getRawPath();
+    if ((rawPath != null && !rawPath.isEmpty())
+        || uri.getRawQuery() != null
+        || uri.getRawFragment() != null) {
+      return OriginValidation.REJECTED;
+    }
+
+    String rawHost = uri.getHost();
+    if (rawHost == null || rawHost.isBlank()) {
+      return OriginValidation.REJECTED;
+    }
+
+    String normalizedOriginHost = normalizeHost(rawHost);
+    if (normalizedOriginHost.isEmpty()) {
+      return OriginValidation.REJECTED;
+    }
+
+    if ("localhost".equals(normalizedOriginHost)
+        || normalizedOriginHost.equals(normalizedConfigHost)) {
+      return new OriginValidation(true, origin);
+    }
+
+    InetAddress originLiteral = parseIpLiteral(normalizedOriginHost);
+    if (originLiteral != null
+        && (originLiteral.isLoopbackAddress() || originLiteral.equals(configHostLiteral))) {
+      return new OriginValidation(true, origin);
+    }
+
+    return OriginValidation.REJECTED;
+  }
+
+  static String normalizeHost(String host) {
+    String trimmed = host.trim();
+    if (trimmed.length() > 2
+        && trimmed.charAt(0) == '['
+        && trimmed.charAt(trimmed.length() - 1) == ']'
+        && trimmed.indexOf(':') >= 0) {
+      trimmed = trimmed.substring(1, trimmed.length() - 1);
+    }
+    return trimmed.toLowerCase(Locale.ROOT);
+  }
+
+  static InetAddress parseIpLiteral(String literal) {
+    if (literal == null || literal.isEmpty()) {
+      return null;
+    }
+    byte[] bytes = literal.indexOf(':') >= 0 ? parseIpv6Bytes(literal) : parseIpv4Bytes(literal);
+    if (bytes == null) {
+      return null;
     }
     try {
-      URI uri = URI.create(origin);
-      String host = uri.getHost();
-      return host != null;
-    } catch (IllegalArgumentException invalidOrigin) {
-      return false;
+      return InetAddress.getByAddress(bytes);
+    } catch (UnknownHostException impossible) {
+      return null;
     }
+  }
+
+  private static byte[] parseIpv4Bytes(String literal) {
+    byte[] bytes = new byte[4];
+    int octetIndex = 0;
+    int value = 0;
+    int digits = 0;
+    for (int i = 0; i < literal.length(); i++) {
+      char ch = literal.charAt(i);
+      if (ch == '.') {
+        if (digits == 0 || octetIndex == 3) {
+          return null;
+        }
+        bytes[octetIndex++] = (byte) value;
+        value = 0;
+        digits = 0;
+      } else if (ch >= '0' && ch <= '9') {
+        if (digits == 1 && value == 0) {
+          return null;
+        }
+        value = value * 10 + (ch - '0');
+        digits++;
+        if (digits > 3 || value > 255) {
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+    if (digits == 0 || octetIndex != 3) {
+      return null;
+    }
+    bytes[3] = (byte) value;
+    return bytes;
+  }
+
+  private static byte[] parseIpv6Bytes(String literal) {
+    if (literal.length() < 2 || literal.indexOf('%') >= 0) {
+      return null;
+    }
+    int doubleColon = literal.indexOf("::");
+    if (doubleColon >= 0 && literal.indexOf("::", doubleColon + 1) >= 0) {
+      return null;
+    }
+    String headPart = doubleColon >= 0 ? literal.substring(0, doubleColon) : literal;
+    String tailPart = doubleColon >= 0 ? literal.substring(doubleColon + 2) : null;
+
+    byte[] headBytes =
+        headPart.isEmpty() ? new byte[0] : parseIpv6Groups(headPart, tailPart == null);
+    if (headBytes == null || (doubleColon < 0 && headPart.isEmpty())) {
+      return null;
+    }
+    if (tailPart == null) {
+      return headBytes.length == 16 ? headBytes : null;
+    }
+    byte[] tailBytes = tailPart.isEmpty() ? new byte[0] : parseIpv6Groups(tailPart, true);
+    if (tailBytes == null || headBytes.length + tailBytes.length >= 16) {
+      return null;
+    }
+    byte[] result = new byte[16];
+    System.arraycopy(headBytes, 0, result, 0, headBytes.length);
+    System.arraycopy(tailBytes, 0, result, 16 - tailBytes.length, tailBytes.length);
+    return result;
+  }
+
+  private static byte[] parseIpv6Groups(String part, boolean allowTrailingIpv4) {
+    if (part.charAt(0) == ':' || part.charAt(part.length() - 1) == ':') {
+      return null;
+    }
+    String[] groups = part.split(":", -1);
+    byte[] buffer = new byte[16];
+    int offset = 0;
+    for (int i = 0; i < groups.length; i++) {
+      String group = groups[i];
+      if (group.isEmpty()) {
+        return null;
+      }
+      if (group.indexOf('.') >= 0) {
+        if (!allowTrailingIpv4 || i != groups.length - 1 || offset > 12) {
+          return null;
+        }
+        byte[] ipv4 = parseIpv4Bytes(group);
+        if (ipv4 == null) {
+          return null;
+        }
+        System.arraycopy(ipv4, 0, buffer, offset, 4);
+        offset += 4;
+      } else {
+        if (group.length() > 4 || offset > 14) {
+          return null;
+        }
+        int word = 0;
+        for (int j = 0; j < group.length(); j++) {
+          int digit = asciiHexDigit(group.charAt(j));
+          if (digit < 0) {
+            return null;
+          }
+          word = (word << 4) | digit;
+        }
+        buffer[offset++] = (byte) (word >>> 8);
+        buffer[offset++] = (byte) word;
+      }
+    }
+    return Arrays.copyOf(buffer, offset);
+  }
+
+  private static int asciiHexDigit(char ch) {
+    if (ch >= '0' && ch <= '9') {
+      return ch - '0';
+    }
+    if (ch >= 'a' && ch <= 'f') {
+      return ch - 'a' + 10;
+    }
+    if (ch >= 'A' && ch <= 'F') {
+      return ch - 'A' + 10;
+    }
+    return -1;
   }
 
   private static String firstHeader(HttpExchange exchange, String name) {
@@ -871,7 +1212,7 @@ public final class McpHttpServer implements AutoCloseable {
     return message == null || message.isBlank() ? current.getClass().getName() : message;
   }
 
-  private static final class JsonRpcError extends RuntimeException {
+  static final class JsonRpcError extends RuntimeException {
     private static final long serialVersionUID = 1L;
     private final int statusCode;
     private final transient Object requestId;
@@ -932,11 +1273,14 @@ public final class McpHttpServer implements AutoCloseable {
     return null;
   }
 
-  private static final class SseSession implements AutoCloseable {
+  static final class SseSession implements AutoCloseable {
     private final String id;
     private final HttpExchange exchange;
     private final OutputStream output;
     private final AtomicBoolean active = new AtomicBoolean(true);
+    private final AtomicBoolean streamClosed = new AtomicBoolean(false);
+    private final CountDownLatch closeLatch = new CountDownLatch(1);
+    private final ReentrantLock writeLock = new ReentrantLock();
 
     SseSession(String id, HttpExchange exchange) throws IOException {
       this.id = id;
@@ -949,42 +1293,85 @@ public final class McpHttpServer implements AutoCloseable {
       this.output = exchange.getResponseBody();
     }
 
-    synchronized void sendEvent(String event, String data) throws IOException {
-      if (!active.get()) {
-        return;
+    void sendEvent(String event, String data) throws IOException {
+      writeLock.lock();
+      try {
+        if (!active.get()) {
+          return;
+        }
+        StringBuilder sb = new StringBuilder();
+        if (event != null && !event.isBlank()) {
+          sb.append("event: ").append(event).append("\n");
+        }
+        for (String line : data.split("\r?\n")) {
+          sb.append("data: ").append(line).append("\n");
+        }
+        sb.append("\n");
+        output.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        output.flush();
+      } finally {
+        writeLock.unlock();
       }
-      StringBuilder sb = new StringBuilder();
-      if (event != null && !event.isBlank()) {
-        sb.append("event: ").append(event).append("\n");
-      }
-      for (String line : data.split("\r?\n")) {
-        sb.append("data: ").append(line).append("\n");
-      }
-      sb.append("\n");
-      output.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-      output.flush();
     }
 
-    synchronized void sendComment(String comment) throws IOException {
-      if (!active.get()) {
-        return;
+    void sendComment(String comment) throws IOException {
+      writeLock.lock();
+      try {
+        if (!active.get()) {
+          return;
+        }
+        String payload = ": " + comment + "\n\n";
+        output.write(payload.getBytes(StandardCharsets.UTF_8));
+        output.flush();
+      } finally {
+        writeLock.unlock();
       }
-      String payload = ": " + comment + "\n\n";
-      output.write(payload.getBytes(StandardCharsets.UTF_8));
-      output.flush();
+    }
+
+    boolean awaitClose(long timeout, TimeUnit unit) throws InterruptedException {
+      return closeLatch.await(timeout, unit);
     }
 
     @Override
     public void close() {
-      if (active.compareAndSet(true, false)) {
+      active.set(false);
+      closeLatch.countDown();
+      if (writeLock.tryLock()) {
         try {
-          output.close();
-        } catch (IOException ignored) {
+          closeStream();
+        } finally {
+          writeLock.unlock();
         }
-        try {
-          exchange.close();
-        } catch (Exception ignored) {
+      }
+    }
+
+    void closeAndAwaitStream() {
+      active.set(false);
+      closeLatch.countDown();
+      boolean interrupted = Thread.interrupted();
+      writeLock.lock();
+      try {
+        closeStream();
+      } finally {
+        writeLock.unlock();
+        if (interrupted) {
+          Thread.currentThread().interrupt();
         }
+      }
+    }
+
+    @SuppressWarnings("PMD.AvoidCatchingGenericException")
+    private void closeStream() {
+      if (!streamClosed.compareAndSet(false, true)) {
+        return;
+      }
+      try {
+        output.close();
+      } catch (IOException ignored) {
+      }
+      try {
+        exchange.close();
+      } catch (Exception ignored) {
       }
     }
 

@@ -61,15 +61,10 @@ public final class ApiCatalog {
     private final boolean allowedDuringAnalysis;
     private final boolean destructive;
     private final boolean idempotent;
-    private final String title;
-    private final boolean readOnlyHint;
-    private final boolean destructiveHint;
-    private final boolean idempotentHint;
 
     private MethodDescriptor(ApiMethod<Map<String, Object>, Object> method) {
       Objects.requireNonNull(method, "method");
       ApiMethod.MethodEffects effects = method.effects();
-      ApiMethod.McpAnnotations annotations = method.mcpAnnotations();
       this.methodName = method.name();
       this.methodDescription = method.description();
       this.requestSchema = immutableSchemaSnapshot(method.requestCodec().schema());
@@ -80,10 +75,6 @@ public final class ApiCatalog {
       this.allowedDuringAnalysis = effects.allowedDuringAnalysis();
       this.destructive = effects.destructive();
       this.idempotent = effects.idempotent();
-      this.title = annotations.title();
-      this.readOnlyHint = annotations.readOnlyHint();
-      this.destructiveHint = annotations.destructiveHint();
-      this.idempotentHint = annotations.idempotentHint();
     }
 
     private static MethodDescriptor from(ApiMethod<Map<String, Object>, Object> method) {
@@ -120,23 +111,6 @@ public final class ApiCatalog {
       descriptor.put(ApiVocabulary.NAME, methodName);
       descriptor.putAll(contractValue());
       return Collections.unmodifiableMap(descriptor);
-    }
-
-    public Map<String, Object> mcpTool() {
-      Map<String, Object> tool = new LinkedHashMap<>();
-      tool.put("name", methodName);
-      tool.put("title", title);
-      tool.put("description", methodDescription);
-      tool.put(
-          "annotations",
-          Map.of(
-              "readOnlyHint", readOnlyHint,
-              "destructiveHint", destructiveHint,
-              "idempotentHint", idempotentHint,
-              "openWorldHint", false));
-      tool.put("inputSchema", inputSchema());
-      tool.put("outputSchema", outputSchema());
-      return Collections.unmodifiableMap(tool);
     }
 
     public String effectSummary() {

@@ -63,7 +63,6 @@ public final class ScriptSymbolRenamer {
     return replacement;
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static Symbol createLabel(
       GhidraSession context,
       Address address,

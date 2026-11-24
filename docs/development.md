@@ -88,7 +88,7 @@ To format Java and Python files in place before verification, run:
 bash .github/scripts/verify-formatting.sh --fix
 ```
 
-Before you submit a change, run the verification suite:
+Before you submit a change, run the verification suite that matches CI:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
@@ -96,9 +96,12 @@ bash .github/scripts/verify-formatting.sh
 ./gradlew --no-daemon clean verify
 ```
 
+On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
+
 The verification tasks check:
 - **Formatting**: `verify-formatting.sh` verifies `google-java-format` style, the 100-character
   Java line limit, and `ruff` checks on `tests/`.
+- **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.

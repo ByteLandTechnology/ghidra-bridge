@@ -2,9 +2,9 @@ package app.byteland.ghidra.adapter.ghidra.function;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.service.TransactionExecutionException;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.VariableStorageReference;
-import ghidra.app.cmd.function.AddParameterCommand;
 import ghidra.app.cmd.function.DeleteVariableCmd;
 import ghidra.app.cmd.function.SetVariableDataTypeCmd;
 import ghidra.app.cmd.function.SetVariableNameCmd;
@@ -16,6 +16,7 @@ import ghidra.program.model.listing.Parameter;
 import ghidra.program.model.listing.ParameterImpl;
 import ghidra.program.model.listing.ReturnParameterImpl;
 import ghidra.program.model.listing.Variable;
+import ghidra.program.model.listing.VariableStorage;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.util.exception.InvalidInputException;
 import java.util.ArrayList;
@@ -71,7 +72,6 @@ final class FunctionParameterMutations {
     }
   }
 
-  @SuppressWarnings({"deprecation", "removal"})
   static void addParameter(
       GhidraSession context,
       Function function,
@@ -98,7 +98,11 @@ final class FunctionParameterMutations {
     try {
       parameter =
           new ParameterImpl(
-              parameterName, dataType, context.currentProgram(), SourceType.USER_DEFINED);
+              parameterName,
+              dataType,
+              VariableStorage.UNASSIGNED_STORAGE,
+              context.currentProgram(),
+              SourceType.USER_DEFINED);
     } catch (InvalidInputException ex) {
       throw new IllegalArgumentException("unable to create parameter: " + ex.getMessage(), ex);
     }
@@ -109,8 +113,38 @@ final class FunctionParameterMutations {
       throw new IllegalArgumentException("parameter ordinal out of range: " + insertOrdinal);
     }
 
+    Parameter[] currentParameters = function.getParameters();
+    int autoCount = 0;
+    while (autoCount < currentParameters.length && currentParameters[autoCount].isAutoParameter()) {
+      autoCount++;
+    }
+    if (insertOrdinal < autoCount) {
+      throw new TransactionExecutionException(
+          "unable to add parameter: Parameter may not be inserted before auto-parameter");
+    }
+
+    List<Variable> parameters = new ArrayList<>();
+    FunctionUpdateType updateType;
+    if (function.hasCustomVariableStorage()) {
+      updateType = FunctionUpdateType.CUSTOM_STORAGE;
+      for (Parameter existing : currentParameters) {
+        parameters.add(existing);
+      }
+      parameters.add(insertOrdinal, parameter);
+    } else {
+      updateType = FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS;
+      for (int index = autoCount; index < currentParameters.length; index++) {
+        Parameter existing = currentParameters[index];
+        if (!existing.isAutoParameter()) {
+          parameters.add(existing);
+        }
+      }
+      parameters.add(insertOrdinal - autoCount, parameter);
+    }
+
     context.runCommand(
-        new AddParameterCommand(function, parameter, insertOrdinal, SourceType.USER_DEFINED),
+        new UpdateFunctionCommand(
+            function, updateType, null, null, parameters, SourceType.USER_DEFINED, false),
         "unable to add parameter");
 
     Function updated = FunctionMutationSupport.refreshFunction(context, function, "add parameter");

@@ -65,7 +65,7 @@ final class SymbolMethods implements ApiMethodProvider {
               .symbolService()
               .listSymbols(
                   new SymbolService.SymbolQuery(
-                      addressScan(request, null, null),
+                      addressScan(request),
                       optionalText(filter, ApiVocabulary.NAME),
                       optionalText(filter, ApiVocabulary.ADDRESS),
                       optionalText(filter, ApiVocabulary.TYPE),
