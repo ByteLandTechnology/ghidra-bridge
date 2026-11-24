@@ -75,14 +75,18 @@ final class StringFilterMatcher {
   }
 
   boolean matches(StringResource candidate, LongSupplier nanoTime, long deadlineNanos) {
+    return matches(candidate.value(), candidate.encoding(), nanoTime, deadlineNanos);
+  }
+
+  boolean matches(String rawValue, String candidateEncoding, LongSupplier nanoTime, long deadlineNanos) {
     if (nanoTime.getAsLong() >= deadlineNanos) {
       throw new RegexTimeoutException();
     }
-    String value = candidate.value() == null ? "" : candidate.value();
+    String value = rawValue == null ? "" : rawValue;
     if (explicitMinLength != null && value.length() < explicitMinLength) {
       return false;
     }
-    if (normalizedEncoding != null && !encodingMatches(candidate.encoding(), normalizedEncoding)) {
+    if (normalizedEncoding != null && !encodingMatches(candidateEncoding, normalizedEncoding)) {
       return false;
     }
     if (normalizedQuery != null) {
