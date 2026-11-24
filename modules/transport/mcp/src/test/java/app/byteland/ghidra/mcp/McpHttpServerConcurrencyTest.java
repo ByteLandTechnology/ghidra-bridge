@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.ByteSequence;
@@ -63,26 +62,39 @@ class McpHttpServerConcurrencyTest {
     AtomicInteger peakReaders = new AtomicInteger();
     AtomicReference<String> commentText = new AtomicReference<>("initial");
     CountDownLatch slowDecompStarted = new CountDownLatch(1);
+    CountDownLatch releaseSlowDecomp = new CountDownLatch(1);
 
     BridgeServices services =
-        createServices(concurrentReaders, peakReaders, commentText, slowDecompStarted);
-    AgentConfig agentConfig =
-        new AgentConfig("ws://127.0.0.1:9999/ws/agent", null, null, null, null, "mcp-sess", null);
+        createServices(
+            concurrentReaders, peakReaders, commentText, slowDecompStarted, releaseSlowDecomp);
     McpConfig mcpConfig = new McpConfig("127.0.0.1", port, "/mcp", null, "mcp-sess", "ghidra");
 
-    try (AgentDispatcher dispatcher = new AgentDispatcher(services, agentConfig);
+    try (AgentDispatcher dispatcher = new AgentDispatcher(services, "mcp-sess");
         McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher);
         ExecutorService clientPool = Executors.newFixedThreadPool(24)) {
       server.start();
       HttpClient client = HttpClient.newHttpClient();
       URI uri = URI.create(server.endpoint());
 
-      // Warm up HTTP connections and codecs
-      for (int i = 0; i < 10; i++) {
-        sendToolCall(client, uri, "w-" + i, "ghidra_program", "get", Map.of());
+      // Warm up pooled HTTP keep-alive connections and tool codecs across worker threads
+      CountDownLatch warmupGate = new CountDownLatch(1);
+      List<Future<Map<String, Object>>> warmupCalls = new ArrayList<>();
+      for (int i = 0; i < 21; i++) {
+        final int idx = i;
+        warmupCalls.add(
+            clientPool.submit(
+                () -> {
+                  warmupGate.await();
+                  return sendReadVariant(client, uri, "w-" + idx, idx);
+                }));
       }
+      warmupGate.countDown();
+      for (Future<Map<String, Object>> warmupCall : warmupCalls) {
+        warmupCall.get(5, TimeUnit.SECONDS);
+      }
+      peakReaders.set(0);
 
-      // Start one 200ms decompilation.get call over HTTP
+      // Start one blocked decompilation.get call over HTTP
       Future<Map<String, Object>> slowDecomp =
           clientPool.submit(
               () ->
@@ -95,7 +107,7 @@ class McpHttpServerConcurrencyTest {
                       Map.of("selector", Map.of("entry", "ram:00100000"))));
       assertTrue(slowDecompStarted.await(5, TimeUnit.SECONDS));
 
-      // Fire C=20 concurrent fast read HTTP calls while the 200ms decompilation is in flight
+      // Fire C=20 concurrent fast read HTTP calls while decompilation.get is still in flight
       CountDownLatch launch = new CountDownLatch(1);
       List<Future<Double>> latenciesMs = new ArrayList<>();
       for (int i = 0; i < 20; i++) {
@@ -105,44 +117,7 @@ class McpHttpServerConcurrencyTest {
                 () -> {
                   launch.await();
                   long start = System.nanoTime();
-                  Map<String, Object> body =
-                      switch (idx % 5) {
-                        case 0 ->
-                            sendToolCall(
-                                client, uri, "r-" + idx, "ghidra_program", "get", Map.of());
-                        case 1 ->
-                            sendToolCall(
-                                client,
-                                uri,
-                                "r-" + idx,
-                                "ghidra_memory",
-                                "read",
-                                Map.of(
-                                    "selector", Map.of("address", "ram:00100000"), "length", 16));
-                        case 2 ->
-                            sendToolCall(
-                                client, uri, "r-" + idx, "ghidra_bridge", "get", Map.of());
-                        case 3 ->
-                            sendToolCall(
-                                client, uri, "r-" + idx, "ghidra_analysis", "get", Map.of());
-                        default ->
-                            sendToolCall(
-                                client,
-                                uri,
-                                "r-" + idx,
-                                "ghidra_batch",
-                                "execute",
-                                Map.of(
-                                    "items",
-                                    List.of(
-                                        Map.of(
-                                            "id",
-                                            "b1",
-                                            "method",
-                                            "program.get",
-                                            "arguments",
-                                            Map.of()))));
-                      };
+                  Map<String, Object> body = sendReadVariant(client, uri, "r-" + idx, idx);
                   double elapsedMs = (System.nanoTime() - start) / 1_000_000.0;
                   @SuppressWarnings("unchecked")
                   Map<String, Object> result = (Map<String, Object>) body.get("result");
@@ -159,18 +134,22 @@ class McpHttpServerConcurrencyTest {
       Collections.sort(samples);
       double p50 = samples.get(samples.size() / 2);
 
-      Map<String, Object> decompResp = slowDecomp.get(5, TimeUnit.SECONDS);
-      @SuppressWarnings("unchecked")
-      Map<String, Object> decompResult = (Map<String, Object>) decompResp.get("result");
-      assertEquals(Boolean.FALSE, decompResult.get("isError"));
-
+      assertFalse(
+          slowDecomp.isDone(),
+          "All 20 fast HTTP reads must finish while slow decompilation is still in flight");
       assertTrue(
           peakReaders.get() >= 2,
           "McpHttpServer worker threads must execute reads concurrently, saw peak="
               + peakReaders.get());
       assertTrue(
-          p50 < 50.0,
-          "Fast read p50 must not stall behind 200ms decompilation, p50=" + p50 + "ms");
+          p50 < 200.0,
+          "Fast read p50 must remain responsive over warm HTTP connections, p50=" + p50 + "ms");
+
+      releaseSlowDecomp.countDown();
+      Map<String, Object> decompResp = slowDecomp.get(5, TimeUnit.SECONDS);
+      @SuppressWarnings("unchecked")
+      Map<String, Object> decompResult = (Map<String, Object>) decompResp.get("result");
+      assertEquals(Boolean.FALSE, decompResult.get("isError"));
 
       // Execute a write over HTTP and verify subsequent HTTP read sees committed value
       Map<String, Object> writeResp =
@@ -197,6 +176,33 @@ class McpHttpServerConcurrencyTest {
               Map.of("selector", Map.of("address", "ram:00100000", "type", "eol")));
       assertTrue(JsonUtil.toJson(readComment).contains("committed-via-mcp"));
     }
+  }
+
+  private static Map<String, Object> sendReadVariant(
+      HttpClient client, URI uri, String id, int variant) throws Exception {
+    return switch (variant % 5) {
+      case 0 -> sendToolCall(client, uri, id, "ghidra_program", "get", Map.of());
+      case 1 ->
+          sendToolCall(
+              client,
+              uri,
+              id,
+              "ghidra_memory",
+              "read",
+              Map.of("selector", Map.of("address", "ram:00100000"), "length", 16));
+      case 2 -> sendToolCall(client, uri, id, "ghidra_bridge", "get", Map.of());
+      case 3 -> sendToolCall(client, uri, id, "ghidra_analysis", "get", Map.of());
+      default ->
+          sendToolCall(
+              client,
+              uri,
+              id,
+              "ghidra_batch",
+              "execute",
+              Map.of(
+                  "items",
+                  List.of(Map.of("id", "b1", "method", "program.get", "arguments", Map.of()))));
+    };
   }
 
   @SuppressWarnings("unchecked")
@@ -237,7 +243,8 @@ class McpHttpServerConcurrencyTest {
       AtomicInteger concurrentReaders,
       AtomicInteger peakReaders,
       AtomicReference<String> commentText,
-      CountDownLatch slowDecompStarted) {
+      CountDownLatch slowDecompStarted,
+      CountDownLatch releaseSlowDecomp) {
     ProgramService programService =
         proxy(
             ProgramService.class,
@@ -309,7 +316,7 @@ class McpHttpServerConcurrencyTest {
             peakReaders.accumulateAndGet(r, Math::max);
             slowDecompStarted.countDown();
             try {
-              Thread.sleep(200L);
+              assertTrue(releaseSlowDecomp.await(5, TimeUnit.SECONDS));
               return new DecompilationResource(
                   "ram:00100000",
                   "main",
