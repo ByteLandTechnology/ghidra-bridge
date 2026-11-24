@@ -14,10 +14,7 @@ final class DataTypeMutationSupport {
   static DataType resolveFieldDataType(
       DataTypeReference reference, Function<DataTypeReference, DataType> resolver) {
     DataTypeReference selected = reference == null ? DataTypeReference.named("byte") : reference;
-    DataType dataType = resolver.apply(selected);
-    if (dataType == null) throw new IllegalArgumentException("unknown data type: " + selected);
-    requireCompositeValueType(dataType, "data_type");
-    return dataType;
+    return requireDataType(resolver, selected);
   }
 
   static DataType requireDataType(
