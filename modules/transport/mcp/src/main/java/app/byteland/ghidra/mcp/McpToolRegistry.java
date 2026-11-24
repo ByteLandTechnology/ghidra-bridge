@@ -75,9 +75,12 @@ final class McpToolRegistry {
 
     String purpose = "listing".equals(domain)
         ? "for code units, data units, instructions, and flow overrides" : "for " + domain + " data";
-    boolean readOnlyHint = operations.values().stream().allMatch(MethodDescriptor::readOnly);
-    boolean destructiveHint = operations.values().stream().anyMatch(MethodDescriptor::destructive);
-    boolean idempotentHint = operations.values().stream().allMatch(MethodDescriptor::idempotent);
+    boolean readOnlyHint =
+        operations.values().stream().allMatch(op -> effectFlag(op, "read_only"));
+    boolean destructiveHint =
+        operations.values().stream().anyMatch(op -> effectFlag(op, "destructive"));
+    boolean idempotentHint =
+        operations.values().stream().allMatch(op -> effectFlag(op, "idempotent"));
     return Map.of("name", toolName(domain),
         "description", "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
@@ -127,7 +130,7 @@ final class McpToolRegistry {
     return Map.of("domain", toolName(domain), "operation", operationValue,
         "method", descriptor.name(), "description", descriptor.description(),
         "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
-        "effects", descriptor.effects());
+        "effects", effectsOf(descriptor));
   }
 
   private static Map<String, Object> domainOperationHelp(
@@ -136,9 +139,18 @@ final class McpToolRegistry {
     info.put("name", operationName);
     info.put("method", descriptor.name());
     info.put("description", descriptor.description());
-    info.put("effects", descriptor.effects());
+    info.put("effects", effectsOf(descriptor));
     info.put("inputSchema", descriptor.inputSchema());
     return Map.copyOf(info);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> effectsOf(MethodDescriptor descriptor) {
+    return (Map<String, Object>) descriptor.contractValue().get("effects");
+  }
+
+  private static boolean effectFlag(MethodDescriptor descriptor, String key) {
+    return Boolean.TRUE.equals(effectsOf(descriptor).get(key));
   }
 
   boolean isHelpTool(String name) {

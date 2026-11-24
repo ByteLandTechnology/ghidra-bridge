@@ -174,6 +174,7 @@ Run the full verification suite before you commit changes:
 ```
 
 The `verify` task checks:
+- JUnit tests across all Java modules.
 - Architecture boundary rules.
 - Generated API contract drift.
 - MCP tool documentation consistency.

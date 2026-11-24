@@ -174,6 +174,7 @@ MCP は Streamable HTTP と SSE を介して、`interface.get` を除く同じ�
 ```
 
 `verify` タスクは以下を厳格に検査します:
+- 全 Java モジュールの JUnit テスト。
 - アーキテクチャ分離ルールの遵守。
 - 生成された API コントラクトとの差分チェック。
 - MCP ツールドキュメントの整合性。
