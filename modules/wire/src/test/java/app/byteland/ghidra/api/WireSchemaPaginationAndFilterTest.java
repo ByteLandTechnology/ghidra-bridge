@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.ByteSequence;
 import app.byteland.ghidra.service.Page;
@@ -23,6 +24,9 @@ import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.function.VariableStorageReference;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
+import app.byteland.ghidra.service.listing.FlowOverrideScope;
+import app.byteland.ghidra.service.listing.FlowOverrideValue;
+import app.byteland.ghidra.service.listing.InstructionResource;
 import app.byteland.ghidra.service.listing.ListingService;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
@@ -452,40 +456,98 @@ class WireSchemaPaginationAndFilterTest {
   }
 
   @Test
-  void flowOverrideListRejectsEmptyFilterWithBadRequestInDirectAndBatchCalls() {
-    ApiRegistry registry = registryWith(unused(MemoryService.class), unused(FunctionService.class),
-        unused(DataTypeService.class), unused(SymbolService.class), unused(ReferenceService.class));
+  void flowOverrideListRequiresSelectorAndDispatchesScopedFilter() throws Exception {
+    ListingService listing =
+        proxy(
+            ListingService.class,
+            (method, args) -> {
+              assertEquals("getFlowOverrides", method);
+              assertEquals(new FlowOverrideScope.AddressScope("ram:00100000"), args[0]);
+              assertEquals(
+                  new AddressScanOptions(null, null, AddressScanOptions.DEFAULT_TIMEOUT_MS),
+                  args[2]);
+              InstructionResource item =
+                  new InstructionResource(
+                      "ram:00100000",
+                      5,
+                      new ByteSequence(ByteSequence.Encoding.HEX, "e800000000", 5),
+                      "CALL",
+                      List.of("0x00100005"),
+                      FlowOverrideValue.CALL_RETURN,
+                      "UNCONDITIONAL_CALL",
+                      "CALL_TERMINATOR",
+                      null);
+              return Page.scanned(
+                  List.of(item),
+                  100,
+                  null,
+                  new ScanProgress(
+                      ScanProgress.Kind.ADDRESS,
+                      "ram:00100000",
+                      "ram:00100000",
+                      "ram:00100000",
+                      "ram:00100000",
+                      true,
+                      ScanProgress.StopReason.COMPLETED,
+                      1L));
+            });
+    ApiRegistry registry =
+        registryWith(
+            unused(MemoryService.class),
+            unused(FunctionService.class),
+            unused(DataTypeService.class),
+            unused(SymbolService.class),
+            unused(ReferenceService.class),
+            listing);
 
-    ApiException direct =
-        assertThrows(
-            ApiException.class,
-            () -> registry.dispatch("flow_override.list", Map.of("filter", Map.of())));
-    assertEquals(400, direct.status());
-    assertEquals("missing_field", direct.error().code());
-    assertEquals("/filter/selector", direct.error().target());
+    for (Map<String, Object> invalidFilter :
+        List.<Map<String, Object>>of(
+            Map.of(), Map.of("flow_overrides", List.of("call_return")))) {
+      ApiException direct =
+          assertThrows(
+              ApiException.class,
+              () -> registry.dispatch("flow_override.list", Map.of("filter", invalidFilter)));
+      assertEquals(400, direct.status());
+      assertEquals("missing_field", direct.error().code());
+      assertEquals("/filter/selector", direct.error().target());
 
-    ApiException batch =
-        assertThrows(
-            ApiException.class,
-            () ->
-                registry.dispatch(
-                    "batch.execute",
-                    Map.of(
-                        "items",
-                        List.of(
-                            Map.of(
-                                "id", "item-1",
-                                "method", "flow_override.list",
-                                "arguments", Map.of("filter", Map.of()))))));
-    assertEquals(400, batch.status());
-    assertEquals("validation_failed", batch.error().code());
-    assertEquals("/items", batch.error().target());
+      ApiException batch =
+          assertThrows(
+              ApiException.class,
+              () ->
+                  registry.dispatch(
+                      "batch.execute",
+                      Map.of(
+                          "items",
+                          List.of(
+                              Map.of(
+                                  "id", "item-1",
+                                  "method", "flow_override.list",
+                                  "arguments", Map.of("filter", invalidFilter))))));
+      assertEquals(400, batch.status());
+      assertEquals("validation_failed", batch.error().code());
+      assertEquals("/items", batch.error().target());
+      @SuppressWarnings("unchecked")
+      List<Map<String, Object>> violations =
+          (List<Map<String, Object>>) batch.error().details().get("violations");
+      assertEquals(1, violations.size());
+      assertEquals("/items/0/arguments/filter/selector", violations.getFirst().get("target"));
+      assertEquals("missing_field", violations.getFirst().get("code"));
+    }
+
     @SuppressWarnings("unchecked")
-    List<Map<String, Object>> violations =
-        (List<Map<String, Object>>) batch.error().details().get("violations");
-    assertEquals(1, violations.size());
-    assertEquals("/items/0/arguments/filter/selector", violations.getFirst().get("target"));
-    assertEquals("missing_field", violations.getFirst().get("code"));
+    Map<String, Object> validResult =
+        (Map<String, Object>)
+            registry.dispatch(
+                "flow_override.list",
+                Map.of(
+                    "filter",
+                    Map.of("selector", Map.of("kind", "address", "address", "ram:00100000"))));
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> items = (List<Map<String, Object>>) validResult.get("items");
+    assertEquals(1, items.size());
+    assertEquals("ram:00100000", items.getFirst().get("address"));
+    assertEquals("call_return", items.getFirst().get("flow_override"));
 
     ApiException missingKind =
         assertThrows(ApiException.class, () -> ApiRegistry.flowScope(Map.of()));
@@ -514,6 +576,17 @@ class WireSchemaPaginationAndFilterTest {
       DataTypeService dataTypes,
       SymbolService symbols,
       ReferenceService references) {
+    return registryWith(
+        memory, functions, dataTypes, symbols, references, unused(ListingService.class));
+  }
+
+  private static ApiRegistry registryWith(
+      MemoryService memory,
+      FunctionService functions,
+      DataTypeService dataTypes,
+      SymbolService symbols,
+      ReferenceService references,
+      ListingService listing) {
     AnalysisService analysis =
         proxy(
             AnalysisService.class,
@@ -544,7 +617,7 @@ class WireSchemaPaginationAndFilterTest {
             unused(CommentService.class),
             references,
             memory,
-            unused(ListingService.class),
+            listing,
             functions,
             unused(GlobalVariableService.class),
             analysis,
