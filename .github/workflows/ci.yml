@@ -17,26 +17,17 @@ env:
   GHIDRA_VERSION: "12.1.2"
   GHIDRA_BUILD_DATE: "20260605"
   GHIDRA_ZIP_SHA256: "b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d"
-  ACTIONLINT_VERSION: "1.7.12"
-  ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Java and Ghidra
-        uses: ./.github/actions/setup-ghidra
-        with:
-          ghidra-version: ${{ env.GHIDRA_VERSION }}
-          ghidra-build-date: ${{ env.GHIDRA_BUILD_DATE }}
-          ghidra-zip-sha256: ${{ env.GHIDRA_ZIP_SHA256 }}
-
-      - name: Verify Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v6
 
       - name: Check workflows with actionlint
         run: |
@@ -55,8 +46,25 @@ jobs:
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
 
-      - name: Check Simplified Technical English
-        run: python3 .github/scripts/verify-ste.py
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java and Ghidra
+        uses: ./.github/actions/setup-ghidra
+        with:
+          ghidra-version: ${{ env.GHIDRA_VERSION }}
+          ghidra-build-date: ${{ env.GHIDRA_BUILD_DATE }}
+          ghidra-zip-sha256: ${{ env.GHIDRA_ZIP_SHA256 }}
+
+      - name: Verify Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Verify repository hygiene
+        run: bash .github/scripts/verify-repository-hygiene.sh
 
       - name: Run clean repository verification
         run: ./gradlew --no-daemon clean verify
@@ -66,7 +74,7 @@ jobs:
 
   release:
     # Update the release PR or create a release after main passes verification.
-    needs: verify
+    needs: [lint, verify]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10

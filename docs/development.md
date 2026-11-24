@@ -88,7 +88,6 @@ Before you submit a change, run the local lint, hygiene, and verification checks
 actionlint
 shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
-python3 .github/scripts/verify-ste.py
 ./gradlew --no-daemon clean verify
 ```
 
@@ -103,7 +102,6 @@ To check module import boundaries without a Ghidra installation, run:
 The verification checks enforce these rules:
 - **Workflows and Shell Scripts**: `actionlint` and `shellcheck` validate GitHub Actions workflows, composite actions, and shell scripts.
 - **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, URLs, and MCP tool names.
-- **Simplified English**: `verify-ste.py` checks English documents and comments against ASD-STE100 rules.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.

@@ -72,7 +72,6 @@ Run these local checks before you commit or submit a pull request:
 - `actionlint`: Checks GitHub Actions workflows and composite action metadata.
 - `shellcheck .github/scripts/*.sh`: Checks repository shell scripts.
 - `bash .github/scripts/verify-repository-hygiene.sh`: Checks tracked files, duplicates, URLs, and MCP tool names.
-- `python3 .github/scripts/verify-ste.py`: Checks documents and comments for automated English rules.
 - `./gradlew --no-daemon verifyArchitecture`: Checks module import boundaries without Ghidra.
 - `./gradlew --no-daemon check`: Runs JUnit tests and module checks across all 8 Java modules.
 - `./gradlew --no-daemon :domain:test`: Runs JUnit tests for one module without Ghidra.

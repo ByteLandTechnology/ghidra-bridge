@@ -173,7 +173,7 @@ class FunctionListQueriesTest {
       assertTrue(page3.scanProgress().complete());
       assertNull(page3.nextCursor());
 
-      // 2. Name filter (case-insensitive text match)
+      // 2. Name filter (case-insensitive substring)
       Page<FunctionResource> byName =
           service.listFunctions(
               new FunctionQuery(
@@ -296,7 +296,7 @@ class FunctionListQueriesTest {
       assertEquals(externalCanonicalRef.get(), externalFilteredOut.scanProgress().scannedStart());
       assertTrue(externalFilteredOut.scanProgress().complete());
 
-      // A scan strictly after the external cursor does not emit the external function again
+      // Resuming strictly after external cursor does not re-emit the external function
       Page<FunctionResource> afterExternal =
           service.listFunctions(
               new FunctionQuery(

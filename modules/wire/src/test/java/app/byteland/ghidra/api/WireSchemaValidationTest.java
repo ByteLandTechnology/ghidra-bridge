@@ -57,7 +57,7 @@ class WireSchemaValidationTest {
     assertEquals("/value must match exactly one schema", multipleWithoutFailure.error().message());
     assertEquals("/value", multipleWithoutFailure.error().target());
 
-    // Multiple branches match and the final branch fails: reports that failed branch.
+    // Multiple branches match with a trailing failing branch: reports that failing branch.
     Map<String, Object> overlappingWithTrailingFailure =
         WireSchema.oneOf(
             WireSchema.string(),
@@ -228,7 +228,7 @@ class WireSchemaValidationTest {
         "/params/a~1b~0c/0/val~01~1leaf must be in 1..10", valueFailure.error().message());
     assertEquals("/params/a~1b~0c/0/val~01~1leaf", valueFailure.error().target());
 
-    // Required field error keeps the raw leaf name and escapes parent segments.
+    // Missing required field keeps raw field name on leaf while escaping ancestor segments.
     ApiException missingFailure =
         assertThrows(
             ApiException.class,
@@ -240,7 +240,7 @@ class WireSchemaValidationTest {
         "/params/a~1b~0c/0/raw/required~field is required", missingFailure.error().message());
     assertEquals("/params/a~1b~0c/0/raw/required~field", missingFailure.error().target());
 
-    // Unknown field error keeps the raw leaf name and escapes parent segments.
+    // Unknown field keeps raw field name on leaf while escaping ancestor segments.
     ApiException unknownFailure =
         assertThrows(
             ApiException.class,
@@ -299,7 +299,7 @@ class WireSchemaValidationTest {
     assertEquals("invalid_value", nanFailure.error().code());
     assertEquals("/progress must be finite", nanFailure.error().message());
 
-    // Object keys that are not strings, and property count bounds.
+    // Object non-string keys and property count bounds.
     Map<Object, Object> nonStringKeyMap = new LinkedHashMap<>();
     nonStringKeyMap.put(123, "bad");
     ApiException invalidField =

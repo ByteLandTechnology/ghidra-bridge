@@ -88,7 +88,7 @@ if [[ "${#hygiene_scan_files[@]}" -gt 0 ]]; then
       | map(.name | capture("^ghidra_(?<domain>[a-z][a-z0-9_]*)$").domain)
       | unique
       | join("|")
-    ' docs/mcp-tools.json
+    ' docs/mcp-tools.json | tr -d '\r'
   )"
   retired_urls="$(grep_nomatch_ok -IlE '[b]yteland-app' "${hygiene_scan_files[@]}")"
   [[ -z "$retired_urls" ]] || fail "retired organization URLs remain" "$retired_urls"
@@ -136,7 +136,7 @@ duplicate_files="$(
 [[ -z "$duplicate_files" ]] || fail "exact duplicate files are candidates for commit" "$duplicate_files"
 
 backtick=$'\140'
-method_count="$(grep_nomatch_ok -Ec "^\\| ${backtick}[^${backtick}]+${backtick} \\|" docs/api.md)"
+method_count="$(grep_nomatch_ok -Ec "^\\| ${backtick}[^${backtick}]+${backtick} \\|" docs/api.md | tr -d '\r')"
 [[ "$method_count" == "56" ]] || fail "docs/api.md documents $method_count methods; expected 56"
 
 echo "repository hygiene check passed"

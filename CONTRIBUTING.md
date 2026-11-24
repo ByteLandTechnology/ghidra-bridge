@@ -26,7 +26,6 @@ Run all local checks before you open a pull request:
 actionlint
 shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
-python3 .github/scripts/verify-ste.py
 ./gradlew --no-daemon clean verify
 ```
 

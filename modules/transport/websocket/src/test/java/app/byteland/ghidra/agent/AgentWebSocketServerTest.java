@@ -66,7 +66,7 @@ class AgentWebSocketServerTest {
           unauthOut.write('x');
           unauthOut.flush();
         }
-        // Valid Bearer-authenticated client must receive HTTP 101, not 409 Conflict.
+        // Valid Bearer-authenticated client must receive HTTP/1.1 101 Switching Protocols, not 409 Conflict.
         WebSocket ws =
             httpClient
                 .newWebSocketBuilder()
@@ -327,7 +327,7 @@ class AgentWebSocketServerTest {
         TestWebSocketListener listener = new TestWebSocketListener();
         pending1.close();
 
-        // Retry briefly if slot release races on the connection thread.
+        // Retry briefly if the freed pending slot cleanup races on the connection thread.
         WebSocket ws = connectWithSlotReleaseRetry(httpClient, port, listener);
         assertNotNull(ws);
         assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS));

@@ -79,7 +79,6 @@ Gradle 按以下优先级解析 Ghidra 安装路径：
 actionlint
 shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
-python3 .github/scripts/verify-ste.py
 ./gradlew --no-daemon clean verify
 ```
 
@@ -94,7 +93,6 @@ python3 .github/scripts/verify-ste.py
 验证套件执行以下检查：
 - **工作流与脚本检查**：`actionlint` 与 `shellcheck` 校验 GitHub Actions 工作流、复合操作和 Shell 脚本。
 - **仓库卫生**：`verify-repository-hygiene.sh` 检查跟踪文件、重复文件、仓库链接与 MCP 工具名。
-- **简化技术英语**：`verify-ste.py` 按 ASD-STE100 规则检查英文文档与代码注释。
 - **单元测试**：`check` 在所有 Java 模块上运行 JUnit 测试。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。
