@@ -17,6 +17,8 @@ env:
   GHIDRA_VERSION: "12.1.2"
   GHIDRA_BUILD_DATE: "20260605"
   GHIDRA_ZIP_SHA256: "b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d"
+  ACTIONLINT_VERSION: "1.7.12"
+  ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 
 jobs:
   verify:
@@ -36,8 +38,25 @@ jobs:
       - name: Verify Gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
 
+      - name: Check workflows with actionlint
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          curl -sL --fail -o "$RUNNER_TEMP/actionlint/${archive}" "$url"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint/${archive}" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint/${archive}" -C "$RUNNER_TEMP/actionlint" actionlint
+          "$RUNNER_TEMP/actionlint/actionlint"
+
+      - name: Check shell scripts with ShellCheck
+        run: shellcheck .github/scripts/*.sh
+
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
+
+      - name: Check Simplified Technical English
+        run: python3 .github/scripts/verify-ste.py
 
       - name: Run clean repository verification
         run: ./gradlew --no-daemon clean verify

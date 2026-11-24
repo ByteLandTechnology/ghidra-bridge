@@ -73,14 +73,26 @@ Ghidra の内部データ構造を型付けされたドメインレコードに�
 
 ## 品質チェック
 
-変更をコミットする前に、必ず検証スイートを実行してください:
+変更をコミットする前に、ローカルのリンター・衛生チェックおよび検証スイートを実行してください:
 
 ```bash
-./gradlew --no-daemon clean verify
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
+python3 .github/scripts/verify-ste.py
+./gradlew --no-daemon clean verify
+```
+
+Ghidra をインストールしていない環境でモジュールのインポート境界のみを確認するには、次を実行します:
+
+```bash
+./gradlew --no-daemon verifyArchitecture
 ```
 
 検証タスクは以下を厳格に検査します:
+- **ワークフローとシェルスクリプト**: `actionlint` と `shellcheck` が GitHub Actions ワークフロー、複合アクション、シェルスクリプトを検証します。
+- **リポジトリ衛生**: `verify-repository-hygiene.sh` が追跡ファイル、重複ファイル、URL、MCP ツール名を検証します。
+- **Simplified Technical English**: `verify-ste.py` が英語ドキュメントとコメントを ASD-STE100 規則に照らして検査します。
 - **アーキテクチャ境界**: `verifyArchitecture` により、adapter と launcher 以外での Ghidra クラスのインポートが禁止されます。
 - **規約ドリフト検出**: `verifyApiContracts` により、ドキュメント規約とコードの一致が確認されます。
 - **スクリプトコンパイル**: `compileGeneratedScripts` により、生成された起動スクリプトが正常にコンパイルできることを確認します。

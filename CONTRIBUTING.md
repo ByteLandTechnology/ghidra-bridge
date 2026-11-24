@@ -20,7 +20,17 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 ## Submit a change
 
-Run `./gradlew --no-daemon clean verify`. State the behavior change and its effect on users in the pull request.
+Run all local checks before you open a pull request:
+
+```bash
+actionlint
+shellcheck .github/scripts/*.sh
+bash .github/scripts/verify-repository-hygiene.sh
+python3 .github/scripts/verify-ste.py
+./gradlew --no-daemon clean verify
+```
+
+Read [AGENTS.md](AGENTS.md) for the English, module, and commit rules. State the behavior change and its effect on users in the pull request.
 
 Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
 
