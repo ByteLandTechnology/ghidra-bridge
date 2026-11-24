@@ -21,20 +21,21 @@ public final class AgentDispatcher implements AutoCloseable {
   private volatile boolean shuttingDown;
 
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
-    this(services, Objects.requireNonNull(config, "config").sessionId());
+    this(
+        Objects.requireNonNull(services, "services"),
+        Objects.requireNonNull(config, "config").sessionId());
   }
 
   public AgentDispatcher(BridgeServices services, String sessionId) {
-    Objects.requireNonNull(services, "services");
+    this.services = Objects.requireNonNull(services, "services");
     String normalizedSessionId = AgentConfig.optionalText(sessionId);
     if (normalizedSessionId == null) {
-      throw new IllegalArgumentException("session_id is required");
+      throw new IllegalArgumentException("sessionId is required");
     }
     this.sessionId = normalizedSessionId;
-    this.services = services;
     this.programName = services.programName();
     this.apiRegistry =
-        new ApiRegistry(services, normalizedSessionId, this::sessionInfo, this::markShuttingDown);
+        new ApiRegistry(services, this.sessionId, this::sessionInfo, this::markShuttingDown);
   }
 
   @Override
