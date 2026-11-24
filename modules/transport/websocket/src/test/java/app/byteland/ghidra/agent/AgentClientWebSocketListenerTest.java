@@ -331,7 +331,10 @@ class AgentClientWebSocketListenerTest {
           InputStream in = peerSocket.getInputStream();
           OutputStream out = peerSocket.getOutputStream();
 
-          WebSocketHandshake.HandshakeRequest handshake = WebSocketHandshake.readHandshake(in);
+          WebSocketHandshake.HandshakeRequest handshake =
+              WebSocketHandshake.readHandshake(
+                  peerSocket, System.nanoTime() + TimeUnit.SECONDS.toNanos(10));
+          peerSocket.setSoTimeout(10_000);
           WebSocketHandshake.writeHandshakeResponse(out, handshake.acceptKey());
 
           WebSocketFrames.Frame readyFrame = WebSocketFrames.readFrame(in);
@@ -407,7 +410,10 @@ class AgentClientWebSocketListenerTest {
           InputStream in = peerSocket.getInputStream();
           OutputStream out = peerSocket.getOutputStream();
 
-          WebSocketHandshake.HandshakeRequest handshake = WebSocketHandshake.readHandshake(in);
+          WebSocketHandshake.HandshakeRequest handshake =
+              WebSocketHandshake.readHandshake(
+                  peerSocket, System.nanoTime() + TimeUnit.SECONDS.toNanos(10));
+          peerSocket.setSoTimeout(10_000);
           WebSocketHandshake.writeHandshakeResponse(out, handshake.acceptKey());
 
           WebSocketFrames.Frame readyFrame = WebSocketFrames.readFrame(in);

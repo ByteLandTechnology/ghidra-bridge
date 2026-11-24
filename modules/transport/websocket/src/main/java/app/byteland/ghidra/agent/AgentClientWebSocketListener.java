@@ -106,7 +106,6 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
     return pendingText.capacity();
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void closeAndDisconnect(WebSocket webSocket, int statusCode, String reason) {
     try {
       CompletableFuture<WebSocket> closeFuture = webSocket.sendClose(statusCode, reason);
@@ -124,7 +123,6 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
     }
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static void abortQuietly(WebSocket webSocket) {
     try {
       webSocket.abort();
