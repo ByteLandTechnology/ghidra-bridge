@@ -3,6 +3,13 @@
 These rules apply to all persons and agents that change this repository.
 CI checks compliance with these rules.
 
+## Environment
+
+- Use Java 21 (JDK 21).
+- Use Ghidra 12.1 or newer (CI uses Ghidra `12.1.2`).
+- Set `GHIDRA_INSTALL_DIR` to the local Ghidra installation directory, or pass `-PghidraInstallDir=/path/to/ghidra`.
+- Run `./gradlew` from the repository root instead of a system Gradle binary.
+
 ## English
 
 - Use ASD-STE100 Simplified Technical English for all English text.
@@ -10,11 +17,24 @@ CI checks compliance with these rules.
 
 ## Modules and contracts
 
+The build defines 8 Java modules under `modules/`:
+
+- `:domain` (`modules/domain`)
+- `:wire` (`modules/wire`)
+- `:contracts` (`modules/contracts`)
+- `:runtime` (`modules/runtime`)
+- `:adapter` (`modules/adapter`)
+- `:launcher` (`modules/launcher`)
+- `:transport:websocket` (`modules/transport/websocket`)
+- `:transport:mcp` (`modules/transport/mcp`)
+
+Obey these module and repository rules:
+
 - Keep Ghidra API imports in `modules/adapter` and `modules/launcher`.
 - Keep `ghidra-bridge.jar` free of third-party dependencies.
 - Run `./gradlew --no-daemon generateApiContracts` when you change a public method or schema.
 - Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand.
-- Do not commit files from a build directory.
+- Do not commit build directories, IDE files, generated scripts, zero-byte files, or duplicate files.
 
 ## Commit messages
 
@@ -54,5 +74,8 @@ Run these local checks before you commit or submit a pull request:
 - `bash .github/scripts/verify-repository-hygiene.sh`: Checks tracked files, duplicates, URLs, and MCP tool names.
 - `python3 .github/scripts/verify-ste.py`: Checks documents and comments for automated English rules.
 - `./gradlew --no-daemon verifyArchitecture`: Checks module import boundaries without Ghidra.
-- `./gradlew --no-daemon verify`: Verifies contracts, distribution files, generated scripts, and architecture rules.
+- `./gradlew --no-daemon check`: Runs JUnit tests and module checks across all 8 Java modules.
+- `./gradlew --no-daemon :domain:test`: Runs JUnit tests for one module without Ghidra.
+- `./gradlew --no-daemon verify`: Verifies module checks, contracts, distribution files, generated scripts, and architecture rules.
 - `./gradlew --no-daemon clean verify`: Runs the clean verification suite that CI executes.
+- `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`: Runs headless function mutation tests on Linux x86-64 after `buildGhidraScript` or `clean verify`.

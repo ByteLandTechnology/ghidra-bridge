@@ -83,6 +83,8 @@ python3 .github/scripts/verify-ste.py
 ./gradlew --no-daemon clean verify
 ```
 
+在 Linux x86-64 环境中，CI 还会在 `clean verify` 之后运行 `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`。
+
 如需在不安装 Ghidra 的环境中单独检查模块导入边界，请运行：
 
 ```bash
@@ -93,6 +95,7 @@ python3 .github/scripts/verify-ste.py
 - **工作流与脚本检查**：`actionlint` 与 `shellcheck` 校验 GitHub Actions 工作流、复合操作和 Shell 脚本。
 - **仓库卫生**：`verify-repository-hygiene.sh` 检查跟踪文件、重复文件、仓库链接与 MCP 工具名。
 - **简化技术英语**：`verify-ste.py` 按 ASD-STE100 规则检查英文文档与代码注释。
+- **单元测试**：`check` 在所有 Java 模块上运行 JUnit 测试。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。
 - **生成脚本编译**：`compileGeneratedScripts` 确保生成的启动脚本编译通过。

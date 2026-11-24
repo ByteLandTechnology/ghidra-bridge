@@ -92,6 +92,8 @@ python3 .github/scripts/verify-ste.py
 ./gradlew --no-daemon clean verify
 ```
 
+On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
+
 To check module import boundaries without a Ghidra installation, run:
 
 ```bash
@@ -102,6 +104,7 @@ The verification checks enforce these rules:
 - **Workflows and Shell Scripts**: `actionlint` and `shellcheck` validate GitHub Actions workflows, composite actions, and shell scripts.
 - **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, URLs, and MCP tool names.
 - **Simplified English**: `verify-ste.py` checks English documents and comments against ASD-STE100 rules.
+- **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
