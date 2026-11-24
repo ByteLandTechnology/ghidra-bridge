@@ -2,114 +2,210 @@ package app.byteland.ghidra.adapter.ghidra.reference;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
-import app.byteland.ghidra.adapter.ghidra.listing.ListingFlowOverrideScopes;
+import app.byteland.ghidra.adapter.ghidra.scan.AddressScanRanges;
+import app.byteland.ghidra.adapter.ghidra.scan.AddressScopeResolver;
 import app.byteland.ghidra.adapter.ghidra.scan.BoundedAddressScan;
 import app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
+import app.byteland.ghidra.service.ScanProgress;
+import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.reference.ReferenceResource;
-import app.byteland.ghidra.service.reference.ReferenceService.ReferenceQuery;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressIterator;
 import ghidra.program.model.address.AddressSet;
-import ghidra.program.model.address.AddressSetView;
+import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceManager;
-import java.util.Iterator;
-import java.util.List;
 
 final class ReferenceListQueries {
-  private static final String ANCHOR_EXHAUSTED_KEY = "\uffff";
+  private static final long NANOS_PER_MILLISECOND = 1_000_000L;
 
   private final GhidraSession context;
-  private final ListingFlowOverrideScopes scopes;
+  private final AddressScopeResolver scopes;
 
   ReferenceListQueries(GhidraSession context) {
+    this(context, new AddressScopeResolver(context));
+  }
+
+  ReferenceListQueries(GhidraSession context, AddressScopeResolver scopes) {
     this.context = context;
-    this.scopes = new ListingFlowOverrideScopes(context);
+    this.scopes = scopes;
   }
 
   Page<ReferenceResource> listReferences(
       String fromRaw, String toRaw, String type, String direction, int limit, String cursor) {
     return listReferences(
-        new ReferenceQuery(
-            null,
-            fromRaw,
-            toRaw,
-            type,
-            direction,
-            new AddressScanOptions(null, null, AddressScanOptions.DEFAULT_TIMEOUT_MS),
-            Page.clampLimit(limit),
-            cursor));
+        fromRaw,
+        toRaw,
+        type,
+        direction,
+        null,
+        new AddressScanOptions(null, null, AddressScanOptions.DEFAULT_TIMEOUT_MS),
+        limit,
+        cursor);
   }
 
-  Page<ReferenceResource> listReferences(ReferenceQuery query) {
-    int normalizedLimit = Page.clampLimit(query.limit());
+  Page<ReferenceResource> listReferences(
+      String fromRaw,
+      String toRaw,
+      String type,
+      String direction,
+      FlowOverrideScope scope,
+      AddressScanOptions options,
+      int limit,
+      String cursor) {
+    int normalizedLimit = Page.clampLimit(limit);
     String normalizedDirection =
-        ReferenceQuerySupport.normalizeDirection(query.direction(), query.from(), query.to());
-    boolean inbound = "to".equals(normalizedDirection);
+        ReferenceQuerySupport.normalizeDirection(direction, fromRaw, toRaw);
+    boolean incoming = "to".equals(normalizedDirection);
+    Address fromFilter =
+        fromRaw == null || fromRaw.isBlank() ? null : parseAddress(fromRaw);
+    Address toFilter = toRaw == null || toRaw.isBlank() ? null : parseAddress(toRaw);
+    Address primaryAnchor = incoming ? toFilter : fromFilter;
 
-    AddressSetView targetAddresses =
-        resolveTargetAddresses(query.selector(), inbound, query.from(), query.to());
-    String oppositeRaw = inbound ? query.from() : query.to();
-    Address oppositeFilter =
-        oppositeRaw == null || oppositeRaw.isBlank() ? null : parseAddress(oppositeRaw);
-    CursorPosition cursorPosition = parseCursor(query.cursor(), targetAddresses);
-
-    if (targetAddresses.isEmpty()) {
-      return BoundedAddressScan.<ReferenceResource>start(
-              normalizedLimit, query.scan().timeoutMs(), null, null)
-          .finish();
+    if (scope == null
+        && options.start() == null
+        && options.end() == null
+        && primaryAnchor != null) {
+      return listSingleAnchor(
+          primaryAnchor, incoming, fromFilter, toFilter, type, normalizedLimit, cursor);
     }
+    return listScopedOrRange(
+        incoming, fromFilter, toFilter, type, scope, options, normalizedLimit, cursor);
+  }
 
-    String requestedStart = AddressUtil.canonicalAddress(targetAddresses.getMinAddress());
-    String requestedEnd = AddressUtil.canonicalAddress(targetAddresses.getMaxAddress());
+  private Page<ReferenceResource> listSingleAnchor(
+      Address anchor,
+      boolean incoming,
+      Address fromFilter,
+      Address toFilter,
+      String type,
+      int limit,
+      String cursor) {
+    long startedNanos = System.nanoTime();
+    String canonicalAnchor = AddressUtil.canonicalAddress(anchor);
+    Page.Selector<Reference> selector = Page.selector(limit, cursor);
+    boolean visitedAny = false;
+    for (Reference reference : context.references(anchor, incoming)) {
+      visitedAny = true;
+      if (!ReferenceQuerySupport.matchesType(type, reference)
+          || !matchesEndpoint(fromFilter, reference.getFromAddress())
+          || !matchesEndpoint(toFilter, reference.getToAddress())) {
+        continue;
+      }
+      String encoded =
+          ReferenceDescriptions.referenceKey(reference, anchor, canonicalAnchor).encoded();
+      selector.offer(encoded, reference);
+    }
+    FunctionManager functionManager =
+        selector.retainedCount() == 0 ? null : context.currentProgram().getFunctionManager();
+    AddressResource.FunctionSummary anchorFunction =
+        ReferenceDescriptions.functionSummary(functionManager, anchor);
+    Page<ReferenceResource> selected =
+        selector.finish(
+            reference ->
+                ReferenceDescriptions.describe(
+                    reference, functionManager, anchor, canonicalAnchor, anchorFunction));
+    long elapsedMs = Math.max(0L, (System.nanoTime() - startedNanos) / NANOS_PER_MILLISECOND);
+    boolean complete = selected.nextCursor() == null;
+    String scannedBound = visitedAny ? canonicalAnchor : null;
+    ScanProgress progress =
+        new ScanProgress(
+            ScanProgress.Kind.ADDRESS,
+            canonicalAnchor,
+            canonicalAnchor,
+            scannedBound,
+            scannedBound,
+            complete,
+            complete ? ScanProgress.StopReason.COMPLETED : ScanProgress.StopReason.LIMIT,
+            elapsedMs);
+    return Page.scanned(selected.items(), selected.limit(), selected.nextCursor(), progress);
+  }
+
+  private Page<ReferenceResource> listScopedOrRange(
+      boolean incoming,
+      Address fromFilter,
+      Address toFilter,
+      String type,
+      FlowOverrideScope scope,
+      AddressScanOptions options,
+      int limit,
+      String cursor) {
+    CursorPosition cursorPosition = parseCursor(cursor);
+    AddressSet targetAddresses = resolveTargetAddresses(scope, options);
+    Address primaryAnchor = incoming ? toFilter : fromFilter;
+    if (primaryAnchor != null) {
+      targetAddresses = targetAddresses.intersect(new AddressSet(primaryAnchor, primaryAnchor));
+    }
+    String requestedStart =
+        targetAddresses.isEmpty()
+            ? options.start()
+            : AddressUtil.canonicalAddress(targetAddresses.getMinAddress());
+    String requestedEnd =
+        targetAddresses.isEmpty()
+            ? options.end()
+            : AddressUtil.canonicalAddress(targetAddresses.getMaxAddress());
+    AddressSet iterationSet =
+        cursorPosition == null
+            ? targetAddresses
+            : tailFrom(targetAddresses, cursorPosition.address());
+
     BoundedAddressScan<ReferenceResource> scan =
-        BoundedAddressScan.start(
-            normalizedLimit, query.scan().timeoutMs(), requestedStart, requestedEnd);
-
-    Iterator<Address> anchors = resolveAnchors(targetAddresses, cursorPosition, inbound);
+        BoundedAddressScan.start(limit, options.timeoutMs(), requestedStart, requestedEnd);
+    ReferenceManager refManager = context.currentProgram().getReferenceManager();
+    FunctionManager functionManager = context.currentProgram().getFunctionManager();
+    AddressIterator addresses =
+        incoming
+            ? refManager.getReferenceDestinationIterator(iterationSet, true)
+            : refManager.getReferenceSourceIterator(iterationSet, true);
     int matchedCount = 0;
 
-    while (anchors.hasNext()) {
-      Address anchor = anchors.next();
+    for (Address anchor : addresses) {
       if (cursorPosition != null && anchor.compareTo(cursorPosition.address()) < 0) {
         continue;
       }
-      String anchorText = AddressUtil.canonicalAddress(anchor);
+      String anchorCanonical = AddressUtil.canonicalAddress(anchor);
       String anchorCursor =
           cursorPosition != null && anchor.equals(cursorPosition.address())
-              ? cursorPosition.encodedKey()
+              ? cursorPosition.key()
               : null;
-      int needed = normalizedLimit - matchedCount;
+      int needed = limit - matchedCount;
       Page.Selector<Reference> selector = Page.selector(needed, anchorCursor);
-      boolean sawReference = false;
-      for (Reference reference : context.references(anchor, inbound)) {
-        sawReference = true;
-        if (!ReferenceQuerySupport.matchesType(query.type(), reference)) continue;
-        if (oppositeFilter != null && !oppositeFilter.equals(oppositeAddress(reference, inbound))) {
+      String maxUnmatchedKey = null;
+      for (Reference reference : context.references(anchor, incoming)) {
+        String encoded =
+            ReferenceDescriptions.referenceKey(reference, anchor, anchorCanonical).encoded();
+        if (anchorCursor != null && encoded.compareTo(anchorCursor) <= 0) {
           continue;
         }
-        String encoded =
-            ReferenceDescriptions.referenceKey(reference, anchor, anchorText).encoded();
-        selector.offer(encoded, reference);
+        if (ReferenceQuerySupport.matchesType(type, reference)
+            && matchesEndpoint(fromFilter, reference.getFromAddress())
+            && matchesEndpoint(toFilter, reference.getToAddress())) {
+          selector.offer(encoded, reference);
+        } else if (maxUnmatchedKey == null || encoded.compareTo(maxUnmatchedKey) > 0) {
+          maxUnmatchedKey = encoded;
+        }
       }
-
-      Page<DescribedReference> winners =
-          selector.finish(
-              (reference, encoded) ->
-                  new DescribedReference(
-                      encoded, ReferenceDescriptions.describe(reference, anchor, anchorText)));
-      if (winners.items().isEmpty()) {
-        if (sawReference) {
-          scan.visit(anchorText, CompositeCursor.key(anchorText, ANCHOR_EXHAUSTED_KEY), null);
+      if (selector.retainedCount() == 0) {
+        if (maxUnmatchedKey != null) {
+          scan.visit(anchorCanonical, CompositeCursor.key(anchorCanonical, maxUnmatchedKey), null);
         }
       } else {
+        AddressResource.FunctionSummary anchorFunction =
+            ReferenceDescriptions.functionSummary(functionManager, anchor);
+        Page<DescribedReference> winners =
+            selector.finish(
+                (reference, encoded) ->
+                    new DescribedReference(
+                        encoded,
+                        ReferenceDescriptions.describe(
+                            reference, functionManager, anchor, anchorCanonical, anchorFunction)));
         for (DescribedReference winner : winners.items()) {
           scan.visit(
-              anchorText,
-              CompositeCursor.key(anchorText, winner.encodedKey()),
+              anchorCanonical,
+              CompositeCursor.key(anchorCanonical, winner.encodedKey()),
               winner.resource());
           matchedCount++;
           if (scan.stopped()) break;
@@ -120,63 +216,46 @@ final class ReferenceListQueries {
     return scan.finish();
   }
 
-  private Iterator<Address> resolveAnchors(
-      AddressSetView targetAddresses, CursorPosition cursorPosition, boolean inbound) {
-    if (targetAddresses.getNumAddresses() == 1) {
-      return List.of(targetAddresses.getMinAddress()).iterator();
+  private AddressSet resolveTargetAddresses(FlowOverrideScope scope, AddressScanOptions options) {
+    if (scope == null) {
+      AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
+      return new AddressSet(range.start(), range.end());
     }
-    AddressSet remaining = new AddressSet(targetAddresses);
-    if (cursorPosition != null
-        && cursorPosition
-            .address()
-            .getAddressSpace()
-            .equals(remaining.getMinAddress().getAddressSpace())
-        && cursorPosition.address().compareTo(remaining.getMinAddress()) > 0) {
-      Address previous = cursorPosition.address().previous();
-      if (previous != null) {
-        remaining.delete(remaining.getMinAddress(), previous);
-      }
+    AddressSet scoped = new AddressSet(scopes.resolve(scope));
+    if (options.start() != null || options.end() != null) {
+      AddressScanRanges.Resolved clip = AddressScanRanges.resolve(context, options, true);
+      scoped = scoped.intersect(new AddressSet(clip.start(), clip.end()));
     }
-    ReferenceManager refManager = context.currentProgram().getReferenceManager();
-    AddressIterator iterator =
-        inbound
-            ? refManager.getReferenceDestinationIterator(remaining, true)
-            : refManager.getReferenceSourceIterator(remaining, true);
-    return iterator;
+    return scoped;
   }
 
-  private AddressSetView resolveTargetAddresses(
-      FlowOverrideScope selector, boolean inbound, String fromRaw, String toRaw) {
-    if (selector == null) {
-      ReferenceQuerySupport.requireTarget(inbound ? "to" : "from", fromRaw, toRaw);
-      Address anchor = parseAddress(inbound ? toRaw : fromRaw);
-      return new AddressSet(anchor, anchor);
+  private AddressSet tailFrom(AddressSet addresses, Address cursor) {
+    if (addresses.isEmpty()) {
+      return addresses;
     }
-    String sameSideRaw = inbound ? toRaw : fromRaw;
-    if (sameSideRaw != null && !sameSideRaw.isBlank()) {
-      throw new IllegalArgumentException(
-          "selector conflicts with " + (inbound ? "to" : "from"));
+    Address max = addresses.getMaxAddress();
+    if (cursor.compareTo(max) > 0) {
+      return new AddressSet();
     }
-    return scopes.resolve(selector).addresses();
+    if (cursor.getAddressSpace().equals(max.getAddressSpace())) {
+      return addresses.intersect(new AddressSet(cursor, max));
+    }
+    return addresses.intersect(new AddressSet(context.currentProgram(), cursor, max));
   }
 
-  private CursorPosition parseCursor(String cursorRaw, AddressSetView targetAddresses) {
-    CompositeCursor parts = CompositeCursor.parse(cursorRaw, "references");
+  private static boolean matchesEndpoint(Address expected, Address actual) {
+    return expected == null || expected.equals(actual);
+  }
+
+  private CursorPosition parseCursor(String cursor) {
+    CompositeCursor parts = CompositeCursor.parse(cursor, "references");
     if (parts == null) return null;
-    Address address = parseAddress(parts.address());
-    if (!targetAddresses.contains(address)) {
-      throw new IllegalArgumentException("cursor must be inside the selected scope");
-    }
-    return new CursorPosition(address, parts.secondary());
-  }
-
-  private static Address oppositeAddress(Reference reference, boolean inbound) {
-    return inbound ? reference.getFromAddress() : reference.getToAddress();
+    return new CursorPosition(parseAddress(parts.address()), parts.secondary());
   }
 
   private record DescribedReference(String encodedKey, ReferenceResource resource) {}
 
-  private record CursorPosition(Address address, String encodedKey) {}
+  private record CursorPosition(Address address, String key) {}
 
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);

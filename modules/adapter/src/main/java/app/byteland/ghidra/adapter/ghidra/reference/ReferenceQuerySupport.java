@@ -18,13 +18,6 @@ final class ReferenceQuerySupport {
     return normalizedDirection;
   }
 
-  static void requireTarget(String direction, String fromRaw, String toRaw) {
-    String target = "to".equals(direction) ? toRaw : fromRaw;
-    if (target == null || target.isBlank()) {
-      throw new IllegalArgumentException("from or to is required");
-    }
-  }
-
   static boolean matchesType(String requestedType, Reference reference) {
     return requestedType == null
         || requestedType.equalsIgnoreCase(reference.getReferenceType().getName());

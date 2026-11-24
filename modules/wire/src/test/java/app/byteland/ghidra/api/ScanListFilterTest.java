@@ -39,6 +39,7 @@ class ScanListFilterTest {
           "code_unit.list",
           "data_unit.list",
           "instruction.list",
+          "reference.list",
           "global_variable.list",
           "comment.list",
           "function.list",
@@ -63,6 +64,9 @@ class ScanListFilterTest {
     assertEquals(Map.of(), filterProperties(catalog, "data_unit.list"));
     assertEquals(Map.of(), filterProperties(catalog, "instruction.list"));
     assertEquals(Set.of("kind"), filterProperties(catalog, "code_unit.list").keySet());
+    assertEquals(
+        List.of("from", "to", "type", "direction", "selector"),
+        List.copyOf(filterProperties(catalog, "reference.list").keySet()));
     assertEquals(
         List.of("name", "namespace", "case_sensitive"),
         List.copyOf(filterProperties(catalog, "global_variable.list").keySet()));
@@ -132,6 +136,9 @@ class ScanListFilterTest {
     assertEquals(expected, harness.lastScan.get());
 
     harness.registry.dispatch("instruction.list", scanParams);
+    assertEquals(expected, harness.lastScan.get());
+
+    harness.registry.dispatch("reference.list", scanParams);
     assertEquals(expected, harness.lastScan.get());
 
     harness.registry.dispatch("global_variable.list", scanParams);
@@ -322,6 +329,11 @@ class ScanListFilterTest {
                     };
                 return emptyScannedPage(scan, limit);
               });
+      ReferenceService references =
+          (fromRaw, toRaw, type, direction, scope, scan, limit, cursor) -> {
+            lastScan.set(scan);
+            return emptyScannedPage(scan, limit);
+          };
       GlobalVariableService globalVariables =
           proxy(
               GlobalVariableService.class,
@@ -378,7 +390,7 @@ class ScanListFilterTest {
               unused(ProgramService.class),
               unused(AddressService.class),
               comments,
-              unused(ReferenceService.class),
+              references,
               unused(MemoryService.class),
               listing,
               functions,

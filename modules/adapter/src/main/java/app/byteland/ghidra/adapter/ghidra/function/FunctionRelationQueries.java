@@ -47,7 +47,9 @@ final class FunctionRelationQueries {
 
   private Page<FunctionCallResource> getFunctionRelations(
       String rawAddress, boolean callers, int limit, String cursor) {
-    CompositeCursor.parse(cursor, "function_call");
+    if (cursor != null && cursor.indexOf('\0') >= 0) {
+      CompositeCursor.parse(cursor, "function_call");
+    }
     Function function = resolver.resolveFunction(rawAddress);
     CollectedPeers collected = collectPeers(function, callers, Long.MAX_VALUE);
     Page.Selector<CandidateCall> selector = Page.selector(limit, cursor);
@@ -135,10 +137,13 @@ final class FunctionRelationQueries {
       Function caller = fnManager.getFunctionContaining(fromAddress);
       if (caller == null) continue;
       String callerEntry = AddressUtil.canonicalAddress(caller.getEntryPoint());
-      PeerAccumulator accumulator =
-          refType.isCall()
-              ? peersByEntry.computeIfAbsent(callerEntry, ignored -> new PeerAccumulator(caller))
-              : peersByEntry.get(callerEntry);
+      PeerAccumulator accumulator = null;
+      if (refType.isCall()) {
+        accumulator =
+            peersByEntry.computeIfAbsent(callerEntry, ignored -> new PeerAccumulator(caller));
+      } else if (!callerEntry.equals(AddressUtil.canonicalAddress(function.getEntryPoint()))) {
+        accumulator = peersByEntry.get(callerEntry);
+      }
       if (accumulator != null) {
         accumulator.callSites().add(AddressUtil.canonicalAddress(fromAddress));
       }
@@ -167,10 +172,13 @@ final class FunctionRelationQueries {
         Function callee = resolveTargetFunction(fnManager, reference);
         if (callee == null) continue;
         String calleeEntry = AddressUtil.canonicalAddress(callee.getEntryPoint());
-        PeerAccumulator accumulator =
-            refType.isCall()
-                ? peersByEntry.computeIfAbsent(calleeEntry, ignored -> new PeerAccumulator(callee))
-                : peersByEntry.get(calleeEntry);
+        PeerAccumulator accumulator = null;
+        if (refType.isCall()) {
+          accumulator =
+              peersByEntry.computeIfAbsent(calleeEntry, ignored -> new PeerAccumulator(callee));
+        } else if (!calleeEntry.equals(AddressUtil.canonicalAddress(function.getEntryPoint()))) {
+          accumulator = peersByEntry.get(calleeEntry);
+        }
         if (accumulator != null) {
           accumulator.callSites().add(site);
         }
@@ -192,8 +200,8 @@ final class FunctionRelationQueries {
     return null;
   }
 
-  private static String cursorKey(String entry, String callSite) {
-    return CompositeCursor.key(entry, callSite == null ? "-" : callSite);
+  static String cursorKey(String entry, String callSite) {
+    return callSite == null ? entry : CompositeCursor.key(entry, callSite);
   }
 
   private static boolean isExpired(long deadlineNanos) {

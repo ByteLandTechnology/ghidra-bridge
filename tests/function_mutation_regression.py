@@ -450,6 +450,14 @@ def run_test(headless, root):
                 },
             })["result"]
             assert len(refs_fn["items"]) == 1
+            assert refs_fn["items"][0]["from_function"] == {
+                "entry": mid["entry"],
+                "name": "mid_callee",
+            }
+            assert refs_fn["items"][0]["to_function"] == {
+                "entry": leaf["entry"],
+                "name": "leaf_callee",
+            }
             refs_fn_p2 = tool(50, "ghidra_reference", {
                 "operation": "list",
                 "params": {

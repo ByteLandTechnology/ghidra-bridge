@@ -5346,6 +5346,17 @@
                           "properties":
                             "from":
                               "type": "string"
+                            "from_function":
+                              "additionalProperties": !!bool "false"
+                              "properties":
+                                "entry":
+                                  "type": "string"
+                                "name":
+                                  "type": "string"
+                              "required":
+                              - "entry"
+                              - "name"
+                              "type": "object"
                             "operand_index":
                               "maximum": !!int "2147483647"
                               "minimum": !!int "-1"
@@ -5356,6 +5367,17 @@
                               "type": "string"
                             "to":
                               "type": "string"
+                            "to_function":
+                              "additionalProperties": !!bool "false"
+                              "properties":
+                                "entry":
+                                  "type": "string"
+                                "name":
+                                  "type": "string"
+                              "required":
+                              - "entry"
+                              - "name"
+                              "type": "object"
                             "type":
                               "type": "string"
                           "required":
@@ -12101,8 +12123,6 @@
                         "type": "string"
                       "type":
                         "type": "string"
-                    "required":
-                    - "direction"
                     "type": "object"
                   "page":
                     "additionalProperties": !!bool "false"
@@ -12122,10 +12142,12 @@
                         "items":
                           "enum":
                           - "from"
+                          - "from_function"
                           - "operand_index"
                           - "primary"
                           - "source_type"
                           - "to"
+                          - "to_function"
                           - "type"
                           "type": "string"
                         "maxItems": !!int "256"
@@ -12136,14 +12158,20 @@
                   "scan":
                     "additionalProperties": !!bool "false"
                     "properties":
+                      "range":
+                        "additionalProperties": !!bool "false"
+                        "properties":
+                          "end":
+                            "type": "string"
+                          "start":
+                            "type": "string"
+                        "type": "object"
                       "timeout_ms":
                         "default": !!int "1000"
                         "maximum": !!int "60000"
                         "minimum": !!int "100"
                         "type": "integer"
                     "type": "object"
-                "required":
-                - "filter"
                 "type": "object"
             "required":
             - "jsonrpc"
@@ -16367,8 +16395,6 @@
                                     "type": "string"
                                   "type":
                                     "type": "string"
-                                "required":
-                                - "direction"
                                 "type": "object"
                               "page":
                                 "additionalProperties": !!bool "false"
@@ -16388,10 +16414,12 @@
                                     "items":
                                       "enum":
                                       - "from"
+                                      - "from_function"
                                       - "operand_index"
                                       - "primary"
                                       - "source_type"
                                       - "to"
+                                      - "to_function"
                                       - "type"
                                       "type": "string"
                                     "maxItems": !!int "256"
@@ -16402,14 +16430,20 @@
                               "scan":
                                 "additionalProperties": !!bool "false"
                                 "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
                                   "timeout_ms":
                                     "default": !!int "1000"
                                     "maximum": !!int "60000"
                                     "minimum": !!int "100"
                                     "type": "integer"
                                 "type": "object"
-                            "required":
-                            - "filter"
                             "type": "object"
                           "id":
                             "minLength": !!int "1"
@@ -21059,8 +21093,6 @@
                           "type": "string"
                         "type":
                           "type": "string"
-                      "required":
-                      - "direction"
                       "type": "object"
                     "page":
                       "additionalProperties": !!bool "false"
@@ -21080,10 +21112,12 @@
                           "items":
                             "enum":
                             - "from"
+                            - "from_function"
                             - "operand_index"
                             - "primary"
                             - "source_type"
                             - "to"
+                            - "to_function"
                             - "type"
                             "type": "string"
                           "maxItems": !!int "256"
@@ -21094,14 +21128,20 @@
                     "scan":
                       "additionalProperties": !!bool "false"
                       "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
                         "timeout_ms":
                           "default": !!int "1000"
                           "maximum": !!int "60000"
                           "minimum": !!int "100"
                           "type": "integer"
                       "type": "object"
-                  "required":
-                  - "filter"
                   "type": "object"
                 "id":
                   "minLength": !!int "1"
@@ -33031,8 +33071,8 @@
       - "language_id"
       "type": "object"
   "reference.list":
-    "description": "List references from or to an address, function, or\
-      \ range. Set filter.direction. Use next_cursor to get the next page."
+    "description": "List references in address order. Select an anchor,\
+      \ scope, or scan range. Use next_cursor to get the next page."
     "effects":
       "allowed_during_analysis": !!bool "true"
       "destructive": !!bool "false"
@@ -33156,8 +33196,6 @@
               "type": "string"
             "type":
               "type": "string"
-          "required":
-          - "direction"
           "type": "object"
         "page":
           "additionalProperties": !!bool "false"
@@ -33177,10 +33215,12 @@
               "items":
                 "enum":
                 - "from"
+                - "from_function"
                 - "operand_index"
                 - "primary"
                 - "source_type"
                 - "to"
+                - "to_function"
                 - "type"
                 "type": "string"
               "maxItems": !!int "256"
@@ -33191,14 +33231,20 @@
         "scan":
           "additionalProperties": !!bool "false"
           "properties":
+            "range":
+              "additionalProperties": !!bool "false"
+              "properties":
+                "end":
+                  "type": "string"
+                "start":
+                  "type": "string"
+              "type": "object"
             "timeout_ms":
               "default": !!int "1000"
               "maximum": !!int "60000"
               "minimum": !!int "100"
               "type": "integer"
           "type": "object"
-      "required":
-      - "filter"
       "type": "object"
     "output_schema":
       "$defs":
@@ -33317,6 +33363,17 @@
             "properties":
               "from":
                 "type": "string"
+              "from_function":
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "entry":
+                    "type": "string"
+                  "name":
+                    "type": "string"
+                "required":
+                - "entry"
+                - "name"
+                "type": "object"
               "operand_index":
                 "maximum": !!int "2147483647"
                 "minimum": !!int "-1"
@@ -33327,6 +33384,17 @@
                 "type": "string"
               "to":
                 "type": "string"
+              "to_function":
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "entry":
+                    "type": "string"
+                  "name":
+                    "type": "string"
+                "required":
+                - "entry"
+                - "name"
+                "type": "object"
               "type":
                 "type": "string"
             "required":

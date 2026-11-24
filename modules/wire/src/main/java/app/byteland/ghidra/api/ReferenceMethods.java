@@ -5,10 +5,8 @@ import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.flowScope;
 import static app.byteland.ghidra.api.ApiRegistry.object;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
-import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
-import app.byteland.ghidra.service.reference.ReferenceService.ReferenceQuery;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,8 +23,6 @@ final class ReferenceMethods implements ApiMethodProvider {
     Map<String, Object> referenceFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
-                ApiVocabulary.SELECTOR,
-                ApiSchemaCatalog.flowSelector(),
                 ApiVocabulary.FROM,
                 WireSchema.string(),
                 "to",
@@ -34,44 +30,43 @@ final class ReferenceMethods implements ApiMethodProvider {
                 ApiVocabulary.TYPE,
                 WireSchema.string(),
                 ApiVocabulary.DIRECTION,
-                WireSchema.stringEnum(ApiVocabulary.FROM, "to")),
-            ApiVocabulary.DIRECTION);
+                WireSchema.stringEnum(ApiVocabulary.FROM, "to"),
+                ApiVocabulary.SELECTOR,
+                ApiSchemaCatalog.flowSelector()));
     registry.scanList(
         "reference.list",
-        "List references from or to an address, function, or range."
-            + " Set filter.direction. Use next_cursor to get the next page.",
-        ApiSchemaCatalog.requiredScanListInput(referenceFilter),
+        "List references in address order. Select an anchor, scope, or scan range."
+            + " Use next_cursor to get the next page.",
+        ApiSchemaCatalog.scanListInput(referenceFilter),
         Set.of(
             ApiVocabulary.FROM,
             "to",
             ApiVocabulary.TYPE,
             ApiVocabulary.SOURCE_TYPE,
             "operand_index",
-            "primary"),
+            "primary",
+            "from_function",
+            "to_function"),
         List.of(ApiVocabulary.FROM, "to", ApiVocabulary.TYPE, "operand_index"),
         (request, page) -> {
           Map<String, Object> filter = filter(request);
+          Object rawSelector = filter.get(ApiVocabulary.SELECTOR);
           FlowOverrideScope scope =
-              filter.get(ApiVocabulary.SELECTOR) instanceof Map<?, ?>
+              rawSelector instanceof Map<?, ?>
                   ? flowScope(object(filter, ApiVocabulary.SELECTOR))
                   : null;
           return registry
               .services()
               .referenceService()
               .listReferences(
-                  new ReferenceQuery(
-                      scope,
-                      optionalText(filter, ApiVocabulary.FROM),
-                      optionalText(filter, "to"),
-                      optionalText(filter, ApiVocabulary.TYPE),
-                      referenceDirection(filter),
-                      addressScan(request),
-                      page.limit(),
-                      page.cursor()));
+                  optionalText(filter, ApiVocabulary.FROM),
+                  optionalText(filter, "to"),
+                  optionalText(filter, ApiVocabulary.TYPE),
+                  optionalText(filter, ApiVocabulary.DIRECTION),
+                  scope,
+                  addressScan(request),
+                  page.limit(),
+                  page.cursor());
         });
-  }
-
-  private static String referenceDirection(Map<String, Object> filter) {
-    return text(filter, ApiVocabulary.DIRECTION);
   }
 }

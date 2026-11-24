@@ -12,6 +12,7 @@ import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.ScanProgress;
 import app.byteland.ghidra.service.TransactionRunner;
+import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.address.AddressService;
 import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
@@ -262,6 +263,7 @@ class ListPaginationParityTest {
                 (proxy, method, args) ->
                     switch (method.getName()) {
                       case "getEntryPoint" -> rootEntry;
+                      case "getName" -> "fn_root";
                       case "getBody" -> rootBody;
                       case "getProgram" -> programHolder[0];
                       case "getCallingFunctions" -> callers;
@@ -338,7 +340,7 @@ class ListPaginationParityTest {
         services(
             baselineDataTypeService(rootCategories, allTypes),
             baselineFunctionService(callers, callees, functionsByEntry, incomingRefs),
-            baselineReferenceService(incomingRefs, List.of(outgoingRefs)),
+            baselineReferenceService(incomingRefs, List.of(outgoingRefs), functionsByEntry),
             analysis);
     return new Fixture(actualServices, baselineServices);
   }
@@ -500,12 +502,17 @@ class ListPaginationParityTest {
         rows.sort(
             Comparator.comparing(
                 row ->
-                    CompositeCursor.key(row.entry(), row.callSite() == null ? "-" : row.callSite())));
+                    row.callSite() == null
+                        ? row.entry()
+                        : CompositeCursor.key(row.entry(), row.callSite())));
         return Page.paginate(
             rows,
             limit,
             cursor,
-            row -> CompositeCursor.key(row.entry(), row.callSite() == null ? "-" : row.callSite()));
+            row ->
+                row.callSite() == null
+                    ? row.entry()
+                    : CompositeCursor.key(row.entry(), row.callSite()));
       }
 
       @Override
@@ -576,15 +583,17 @@ class ListPaginationParityTest {
   }
 
   private static ReferenceService baselineReferenceService(
-      List<Reference> incoming, List<Reference> outgoing) {
-    return query -> {
-      boolean inbound = "to".equals(query.direction());
-      String anchor = inbound ? query.to() : query.from();
+      List<Reference> incoming,
+      List<Reference> outgoing,
+      Map<Address, Function> functionsByAddress) {
+    return (fromRaw, toRaw, type, direction, scope, scan, limit, cursor) -> {
+      boolean inbound = "to".equals(direction);
+      String canonicalAnchor = inbound ? toRaw : fromRaw;
       List<Reference> source = inbound ? incoming : outgoing;
       record Keyed(Reference ref, String key) {}
       List<Keyed> matched = new ArrayList<>();
       for (Reference ref : source) {
-        if (query.type() != null && !query.type().equalsIgnoreCase(ref.getReferenceType().getName())) {
+        if (type != null && !type.equalsIgnoreCase(ref.getReferenceType().getName())) {
           continue;
         }
         String encoded =
@@ -594,38 +603,45 @@ class ListPaginationParityTest {
                     AddressUtil.canonicalAddress(ref.getToAddress()),
                     ref.getReferenceType().getName(),
                     ref.getOperandIndex()));
-        matched.add(new Keyed(ref, CompositeCursor.key(anchor, encoded)));
+        matched.add(new Keyed(ref, encoded));
       }
       matched.sort(Comparator.comparing(Keyed::key));
-      List<ReferenceResource> items = new ArrayList<>();
-      String lastKey = null;
-      for (Keyed k : matched) {
-        if (query.cursor() != null && k.key().compareTo(query.cursor()) <= 0) continue;
-        if (items.size() >= query.limit()) break;
-        items.add(
-            new ReferenceResource(
-                AddressUtil.canonicalAddress(k.ref().getFromAddress()),
-                AddressUtil.canonicalAddress(k.ref().getToAddress()),
-                k.ref().getReferenceType().getName(),
-                k.ref().getOperandIndex(),
-                k.ref().isPrimary(),
-                String.valueOf(k.ref().getSource())));
-        lastKey = k.key();
-      }
-      boolean hitLimit = items.size() >= query.limit();
-      String scanned = !source.isEmpty() && (!items.isEmpty() || query.cursor() != null) ? anchor : null;
+      Page<Keyed> page = Page.paginate(matched, limit, cursor, Keyed::key);
+      List<ReferenceResource> items =
+          page.items().stream()
+              .map(
+                  k ->
+                      new ReferenceResource(
+                          AddressUtil.canonicalAddress(k.ref().getFromAddress()),
+                          AddressUtil.canonicalAddress(k.ref().getToAddress()),
+                          k.ref().getReferenceType().getName(),
+                          k.ref().getOperandIndex(),
+                          k.ref().isPrimary(),
+                          String.valueOf(k.ref().getSource()),
+                          summaryFor(functionsByAddress.get(k.ref().getFromAddress())),
+                          summaryFor(functionsByAddress.get(k.ref().getToAddress()))))
+              .toList();
+      boolean complete = page.nextCursor() == null;
+      String scanned = source.isEmpty() ? null : canonicalAnchor;
       ScanProgress progress =
           new ScanProgress(
               ScanProgress.Kind.ADDRESS,
-              anchor,
-              anchor,
+              canonicalAnchor,
+              canonicalAnchor,
               scanned,
               scanned,
-              !hitLimit,
-              hitLimit ? ScanProgress.StopReason.LIMIT : ScanProgress.StopReason.COMPLETED,
+              complete,
+              complete ? ScanProgress.StopReason.COMPLETED : ScanProgress.StopReason.LIMIT,
               0L);
-      return Page.scanned(items, query.limit(), hitLimit ? lastKey : null, progress);
+      return Page.scanned(items, page.limit(), page.nextCursor(), progress);
     };
+  }
+
+  private static AddressResource.FunctionSummary summaryFor(Function fn) {
+    return fn == null
+        ? null
+        : new AddressResource.FunctionSummary(
+            AddressUtil.canonicalAddress(fn.getEntryPoint()), fn.getName());
   }
 
   @SuppressWarnings("unchecked")

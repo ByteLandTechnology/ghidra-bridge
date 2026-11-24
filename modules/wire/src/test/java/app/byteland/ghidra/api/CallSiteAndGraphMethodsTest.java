@@ -11,6 +11,7 @@ import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.ScanProgress;
 import app.byteland.ghidra.service.TransactionRunner;
+import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.address.AddressService;
 import app.byteland.ghidra.service.analysis.AnalysisResource;
 import app.byteland.ghidra.service.analysis.AnalysisService;
@@ -35,7 +36,6 @@ import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import app.byteland.ghidra.service.reference.ReferenceService;
-import app.byteland.ghidra.service.reference.ReferenceService.ReferenceQuery;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.lang.reflect.Proxy;
 import java.util.List;
@@ -82,7 +82,9 @@ class CallSiteAndGraphMethodsTest {
                   limit,
                   cursor,
                   row ->
-                      row.entry() + '\0' + (row.callSite() == null ? "-" : row.callSite()));
+                      row.callSite() == null
+                          ? row.entry()
+                          : row.entry() + '\0' + row.callSite());
             });
 
     ApiRegistry registry = registryWith(functions, unused(ListingService.class), unused(ReferenceService.class));
@@ -268,50 +270,67 @@ class CallSiteAndGraphMethodsTest {
   }
 
   @Test
-  void referenceListAcceptsSelectorAndLegacySingleAddressFilters() throws Exception {
-    AtomicReference<ReferenceQuery> captured = new AtomicReference<>();
+  @SuppressWarnings("unchecked")
+  void referenceListAcceptsSelectorScanAndFunctionSummaries() throws Exception {
+    AtomicReference<FlowOverrideScope> capturedScope = new AtomicReference<>();
+    AtomicReference<AddressScanOptions> capturedScan = new AtomicReference<>();
+    AtomicReference<String> capturedTo = new AtomicReference<>();
     ReferenceService references =
-        proxy(
-            ReferenceService.class,
-            (method, args) -> {
-              assertEquals("listReferences", method);
-              ReferenceQuery query = (ReferenceQuery) args[0];
-              captured.set(query);
-              ReferenceResource ref =
-                  new ReferenceResource(
-                      "ram:00102008", "ram:00101000", "UNCONDITIONAL_CALL", 0, true, "DEFAULT");
-              ScanProgress progress =
-                  new ScanProgress(
-                      ScanProgress.Kind.ADDRESS,
-                      "ram:00102000",
-                      "ram:00102020",
-                      "ram:00102008",
-                      "ram:00102008",
-                      true,
-                      ScanProgress.StopReason.COMPLETED,
-                      1L);
-              return Page.scanned(List.of(ref), query.limit(), null, progress);
-            });
+        (fromRaw, toRaw, type, direction, scope, scan, limit, cursor) -> {
+          capturedScope.set(scope);
+          capturedScan.set(scan);
+          capturedTo.set(toRaw);
+          ReferenceResource ref =
+              new ReferenceResource(
+                  "ram:00102008",
+                  "ram:00101000",
+                  "UNCONDITIONAL_CALL",
+                  0,
+                  true,
+                  "DEFAULT",
+                  new AddressResource.FunctionSummary("ram:00102000", "caller_fn"),
+                  new AddressResource.FunctionSummary("ram:00101000", "callee_fn"));
+          ScanProgress progress =
+              new ScanProgress(
+                  ScanProgress.Kind.ADDRESS,
+                  "ram:00102000",
+                  "ram:00102020",
+                  "ram:00102008",
+                  "ram:00102008",
+                  true,
+                  ScanProgress.StopReason.COMPLETED,
+                  1L);
+          return Page.scanned(List.of(ref), limit, null, progress);
+        };
 
     ApiRegistry registry =
         registryWith(unused(FunctionService.class), unused(ListingService.class), references);
 
-    registry.dispatch(
-        "reference.list",
-        Map.of(
-            "filter",
-            Map.of(
-                "direction", "from",
-                "selector", Map.of("kind", "function", "entry", "0x102000"))));
-    assertEquals(new FlowOverrideScope.FunctionScope("0x102000"), captured.get().selector());
-    assertNull(captured.get().from());
+    Map<String, Object> scopedResponse =
+        (Map<String, Object>)
+            registry.dispatch(
+                "reference.list",
+                Map.of(
+                    "filter",
+                    Map.of(
+                        "direction", "from",
+                        "selector", Map.of("kind", "function", "entry", "0x102000"))));
+    assertEquals(new FlowOverrideScope.FunctionScope("0x102000"), capturedScope.get());
+    assertNull(capturedTo.get());
+    List<Map<String, Object>> items = (List<Map<String, Object>>) scopedResponse.get("items");
+    assertEquals(
+        Map.of("entry", "ram:00102000", "name", "caller_fn"),
+        items.getFirst().get("from_function"));
+    assertEquals(
+        Map.of("entry", "ram:00101000", "name", "callee_fn"),
+        items.getFirst().get("to_function"));
 
     registry.dispatch(
         "reference.list",
-        Map.of("filter", Map.of("direction", "to", "to", "0x101000")));
-    assertNull(captured.get().selector());
-    assertEquals("0x101000", captured.get().to());
-    assertEquals(AddressScanOptions.DEFAULT_TIMEOUT_MS, captured.get().scan().timeoutMs());
+        Map.of("filter", Map.of("to", "0x101000")));
+    assertNull(capturedScope.get());
+    assertEquals("0x101000", capturedTo.get());
+    assertEquals(AddressScanOptions.DEFAULT_TIMEOUT_MS, capturedScan.get().timeoutMs());
   }
 
   private static ApiRegistry registryWith(
