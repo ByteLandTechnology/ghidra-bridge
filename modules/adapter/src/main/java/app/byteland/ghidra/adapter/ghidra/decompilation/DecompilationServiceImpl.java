@@ -131,7 +131,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
     commentModes.put(decompiler, includeComments);
   }
 
-  /** Flushes cached native symbols and types only when the program state changed. */
+  /** Flushes the native cache only when the program or its modification number changes. */
   private void flushCacheIfNeeded(DecompInterface decompiler, Program program) {
     Program target = program != null ? program : context.currentProgramOrNull();
     if (target == null) {
@@ -142,13 +142,16 @@ public final class DecompilationServiceImpl implements DecompilationService {
     long modificationNumber = target.getModificationNumber();
     CacheState state = cacheStates.get(decompiler);
     if (state == null) {
-      cacheStates.put(decompiler, CacheState.clean(target, modificationNumber));
+      Program openedProgram = decompiler.getProgram();
+      if (openedProgram == null || openedProgram == target) {
+        cacheStates.put(decompiler, CacheState.clean(target, modificationNumber));
+        return;
+      }
+    } else if (state.isCleanFor(target, modificationNumber)) {
       return;
     }
-    if (state.isCleanFor(target, modificationNumber)) {
-      return;
-    }
-    cacheStates.put(decompiler, state.markDirty());
+    cacheStates.put(
+        decompiler, state == null ? CacheState.dirtyWithoutProgram() : state.markDirty());
     if (decompiler.flushCache() >= 0) {
       cacheStates.put(decompiler, CacheState.clean(target, modificationNumber));
     }
