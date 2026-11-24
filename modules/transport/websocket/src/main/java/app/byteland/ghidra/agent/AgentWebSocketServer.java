@@ -1,6 +1,7 @@
 package app.byteland.ghidra.agent;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -84,6 +85,14 @@ public final class AgentWebSocketServer implements AutoCloseable {
   @Override
   public void close() {
     running.set(false);
+    ServerSocket socket = serverSocket;
+    if (socket != null && !socket.isClosed()) {
+      try {
+        socket.close();
+      } catch (IOException failure) {
+        handler.onServerError(failure);
+      }
+    }
     AgentServerConnection connection = activeConnection.getAndSet(null);
     if (connection != null) {
       try {
@@ -93,21 +102,32 @@ public final class AgentWebSocketServer implements AutoCloseable {
       }
     }
     for (Socket pending : pendingSockets.drain()) {
-      if (!pending.isClosed()) {
-        try {
-          pending.close();
-        } catch (IOException failure) {
-          handler.onConnectionError(null, failure);
+      closePendingSocket(pending);
+    }
+  }
+
+  private void closePendingSocket(Socket pending) {
+    if (pending.isClosed()) {
+      return;
+    }
+    try {
+      if (!pending.isInputShutdown()) {
+        InputStream input = pending.getInputStream();
+        byte[] discard = new byte[1024];
+        while (input.available() > 0) {
+          int step = Math.min(discard.length, input.available());
+          if (input.read(discard, 0, step) <= 0) {
+            break;
+          }
         }
       }
+    } catch (IOException ignored) {
+      // Ignore read errors when the server closes a socket.
     }
-    ServerSocket socket = serverSocket;
-    if (socket != null && !socket.isClosed()) {
-      try {
-        socket.close();
-      } catch (IOException failure) {
-        handler.onServerError(failure);
-      }
+    try {
+      pending.close();
+    } catch (IOException failure) {
+      handler.onConnectionError(null, failure);
     }
   }
 

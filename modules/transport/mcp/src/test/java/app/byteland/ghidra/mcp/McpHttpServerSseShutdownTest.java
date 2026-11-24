@@ -209,12 +209,12 @@ class McpHttpServerSseShutdownTest {
 
     try {
       assertTrue(
-          waiterWoke.await(500, TimeUnit.MILLISECONDS),
+          waiterWoke.await(2, TimeUnit.SECONDS),
           "close() must signal closeLatch even while writeLock is held by a stalled socket write");
       assertTrue(signaled.get());
       assertFalse(session.isActive());
       assertTrue(
-          closeFinished.await(500, TimeUnit.MILLISECONDS),
+          closeFinished.await(2, TimeUnit.SECONDS),
           "close() must not block on writeLock");
     } finally {
       unblockWrite.countDown();

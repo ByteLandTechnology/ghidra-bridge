@@ -69,7 +69,7 @@ final class AgentWebSocketConnectionRunner {
                 "Conflict",
                 List.of("Connection: close"),
                 "Bridge already has an active client");
-            WebSocketHandshake.closeAfterHttpError(socket, 100, 16 * 1024);
+            WebSocketHandshake.closeAfterHttpError(socket, 250, 16 * 1024);
           }
           return;
         }
@@ -115,7 +115,7 @@ final class AgentWebSocketConnectionRunner {
           e.reason(),
           List.of("Connection: close"),
           e.getMessage());
-      WebSocketHandshake.closeAfterHttpError(socket, 250, 128 * 1024);
+      WebSocketHandshake.closeAfterHttpError(socket, 1_000, 128 * 1024);
     } catch (IOException responseFailure) {
       e.addSuppressed(responseFailure);
       if (running.get()) {

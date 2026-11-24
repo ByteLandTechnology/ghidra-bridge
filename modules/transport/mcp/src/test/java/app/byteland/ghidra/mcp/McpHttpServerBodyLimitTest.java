@@ -273,6 +273,8 @@ class McpHttpServerBodyLimitTest {
       long overLimit = McpHttpServer.MAX_REQUEST_BODY_BYTES + 1L;
       try (Socket socket = new Socket(LOOPBACK, running.port)) {
         socket.setSoTimeout(10_000);
+        CompletableFuture<RawHttpResponse> responseFuture =
+            startResponseReader(socket.getInputStream());
         String headers =
             "POST /mcp HTTP/1.1\r\n"
                 + "Host: 127.0.0.1:"
@@ -283,11 +285,15 @@ class McpHttpServerBodyLimitTest {
                 + "Content-Length: "
                 + overLimit
                 + "\r\n\r\n";
-        OutputStream out = socket.getOutputStream();
-        out.write(headers.getBytes(StandardCharsets.US_ASCII));
-        out.flush();
+        try {
+          OutputStream out = socket.getOutputStream();
+          out.write(headers.getBytes(StandardCharsets.US_ASCII));
+          out.flush();
+        } catch (IOException ignored) {
+          // Ignore write errors after the server closes the socket.
+        }
 
-        RawHttpResponse response = readHttpResponse(socket.getInputStream());
+        RawHttpResponse response = responseFuture.get(10, TimeUnit.SECONDS);
         assertEquals(413, response.statusCode);
         assertEquals("close", response.headers.get("connection"));
         Map<?, ?> parsed = (Map<?, ?>) JsonUtil.parse(response.body);
@@ -299,6 +305,8 @@ class McpHttpServerBodyLimitTest {
       // 2. Oversized `Transfer-Encoding: chunked` (16 MiB + 1) where client pauses before 0\r\n\r\n.
       try (Socket socket = new Socket(LOOPBACK, running.port)) {
         socket.setSoTimeout(10_000);
+        CompletableFuture<RawHttpResponse> responseFuture =
+            startResponseReader(socket.getInputStream());
         String headers =
             "POST /mcp HTTP/1.1\r\n"
                 + "Host: 127.0.0.1:"
@@ -307,25 +315,31 @@ class McpHttpServerBodyLimitTest {
                 + "Content-Type: application/json\r\n"
                 + "MCP-Protocol-Version: 2025-11-25\r\n"
                 + "Transfer-Encoding: chunked\r\n\r\n";
-        OutputStream out = socket.getOutputStream();
-        out.write(headers.getBytes(StandardCharsets.US_ASCII));
-        byte[] chunk = new byte[CHUNK_SIZE];
-        Arrays.fill(chunk, (byte) 'x');
-        byte[] chunkPrefix =
-            (Integer.toHexString(CHUNK_SIZE) + "\r\n").getBytes(StandardCharsets.US_ASCII);
-        byte[] crlf = "\r\n".getBytes(StandardCharsets.US_ASCII);
+        try {
+          OutputStream out = socket.getOutputStream();
+          out.write(headers.getBytes(StandardCharsets.US_ASCII));
+          byte[] chunk = new byte[CHUNK_SIZE];
+          Arrays.fill(chunk, (byte) 'x');
+          byte[] chunkPrefix =
+              (Integer.toHexString(CHUNK_SIZE) + "\r\n").getBytes(StandardCharsets.US_ASCII);
+          byte[] crlf = "\r\n".getBytes(StandardCharsets.US_ASCII);
 
-        int fullChunks = McpHttpServer.MAX_REQUEST_BODY_BYTES / CHUNK_SIZE;
-        for (int i = 0; i < fullChunks; i++) {
-          out.write(chunkPrefix);
-          out.write(chunk);
-          out.write(crlf);
+          int fullChunks = McpHttpServer.MAX_REQUEST_BODY_BYTES / CHUNK_SIZE;
+          for (int i = 0; i < fullChunks && !responseFuture.isDone(); i++) {
+            out.write(chunkPrefix);
+            out.write(chunk);
+            out.write(crlf);
+          }
+          // Send 1 extra byte in one more chunk (total = 16 MiB + 1) and DO NOT send 0\r\n\r\n.
+          if (!responseFuture.isDone()) {
+            out.write("1\r\nx\r\n".getBytes(StandardCharsets.US_ASCII));
+            out.flush();
+          }
+        } catch (IOException ignored) {
+          // Ignore write errors after the server closes the socket.
         }
-        // Send 1 extra byte in one more chunk (total = 16 MiB + 1) and DO NOT send 0\r\n\r\n.
-        out.write("1\r\nx\r\n".getBytes(StandardCharsets.US_ASCII));
-        out.flush();
 
-        RawHttpResponse response = readHttpResponse(socket.getInputStream());
+        RawHttpResponse response = responseFuture.get(10, TimeUnit.SECONDS);
         assertEquals(413, response.statusCode);
         assertEquals("close", response.headers.get("connection"));
         Map<?, ?> parsed = (Map<?, ?>) JsonUtil.parse(response.body);
@@ -400,6 +414,8 @@ class McpHttpServerBodyLimitTest {
       long overLimit = McpHttpServer.MAX_REQUEST_BODY_BYTES + 1L;
       try (Socket postSocket = new Socket(LOOPBACK, running.port)) {
         postSocket.setSoTimeout(10_000);
+        CompletableFuture<RawHttpResponse> responseFuture =
+            startResponseReader(postSocket.getInputStream());
         String postHeaders =
             "POST "
                 + sessionEndpoint
@@ -412,10 +428,14 @@ class McpHttpServerBodyLimitTest {
                 + "Content-Length: "
                 + overLimit
                 + "\r\n\r\n";
-        postSocket.getOutputStream().write(postHeaders.getBytes(StandardCharsets.US_ASCII));
-        postSocket.getOutputStream().flush();
+        try {
+          postSocket.getOutputStream().write(postHeaders.getBytes(StandardCharsets.US_ASCII));
+          postSocket.getOutputStream().flush();
+        } catch (IOException ignored) {
+          // Ignore write errors after the server closes the socket.
+        }
 
-        RawHttpResponse postResponse = readHttpResponse(postSocket.getInputStream());
+        RawHttpResponse postResponse = responseFuture.get(10, TimeUnit.SECONDS);
         assertEquals(413, postResponse.statusCode);
         assertEquals("close", postResponse.headers.get("connection"));
       }

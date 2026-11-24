@@ -871,7 +871,7 @@ public final class McpHttpServer implements AutoCloseable {
       output.write(bytes);
       output.flush();
       if (statusCode == HTTP_PAYLOAD_TOO_LARGE && !closed.get()) {
-        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(50));
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(200));
       }
     }
   }
