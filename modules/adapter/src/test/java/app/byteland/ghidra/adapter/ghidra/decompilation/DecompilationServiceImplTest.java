@@ -55,7 +55,7 @@ class DecompilationServiceImplTest {
       service.decompileFunction("0x101000", DecompilationResource.Format.DOCUMENT, 1_200, true);
       assertEquals(1, decompiler.flushCalls.get());
 
-      // Advancing the program modification number triggers a new flush once.
+      // An increment to the program modification number triggers a new flush once.
       modificationNumber.set(11L);
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, true);
       assertEquals(2, decompiler.flushCalls.get());
@@ -83,7 +83,7 @@ class DecompilationServiceImplTest {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
       assertEquals(1, decompiler.flushCalls.get());
 
-      // Modification changes to 2, but flushCache throws after removing cached modification 1.
+      // Modification changes to 2, but flushCache throws after it clears cached modification 1.
       modificationNumber.set(2L);
       mode.set(1);
       assertThrows(
