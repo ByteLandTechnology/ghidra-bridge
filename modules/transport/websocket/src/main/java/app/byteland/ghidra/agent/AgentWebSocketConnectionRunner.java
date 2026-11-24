@@ -4,6 +4,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -16,52 +17,70 @@ final class AgentWebSocketConnectionRunner {
   private final AgentConfig config;
   private final AgentWebSocketServer.Handler handler;
   private final AtomicBoolean running;
-  private final AtomicReference<Object> activeConnection;
-  private final AtomicReference<Socket> pendingSocket;
+  private final AtomicReference<AgentServerConnection> activeConnection;
+  private final AgentWebSocketServer.PendingSockets pendingSockets;
+  private final long handshakeTimeoutNanos;
 
   AgentWebSocketConnectionRunner(
       AgentConfig config,
       AgentWebSocketServer.Handler handler,
       AtomicBoolean running,
-      AtomicReference<Object> activeConnection,
-      AtomicReference<Socket> pendingSocket) {
+      AtomicReference<AgentServerConnection> activeConnection,
+      AgentWebSocketServer.PendingSockets pendingSockets,
+      Duration handshakeTimeout) {
     this.config = config;
     this.handler = handler;
     this.running = running;
     this.activeConnection = activeConnection;
-    this.pendingSocket = pendingSocket;
+    this.pendingSockets = pendingSockets;
+    this.handshakeTimeoutNanos = handshakeTimeout.toNanos();
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   void runConnection(Socket socket) {
     AgentServerConnection connection = null;
+    boolean opened = false;
     CloseState closeState = new CloseState(NORMAL_CLOSE_CODE, NORMAL_CLOSE_REASON);
-    try (socket) {
-      socket.setTcpNoDelay(true);
-      socket.setSoTimeout(10_000);
-      WebSocketHandshake.HandshakeRequest request =
-          WebSocketHandshake.readHandshake(socket.getInputStream());
-      WebSocketHandshakeValidator.validate(config, request);
-      socket.setSoTimeout(0);
-      connection = new AgentServerConnection(socket);
-      if (!activeConnection.compareAndSet(
-          AgentWebSocketServer.RESERVED_CONNECTION_SLOT, connection)) {
-        connection.markClosed();
-        closeState.reason = "server shutdown";
-        return;
-      }
-      pendingSocket.compareAndSet(socket, null);
-      WebSocketHandshake.writeHandshakeResponse(socket.getOutputStream(), request.acceptKey());
-      handler.onOpen(connection);
-      runFrameLoop(connection, closeState);
-    } catch (WebSocketHandshake.HttpHandshakeException e) {
-      closeState.reason = e.getMessage();
-      try {
-        WebSocketHandshake.writeHttpResponse(
-            socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
-      } catch (IOException responseFailure) {
-        e.addSuppressed(responseFailure);
-        handler.onConnectionError(connection, e);
+    try {
+      try (socket) {
+        socket.setTcpNoDelay(true);
+        long deadlineNanos = System.nanoTime() + handshakeTimeoutNanos;
+        WebSocketHandshake.HandshakeRequest request;
+        try {
+          request = WebSocketHandshake.readHandshake(socket, deadlineNanos);
+          WebSocketHandshakeValidator.validate(config, request);
+        } catch (WebSocketHandshake.HttpHandshakeException e) {
+          closeState.reason = e.getMessage();
+          writeHandshakeFailure(socket, e);
+          return;
+        }
+        if (!running.get()) {
+          return;
+        }
+        socket.setSoTimeout(0);
+        AgentServerConnection candidate = new AgentServerConnection(socket);
+        if (!activeConnection.compareAndSet(null, candidate)) {
+          candidate.markClosed();
+          if (running.get()) {
+            WebSocketHandshake.writeHttpResponse(
+                socket.getOutputStream(),
+                409,
+                "Conflict",
+                List.of(),
+                "Bridge already has an active client");
+          }
+          return;
+        }
+        pendingSockets.remove(socket);
+        if (!running.get()) {
+          activeConnection.compareAndSet(candidate, null);
+          candidate.markClosed();
+          return;
+        }
+        connection = candidate;
+        WebSocketHandshake.writeHandshakeResponse(socket.getOutputStream(), request.acceptKey());
+        opened = true;
+        handler.onOpen(connection);
+        runFrameLoop(connection, closeState);
       }
     } catch (EOFException ignored) {
       closeState.reason = "peer disconnected";
@@ -74,14 +93,25 @@ final class AgentWebSocketConnectionRunner {
       closeState.reason = e.getMessage() == null ? "runtime error" : e.getMessage();
       handler.onConnectionError(connection, e);
     } finally {
-      pendingSocket.compareAndSet(socket, null);
-      activeConnection.compareAndSet(
-          connection != null ? connection : AgentWebSocketServer.RESERVED_CONNECTION_SLOT, null);
+      pendingSockets.remove(socket);
       if (connection != null) {
+        activeConnection.compareAndSet(connection, null);
         connection.markClosed();
       }
-      if (connection != null) {
+      if (opened) {
         handler.onClose(connection, closeState.code, closeState.reason);
+      }
+    }
+  }
+
+  private void writeHandshakeFailure(Socket socket, WebSocketHandshake.HttpHandshakeException e) {
+    try {
+      WebSocketHandshake.writeHttpResponse(
+          socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
+    } catch (IOException responseFailure) {
+      e.addSuppressed(responseFailure);
+      if (running.get()) {
+        handler.onConnectionError(null, e);
       }
     }
   }

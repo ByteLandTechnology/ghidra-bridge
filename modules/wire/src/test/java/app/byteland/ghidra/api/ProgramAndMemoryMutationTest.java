@@ -201,6 +201,8 @@ class ProgramAndMemoryMutationTest {
             8,
             "bytes",
             Map.of("encoding", "hex", "data", "00200020", "length", 4),
+            "fill_byte",
+            0xFF,
             "read",
             true,
             "write",
@@ -211,6 +213,103 @@ class ProgramAndMemoryMutationTest {
         (Map<?, ?>) registry.dispatch("memory_block.create", Map.of("resource", initResource));
     assertEquals(Boolean.TRUE, createdInit.get("initialized"));
     assertEquals(ByteSequence.Encoding.HEX, createdBlocks.getLast().bytes().encoding());
+    assertEquals(0xFF, createdBlocks.getLast().fillByte());
+
+    Map<?, ?> exactMaxInit =
+        (Map<?, ?>)
+            registry.dispatch(
+                "memory_block.create",
+                Map.of(
+                    "resource",
+                    Map.of(
+                        "name",
+                        "MAX_FLASH",
+                        "start",
+                        "0x10000000",
+                        "length",
+                        MemoryService.MAX_INITIALIZED_BLOCK_LENGTH,
+                        "initialized",
+                        true)));
+    assertEquals(Boolean.TRUE, exactMaxInit.get("initialized"));
+    assertEquals(
+        (long) MemoryService.MAX_INITIALIZED_BLOCK_LENGTH,
+        ((Number) exactMaxInit.get("length")).longValue());
+
+    Map<?, ?> largeUninit =
+        (Map<?, ?>)
+            registry.dispatch(
+                "memory_block.create",
+                Map.of(
+                    "resource",
+                    Map.of(
+                        "name",
+                        "DRAM",
+                        "start",
+                        "0x80000000",
+                        "length",
+                        MemoryService.MAX_INITIALIZED_BLOCK_LENGTH + 4096L)));
+    assertEquals(Boolean.FALSE, largeUninit.get("initialized"));
+
+    ApiException oversizedInit =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "memory_block.create",
+                    Map.of(
+                        "resource",
+                        Map.of(
+                            "name",
+                            "TOO_BIG_INIT",
+                            "start",
+                            "0x10000000",
+                            "length",
+                            MemoryService.MAX_INITIALIZED_BLOCK_LENGTH + 1L,
+                            "initialized",
+                            true))));
+    assertEquals(400, oversizedInit.status());
+    assertEquals("invalid_value", oversizedInit.error().code());
+    assertEquals("/resource/length", oversizedInit.error().target());
+
+    ApiException oversizedFillInit =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "memory_block.create",
+                    Map.of(
+                        "resource",
+                        Map.of(
+                            "name",
+                            "TOO_BIG_FILL",
+                            "start",
+                            "0x10000000",
+                            "length",
+                            MemoryService.MAX_INITIALIZED_BLOCK_LENGTH + 1L,
+                            "fill_byte",
+                            0xFF))));
+    assertEquals(400, oversizedFillInit.status());
+    assertEquals("invalid_value", oversizedFillInit.error().code());
+    assertEquals("/resource/length", oversizedFillInit.error().target());
+
+    ApiException oversizedBlock =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "memory_block.create",
+                    Map.of(
+                        "resource",
+                        Map.of(
+                            "name",
+                            "TOO_BIG_UNINIT",
+                            "start",
+                            "0x10000000",
+                            "length",
+                            MemoryService.MAX_BLOCK_LENGTH + 1L))));
+    assertEquals(400, oversizedBlock.status());
+    assertEquals("invalid_value", oversizedBlock.error().code());
+    assertEquals("/resource/length", oversizedBlock.error().target());
 
     assertThrows(
         ApiException.class,

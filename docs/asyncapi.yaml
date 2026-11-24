@@ -7985,7 +7985,7 @@
                       "is_volatile":
                         "type": "boolean"
                       "length":
-                        "maximum": !!int "9223372036854775807"
+                        "maximum": !!int "17179869184"
                         "minimum": !!int "1"
                         "type": "integer"
                       "name":
@@ -14000,7 +14000,7 @@
                                   "is_volatile":
                                     "type": "boolean"
                                   "length":
-                                    "maximum": !!int "9223372036854775807"
+                                    "maximum": !!int "17179869184"
                                     "minimum": !!int "1"
                                     "type": "integer"
                                   "name":
@@ -18140,7 +18140,7 @@
                         "is_volatile":
                           "type": "boolean"
                         "length":
-                          "maximum": !!int "9223372036854775807"
+                          "maximum": !!int "17179869184"
                           "minimum": !!int "1"
                           "type": "integer"
                         "name":
@@ -30870,7 +30870,7 @@
             "is_volatile":
               "type": "boolean"
             "length":
-              "maximum": !!int "9223372036854775807"
+              "maximum": !!int "17179869184"
               "minimum": !!int "1"
               "type": "integer"
             "name":

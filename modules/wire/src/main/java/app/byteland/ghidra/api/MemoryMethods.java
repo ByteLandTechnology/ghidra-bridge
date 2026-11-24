@@ -89,7 +89,7 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.START,
                 WireSchema.nonBlankString(),
                 ApiVocabulary.LENGTH,
-                WireSchema.integer(1, Long.MAX_VALUE),
+                WireSchema.integer(1, MemoryService.MAX_BLOCK_LENGTH),
                 "initialized",
                 WireSchema.bool(),
                 "fill_byte",
@@ -154,7 +154,7 @@ final class MemoryMethods implements ApiMethodProvider {
             "bytes.length"),
         List.of(ApiVocabulary.ADDRESS),
         request ->
-            WireValues.memory(
+            WireValues.resource(
                 registry
                     .services()
                     .memoryService()
@@ -226,6 +226,14 @@ final class MemoryMethods implements ApiMethodProvider {
     }
     boolean initialized =
         explicitInitialized != null ? explicitInitialized : (sequence != null || fillByte != null);
+    if (initialized && length > MemoryService.MAX_INITIALIZED_BLOCK_LENGTH) {
+      throw ApiException.badRequest(
+          ApiVocabulary.INVALID_VALUE,
+          "/resource/length must be in 1.."
+              + MemoryService.MAX_INITIALIZED_BLOCK_LENGTH
+              + " when initialized",
+          "/resource/length");
+    }
     return new MemoryService.MemoryBlockCreateRequest(
         text(resource, ApiVocabulary.NAME),
         text(resource, ApiVocabulary.START),

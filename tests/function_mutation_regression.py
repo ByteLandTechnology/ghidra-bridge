@@ -168,7 +168,188 @@ def run_test(headless, root):
             })["result"]
             assert label["name"] == "label_only"
 
-            sram = tool(30, "ghidra_memory", {
+            first_param = function(21, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert first_param == {
+                "ordinal": 0,
+                "name": "first_param",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "register:00000038:4"},
+            }
+
+            zero_param = function(22, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "zero_param",
+                    "data_type": {"kind": "pointer", "target": {"kind": "named", "name": "/char"}},
+                },
+            })["result"]
+            assert zero_param == {
+                "ordinal": 0,
+                "name": "zero_param",
+                "data_type": {"kind": "pointer", "target": {"kind": "named", "name": "/char"}},
+                "storage": {"kind": "serialization", "serialization": "register:00000038:8"},
+            }
+
+            func_a_with_params = function(23, "get", selector("func_a"))["result"]
+            assert func_a_with_params["has_custom_variable_storage"] is False
+            assert func_a_with_params["parameter_count"] == 2
+            assert func_a_with_params["parameters"] == [
+                zero_param,
+                {
+                    "ordinal": 1,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                    "storage": {"kind": "serialization", "serialization": "register:00000030:4"},
+                },
+            ]
+
+            function(24, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 2,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+            function(25, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 5,
+                    "name": "out_of_range",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+            assert function(26, "get", selector("func_a"))["result"]["parameter_count"] == 2
+
+            patched_recreated = function(27, "patch", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "patch": {
+                    "return_type": {"kind": "named", "name": "/int"},
+                    "return_storage": {"kind": "register", "register": "EAX"},
+                },
+            })["result"]
+            assert patched_recreated["has_custom_variable_storage"] is True
+
+            custom_reg = function(28, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "custom_reg",
+                    "data_type": {"kind": "named", "name": "/longlong"},
+                    "storage": {"kind": "register", "register": "R12"},
+                },
+            })["result"]
+            assert custom_reg == {
+                "ordinal": 0,
+                "name": "custom_reg",
+                "data_type": {"kind": "named", "name": "/longlong"},
+                "storage": {"kind": "serialization", "serialization": "register:000000a0:8"},
+            }
+
+            unassigned_tail = function(29, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 1,
+                    "name": "unassigned_tail",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert unassigned_tail == {
+                "ordinal": 1,
+                "name": "unassigned_tail",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+            }
+
+            unassigned_head = function(30, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "unassigned_head",
+                    "data_type": {"kind": "named", "name": "/short"},
+                },
+            })["result"]
+            assert unassigned_head == {
+                "ordinal": 0,
+                "name": "unassigned_head",
+                "data_type": {"kind": "named", "name": "/short"},
+                "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+            }
+
+            custom_with_params = function(31, "get", selector("jump_entry"))["result"]
+            assert custom_with_params["has_custom_variable_storage"] is True
+            assert custom_with_params["return_storage"] == {
+                "kind": "serialization",
+                "serialization": "register:00000000:4",
+            }
+            assert custom_with_params["parameter_count"] == 3
+            assert custom_with_params["parameters"] == [
+                unassigned_head,
+                {
+                    "ordinal": 1,
+                    "name": "custom_reg",
+                    "data_type": {"kind": "named", "name": "/longlong"},
+                    "storage": {"kind": "serialization", "serialization": "register:000000a0:8"},
+                },
+                {
+                    "ordinal": 2,
+                    "name": "unassigned_tail",
+                    "data_type": {"kind": "named", "name": "/int"},
+                    "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+                },
+            ]
+
+            tool(32, "ghidra_data_type", {
+                "operation": "create",
+                "params": {"resource": {"kind": "struct", "name": "big_ret", "size": 24}},
+            })
+            auto_patched = function(33, "patch", {
+                "selector": {"entry": symbols["label_only"]},
+                "patch": {"return_type": {"kind": "named", "name": "/big_ret"}},
+            })["result"]
+            assert auto_patched["parameter_count"] == 1
+            assert auto_patched["parameters"][0]["name"] == "__return_storage_ptr__"
+
+            function(34, "parameter.create", {
+                "selector": {"entry": symbols["label_only"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "before_auto",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+
+            after_auto = function(35, "parameter.create", {
+                "selector": {"entry": symbols["label_only"]},
+                "resource": {
+                    "ordinal": 1,
+                    "name": "after_auto",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert after_auto == {
+                "ordinal": 1,
+                "name": "after_auto",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "register:00000030:4"},
+            }
+            auto_with_params = function(36, "get", selector("label_only"))["result"]
+            assert auto_with_params["has_custom_variable_storage"] is False
+            assert auto_with_params["parameter_count"] == 2
+            assert [p["name"] for p in auto_with_params["parameters"]] == [
+                "__return_storage_ptr__",
+                "after_auto",
+            ]
+
+            sram = tool(40, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -188,7 +369,7 @@ def run_test(headless, root):
             assert sram["initialized"] is False
             assert sram["length"] == 4096
 
-            mmio = tool(31, "ghidra_memory", {
+            mmio = tool(41, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -207,15 +388,16 @@ def run_test(headless, root):
             assert mmio["volatile"] is True
             assert mmio["comment"] == "Peripheral registers"
 
-            rom = tool(32, "ghidra_memory", {
+            rom = tool(42, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
                         "name": "BOOTROM",
                         "start": "0x10000000",
-                        "length": 4,
+                        "length": 8,
                         "initialized": True,
                         "bytes": {"encoding": "hex", "data": "909090c3", "length": 4},
+                        "fill_byte": 0xFF,
                         "read": True,
                         "write": False,
                         "execute": True,
@@ -224,13 +406,25 @@ def run_test(headless, root):
             })["result"]
             assert rom["initialized"] is True
             assert rom["execute"] is True
-            rom_bytes = tool(33, "ghidra_memory", {
+            rom_bytes = tool(43, "ghidra_memory", {
                 "operation": "read",
-                "params": {"selector": {"address": "0x10000000"}, "length": 4},
+                "params": {"selector": {"address": "0x10000000"}, "length": 8},
             })["result"]
-            assert rom_bytes["bytes"]["data"] == "909090c3"
+            assert rom_bytes["bytes"]["data"] == "909090c3ffffffff"
 
-            tool(34, "ghidra_memory", {
+            tool(44, "ghidra_memory", {
+                "operation": "block.create",
+                "params": {
+                    "resource": {
+                        "name": "TOO_LARGE_INIT",
+                        "start": "0x50000000",
+                        "length": 16 * 1024 * 1024 + 1,
+                        "initialized": True,
+                    },
+                },
+            }, success=False)
+
+            tool(45, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -241,7 +435,7 @@ def run_test(headless, root):
                 },
             }, success=False)
 
-            overlay = tool(35, "ghidra_memory", {
+            overlay = tool(46, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -256,29 +450,29 @@ def run_test(headless, root):
             })["result"]
             assert overlay["overlay"] is True
 
-            before_program = tool(36, "ghidra_program", {"operation": "get"})["result"]
+            before_program = tool(47, "ghidra_program", {"operation": "get"})["result"]
             old_base = int(before_program["image_base"].split(":")[-1], 16)
             new_base = old_base + 0x100000
-            rebased = tool(37, "ghidra_program", {
+            rebased = tool(48, "ghidra_program", {
                 "operation": "rebase",
                 "params": {"image_base": hex(new_base)},
             })["result"]
             assert int(rebased["image_base"].split(":")[-1], 16) == new_base
             shifted_label = hex(int(symbols["label_only"], 16) + 0x100000)
-            assert function(38, "get", {"selector": {"entry": shifted_label}})["result"]["name"] == "label_only"
+            assert function(49, "get", {"selector": {"entry": shifted_label}})["result"]["name"] == "label_only"
 
-            tool(39, "ghidra_program", {
+            tool(50, "ghidra_program", {
                 "operation": "rebase",
                 "params": {"image_base": "0xfffffffffffffff0"},
             }, success=False)
 
-            restored = tool(44, "ghidra_program", {
+            restored = tool(51, "ghidra_program", {
                 "operation": "rebase",
                 "params": {"image_base": hex(old_base)},
             })["result"]
             assert int(restored["image_base"].split(":")[-1], 16) == old_base
 
-            tool(40, "ghidra_batch", {
+            tool(52, "ghidra_batch", {
                 "operation": "execute",
                 "params": {
                     "transaction_mode": "all_or_none",
@@ -308,10 +502,10 @@ def run_test(headless, root):
                     ],
                 },
             }, success=False)
-            blocks = tool(41, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
+            blocks = tool(53, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
             assert all(item["name"] != "ROLLED_BACK" for item in blocks)
 
-            per_item = tool(42, "ghidra_batch", {
+            per_item = tool(54, "ghidra_batch", {
                 "operation": "execute",
                 "params": {
                     "transaction_mode": "per_item",
@@ -343,7 +537,7 @@ def run_test(headless, root):
             })["result"]["items"]
             assert "result" in per_item[0]
             assert "error" in per_item[1]
-            blocks_after = tool(43, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
+            blocks_after = tool(55, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
             assert any(item["name"] == "KEPT_BLOCK" for item in blocks_after)
             print("Function, program rebase, and memory block regression checks passed")
         finally:

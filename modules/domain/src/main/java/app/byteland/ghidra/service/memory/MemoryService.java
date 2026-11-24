@@ -8,6 +8,8 @@ import app.byteland.ghidra.service.Page;
  */
 public interface MemoryService {
   int MAX_RANGE_LENGTH = 65_536;
+  long MAX_BLOCK_LENGTH = 16L * 1024 * 1024 * 1024;
+  int MAX_INITIALIZED_BLOCK_LENGTH = 16 * 1024 * 1024;
 
   /**
    * Query parameters for memory block filters.
@@ -42,8 +44,19 @@ public interface MemoryService {
       if (start == null || start.isBlank()) {
         throw new IllegalArgumentException("start must not be blank");
       }
-      if (length < 1) {
-        throw new IllegalArgumentException("length must be positive");
+      if (length < 1 || length > MAX_BLOCK_LENGTH) {
+        throw new IllegalArgumentException("length must be in 1.." + MAX_BLOCK_LENGTH);
+      }
+      if (initialized && length > MAX_INITIALIZED_BLOCK_LENGTH) {
+        throw new IllegalArgumentException(
+            "initialized block length must be in 1.." + MAX_INITIALIZED_BLOCK_LENGTH);
+      }
+      if (!initialized && (fillByte != null || bytes != null)) {
+        throw new IllegalArgumentException(
+            "uninitialized block must not set fillByte or bytes");
+      }
+      if (bytes != null && bytes.length() > length) {
+        throw new IllegalArgumentException("bytes length must not exceed block length");
       }
       if (fillByte != null && (fillByte < 0 || fillByte > 255)) {
         throw new IllegalArgumentException("fillByte must be in 0..255");

@@ -16,6 +16,7 @@ import ghidra.program.model.mem.MemoryConflictException;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.task.TaskMonitor;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -62,20 +63,23 @@ final class MemoryMutations {
         return memory.createUninitializedBlock(
             request.name(), start, request.length(), request.overlay());
       }
+      byte fill = (byte) (request.fillByte() != null ? request.fillByte() : 0);
       if (request.bytes() != null) {
         byte[] decoded =
             MemoryEncoding.decodeBytes(
                 request.bytes().data(),
                 request.bytes().encoding().name().toLowerCase(Locale.ROOT));
+        if (decoded.length > request.length()) {
+          throw new IllegalArgumentException("bytes length must not exceed block length");
+        }
         return memory.createInitializedBlock(
             request.name(),
             start,
-            paddedStream(decoded, request.length()),
+            paddedStream(decoded, request.length(), fill),
             request.length(),
             TaskMonitor.DUMMY,
             request.overlay());
       }
-      byte fill = (byte) (request.fillByte() != null ? request.fillByte() : 0);
       return memory.createInitializedBlock(
           request.name(), start, request.length(), fill, TaskMonitor.DUMMY, request.overlay());
     } catch (MemoryConflictException ex) {
@@ -96,13 +100,19 @@ final class MemoryMutations {
           "/resource",
           "memory block creation requires exclusive access: " + ex.getMessage(),
           ex);
+    } catch (IllegalStateException ex) {
+      throw new MemoryBlockConflictException(
+          "memory_block_conflict",
+          "/resource/length",
+          "memory block creation failed: " + ex.getMessage(),
+          ex);
     } catch (CancelledException ex) {
       throw new TransactionExecutionException(
           "memory block creation stopped early: " + ex.getMessage(), ex);
     }
   }
 
-  private static InputStream paddedStream(byte[] prefix, long totalLength) {
+  private static InputStream paddedStream(byte[] prefix, long totalLength, byte fill) {
     return new InputStream() {
       private long position;
 
@@ -111,7 +121,7 @@ final class MemoryMutations {
         if (position >= totalLength) {
           return -1;
         }
-        int value = position < prefix.length ? (prefix[(int) position] & 0xFF) : 0;
+        int value = (position < prefix.length ? prefix[(int) position] : fill) & 0xFF;
         position++;
         return value;
       }
@@ -132,7 +142,7 @@ final class MemoryMutations {
           System.arraycopy(prefix, (int) position, buffer, offset, copied);
         }
         if (copied < count) {
-          java.util.Arrays.fill(buffer, offset + copied, offset + count, (byte) 0);
+          Arrays.fill(buffer, offset + copied, offset + count, fill);
         }
         position += count;
         return count;
