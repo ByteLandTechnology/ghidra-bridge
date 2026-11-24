@@ -82,12 +82,16 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
-Before you submit a change, run the verification suite:
+Before you submit a change, run the verification suite that matches CI:
 
 ```bash
-./gradlew --no-daemon clean verify
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
 ```
+
+On Linux x86-64, CI also runs
+`python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`
+after `clean verify`.
 
 To run compiler lint, Javadoc, or unit test checks separately during local work, run:
 
@@ -105,6 +109,7 @@ To run compiler lint, Javadoc, or unit test checks separately during local work,
 The `verify` task checks:
 - **Compiler Lints**: Java and script compile tasks use `-Xlint:all` and `-Werror` on Java 21.
 - **Javadoc**: `javadoc` checks all Java subprojects with `-Xdoclint:all` and `-Werror`.
+- **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.

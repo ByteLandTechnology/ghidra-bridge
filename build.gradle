@@ -42,6 +42,10 @@ subprojects {
         options.addBooleanOption('Xdoclint:all', true)
         options.addBooleanOption('Werror', true)
     }
+    def subprojectCheck = tasks.named('check')
+    rootProject.tasks.named('check') {
+        dependsOn subprojectCheck
+    }
 }
 
 def ghidraJars = ghidraInstallDir == null ? files() : fileTree(dir: ghidraInstallDir, include: ['**/*.jar'])
@@ -79,6 +83,7 @@ project(':launcher') {
         implementation project(':transport:websocket')
         implementation project(':transport:mcp')
         compileOnly ghidraJars
+        testImplementation ghidraJars
     }
 }
 
@@ -94,6 +99,9 @@ project(':adapter').tasks.named('javadoc') {
     dependsOn rootProject.tasks.named('verifyGhidraInstallDir')
 }
 project(':launcher').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+project(':launcher').tasks.named('compileTestJava') {
+    dependsOn rootProject.tasks.named('verifyGhidraInstallDir')
+}
 project(':launcher').tasks.named('javadoc') {
     dependsOn rootProject.tasks.named('verifyGhidraInstallDir')
 }
@@ -182,7 +190,7 @@ tasks.register('verifyApiContracts') {
 
 tasks.register('verifyDistribution') {
     group = 'verification'
-    dependsOn 'buildGhidraScript', 'compileGeneratedScripts'
+    dependsOn 'buildGhidraScript', 'compileGeneratedScripts', ':launcher:test'
     doLast {
         def output = layout.buildDirectory.dir('ghidra-script').get().asFile
         def names = output.listFiles().collect { it.name }.sort()
@@ -213,6 +221,10 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     options.compilerArgs.addAll(['-Xlint:all', '-Werror'])
 }
 
+project(':launcher').tasks.named('test', Test) {
+    classpath += files(tasks.named('compileGeneratedScripts'))
+}
+
 tasks.register('verifyArchitecture') {
     group = 'verification'
     doLast {
@@ -231,6 +243,6 @@ def javaSubprojects = subprojects.findAll { it.path != ':transport' }
 
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'check', 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
     dependsOn javaSubprojects.collect { [it.tasks.named('testClasses'), it.tasks.named('javadoc')] }
 }

@@ -97,16 +97,22 @@ public final class GhidraSession {
   }
 
   /**
-   * Lists references to or from the given program address.
+   * Returns references to or from the given program address.
    *
    * @param address target or source address
    * @param to true for inbound references, false for outbound references
-   * @return list of Ghidra references
+   * @return iterable of Ghidra references
    */
-  public java.util.List<ghidra.program.model.symbol.Reference> references(
-      Address address, boolean to) {
-    return java.util.Arrays.asList(
-        to ? ghidraScript.getReferencesTo(address) : ghidraScript.getReferencesFrom(address));
+  public Iterable<ghidra.program.model.symbol.Reference> references(Address address, boolean to) {
+    ghidra.program.model.symbol.ReferenceManager manager = currentProgram().getReferenceManager();
+    if (to) {
+      return () -> {
+        ghidra.program.model.symbol.ReferenceIterator incoming = manager.getReferencesTo(address);
+        return incoming == null ? java.util.Collections.emptyIterator() : incoming;
+      };
+    }
+    ghidra.program.model.symbol.Reference[] outgoing = manager.getReferencesFrom(address);
+    return outgoing == null ? java.util.List.of() : java.util.Arrays.asList(outgoing);
   }
 
   /**

@@ -2,6 +2,7 @@ package app.byteland.ghidra;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Serializes objects to compact JSON and parses JSON text.
@@ -17,6 +18,16 @@ public final class JsonUtil {
    */
   public static String toJson(Object value) {
     return JsonWriter.toJson(value);
+  }
+
+  /**
+   * Wraps pre-serialized JSON text so {@link #toJson(Object)} writes it verbatim.
+   *
+   * @param json valid pre-serialized JSON fragment
+   * @return raw JSON marker value
+   */
+  public static Object rawJson(String json) {
+    return new JsonWriter.RawJson(Objects.requireNonNull(json, "json"));
   }
 
   /**

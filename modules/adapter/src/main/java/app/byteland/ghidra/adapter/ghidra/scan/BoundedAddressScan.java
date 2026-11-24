@@ -88,6 +88,30 @@ public final class BoundedAddressScan<T> {
   }
 
   /**
+   * Sets the initial scan boundary address when no start or end address is recorded yet.
+   *
+   * @param address canonical start boundary address
+   */
+  public void anchorStart(String address) {
+    if (stopped()) throw new IllegalStateException("scan is already stopped");
+    if (address == null) throw new IllegalArgumentException("address is required");
+    if (scannedStart == null) scannedStart = address;
+    if (scannedEnd == null) scannedEnd = address;
+  }
+
+  /**
+   * Sets the terminal scan boundary address after a scan completes through {@code address}.
+   *
+   * @param address canonical end boundary address
+   */
+  public void anchorCompletedEnd(String address) {
+    if (stopped()) throw new IllegalStateException("scan is already stopped");
+    if (address == null) throw new IllegalArgumentException("address is required");
+    if (scannedStart == null) scannedStart = address;
+    scannedEnd = address;
+  }
+
+  /**
    * Reports whether the scan has reached its item limit or timeout.
    *
    * @return {@code true} if no further addresses can be visited

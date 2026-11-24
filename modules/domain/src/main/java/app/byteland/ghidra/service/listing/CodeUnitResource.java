@@ -15,8 +15,6 @@ import java.util.List;
  * @param mnemonic instruction mnemonic, or {@code null} for data
  * @param operands rendered instruction operands, or {@code null} for data
  * @param dataType defined data type reference, or {@code null} for instructions
- * @param value formatted data value, or {@code null}
- * @param representation rendered data representation, or {@code null}
  */
 public record CodeUnitResource(
     String address,
@@ -26,9 +24,7 @@ public record CodeUnitResource(
     String text,
     String mnemonic,
     List<String> operands,
-    DataTypeReference dataType,
-    String value,
-    String representation) {
+    DataTypeReference dataType) {
   /** Copies optional operand strings into an immutable list. */
   public CodeUnitResource {
     operands = immutableCopyOrNull(operands);
