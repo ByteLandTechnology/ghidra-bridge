@@ -329,7 +329,7 @@ class McpHttpServerOriginTest {
 
   @Test
   void matchesConfiguredHostCaseInsensitivelyAndAcrossIpv6RepresentationsWithoutDns() {
-    // Hostname matching without DNS resolution (.invalid is RFC 2606 guaranteed non-resolvable)
+    // Hostname match without DNS resolution (.invalid is RFC 2606 guaranteed non-resolvable)
     assertTrue(
         McpHttpServer.isAllowedOrigin(
             List.of("https://GHIDRA-HOST.INVALID:8443"), "ghidra-host.invalid"));
@@ -338,7 +338,7 @@ class McpHttpServerOriginTest {
             List.of("https://other-host.invalid:8443"), "ghidra-host.invalid"));
     assertFalse(McpHttpServer.isAllowedOrigin(List.of("https://untrusted.invalid"), "127.0.0.1"));
 
-    // Configured non-loopback IPv4 and IPv6 literal matching
+    // Configured non-loopback IPv4 and IPv6 literal match
     assertTrue(McpHttpServer.isAllowedOrigin(List.of("http://192.168.1.50:8766"), "192.168.1.50"));
     assertFalse(McpHttpServer.isAllowedOrigin(List.of("http://192.168.1.51:8766"), "192.168.1.50"));
     assertTrue(McpHttpServer.isAllowedOrigin(List.of("http://[fd00::1]:8766"), "[FD00::1]"));
@@ -346,7 +346,7 @@ class McpHttpServerOriginTest {
         McpHttpServer.isAllowedOrigin(List.of("http://[fd00:0:0:0:0:0:0:1]:8766"), "fd00::1"));
     assertFalse(McpHttpServer.isAllowedOrigin(List.of("http://[fd00::2]:8766"), "fd00::1"));
 
-    // Malformed IP literals return null without throwing or querying DNS
+    // Malformed IP literals return null without an exception or DNS query
     assertNull(McpHttpServer.parseIpLiteral("127.0.0.1.evil.example"));
     assertNull(McpHttpServer.parseIpLiteral("127.0.0.01"));
     assertNull(McpHttpServer.parseIpLiteral("127.1"));

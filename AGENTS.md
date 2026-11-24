@@ -27,8 +27,8 @@ The build defines 8 Java subprojects under `modules/`:
 - `:transport:websocket` (`modules/transport/websocket`)
 - `:transport:mcp` (`modules/transport/mcp`)
 
-Follow these repository rules when you edit files:
-- **Ghidra API boundary**: Keep `ghidra.*` imports in `modules/adapter` and `modules/launcher` (`verifyArchitecture` checks this rule).
+Follow these repository rules when you change code:
+- **Ghidra API boundary**: Only `modules/adapter` and `modules/launcher` can import `ghidra.*` packages (`verifyArchitecture` enforces this rule).
 - **Generated contracts**: Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand. Run `./gradlew generateApiContracts` after public interface changes.
 - **Line endings**: Keep LF line endings on text files, contracts, and shell scripts. Keep CRLF line endings on `gradlew.bat`.
 - **Formatting**: Format Java files with `google-java-format` (2-space indentation), and keep each Java line at 100 characters or fewer. Format Python files in `tests/` with `ruff` (4-space indentation), and do not put a shebang line in a Python script that is not executable. Do not add external Gradle plugins to `build.gradle` or change `gradle/verification-metadata.xml` for formatting tools.
@@ -86,7 +86,7 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
 
 ### Full Build and Verification (`clean verify`)
 
-Run the full Gradle verification gate used in pull requests and release packaging:
+Run the full Gradle verification gate used in pull requests and release archives:
 
 ```bash
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify

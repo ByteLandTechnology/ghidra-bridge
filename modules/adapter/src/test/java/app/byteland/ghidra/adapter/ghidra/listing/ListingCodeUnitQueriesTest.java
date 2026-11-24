@@ -132,7 +132,7 @@ class ListingCodeUnitQueriesTest {
       ListingCodeUnitQueries queries =
           new ListingCodeUnitQueries(GhidraTestSupport.sessionFor(spy.wrap(holder.program())));
 
-      // Completed instruction scan across 64 KB undefined gap + trailing undefined tail
+      // Completed instruction scan across 64 KB undefined gap and final undefined tail
       Page<CodeUnitResource> instructions =
           queries.listCodeUnits(
               AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
@@ -345,7 +345,7 @@ class ListingCodeUnitQueriesTest {
         assertNull(atMax.nextCursor());
       }
 
-      // Cursor resumption at minAddress (0x0) going backward for all kinds
+      // Cursor resumption at minAddress (0x0) backward for all kinds
       for (String kind : List.of("all", "instruction", "data")) {
         Page<CodeUnitResource> atMin =
             queries.listCodeUnits(

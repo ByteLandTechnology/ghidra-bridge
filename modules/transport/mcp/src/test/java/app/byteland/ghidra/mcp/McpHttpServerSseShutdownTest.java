@@ -130,9 +130,9 @@ class McpHttpServerSseShutdownTest {
             closeElapsedMs < 1_000L,
             "Expected immediate wakeup on close(), got " + closeElapsedMs + " ms");
 
-        // Drain any remaining lines; stream must reach EOF promptly after close().
+        // Drain any left-over lines; stream must reach EOF promptly after close().
         while (client.reader.readLine() != null) {
-          // draining EOF
+          // drain to EOF
         }
       }
     }

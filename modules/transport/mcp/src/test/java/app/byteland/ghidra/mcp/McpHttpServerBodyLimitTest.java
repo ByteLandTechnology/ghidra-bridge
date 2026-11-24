@@ -188,7 +188,7 @@ class McpHttpServerBodyLimitTest {
     assertEquals(McpHttpServer.MAX_REQUEST_BODY_BYTES, exactBody.length());
     assertTrue(exactClosed.get());
 
-    // Stream promises small Content-Length (32) in headers, but underlying stream yields 64 MiB;
+    // Stream promises small Content-Length (32) in headers, but the base stream yields 64 MiB;
     // also fail if readBody tries to read past MAX_REQUEST_BODY_BYTES + 1.
     Headers mismatchedHeaders = new Headers();
     mismatchedHeaders.add("Content-Length", "32");
@@ -294,7 +294,8 @@ class McpHttpServerBodyLimitTest {
         assertEquals(-32600, ((Number) error.get("code")).intValue());
       }
 
-      // 2. Oversized Transfer-Encoding: chunked (16 MiB + 1) where client pauses before 0\r\n\r\n.
+      // 2. Oversized `Transfer-Encoding: chunked` (16 MiB + 1) where client pauses before
+      // 0\r\n\r\n.
       try (Socket socket = new Socket(LOOPBACK, running.port)) {
         socket.setSoTimeout(10_000);
         String headers =
@@ -545,7 +546,7 @@ class McpHttpServerBodyLimitTest {
       Map<?, ?> pingJson = (Map<?, ?>) JsonUtil.parse(pingResponse.body());
       assertEquals(4, ((Number) pingJson.get("id")).intValue());
 
-      // Signal clean shutdown by closing child stdin.
+      // Signal clean shutdown when you close child stdin.
       process.getOutputStream().close();
       assertTrue(process.waitFor(15, TimeUnit.SECONDS), "Child JVM did not exit in time");
       String stderr = stderrFuture.get(5, TimeUnit.SECONDS);
@@ -952,7 +953,7 @@ class McpHttpServerBodyLimitTest {
         System.out.flush();
         // Wait until parent closes stdin.
         while (System.in.read() != -1) {
-          // Keep server running.
+          // Keep server active.
         }
       }
     }
