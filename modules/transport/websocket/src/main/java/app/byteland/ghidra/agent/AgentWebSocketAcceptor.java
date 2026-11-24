@@ -55,7 +55,6 @@ final class AgentWebSocketAcceptor implements Runnable {
   }
 
   @Override
-  @SuppressWarnings("PMD.CloseResource")
   public void run() {
     while (running.get()) {
       try {
@@ -87,7 +86,6 @@ final class AgentWebSocketAcceptor implements Runnable {
     }
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void startConnectionThread(Socket socket) {
     pendingSocket.set(socket);
     try {
@@ -102,7 +100,6 @@ final class AgentWebSocketAcceptor implements Runnable {
     }
   }
 
-  @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CompareObjectsWithEquals"})
   private static void closeAfterFailedStart(Socket socket, RuntimeException startFailure) {
     try {
       socket.close();

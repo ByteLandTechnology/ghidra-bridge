@@ -32,7 +32,6 @@ final class AgentWebSocketConnectionRunner {
     this.pendingSocket = pendingSocket;
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   void runConnection(Socket socket) {
     AgentServerConnection connection = null;
     CloseState closeState = new CloseState(NORMAL_CLOSE_CODE, NORMAL_CLOSE_REASON);

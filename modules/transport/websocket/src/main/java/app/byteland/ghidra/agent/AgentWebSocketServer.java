@@ -27,7 +27,6 @@ public final class AgentWebSocketServer implements AutoCloseable {
     this.handler = handler;
   }
 
-  @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
   public void start() throws IOException {
     if (!running.compareAndSet(false, true)) {
       return;
@@ -52,7 +51,6 @@ public final class AgentWebSocketServer implements AutoCloseable {
     }
   }
 
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
   private static void closeAfterFailedStart(ServerSocket socket, Throwable startFailure) {
     try {
       socket.close();
@@ -64,7 +62,6 @@ public final class AgentWebSocketServer implements AutoCloseable {
   }
 
   @Override
-  @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
   public void close() {
     running.set(false);
     Object slot = activeConnection.getAndSet(null);
