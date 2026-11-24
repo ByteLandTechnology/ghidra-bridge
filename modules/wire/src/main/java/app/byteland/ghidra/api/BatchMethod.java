@@ -404,29 +404,30 @@ final class BatchMethod {
     return new PendingBatchResponse(List.copyOf(rows), false);
   }
 
-  private PendingBatchResponse executeAllOrNone(List<PreparedItem> items) {
+  private Object executeAllOrNone(List<PreparedItem> items) {
     try {
       boolean requiresTransaction =
           items.stream().anyMatch(item -> item.method().effects().requiresTransaction());
-      List<PendingRow> rows =
-          requiresTransaction
-              ? runtime.inTransaction(() -> executeAllOrNoneItems(items))
-              : executeAllOrNoneItems(items);
-      return new PendingBatchResponse(List.copyOf(rows), true);
+      if (requiresTransaction) {
+        return runtime.inTransaction(() -> batchEnvelope(executeAllOrNoneTransactional(items)));
+      }
+      return new PendingBatchResponse(List.copyOf(executeAllOrNoneItems(items)), true);
     } catch (BatchRollback rollback) {
-      BridgeError cause = ApiFailures.normalize(rollback.getCause()).error();
-      ApiException translated =
-          new ApiException(
-              409,
-              new BridgeError(
-                  409,
-                  "batch_rolled_back",
-                  "all_or_none batch rolled back",
-                  ITEMS_TARGET,
-                  Map.of("failed_item", rollback.itemId(), "cause", cause.toMap())));
-      translated.initCause(rollback);
-      throw translated;
+      throw translateBatchRollback(rollback.itemId(), rollback.getCause(), rollback);
     }
+  }
+
+  private List<Map<String, Object>> executeAllOrNoneTransactional(List<PreparedItem> items) {
+    List<Map<String, Object>> encoded = new ArrayList<>(items.size());
+    for (PreparedItem item : items) {
+      try {
+        Object rawResult = runtime.invokeHandler(item.method(), item.request(), false);
+        encoded.add(successRow(item.id(), item.method().encodeResponse(item.request(), rawResult)));
+      } catch (Exception error) {
+        throw new BatchRollback(item.id(), error);
+      }
+    }
+    return encoded;
   }
 
   private List<PendingRow> executeAllOrNoneItems(List<PreparedItem> items) {
@@ -440,6 +441,22 @@ final class BatchMethod {
       }
     }
     return temporary;
+  }
+
+  private static ApiException translateBatchRollback(
+      String failedItemId, Throwable rawCause, Throwable attachCause) {
+    BridgeError cause = ApiFailures.normalize(rawCause).error();
+    ApiException translated =
+        new ApiException(
+            409,
+            new BridgeError(
+                409,
+                "batch_rolled_back",
+                "all_or_none batch rolled back",
+                ITEMS_TARGET,
+                Map.of("failed_item", failedItemId, "cause", cause.toMap())));
+    translated.initCause(attachCause);
+    return translated;
   }
 
   private static Map<String, Object> successRow(String id, Object result) {
@@ -510,8 +527,13 @@ final class BatchMethod {
         }
         PreparedItem item = row.item();
         if (allOrNone) {
-          encoded.add(
-              successRow(item.id(), item.method().encodeResponse(item.request(), row.rawResult())));
+          try {
+            encoded.add(
+                successRow(
+                    item.id(), item.method().encodeResponse(item.request(), row.rawResult())));
+          } catch (Exception error) {
+            throw translateBatchRollback(item.id(), error, error);
+          }
         } else {
           try {
             encoded.add(

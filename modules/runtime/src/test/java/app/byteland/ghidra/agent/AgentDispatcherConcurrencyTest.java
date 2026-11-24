@@ -349,6 +349,70 @@ class AgentDispatcherConcurrencyTest {
       assertEquals("invalid_response", invalidResponse.error().code());
       assertEquals(0, dispatcher.barrier().readLockCount());
       assertFalse(dispatcher.barrier().isWriteLockedByCurrentThread());
+
+      // Read-only all_or_none batch translates post-lock item encoding failures to 409 batch_rolled_back
+      ApiException readOnlyAllOrNoneFailure =
+          assertThrows(
+              ApiException.class,
+              () ->
+                  dispatcher.dispatch(
+                      "batch.execute",
+                      Map.of(
+                          "transaction_mode",
+                          "all_or_none",
+                          "items",
+                          List.of(
+                              Map.of("id", "ok-prog", "method", "program.get", "arguments", Map.of()),
+                              Map.of(
+                                  "id",
+                                  "bad-lang",
+                                  "method",
+                                  "program_language.get",
+                                  "arguments",
+                                  Map.of())))));
+      assertEquals(409, readOnlyAllOrNoneFailure.status());
+      assertEquals("batch_rolled_back", readOnlyAllOrNoneFailure.error().code());
+      assertEquals("bad-lang", readOnlyAllOrNoneFailure.error().details().get("failed_item"));
+      assertEquals(0, dispatcher.barrier().readLockCount());
+
+      // Transactional all_or_none batch rolls back prior mutations if a later item fails encodeResponse
+      String beforeRollback = harness.committedComment.get();
+      ApiException transactionalEncodeRollback =
+          assertThrows(
+              ApiException.class,
+              () ->
+                  dispatcher.dispatch(
+                      "batch.execute",
+                      Map.of(
+                          "transaction_mode",
+                          "all_or_none",
+                          "items",
+                          List.of(
+                              Map.of(
+                                  "id",
+                                  "mut-1",
+                                  "method",
+                                  "comment.upsert",
+                                  "arguments",
+                                  Map.of(
+                                      "resource",
+                                      Map.of(
+                                          "address", "ram:00100000",
+                                          "type", "eol",
+                                          "text", "ROLLBACK_ON_ENCODE_FAILURE"))),
+                              Map.of(
+                                  "id",
+                                  "bad-lang",
+                                  "method",
+                                  "program_language.get",
+                                  "arguments",
+                                  Map.of())))));
+      assertEquals(409, transactionalEncodeRollback.status());
+      assertEquals("batch_rolled_back", transactionalEncodeRollback.error().code());
+      assertEquals("bad-lang", transactionalEncodeRollback.error().details().get("failed_item"));
+      assertEquals(beforeRollback, harness.committedComment.get());
+      assertEquals(0, harness.activeTransactions.get());
+      assertFalse(dispatcher.barrier().isWriteLockedByCurrentThread());
       harness.returnCorruptLanguageResponse.set(false);
 
       // Also verify response JsonValueCodec + FieldProjection run while write lock is held
