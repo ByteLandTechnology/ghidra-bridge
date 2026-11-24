@@ -76,11 +76,7 @@ public final class ApiRegistry {
         "metadata");
   }
 
-  @SuppressWarnings({
-    ApiVocabulary.UNCHECKED,
-    "PMD.UseProperClassLoader",
-    "PMD.CompareObjectsWithEquals"
-  })
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
   private static <T> T inertService(Class<T> type) {
     return (T)
         java.lang.reflect.Proxy.newProxyInstance(
@@ -672,7 +668,6 @@ public final class ApiRegistry {
     return 0;
   }
 
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
   private static boolean sameReference(Object left, Object right) {
     return left == right;
   }
@@ -854,7 +849,6 @@ public final class ApiRegistry {
         .toList();
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   static List<String> stringList(Object value) {
     if (!(value instanceof List<?> list)) return null;
     return list.stream().map(String.class::cast).toList();
