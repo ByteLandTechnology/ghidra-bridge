@@ -1,9 +1,13 @@
 package app.byteland.ghidra.api;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public final class WireSchema {
   private static final int EXACT_UNION_MATCHES = 1;
@@ -136,6 +140,45 @@ public final class WireSchema {
     Map<String, Object> root = new LinkedHashMap<>(schema);
     root.put(ApiVocabulary.DEFINITIONS, DEFAULT_DEFINITIONS);
     return root;
+  }
+
+  static Map<String, Object> snapshot(Map<?, ?> source) {
+    Objects.requireNonNull(source, "schema");
+    Map<String, Object> copy = new LinkedHashMap<>();
+    for (Map.Entry<?, ?> entry : source.entrySet()) {
+      if (!(entry.getKey() instanceof String key)) {
+        throw new IllegalArgumentException("schema object keys must be strings");
+      }
+      copy.put(key, snapshotValue(entry.getValue()));
+    }
+    return Collections.unmodifiableMap(copy);
+  }
+
+  private static Object snapshotValue(Object value) {
+    if (value instanceof Map<?, ?> map) {
+      return snapshot(map);
+    }
+    if (value instanceof List<?> list) {
+      List<Object> copy = new ArrayList<>(list.size());
+      for (Object item : list) {
+        copy.add(snapshotValue(item));
+      }
+      return Collections.unmodifiableList(copy);
+    }
+    if (value == null
+        || value instanceof String
+        || value instanceof Boolean
+        || value instanceof Byte
+        || value instanceof Short
+        || value instanceof Integer
+        || value instanceof Long
+        || value instanceof Float
+        || value instanceof Double
+        || value instanceof BigInteger
+        || value instanceof BigDecimal) {
+      return value;
+    }
+    throw new IllegalArgumentException("unsupported schema value: " + value.getClass().getName());
   }
 
   private static final Map<String, Map<String, Object>> DEFAULT_DEFINITIONS =
