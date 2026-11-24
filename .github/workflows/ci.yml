@@ -14,15 +14,32 @@ concurrency:
 
 env:
   # Use one Ghidra release and one Java version for each run.
-  GHIDRA_VERSION: "12.1.2"
-  GHIDRA_BUILD_DATE: "20260605"
-  GHIDRA_ZIP_SHA256: "b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d"
+  GHIDRA_VERSION: "12.1.4"
+  GHIDRA_BUILD_DATE: "20260921"
+  GHIDRA_ZIP_SHA256: "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db"
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
+  verify-matrix:
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - macos-15-intel
+          - macos-15
+          - windows-2025
+          - windows-11-arm
+    defaults:
+      run:
+        shell: bash
     steps:
+      - name: Configure Git line behavior on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -40,12 +57,27 @@ jobs:
         run: bash .github/scripts/verify-repository-hygiene.sh
 
       - name: Run clean repository verification
-        run: ./gradlew --no-daemon clean verify
+        run: ${{ runner.os == 'Windows' && './gradlew.bat' || './gradlew' }} --no-daemon clean verify
 
       - name: Test function mutations
         run: |
-          ./gradlew --no-daemon :wire:test :contracts:test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+          ${{ runner.os == 'Windows' && './gradlew.bat' || './gradlew' }} --no-daemon :wire:test :contracts:test
+          ${{ runner.os == 'Windows' && 'python' || 'python3' }} tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/${{ runner.os == 'Windows' && 'analyzeHeadless.bat' || 'analyzeHeadless' }}"
+
+  verify:
+    needs: verify-matrix
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check matrix status
+        env:
+          MATRIX_RESULT: ${{ needs.verify-matrix.result }}
+        run: |
+          if [ "$MATRIX_RESULT" != "success" ]; then
+            echo "verify-matrix finished with status: $MATRIX_RESULT" >&2
+            exit 1
+          fi
 
   release:
     # Update the release PR or create a release after main passes verification.

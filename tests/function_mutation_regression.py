@@ -7,8 +7,8 @@ import json
 import os
 import pathlib
 import shutil
-import signal
 import socket
+import struct
 import subprocess
 import tempfile
 import time
@@ -16,47 +16,250 @@ import urllib.error
 import urllib.request
 
 
-FIXTURE = """
-.global _start
-_start: ret
-.global func_a
-func_a: push %rbp
- jmp shared
-.global func_b
-func_b: push %rbx
- jmp shared
-.global shared
-shared: nop
- ret
-.global jump_entry
-jump_entry: jmp jump_target
-.global jump_target
-jump_target: mov $1, %eax
- ret
-.global reserved_entry
-reserved_entry: nop
- ret
-.global label_only
-label_only: nop
- ret
-"""
+TEXT_VADDR = 0x401000
+TEXT_OFFSET = 0x1000
+
+# x86-64 machine code fixture:
+# 0x00 _start:         ret
+# 0x01 func_a:         push %rbp; jmp shared
+# 0x04 func_b:         push %rbx; jmp shared
+# 0x07 shared:         nop; ret
+# 0x09 jump_entry:     jmp jump_target
+# 0x0b jump_target:    mov $1, %eax; ret
+# 0x11 reserved_entry: nop; ret
+# 0x13 label_only:     nop; ret
+TEXT_BYTES = bytes.fromhex(
+    "c3"
+    "55eb03"
+    "53eb00"
+    "90c3"
+    "eb00"
+    "b801000000c3"
+    "90c3"
+    "90c3"
+)
+
+SYMBOL_OFFSETS = (
+    ("_start", 0x00),
+    ("func_a", 0x01),
+    ("func_b", 0x04),
+    ("shared", 0x07),
+    ("jump_entry", 0x09),
+    ("jump_target", 0x0B),
+    ("reserved_entry", 0x11),
+    ("label_only", 0x13),
+)
+
+
+def align_up(value, alignment):
+    remainder = value % alignment
+    return value if remainder == 0 else value + (alignment - remainder)
+
+
+def build_fixture_elf(binary_path):
+    strtab = bytearray(b"\x00")
+    symtab = bytearray(struct.pack("<IBBHQQ", 0, 0, 0, 0, 0, 0))
+    symbols = {}
+
+    for name, offset in SYMBOL_OFFSETS:
+        name_offset = len(strtab)
+        strtab.extend(name.encode("ascii") + b"\x00")
+        address = TEXT_VADDR + offset
+        symbols[name] = f"0x{address:016x}"
+        # STB_GLOBAL (1 << 4) | STT_NOTYPE (0) keeps labels without pre-creating functions.
+        symtab.extend(struct.pack("<IBBHQQ", name_offset, 0x10, 0, 1, address, 0))
+
+    shstrtab = b"\x00.text\x00.symtab\x00.strtab\x00.shstrtab\x00"
+
+    body = bytearray(TEXT_OFFSET)
+    body.extend(TEXT_BYTES)
+
+    symtab_offset = align_up(len(body), 8)
+    body.extend(b"\x00" * (symtab_offset - len(body)))
+    body.extend(symtab)
+
+    strtab_offset = len(body)
+    body.extend(strtab)
+
+    shstrtab_offset = len(body)
+    body.extend(shstrtab)
+
+    shoff = align_up(len(body), 8)
+    body.extend(b"\x00" * (shoff - len(body)))
+
+    section_headers = b"".join(
+        [
+            struct.pack("<IIQQQQIIQQ", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+            struct.pack(
+                "<IIQQQQIIQQ",
+                1,
+                1,
+                0x6,
+                TEXT_VADDR,
+                TEXT_OFFSET,
+                len(TEXT_BYTES),
+                0,
+                0,
+                16,
+                0,
+            ),
+            struct.pack(
+                "<IIQQQQIIQQ",
+                7,
+                2,
+                0,
+                0,
+                symtab_offset,
+                len(symtab),
+                3,
+                1,
+                8,
+                24,
+            ),
+            struct.pack(
+                "<IIQQQQIIQQ",
+                15,
+                3,
+                0,
+                0,
+                strtab_offset,
+                len(strtab),
+                0,
+                0,
+                1,
+                0,
+            ),
+            struct.pack(
+                "<IIQQQQIIQQ",
+                23,
+                3,
+                0,
+                0,
+                shstrtab_offset,
+                len(shstrtab),
+                0,
+                0,
+                1,
+                0,
+            ),
+        ]
+    )
+    body.extend(section_headers)
+
+    ehdr = struct.pack(
+        "<4sBBBBB7xHHIQQQIHHHHHH",
+        b"\x7fELF",
+        2,
+        1,
+        1,
+        0,
+        0,
+        2,
+        62,
+        1,
+        TEXT_VADDR,
+        64,
+        shoff,
+        0,
+        64,
+        56,
+        1,
+        64,
+        5,
+        4,
+    )
+    phdr = struct.pack(
+        "<IIQQQQQQ",
+        1,
+        5,
+        TEXT_OFFSET,
+        TEXT_VADDR,
+        TEXT_VADDR,
+        len(TEXT_BYTES),
+        len(TEXT_BYTES),
+        0x1000,
+    )
+    body[0:64] = ehdr
+    body[64:120] = phdr
+
+    binary_path.write_bytes(body)
+    return symbols
+
+
+def resolve_headless_launcher(headless):
+    candidate = pathlib.Path(os.path.abspath(str(headless)))
+    if os.name == "nt" and candidate.suffix == "":
+        bat_candidate = candidate.with_suffix(".bat")
+        if bat_candidate.is_file():
+            candidate = bat_candidate
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Ghidra headless launcher not found: {candidate}")
+    return candidate
+
+
+def start_headless_process(command, log):
+    if os.name == "nt":
+        quoted = " ".join('"' + part.replace('"', '""') + '"' for part in command)
+        return subprocess.Popen(
+            f'cmd.exe /d /s /c "{quoted}"',
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    return subprocess.Popen(
+        command,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+
+
+def stop_headless_process(process, graceful_wait):
+    if graceful_wait > 0:
+        try:
+            process.wait(timeout=graceful_wait)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        process.kill()
+        process.wait(timeout=10)
+        return
+    if shutil.which("pkill"):
+        subprocess.run(
+            ["pkill", "-TERM", "-P", str(process.pid)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        if shutil.which("pkill"):
+            subprocess.run(
+                ["pkill", "-KILL", "-P", str(process.pid)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        process.kill()
+        process.wait(timeout=5)
 
 
 def run_test(headless, root):
     project = root / "project"
     project.mkdir()
-    source = root / "fixture.s"
-    source.write_text(FIXTURE)
     binary = root / "fixture"
-    subprocess.run(
-        ["gcc", "-nostdlib", "-no-pie", "-Wl,-e,_start", "-o", str(binary), str(source)],
-        check=True,
-    )
-    symbols = {}
-    for line in subprocess.check_output(["nm", str(binary)], text=True).splitlines():
-        parts = line.split()
-        if len(parts) == 3:
-            symbols[parts[2]] = "0x" + parts[0]
+    symbols = build_fixture_elf(binary)
 
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -92,26 +295,44 @@ def run_test(headless, root):
     def selector(label):
         return {"selector": {"entry": symbols[label]}}
 
-    scripts = pathlib.Path(__file__).resolve().parents[1] / "build" / "ghidra-script"
+    repo_root = pathlib.Path(os.path.abspath(str(pathlib.Path(__file__).resolve().parents[1])))
+    scripts = repo_root / "build" / "ghidra-script"
     command = [
-        str(headless), str(project), "test", "-import", str(binary), "-noanalysis",
-        "-scriptPath", str(scripts), "-postScript", "GhidraMcp.java",
-        "host=127.0.0.1", f"port={port}",
+        str(headless),
+        str(project),
+        "test",
+        "-import",
+        str(binary),
+        "-noanalysis",
+        "-scriptPath",
+        str(scripts),
+        "-postScript",
+        "GhidraMcp.java",
+        "host=127.0.0.1",
+        f"port={port}",
     ]
     log_path = root / "headless.log"
-    with log_path.open("w") as log:
-        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                   start_new_session=True)
+    with log_path.open("w", encoding="utf-8", errors="replace") as log:
+        process = start_headless_process(command, log)
         ready = False
         try:
             initialize = {
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {"protocolVersion": "2025-03-26", "capabilities": {},
-                           "clientInfo": {"name": "function-test", "version": "1"}},
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "function-test", "version": "1"},
+                },
             }
-            for _ in range(120):
+            deadline = time.monotonic() + 120.0
+            while time.monotonic() < deadline:
                 if process.poll() is not None:
-                    raise RuntimeError("Ghidra stopped: " + log_path.read_text()[-2000:])
+                    raise RuntimeError(
+                        "Ghidra stopped: "
+                        + log_path.read_text(encoding="utf-8", errors="replace")[-2000:]
+                    )
                 try:
                     if call(initialize).get("result"):
                         ready = True
@@ -119,53 +340,95 @@ def run_test(headless, root):
                 except (OSError, TimeoutError, urllib.error.URLError):
                     time.sleep(0.5)
             if not ready:
-                raise RuntimeError("Ghidra did not start")
+                raise RuntimeError(
+                    "Ghidra did not start: "
+                    + log_path.read_text(encoding="utf-8", errors="replace")[-2000:]
+                )
             call({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
-            first = function(2, "create", {
-                "resource": {"entry": symbols["func_a"], "name": "func_a"},
-                "disassemble": True,
-            })["result"]
-            function(3, "create", {
-                "resource": {"entry": symbols["func_b"], "name": "func_b"},
-                "disassemble": True,
-            }, success=False)
+            first = function(
+                2,
+                "create",
+                {
+                    "resource": {"entry": symbols["func_a"], "name": "func_a"},
+                    "disassemble": True,
+                },
+            )["result"]
+            function(
+                3,
+                "create",
+                {
+                    "resource": {"entry": symbols["func_b"], "name": "func_b"},
+                    "disassemble": True,
+                },
+                success=False,
+            )
             assert function(4, "get", selector("func_a"))["result"]["body"] == first["body"]
             function(5, "get", selector("func_b"), success=False)
-            tool(16, "ghidra_listing", {
-                "operation": "instruction.get",
-                "params": {"selector": {"address": symbols["func_b"]}},
-            }, success=False)
+            tool(
+                16,
+                "ghidra_listing",
+                {
+                    "operation": "instruction.get",
+                    "params": {"selector": {"address": symbols["func_b"]}},
+                },
+                success=False,
+            )
 
-            jump = function(6, "create", {
-                "resource": {"entry": symbols["jump_entry"], "name": "jump_name"},
-                "disassemble": True,
-            })["result"]
+            jump = function(
+                6,
+                "create",
+                {
+                    "resource": {"entry": symbols["jump_entry"], "name": "jump_name"},
+                    "disassemble": True,
+                },
+            )["result"]
             assert jump["name"] == "jump_name"
             function(7, "get", selector("jump_target"), success=False)
-            instruction = {"operation": "instruction.get",
-                           "params": {"selector": {"address": symbols["jump_entry"]}}}
+            instruction = {
+                "operation": "instruction.get",
+                "params": {"selector": {"address": symbols["jump_entry"]}},
+            }
             before = tool(8, "ghidra_listing", instruction)["result"]
             assert function(9, "delete", selector("jump_entry"))["result"] == {"deleted": True}
             assert tool(10, "ghidra_listing", instruction)["result"] == before
             function(11, "delete", selector("jump_entry"), success=False)
-            recreated = function(12, "create", {
-                "resource": {"entry": symbols["jump_entry"], "name": "recreated"},
-            })["result"]
+            recreated = function(
+                12,
+                "create",
+                {
+                    "resource": {"entry": symbols["jump_entry"], "name": "recreated"},
+                },
+            )["result"]
             assert recreated["name"] == "recreated"
 
-            function(13, "create", {
-                "resource": {"entry": symbols["reserved_entry"], "name": "FUN_12345678"},
-                "disassemble": True,
-            }, success=False)
+            function(
+                13,
+                "create",
+                {
+                    "resource": {"entry": symbols["reserved_entry"], "name": "FUN_12345678"},
+                    "disassemble": True,
+                },
+                success=False,
+            )
             function(14, "get", selector("reserved_entry"), success=False)
-            tool(17, "ghidra_listing", {
-                "operation": "instruction.get",
-                "params": {"selector": {"address": symbols["reserved_entry"]}},
-            }, success=False)
-            label = function(15, "create", {
-                "resource": {"entry": symbols["label_only"]}, "disassemble": True,
-            })["result"]
+            tool(
+                17,
+                "ghidra_listing",
+                {
+                    "operation": "instruction.get",
+                    "params": {"selector": {"address": symbols["reserved_entry"]}},
+                },
+                success=False,
+            )
+            label = function(
+                15,
+                "create",
+                {
+                    "resource": {"entry": symbols["label_only"]},
+                    "disassemble": True,
+                },
+            )["result"]
             assert label["name"] == "label_only"
             print("Function mutation regression checks passed")
         finally:
@@ -174,21 +437,16 @@ def run_test(headless, root):
                     tool(20, "ghidra_bridge", {"operation": "shutdown"})
                 except (OSError, TimeoutError, urllib.error.URLError):
                     pass
-            try:
-                process.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGTERM)
-                process.wait(timeout=10)
+            stop_headless_process(process, 20 if ready else 0)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("headless", type=pathlib.Path, help="path to analyzeHeadless")
     args = parser.parse_args()
-    if shutil.which("gcc") is None or shutil.which("nm") is None:
-        parser.error("gcc and nm are required")
+    headless = resolve_headless_launcher(args.headless)
     with tempfile.TemporaryDirectory(prefix="ghidra-function-test-") as directory:
-        run_test(args.headless.resolve(), pathlib.Path(directory))
+        run_test(headless, pathlib.Path(os.path.abspath(directory)))
 
 
 if __name__ == "__main__":

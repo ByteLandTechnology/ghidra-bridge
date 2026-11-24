@@ -14,8 +14,16 @@ def isFilePath = { File candidate ->
     candidate != null && candidate.isFile()
 }
 
+def envValue = { String name ->
+    def value = providers.environmentVariable(name).orNull
+    if (value != null) {
+        return value
+    }
+    System.getenv(name)
+}
+
 def pathEntries = {
-    def rawPath = System.getenv('PATH') ?: System.getenv('Path')
+    def rawPath = envValue('PATH') ?: envValue('Path')
     rawPath ? rawPath.split(java.util.regex.Pattern.quote(File.pathSeparator)).findAll { !it.isBlank() } : []
 }
 
@@ -24,7 +32,7 @@ def executableNames = { String baseName ->
         return [baseName]
     }
 
-    def pathext = (System.getenv('PATHEXT') ?: '.EXE;.CMD;.BAT;.COM')
+    def pathext = (envValue('PATHEXT') ?: '.EXE;.CMD;.BAT;.COM')
             .split(';')
             .collect { it.toLowerCase(Locale.ROOT) }
             .findAll { !it.isBlank() }
@@ -51,6 +59,8 @@ def findExecutableOnPath = { String baseName ->
 def analyzeCandidatesFromInstallDir = { File installDir ->
     [
         new File(installDir, "support/${analyzeHeadlessName}"),
+        new File(installDir, "Contents/Resources/Java/support/${analyzeHeadlessName}"),
+        new File(installDir, "Contents/Resources/support/${analyzeHeadlessName}"),
         new File(installDir, "libexec/support/${analyzeHeadlessName}"),
         new File(installDir, "libexec/${analyzeHeadlessName}"),
         new File(installDir, analyzeHeadlessName)
@@ -61,6 +71,9 @@ def ghidraRunCandidatesFromInstallDir = { File installDir ->
     [
         new File(installDir, "bin/${ghidraRunName}"),
         new File(installDir, "support/${ghidraRunName}"),
+        new File(installDir, "Contents/Resources/Java/${ghidraRunName}"),
+        new File(installDir, "Contents/Resources/Java/support/${ghidraRunName}"),
+        new File(installDir, "Contents/MacOS/${ghidraRunName}"),
         new File(installDir, "libexec/support/${ghidraRunName}"),
         new File(installDir, "libexec/${ghidraRunName}"),
         new File(installDir, ghidraRunName)
@@ -82,12 +95,46 @@ def uniqueFiles = { Collection<File> candidates ->
     values
 }
 
+def versionTokens = { String text ->
+    def tokens = []
+    def matcher = (text =~ /(\d+|\D+)/)
+    while (matcher.find()) {
+        def part = matcher.group(1)
+        tokens << (part.isBigInteger() ? part.toBigInteger() : part.toLowerCase(Locale.ROOT))
+    }
+    tokens
+}
+
+def sortNewestFirst = { Collection<File> files ->
+    files.toList().sort { File left, File right ->
+        def leftTokens = versionTokens(left.name)
+        def rightTokens = versionTokens(right.name)
+        int limit = Math.min(leftTokens.size(), rightTokens.size())
+        for (int index = 0; index < limit; index += 1) {
+            def a = leftTokens[index]
+            def b = rightTokens[index]
+            if (a == b) {
+                continue
+            }
+            if (a instanceof BigInteger && b instanceof BigInteger) {
+                return b <=> a
+            }
+            if (a instanceof BigInteger != b instanceof BigInteger) {
+                return a instanceof BigInteger ? -1 : 1
+            }
+            return b.toString() <=> a.toString()
+        }
+        int lengthOrder = rightTokens.size() <=> leftTokens.size()
+        lengthOrder != 0 ? lengthOrder : (right.name <=> left.name)
+    }
+}
+
 def readdirSafe = { File root ->
-    if (!root.isDirectory()) {
+    if (root == null || !root.isDirectory()) {
         return []
     }
     def entries = root.listFiles()
-    entries == null ? [] : entries.toList()
+    entries == null ? [] : sortNewestFirst(entries.findAll { it.isDirectory() })
 }
 
 def installDirCandidates = { File root ->
@@ -103,7 +150,7 @@ def installDirFromResolvedBinary = { File binaryPath ->
     File current = resolved.parentFile
     def matches = []
 
-    for (int depth = 0; depth < 4 && current != null; depth += 1) {
+    for (int depth = 0; depth < 5 && current != null; depth += 1) {
         if (analyzeCandidatesFromInstallDir(current).collect { canonicalizeExistingPath(it).path }.contains(resolved.path) ||
                 ghidraRunCandidatesFromInstallDir(current).collect { canonicalizeExistingPath(it).path }.contains(resolved.path)) {
             matches << current
@@ -120,6 +167,19 @@ def installDirFromResolvedBinary = { File binaryPath ->
 
 def resolveGhidraFromInstallDir = { File installDir ->
     def resolvedInstallDir = canonicalizeExistingPath(installDir)
+    def bundleJavaDir = new File(resolvedInstallDir, 'Contents/Resources/Java')
+    if (new File(bundleJavaDir, "support/${analyzeHeadlessName}").isFile()) {
+        return canonicalizeExistingPath(bundleJavaDir)
+    }
+    def bundleResourcesDir = new File(resolvedInstallDir, 'Contents/Resources')
+    if (new File(bundleResourcesDir, "support/${analyzeHeadlessName}").isFile()) {
+        return canonicalizeExistingPath(bundleResourcesDir)
+    }
+    for (def nested : readdirSafe(bundleResourcesDir)) {
+        if (new File(nested, "support/${analyzeHeadlessName}").isFile()) {
+            return canonicalizeExistingPath(nested)
+        }
+    }
     def analyzeHeadless = analyzeCandidatesFromInstallDir(resolvedInstallDir).find(isFilePath)
     analyzeHeadless ? resolvedInstallDir : null
 }
@@ -147,7 +207,7 @@ def resolveGhidraFromCandidatePath = { String candidatePath ->
     null
 }
 
-// Stop a command that blocks Ghidra detection during Gradle setup.
+// Stop a command that blocks Ghidra detection during Gradle configuration.
 def RUN_COMMAND_TIMEOUT_SECONDS = 10L
 
 def runCommand = { List<String> command ->
@@ -194,14 +254,16 @@ def homebrewGhidraInstallDirs = {
         try {
             def parsed = new groovy.json.JsonSlurper().parseText(info)
             for (def formula : parsed.formulae ?: []) {
+                if (formula.cellar && formula.linked_keg) {
+                    candidates << new File("${formula.cellar}/${formula.linked_keg}")
+                }
+                def installedDirs = []
                 for (def installed : formula.installed ?: []) {
                     if (installed.prefix) {
-                        candidates << file(installed.prefix as String)
+                        installedDirs << new File(installed.prefix as String)
                     }
                 }
-                if (formula.cellar && formula.linked_keg) {
-                    candidates << file("${formula.cellar}/${formula.linked_keg}")
-                }
+                candidates.addAll(sortNewestFirst(installedDirs))
             }
         } catch (Exception ignored) {
             // Try other paths if brew returns invalid JSON.
@@ -214,7 +276,95 @@ def homebrewGhidraInstallDirs = {
         'ghidra'
     ])
     if (prefix != null) {
-        candidates << file(prefix)
+        candidates << new File(prefix)
+    }
+
+    candidates
+}
+
+def ghidraNamedSubdirs = { File root ->
+    readdirSafe(root).findAll { File dir ->
+        dir.name.toLowerCase(Locale.ROOT).contains('ghidra')
+    }
+}
+
+def windowsInstallDirs = {
+    def candidates = []
+    def rootsToScan = []
+
+    def programFiles = envValue('ProgramFiles') ?: (isWindows ? 'C:/Program Files' : null)
+    def programFilesX86 = envValue('ProgramFiles(x86)') ?: (isWindows ? 'C:/Program Files (x86)' : null)
+    def localAppData = envValue('LOCALAPPDATA')
+    def programData = envValue('ProgramData') ?: (isWindows ? 'C:/ProgramData' : null)
+    def chocolateyInstall = envValue('ChocolateyInstall') ?: (programData ? "${programData}/chocolatey" : null)
+    def chocolateyTools = envValue('ChocolateyToolsLocation')
+    def scoopDir = envValue('SCOOP')
+    def userProfile = envValue('USERPROFILE')
+    def systemDrive = envValue('SystemDrive') ?: (isWindows ? 'C:' : null)
+
+    for (def base : [programFiles, programFilesX86]) {
+        if (base != null && !base.trim().isEmpty()) {
+            def root = new File(base)
+            candidates << new File(root, 'ghidra')
+            candidates << new File(root, 'Ghidra')
+            rootsToScan << root
+        }
+    }
+
+    if (localAppData != null && !localAppData.trim().isEmpty()) {
+        def lad = new File(localAppData)
+        candidates << new File(lad, 'ghidra')
+        candidates << new File(lad, 'Programs/ghidra')
+        rootsToScan << lad
+        rootsToScan << new File(lad, 'Programs')
+        rootsToScan << new File(lad, 'Microsoft/WinGet/Packages')
+    }
+
+    if (chocolateyInstall != null && !chocolateyInstall.trim().isEmpty()) {
+        def chocoTools = new File(chocolateyInstall, 'lib/ghidra/tools')
+        candidates << chocoTools
+        rootsToScan << chocoTools
+    }
+
+    if (chocolateyTools != null && !chocolateyTools.trim().isEmpty()) {
+        def toolsDir = new File(chocolateyTools)
+        candidates << new File(toolsDir, 'ghidra')
+        rootsToScan << toolsDir
+    }
+
+    def scoopRoots = []
+    if (scoopDir != null && !scoopDir.trim().isEmpty()) {
+        scoopRoots << new File(scoopDir)
+    }
+    if (userProfile != null && !userProfile.trim().isEmpty()) {
+        scoopRoots << new File(userProfile, 'scoop')
+    }
+    for (def scoopRoot : scoopRoots) {
+        candidates << new File(scoopRoot, 'apps/ghidra/current')
+        candidates << new File(scoopRoot, 'apps/ghidra')
+    }
+
+    if (systemDrive != null && !systemDrive.trim().isEmpty()) {
+        def driveRoot = new File("${systemDrive}/")
+        candidates << new File(driveRoot, 'ghidra')
+        candidates << new File(driveRoot, 'tools/ghidra')
+        candidates << new File(driveRoot, 'opt/ghidra')
+        rootsToScan << driveRoot
+        rootsToScan << new File(driveRoot, 'tools')
+        rootsToScan << new File(driveRoot, 'opt')
+    }
+
+    if (userProfile != null && !userProfile.trim().isEmpty()) {
+        def profileRoot = new File(userProfile)
+        candidates << new File(profileRoot, 'ghidra')
+        rootsToScan << new File(profileRoot, 'Applications')
+        rootsToScan << new File(profileRoot, 'opt')
+        rootsToScan << new File(profileRoot, 'tools')
+        rootsToScan << profileRoot
+    }
+
+    for (def root : uniqueFiles(rootsToScan)) {
+        candidates.addAll(ghidraNamedSubdirs(root))
     }
 
     candidates
@@ -222,20 +372,32 @@ def homebrewGhidraInstallDirs = {
 
 def commonInstallDirs = {
     def candidates = [
-        file('/opt/ghidra'),
-        file('/usr/local/ghidra'),
-        file('/Applications/ghidra'),
-        file('/opt/homebrew/opt/ghidra'),
-        file('/opt/homebrew/Cellar/ghidra'),
-        file('/usr/local/opt/ghidra'),
-        file('/usr/local/Cellar/ghidra'),
-        file('/Applications/Ghidra.app/Contents/Resources')
+        new File('/opt/homebrew/Cellar/ghidra'),
+        new File('/usr/local/Cellar/ghidra'),
+        new File('/opt/homebrew/opt/ghidra'),
+        new File('/usr/local/opt/ghidra'),
+        new File('/opt/ghidra'),
+        new File('/usr/local/ghidra'),
+        new File('/Applications/Ghidra.app'),
+        new File('/Applications/ghidra')
     ]
-    def applicationsDir = file('/Applications')
-    if (applicationsDir.isDirectory()) {
-        applicationsDir.listFiles()?.findAll { it.name ==~ /(?i)^ghidra.*/ }?.each { candidates << it }
+
+    def unixRoots = [new File('/Applications'), new File('/opt'), new File('/usr/local')]
+    def homePath = envValue('HOME') ?: System.getProperty('user.home')
+    if (homePath != null && !homePath.trim().isEmpty()) {
+        def homeDir = new File(homePath)
+        unixRoots.addAll([
+            new File(homeDir, 'Applications'),
+            new File(homeDir, 'opt'),
+            homeDir
+        ])
     }
-    candidates.findAll { it.isDirectory() }
+    for (def root : uniqueFiles(unixRoots)) {
+        candidates.addAll(ghidraNamedSubdirs(root))
+    }
+
+    candidates.addAll(windowsInstallDirs())
+    candidates.findAll { it != null && it.isDirectory() }
 }
 
 def resolveGhidraInstallDir = {
@@ -247,9 +409,19 @@ def resolveGhidraInstallDir = {
         }
     }
 
-    def envInstallDir = providers.environmentVariable('GHIDRA_INSTALL_DIR').orNull
-    if (envInstallDir != null && !envInstallDir.trim().isEmpty()) {
-        def installation = resolveGhidraFromCandidatePath(envInstallDir)
+    for (def envName : ['GHIDRA_INSTALL_DIR', 'GHIDRA_HOME']) {
+        def envInstallDir = envValue(envName)
+        if (envInstallDir != null && !envInstallDir.trim().isEmpty()) {
+            def installation = resolveGhidraFromCandidatePath(envInstallDir)
+            if (installation != null) {
+                return installation
+            }
+        }
+    }
+
+    def analyzeOnPath = findExecutableOnPath('analyzeHeadless')
+    if (analyzeOnPath != null) {
+        def installation = resolveGhidraFromCandidatePath(analyzeOnPath.path)
         if (installation != null) {
             return installation
         }
@@ -265,14 +437,6 @@ def resolveGhidraInstallDir = {
 
     for (def installDir : uniqueFiles(homebrewGhidraInstallDirs())) {
         def installation = resolveGhidraFromCandidatePath(installDir.path)
-        if (installation != null) {
-            return installation
-        }
-    }
-
-    def analyzeOnPath = findExecutableOnPath('analyzeHeadless')
-    if (analyzeOnPath != null) {
-        def installation = resolveGhidraFromCandidatePath(analyzeOnPath.path)
         if (installation != null) {
             return installation
         }

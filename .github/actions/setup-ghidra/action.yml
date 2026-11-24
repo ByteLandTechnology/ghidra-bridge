@@ -28,8 +28,8 @@ runs:
       id: cache-ghidra
       uses: actions/cache@v4
       with:
-        path: ghidra-dist
-        key: ghidra-${{ inputs.ghidra-version }}-${{ inputs.ghidra-build-date }}
+        path: ${{ runner.temp }}/ghidra-dist
+        key: ghidra-${{ runner.os }}-${{ runner.arch }}-${{ inputs.ghidra-version }}-${{ inputs.ghidra-build-date }}
 
     - name: Download Ghidra
       if: steps.cache-ghidra.outputs.cache-hit != 'true'
@@ -40,22 +40,90 @@ runs:
         GHIDRA_ZIP_SHA256: ${{ inputs.ghidra-zip-sha256 }}
       run: |
         set -euo pipefail
-        zip_name="ghidra_${GHIDRA_VERSION}_PUBLIC_${GHIDRA_BUILD_DATE}.zip"
-        tag="Ghidra_${GHIDRA_VERSION}_build"
-        url="https://github.com/NationalSecurityAgency/ghidra/releases/download/${tag}/${zip_name}"
-        curl -sL --fail -o "$zip_name" "$url"
-        echo "${GHIDRA_ZIP_SHA256}  ${zip_name}" | sha256sum -c -
-        mkdir -p ghidra-dist
-        unzip -q "$zip_name" -d ghidra-dist
-        rm "$zip_name"
+        python_cmd="python3"
+        if [ "${RUNNER_OS:-}" = "Windows" ]; then
+          python_cmd="python"
+        fi
+        "$python_cmd" - <<'PY'
+        import hashlib
+        import os
+        import pathlib
+        import shutil
+        import subprocess
+        import sys
+        import urllib.request
+        import zipfile
+
+        version = os.environ["GHIDRA_VERSION"]
+        build_date = os.environ["GHIDRA_BUILD_DATE"]
+        expected = os.environ["GHIDRA_ZIP_SHA256"].strip().lower()
+        temp_root = pathlib.Path(os.environ["RUNNER_TEMP"])
+        dist_dir = temp_root / "ghidra-dist"
+        zip_path = temp_root / f"ghidra_{version}_PUBLIC_{build_date}.zip"
+        url = (
+            "https://github.com/NationalSecurityAgency/ghidra/releases/download/"
+            f"Ghidra_{version}_build/{zip_path.name}"
+        )
+
+        if shutil.which("curl"):
+            subprocess.run(
+                ["curl", "-sSL", "--fail", "--retry", "3", "-o", str(zip_path), url],
+                check=True,
+            )
+        else:
+            urllib.request.urlretrieve(url, zip_path)
+
+        digest = hashlib.sha256()
+        with zip_path.open("rb") as archive_file:
+            for chunk in iter(lambda: archive_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        actual = digest.hexdigest()
+        if actual != expected:
+            zip_path.unlink(missing_ok=True)
+            sys.exit(f"Ghidra archive SHA-256 mismatch: expected {expected}, got {actual}")
+
+        if dist_dir.exists():
+            shutil.rmtree(dist_dir)
+        dist_dir.mkdir(parents=True, exist_ok=True)
+
+        if os.name != "nt" and shutil.which("unzip"):
+            subprocess.run(["unzip", "-q", str(zip_path), "-d", str(dist_dir)], check=True)
+        else:
+            with zipfile.ZipFile(zip_path) as archive:
+                archive.extractall(dist_dir)
+                if os.name != "nt":
+                    for info in archive.infolist():
+                        mode = (info.external_attr >> 16) & 0o7777
+                        if mode:
+                            target = dist_dir / info.filename
+                            if target.exists() and not target.is_symlink():
+                                os.chmod(target, mode)
+
+        zip_path.unlink(missing_ok=True)
+        PY
 
     - name: Resolve GHIDRA_INSTALL_DIR
       shell: bash
       run: |
         set -euo pipefail
-        install_dir="$(find ghidra-dist -maxdepth 1 -mindepth 1 -type d | head -n 1)"
-        if [ -z "$install_dir" ]; then
-          echo "Cannot find an extracted Ghidra directory under ghidra-dist/" >&2
-          exit 1
+        python_cmd="python3"
+        if [ "${RUNNER_OS:-}" = "Windows" ]; then
+          python_cmd="python"
         fi
-        echo "GHIDRA_INSTALL_DIR=$(cd "$install_dir" && pwd)" >> "$GITHUB_ENV"
+        "$python_cmd" - <<'PY'
+        import os
+        import pathlib
+        import sys
+
+        dist_dir = pathlib.Path(os.environ["RUNNER_TEMP"]) / "ghidra-dist"
+        candidates = (
+            sorted(entry for entry in dist_dir.iterdir() if entry.is_dir())
+            if dist_dir.is_dir()
+            else []
+        )
+        if not candidates:
+            sys.exit(f"Cannot find an extracted Ghidra directory under {dist_dir}")
+        install_dir = os.path.abspath(str(candidates[0]))
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+            env_file.write(f"GHIDRA_INSTALL_DIR={install_dir}\n")
+        PY

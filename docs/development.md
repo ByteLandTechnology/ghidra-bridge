@@ -5,20 +5,22 @@ This guide describes how to build, extend, and verify the Ghidra Bridge codebase
 ## Prerequisites
 
 - **Java Development Kit**: Use JDK 21.
-- **Ghidra**: Use Ghidra 12.1 or newer to compile adapters.
-- **Environment**: Set `GHIDRA_INSTALL_DIR` to the Ghidra installation path.
+- **Ghidra**: Use Ghidra 12.1 or newer to compile adapters. CI uses Ghidra `12.1.4`.
+- **Environment**: Set `GHIDRA_INSTALL_DIR` or `GHIDRA_HOME` when Ghidra is not in a standard location.
+- **Windows Git Checkout**: Set `git config core.autocrlf false` so generated contract files keep LF line endings.
 
-Gradle resolves Ghidra from:
+Gradle resolves Ghidra in this sequence:
 1. The `-PghidraInstallDir` command line property.
-2. The `GHIDRA_INSTALL_DIR` environment variable.
-3. The `ghidraRun` executable on your system `PATH`.
-4. Homebrew installations of Ghidra.
-5. The `analyzeHeadless` executable on your system `PATH`.
-6. Standard installation directories on your machine.
+2. The `GHIDRA_INSTALL_DIR` and `GHIDRA_HOME` environment variables.
+3. The `analyzeHeadless` and `ghidraRun` launchers on `PATH` (`analyzeHeadless.bat` and `ghidraRun.bat` on Windows).
+4. Homebrew installations of Ghidra on macOS and Linux.
+5. Standard install folders on Linux, macOS (`Ghidra.app` bundles and `/Applications`), and Windows, newest version first.
 
 ## Use Gradle
 
-Always use the Gradle Wrapper in this repository:
+Always use the Gradle Wrapper in this repository.
+
+On Linux and macOS:
 
 ```bash
 # Build the user distribution
@@ -27,6 +29,18 @@ Always use the Gradle Wrapper in this repository:
 # Run all verification checks
 ./gradlew --no-daemon clean verify
 ```
+
+On Windows in PowerShell:
+
+```powershell
+# Build the user distribution
+.\gradlew.bat buildGhidraScript
+
+# Run all verification checks
+.\gradlew.bat --no-daemon clean verify
+```
+
+On Windows in Git Bash, run `./gradlew.bat` with the same arguments.
 
 The `buildGhidraScript` task creates three files in `build/ghidra-script/`:
 - `Bridge.java`
@@ -60,7 +74,11 @@ Register the new operation in `modules/wire` with `ApiRegistry`:
 Run the contract generator task:
 
 ```bash
+# Linux and macOS
 ./gradlew generateApiContracts
+
+# Windows (PowerShell)
+.\gradlew.bat generateApiContracts
 ```
 
 This task regenerates:
@@ -71,29 +89,52 @@ This task regenerates:
 Do not edit these files by hand.
 The build fails if repository files differ from the generator output.
 
-To test function mutations in an isolated Ghidra project on Linux x86-64, run:
+To test function mutations in an isolated headless Ghidra project on Linux or macOS, run:
 
 ```bash
 ./gradlew buildGhidraScript
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
-The test requires `gcc` and `nm`.
+On Windows in PowerShell, run:
+
+```powershell
+.\gradlew.bat buildGhidraScript
+python tests/function_mutation_regression.py "$env:GHIDRA_INSTALL_DIR\support\analyzeHeadless.bat"
+```
+
+The Python script builds its own x86-64 ELF test binary and symbol map without external compilers.
 
 ## Quality Checks
 
-Before you submit a change, run the verification suite:
+CI runs verification across Linux, macOS, and Windows on x86-64 and ARM64.
+Before you submit a change, run the local CI checks.
+
+On Linux and macOS:
 
 ```bash
-./gradlew --no-daemon clean verify
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
+./gradlew --no-daemon :wire:test :contracts:test
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+```
+
+On Windows in PowerShell (run the hygiene script in Git Bash):
+
+```powershell
+bash .github/scripts/verify-repository-hygiene.sh
+.\gradlew.bat --no-daemon clean verify
+.\gradlew.bat --no-daemon :wire:test :contracts:test
+python tests/function_mutation_regression.py "$env:GHIDRA_INSTALL_DIR\support\analyzeHeadless.bat"
 ```
 
 The verification tasks check:
+- **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, and the `docs/api.md` method count.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+- **Headless Regression**: `function_mutation_regression.py` verifies function creation and deletion in headless Ghidra.
 
 ## Releases
 
