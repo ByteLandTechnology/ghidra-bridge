@@ -193,7 +193,6 @@ public final class McpHttpServer implements AutoCloseable {
 
   private final class JsonRpcHandler implements HttpHandler {
     @Override
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     public void handle(HttpExchange exchange) throws IOException {
       RequestLog log = new RequestLog(requestLogSink);
       try (exchange) {
@@ -507,7 +506,6 @@ public final class McpHttpServer implements AutoCloseable {
         : Map.of("contents", List.of(content));
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private Map<String, Object> handleToolCall(
       Object id, Map<String, Object> params, RequestLog log, boolean statelessProtocol) {
     String name = requireString(params.get(NAME_FIELD), NAME_FIELD, id);

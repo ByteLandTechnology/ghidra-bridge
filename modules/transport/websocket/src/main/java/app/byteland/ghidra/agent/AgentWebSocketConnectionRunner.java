@@ -39,7 +39,6 @@ final class AgentWebSocketConnectionRunner {
     this.handshakeTimeoutNanos = handshakeTimeout.toNanos();
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   void runConnection(Socket socket) {
     AgentServerConnection connection = null;
     boolean opened = false;
