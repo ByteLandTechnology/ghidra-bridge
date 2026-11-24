@@ -18,9 +18,12 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -132,7 +135,7 @@ final class DataTypeMethods implements ApiMethodProvider {
         });
     registry.writeListResult(
         "data_type.parse_c",
-        MethodEffects.mutation(true, true),
+        MethodEffects.mutation(true, false),
         "Parse C declarations into data types in the active program.",
         ApiSchemaCatalog.dataTypeParseCInputSchema(),
         ApiSchemaCatalog.dataTypeFields(),
@@ -143,11 +146,26 @@ final class DataTypeMethods implements ApiMethodProvider {
             throw ApiException.badRequest(
                 ApiVocabulary.INVALID_VALUE, "/source must not be blank", "/source");
           }
+          if (source.getBytes(StandardCharsets.UTF_8).length
+              > DataTypeService.MAX_DECLARATIONS_BYTES) {
+            throw ApiException.badRequest(
+                ApiVocabulary.INVALID_VALUE,
+                "/source exceeds maximum size of "
+                    + DataTypeService.MAX_DECLARATIONS_BYTES
+                    + " UTF-8 bytes",
+                "/source");
+          }
+          String rawConflictMode = optionalText(request, ApiVocabulary.CONFLICT_MODE, "replace");
+          DataTypeService.ConflictMode conflictMode =
+              DataTypeService.ConflictMode.valueOf(rawConflictMode.toUpperCase(Locale.ROOT));
           return Page.of(
               registry
                   .services()
                   .dataTypeService()
-                  .parseC(source, optionalText(request, ApiVocabulary.CATEGORY_PATH, "/")),
+                  .parseC(
+                      source,
+                      optionalText(request, ApiVocabulary.CATEGORY_PATH, "/"),
+                      conflictMode),
               ApiRegistry.MAX_LIMIT,
               null);
         });

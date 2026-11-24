@@ -1,11 +1,24 @@
 package app.byteland.ghidra.service.datatype;
 
 import app.byteland.ghidra.service.Page;
+import java.util.List;
 
 /**
  * Manages data types, structures, and category hierarchies.
  */
 public interface DataTypeService {
+  /** Maximum UTF-8 byte length accepted for C declarations. */
+  int MAX_DECLARATIONS_BYTES = 65_536;
+
+  /**
+   * Conflict resolution policy when parsed C declarations match prior data types.
+   */
+  enum ConflictMode {
+    REPLACE,
+    KEEP,
+    RENAME
+  }
+
   /**
    * Returns child categories under a category path.
    *
@@ -63,7 +76,19 @@ public interface DataTypeService {
    * @param categoryPath destination category folder
    * @return list of created or updated data type resources
    */
-  java.util.List<DataTypeResource> parseC(String source, String categoryPath);
+  default List<DataTypeResource> parseC(String source, String categoryPath) {
+    return parseC(source, categoryPath, ConflictMode.REPLACE);
+  }
+
+  /**
+   * Parses C declarations and saves the data types in the program data manager.
+   *
+   * @param source C header declarations to parse
+   * @param categoryPath destination category folder
+   * @param conflictMode conflict policy for prior data types
+   * @return list of created or updated data type resources
+   */
+  List<DataTypeResource> parseC(String source, String categoryPath, ConflictMode conflictMode);
 
   /**
    * Updates a data type definition that exists.

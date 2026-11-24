@@ -270,6 +270,8 @@ final class ApiSchemaCatalog {
             WireSchema.nonBlankString(),
             CATEGORY_PATH,
             WireSchema.string(),
+            ApiVocabulary.CONFLICT_MODE,
+            WireSchema.stringEnum("keep", "rename", "replace"),
             FIELDS,
             ApiRegistry.fieldsSchema()),
         ApiVocabulary.SOURCE);

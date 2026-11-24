@@ -884,6 +884,16 @@ public final class ApiRegistry {
         throw ApiException.badRequest(
             ApiVocabulary.INVALID_VALUE, target + " must not be blank", target);
       }
+      if (declaration.getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+          > DataTypeReference.MAX_C_TYPE_BYTES) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE,
+            target
+                + " exceeds maximum size of "
+                + DataTypeReference.MAX_C_TYPE_BYTES
+                + " UTF-8 bytes",
+            target);
+      }
       return DataTypeReference.cType(declaration);
     }
     Map<String, Object> value = objectAt(raw, target);

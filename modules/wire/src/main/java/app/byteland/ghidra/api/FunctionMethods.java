@@ -314,9 +314,20 @@ final class FunctionMethods implements ApiMethodProvider {
           "/patch");
     }
     String signature = optionalText(patch, ApiVocabulary.SIGNATURE);
-    if (signature != null && signature.isBlank()) {
-      throw ApiException.badRequest(
-          ApiVocabulary.INVALID_VALUE, "/patch/signature must not be blank", "/patch/signature");
+    if (signature != null) {
+      if (signature.isBlank()) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE, "/patch/signature must not be blank", "/patch/signature");
+      }
+      if (signature.getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+          > app.byteland.ghidra.service.function.FunctionService.MAX_SIGNATURE_BYTES) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE,
+            "/patch/signature exceeds maximum size of "
+                + app.byteland.ghidra.service.function.FunctionService.MAX_SIGNATURE_BYTES
+                + " UTF-8 bytes",
+            "/patch/signature");
+      }
     }
     List<ParameterPatch> parameters = convertedParameters(patch.get(ApiVocabulary.PARAMETERS));
     DataTypeReference returnType = dataType(patch.get("return_type"), "/patch/return_type");

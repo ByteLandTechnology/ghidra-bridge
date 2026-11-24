@@ -380,6 +380,36 @@ def run_test(headless, root):
                 "/c_test/handle_packet",
             }, parsed_paths
 
+            kept = tool(401, "ghidra_data_type", {
+                "operation": "parse_c",
+                "params": {
+                    "category_path": "/c_test",
+                    "conflict_mode": "keep",
+                    "source": (
+                        "enum Mode { MODE_DIFFERENT = 99 };\n"
+                        "struct KeptCompanion { int count; };\n"
+                    ),
+                },
+            })["result"]
+            assert {item["path"] for item in kept["items"]} == {
+                "/c_test/Mode",
+                "/c_test/KeptCompanion",
+            }, kept
+            kept_mode = next(item for item in kept["items"] if item["path"] == "/c_test/Mode")
+            assert [m["name"] for m in kept_mode["values"]] == ["MODE_A", "MODE_B"], kept_mode
+
+            renamed = tool(402, "ghidra_data_type", {
+                "operation": "parse_c",
+                "params": {
+                    "category_path": "/c_test",
+                    "conflict_mode": "rename",
+                    "source": "struct KeptCompanion { int a; int b; };\n",
+                },
+            })["result"]
+            assert len(renamed["items"]) == 1, renamed
+            assert renamed["items"][0]["path"].startswith("/c_test/KeptCompanion.conflict"), renamed
+            assert len(renamed["items"][0]["fields"]) == 2, renamed
+
             tool(41, "ghidra_data_type", {
                 "operation": "parse_c",
                 "params": {

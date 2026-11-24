@@ -13645,6 +13645,12 @@
                 "properties":
                   "category_path":
                     "type": "string"
+                  "conflict_mode":
+                    "enum":
+                    - "keep"
+                    - "rename"
+                    - "replace"
+                    "type": "string"
                   "projection":
                     "additionalProperties": !!bool "false"
                     "properties":
@@ -17037,6 +17043,12 @@
                             "additionalProperties": !!bool "false"
                             "properties":
                               "category_path":
+                                "type": "string"
+                              "conflict_mode":
+                                "enum":
+                                - "keep"
+                                - "rename"
+                                - "replace"
                                 "type": "string"
                               "projection":
                                 "additionalProperties": !!bool "false"
@@ -21193,6 +21205,12 @@
                   "properties":
                     "category_path":
                       "type": "string"
+                    "conflict_mode":
+                      "enum":
+                      - "keep"
+                      - "rename"
+                      - "replace"
+                      "type": "string"
                     "projection":
                       "additionalProperties": !!bool "false"
                       "properties":
@@ -23864,7 +23882,7 @@
     "effects":
       "allowed_during_analysis": !!bool "false"
       "destructive": !!bool "true"
-      "idempotent": !!bool "true"
+      "idempotent": !!bool "false"
       "mutates_program": !!bool "true"
       "read_only": !!bool "false"
       "requires_transaction": !!bool "true"
@@ -23928,6 +23946,12 @@
       "additionalProperties": !!bool "false"
       "properties":
         "category_path":
+          "type": "string"
+        "conflict_mode":
+          "enum":
+          - "keep"
+          - "rename"
+          - "replace"
           "type": "string"
         "projection":
           "additionalProperties": !!bool "false"

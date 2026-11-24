@@ -1,12 +1,17 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.adapter.ghidra.datatype.CDeclarationParser;
+import app.byteland.ghidra.adapter.ghidra.function.CFunctionSignatureParser;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import app.byteland.ghidra.service.datatype.DataTypeService.ConflictMode;
 import ghidra.GhidraTestApplicationLayout;
 import ghidra.framework.Application;
 import ghidra.framework.ApplicationConfiguration;
@@ -18,6 +23,7 @@ import ghidra.program.model.data.DataTypeConflictHandler;
 import ghidra.program.model.data.FunctionDefinition;
 import ghidra.program.model.data.IntegerDataType;
 import ghidra.program.model.data.Pointer;
+import ghidra.program.model.data.SourceArchive;
 import ghidra.program.model.data.StandAloneDataTypeManager;
 import ghidra.program.model.data.Structure;
 import ghidra.program.model.data.StructureDataType;
@@ -52,7 +58,8 @@ class GhidraCParserSupportTest {
     assertEquals("char *", GhidraCParserSupport.stripQualifiers("const char *"));
     assertEquals(
         "unsigned int * ptr",
-        GhidraCParserSupport.stripQualifiers("const volatile unsigned int * __restrict ptr"));
+        GhidraCParserSupport.stripQualifiers(
+            "const volatile unsigned int * __restrict _Restrict ptr"));
     assertEquals(
         "const_value *",
         GhidraCParserSupport.stripQualifiers("const const_value * volatile"));
@@ -77,13 +84,9 @@ class GhidraCParserSupportTest {
         manager.addDataType(catType, DataTypeConflictHandler.DEFAULT_HANDLER);
 
         // 1. int
-        assertEquals(
-            DataTypeReference.named("/int"),
-            resolveCanonical(manager, "int"));
+        assertEquals(DataTypeReference.named("/int"), resolveCanonical(manager, "int"));
         // 2. unsigned int
-        assertEquals(
-            DataTypeReference.named("/uint"),
-            resolveCanonical(manager, "unsigned int"));
+        assertEquals(DataTypeReference.named("/uint"), resolveCanonical(manager, "unsigned int"));
         // 3. const char *
         assertEquals(
             DataTypeReference.pointerTo(DataTypeReference.named("/char")),
@@ -116,9 +119,7 @@ class GhidraCParserSupportTest {
         assertEquals(
             DataTypeReference.pointerTo(DataTypeReference.named("/void")),
             resolveCanonical(manager, "void *"));
-        assertEquals(
-            DataTypeReference.untypedPointer(),
-            resolveCanonical(manager, "pointer"));
+        assertEquals(DataTypeReference.untypedPointer(), resolveCanonical(manager, "pointer"));
         // Category path that contains a qualifier word
         assertEquals(
             DataTypeReference.pointerTo(DataTypeReference.named("/My const Dir/Bar")),
@@ -147,7 +148,7 @@ class GhidraCParserSupportTest {
   }
 
   @Test
-  void parseCHeaderCreatesMultiTypeGraphAndRejectsIncludesOrSyntaxErrorsCleanly() {
+  void parseHeaderSupportsConflictModesCleansUpTemporaryArchivesAndRejectsInvalidHeaders() {
     try (StandAloneDataTypeManager manager =
         new StandAloneDataTypeManager("test_prog", DataOrganizationImpl.getDefaultOrganization())) {
       int tx = manager.startTransaction("parse_header");
@@ -156,15 +157,21 @@ class GhidraCParserSupportTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                GhidraCParserSupport.parseCHeader(
-                    manager, "#include <stdio.h>\nstruct Bad { int x; };", "/hdr"));
+                CDeclarationParser.parseHeader(
+                    manager,
+                    "#include <stdio.h>\nstruct Bad { int x; };",
+                    "/hdr",
+                    ConflictMode.REPLACE));
         assertEquals(baselineCount, countDataTypes(manager));
 
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                GhidraCParserSupport.parseCHeader(
-                    manager, "struct Good { int a; };\nstruct Broken { MissingType b; };", "/hdr"));
+                CDeclarationParser.parseHeader(
+                    manager,
+                    "struct Good { int a; };\nstruct Broken { MissingType b; };",
+                    "/hdr",
+                    ConflictMode.REPLACE));
         assertNull(manager.getDataType("/hdr/Good"));
         assertEquals(baselineCount, countDataTypes(manager));
 
@@ -186,20 +193,26 @@ class GhidraCParserSupportTest {
             };
             int dispatch_packet(const PacketNode_t *pkt, enum PacketState state);
             """;
-        List<DataType> created = GhidraCParserSupport.parseCHeader(manager, header, "/hdr");
+        List<DataType> created =
+            CDeclarationParser.parseHeader(manager, header, "/hdr", ConflictMode.REPLACE);
         assertEquals(5, created.size());
-        assertInstanceOf(ghidra.program.model.data.Enum.class, manager.getDataType("/hdr/PacketState"));
-        Structure structType = assertInstanceOf(Structure.class, manager.getDataType("/hdr/PacketNode"));
+        assertInstanceOf(
+            ghidra.program.model.data.Enum.class, manager.getDataType("/hdr/PacketState"));
+        Structure structType =
+            assertInstanceOf(Structure.class, manager.getDataType("/hdr/PacketNode"));
         assertEquals(3, structType.getNumComponents());
-        Array wordsArray = assertInstanceOf(Array.class, structType.getComponent(2).getDataType());
+        Array wordsArray =
+            assertInstanceOf(Array.class, structType.getComponent(2).getDataType());
         assertEquals(4, wordsArray.getNumElements());
         assertInstanceOf(TypeDef.class, manager.getDataType("/hdr/PacketNode_t"));
         assertInstanceOf(Union.class, manager.getDataType("/hdr/PacketValue"));
         FunctionDefinition fn =
-            assertInstanceOf(FunctionDefinition.class, manager.getDataType("/hdr/dispatch_packet"));
+            assertInstanceOf(
+                FunctionDefinition.class, manager.getDataType("/hdr/dispatch_packet"));
         assertEquals(2, fn.getArguments().length);
+        assertNoTemporarySourceArchives(manager);
 
-        // A second parse in the same category replaces prior definitions cleanly.
+        // REPLACE overwrites prior definitions and repairs pointer-to-array fields.
         String updatedHeader =
             """
             struct PacketNode {
@@ -214,7 +227,7 @@ class GhidraCParserSupportTest {
             } SameTag;
             """;
         List<DataType> reimported =
-            GhidraCParserSupport.parseCHeader(manager, updatedHeader, "/hdr");
+            CDeclarationParser.parseHeader(manager, updatedHeader, "/hdr", ConflictMode.REPLACE);
         assertEquals(3, reimported.size());
         Structure updatedStruct =
             assertInstanceOf(Structure.class, manager.getDataType("/hdr/PacketNode"));
@@ -224,6 +237,46 @@ class GhidraCParserSupportTest {
         Array matrixArr = assertInstanceOf(Array.class, matrixPtr.getDataType());
         assertEquals(4, matrixArr.getNumElements());
         assertInstanceOf(Structure.class, manager.getDataType("/hdr/SameTag"));
+
+        // KEEP retains prior SameTag (1 field) even if new source has (*)[8], and adds BrandNew.
+        String keepHeader =
+            """
+            struct SameTag {
+              int a;
+              int (*ignored_matrix)[8];
+            };
+            struct BrandNew {
+              int value;
+            };
+            """;
+        List<DataType> kept =
+            CDeclarationParser.parseHeader(manager, keepHeader, "/hdr", ConflictMode.KEEP);
+        assertEquals(2, kept.size());
+        Structure keptSameTag =
+            assertInstanceOf(Structure.class, manager.getDataType("/hdr/SameTag"));
+        assertEquals(1, keptSameTag.getNumComponents());
+        assertEquals("id", keptSameTag.getComponent(0).getFieldName());
+        assertNotNull(manager.getDataType("/hdr/BrandNew"));
+
+        // RENAME keeps original BrandNew and stores duplicate struct with .conflict suffix.
+        String renameHeader =
+            """
+            struct BrandNew {
+              int first;
+              int (*rows)[2];
+            };
+            """;
+        List<DataType> renamed =
+            CDeclarationParser.parseHeader(manager, renameHeader, "/hdr", ConflictMode.RENAME);
+        assertEquals(1, renamed.size());
+        assertTrue(renamed.getFirst().getName().startsWith("BrandNew.conflict"));
+        Structure originalBrandNew =
+            assertInstanceOf(Structure.class, manager.getDataType("/hdr/BrandNew"));
+        assertEquals(1, originalBrandNew.getNumComponents());
+        Structure conflictBrandNew = assertInstanceOf(Structure.class, renamed.getFirst());
+        assertEquals(2, conflictBrandNew.getNumComponents());
+        assertInstanceOf(Pointer.class, conflictBrandNew.getComponent(1).getDataType());
+        assertNoTemporarySourceArchives(manager);
       } finally {
         manager.endTransaction(tx, true);
       }
@@ -237,7 +290,7 @@ class GhidraCParserSupportTest {
       int tx = manager.startTransaction("sig");
       try {
         var parsed =
-            GhidraCParserSupport.parseFunctionSignature(
+            CFunctionSignatureParser.parse(
                 manager,
                 null,
                 "int process_matrix(const int (*matrix)[4], void (*on_row)(int), uint32_t count)");
@@ -256,6 +309,42 @@ class GhidraCParserSupportTest {
       } finally {
         manager.endTransaction(tx, true);
       }
+    }
+  }
+
+  @Test
+  void enforcesUtf8PayloadSizeCapsAcrossTypeHeaderAndSignatureParsers() {
+    try (StandAloneDataTypeManager manager =
+        new StandAloneDataTypeManager("test_prog", DataOrganizationImpl.getDefaultOrganization())) {
+      int tx = manager.startTransaction("caps");
+      try {
+        String oversizedType = "int " + "*".repeat(GhidraCParserSupport.MAX_TYPE_EXPRESSION_BYTES);
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> CTypeExpressionResolver.resolveCType(manager, oversizedType));
+
+        String oversizedHeader =
+            "/* " + "x".repeat(GhidraCParserSupport.MAX_DECLARATIONS_BYTES) + " */ struct S { int a; };";
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> CDeclarationParser.parseHeader(manager, oversizedHeader, "/", ConflictMode.REPLACE));
+
+        String oversizedSig =
+            "void f(int " + "a".repeat(GhidraCParserSupport.MAX_SIGNATURE_BYTES) + ")";
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> CFunctionSignatureParser.parse(manager, null, oversizedSig));
+      } finally {
+        manager.endTransaction(tx, true);
+      }
+    }
+  }
+
+  private static void assertNoTemporarySourceArchives(StandAloneDataTypeManager manager) {
+    for (SourceArchive archive : manager.getSourceArchives()) {
+      assertFalse(
+          "c_parser_scratch".equals(archive.getName()) || "c_std_types".equals(archive.getName()),
+          () -> "temporary archive leaked into program manager: " + archive.getName());
     }
   }
 

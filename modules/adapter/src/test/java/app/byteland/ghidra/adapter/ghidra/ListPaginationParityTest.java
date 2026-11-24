@@ -376,7 +376,8 @@ class ListPaginationParityTest {
       }
 
       @Override
-      public List<DataTypeResource> parseC(String source, String categoryPath) {
+      public List<DataTypeResource> parseC(
+          String source, String categoryPath, DataTypeService.ConflictMode conflictMode) {
         throw new UnsupportedOperationException();
       }
 

@@ -60,8 +60,9 @@ public final class DataTypeServiceImpl implements DataTypeService {
   }
 
   @Override
-  public java.util.List<DataTypeResource> parseC(String source, String categoryPath) {
-    return DataTypeMutations.parseC(dataTypeManager(), source, categoryPath);
+  public java.util.List<DataTypeResource> parseC(
+      String source, String categoryPath, ConflictMode conflictMode) {
+    return DataTypeMutations.parseC(dataTypeManager(), source, categoryPath, conflictMode);
   }
 
   @Override

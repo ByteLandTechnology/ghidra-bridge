@@ -58,7 +58,7 @@ public final class GhidraDataTypeReferences {
         yield buildArrayDataType(elementType, array.count(), programDataTypeManager);
       }
       case DataTypeReference.CType cType ->
-          GhidraCParserSupport.resolveCType(programDataTypeManager, cType.declaration());
+          CTypeExpressionResolver.resolveCType(programDataTypeManager, cType.declaration());
     };
   }
 
@@ -136,7 +136,7 @@ public final class GhidraDataTypeReferences {
             || normalized.indexOf('(') >= 0) {
           throw new IllegalArgumentException("unknown data type: " + normalized);
         }
-        selected = GhidraCParserSupport.resolveCType(programDataTypeManager, normalized);
+        selected = CTypeExpressionResolver.resolveCType(programDataTypeManager, normalized);
       } else if (matches.size() > UNAMBIGUOUS_MATCH_COUNT) {
         throw new IllegalArgumentException(
             "ambiguous data type name: " + normalized + "; use an absolute path");

@@ -9,6 +9,9 @@ public sealed interface DataTypeReference
         DataTypeReference.UntypedPointer,
         DataTypeReference.CType {
 
+  /** Maximum UTF-8 byte length accepted for a C data type string. */
+  int MAX_C_TYPE_BYTES = 4_096;
+
   String kind();
 
   record CType(String declaration) implements DataTypeReference {

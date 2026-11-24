@@ -1,10 +1,10 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
-import app.byteland.ghidra.adapter.ghidra.GhidraCParserSupport;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeService.ConflictMode;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
@@ -78,14 +78,8 @@ final class DataTypeMutations {
   }
 
   static java.util.List<DataTypeResource> parseC(
-      DataTypeManager manager, String source, String categoryPath) {
-    java.util.List<DataType> created =
-        GhidraCParserSupport.parseCHeader(manager, source, categoryPath);
-    java.util.List<DataTypeResource> resources = new java.util.ArrayList<>(created.size());
-    for (DataType dataType : created) {
-      resources.add(DataTypeDescriptions.detail(dataType));
-    }
-    return java.util.List.copyOf(resources);
+      DataTypeManager manager, String source, String categoryPath, ConflictMode conflictMode) {
+    return CDeclarationParser.parseAndStore(manager, source, categoryPath, conflictMode);
   }
 
   private static FunctionDefinition buildFunctionDefinition(

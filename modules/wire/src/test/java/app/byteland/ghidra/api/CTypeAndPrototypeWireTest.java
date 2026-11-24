@@ -82,7 +82,7 @@ class CTypeAndPrototypeWireTest {
             DataTypeService.class,
             (method, args) -> {
               assertEquals("parseC", method);
-              captured.set(List.of(args[0], args[1]));
+              captured.set(List.of(args[0], args[1], args[2]));
               return List.of(
                   new DataTypeResource(
                       "/net/Packet",
@@ -117,7 +117,12 @@ class CTypeAndPrototypeWireTest {
                 Map.of(
                     "source", "struct Packet { const char *buf; };",
                     "category_path", "/net"));
-    assertEquals(List.of("struct Packet { const char *buf; };", "/net"), captured.get());
+    assertEquals(
+        List.of(
+            "struct Packet { const char *buf; };",
+            "/net",
+            DataTypeService.ConflictMode.REPLACE),
+        captured.get());
     assertEquals(1, transactions.get());
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> items = (List<Map<String, Object>>) response.get("items");
@@ -129,11 +134,46 @@ class CTypeAndPrototypeWireTest {
         Map.of("kind", "pointer", "target", Map.of("kind", "named", "name", "/char")),
         fields.getFirst().get("data_type"));
 
+    registry.dispatch(
+        "data_type.parse_c",
+        Map.of(
+            "source", "struct Packet { int a; };",
+            "category_path", "/net",
+            "conflict_mode", "keep"));
+    assertEquals(
+        List.of("struct Packet { int a; };", "/net", DataTypeService.ConflictMode.KEEP),
+        captured.get());
+
+    registry.dispatch(
+        "data_type.parse_c",
+        Map.of(
+            "source", "struct Packet { int a; };",
+            "category_path", "/net",
+            "conflict_mode", "rename"));
+    assertEquals(
+        List.of("struct Packet { int a; };", "/net", DataTypeService.ConflictMode.RENAME),
+        captured.get());
+
     ApiException blankSource =
         assertThrows(
             ApiException.class,
             () -> registry.dispatch("data_type.parse_c", Map.of("source", "   ")));
     assertEquals(400, blankSource.status());
+
+    String oversizedHeader =
+        "/* " + "é".repeat(DataTypeService.MAX_DECLARATIONS_BYTES / 2 + 1) + " */";
+    ApiException headerTooLarge =
+        assertThrows(
+            ApiException.class,
+            () -> registry.dispatch("data_type.parse_c", Map.of("source", oversizedHeader)));
+    assertEquals(400, headerTooLarge.status());
+    assertEquals("invalid_value", headerTooLarge.error().code());
+
+    String oversizedCType = "é".repeat(DataTypeReference.MAX_C_TYPE_BYTES / 2 + 1);
+    ApiException cTypeTooLarge =
+        assertThrows(ApiException.class, () -> ApiRegistry.dataType(oversizedCType, "/data_type"));
+    assertEquals(400, cTypeTooLarge.status());
+    assertEquals("invalid_value", cTypeTooLarge.error().code());
   }
 
   @Test
@@ -203,6 +243,20 @@ class CTypeAndPrototypeWireTest {
     Object[] sigArgs = patchCall.get();
     assertNotNull(sigArgs);
     assertEquals("int process(const char *buf, void (*cb)(int))", sigArgs[9]);
+
+    String oversizedSignature =
+        "int f(int " + "é".repeat(FunctionService.MAX_SIGNATURE_BYTES / 2 + 1) + ")";
+    ApiException signatureTooLarge =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "function.patch",
+                    Map.of(
+                        "selector", Map.of("entry", "0x401000"),
+                        "patch", Map.of("signature", oversizedSignature))));
+    assertEquals(400, signatureTooLarge.status());
+    assertEquals("invalid_value", signatureTooLarge.error().code());
 
     registry.dispatch(
         "function.patch",

@@ -9,6 +9,9 @@ import java.util.Set;
  * Manages functions, parameters, local variables, and call graphs.
  */
 public interface FunctionService {
+  /** Maximum UTF-8 byte length accepted for a C function signature string. */
+  int MAX_SIGNATURE_BYTES = 8_192;
+
   /**
    * Patch for Boolean and integer function attributes.
    */
