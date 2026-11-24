@@ -15,9 +15,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.URI;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,7 +33,6 @@ import javax.swing.event.DocumentListener;
  * Interactive GUI configuration dialogs and multi-tab default calculation for {@link Bootstrap}.
  */
 final class GuiConfigDialog {
-  @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
   static final String DEFAULT_HOST = "127.0.0.1";
 
   static final int DEFAULT_WS_PORT = 8765;
@@ -353,7 +350,7 @@ final class GuiConfigDialog {
 
     Map<String, String> map = new LinkedHashMap<>();
     if (wsUrl != null) {
-      validateWsUri(wsUrl);
+      AgentConfig.parseWsUri(wsUrl);
       map.put(WS_URL_KEY, wsUrl);
       if (isExplicitlyOverridden(values, HOST_KEY, host, defaults.host())) {
         map.put(HOST_KEY, host);
@@ -386,21 +383,6 @@ final class GuiConfigDialog {
         map, TOOL_PREFIX_KEY, AgentConfig.optionalText(values.getString(TOOL_PREFIX_KEY)));
     putIfPresent(map, TOKEN_KEY, AgentConfig.optionalText(values.getString(TOKEN_KEY)));
     return McpConfig.fromMap(map);
-  }
-
-  private static void validateWsUri(String wsUrl) {
-    URI uri;
-    try {
-      uri = URI.create(wsUrl);
-    } catch (IllegalArgumentException invalid) {
-      throw new IllegalArgumentException("ws_url must be a valid ws:// or wss:// URI");
-    }
-    String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-    if ((!"ws".equals(scheme) && !"wss".equals(scheme))
-        || uri.getHost() == null
-        || uri.getHost().isBlank()) {
-      throw new IllegalArgumentException("ws_url must be a valid ws:// or wss:// URI");
-    }
   }
 
   private static boolean isExplicitlyOverridden(

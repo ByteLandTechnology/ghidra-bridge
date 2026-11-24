@@ -44,7 +44,6 @@ final class AgentServerConnection implements AgentWebSocketServer.Connection {
   }
 
   @Override
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public void close(int statusCode, String reason) {
     if (!state.compareAndSet(State.OPEN, State.CLOSING)) {
       abortCloseInProgress();
@@ -76,7 +75,6 @@ final class AgentServerConnection implements AgentWebSocketServer.Connection {
     }
   }
 
-  @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CompareObjectsWithEquals"})
   private Throwable closeSocketOnce(Throwable priorFailure) {
     if (!socketCloseStarted.compareAndSet(false, true)) {
       return priorFailure;

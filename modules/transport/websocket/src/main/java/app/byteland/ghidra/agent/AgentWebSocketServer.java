@@ -5,6 +5,11 @@ import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.time.Duration;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -14,21 +19,36 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class AgentWebSocketServer implements AutoCloseable {
   public static final String DEFAULT_PATH = "/ws/agent";
   private static final int SERVER_SHUTDOWN_CLOSE_CODE = 1001;
-  static final Object RESERVED_CONNECTION_SLOT = new Object();
+  static final Duration DEFAULT_HANDSHAKE_TIMEOUT = Duration.ofSeconds(10);
+  static final int DEFAULT_MAX_PENDING_SOCKETS = 16;
 
   private final AgentConfig config;
   private final Handler handler;
+  private final Duration handshakeTimeout;
   private final AtomicBoolean running = new AtomicBoolean(false);
-  private final AtomicReference<Object> activeConnection = new AtomicReference<>();
-  private final AtomicReference<Socket> pendingSocket = new AtomicReference<>();
+  private final AtomicReference<AgentServerConnection> activeConnection = new AtomicReference<>();
+  private final PendingSockets pendingSockets;
   private ServerSocket serverSocket;
 
   public AgentWebSocketServer(AgentConfig config, Handler handler) {
-    this.config = config;
-    this.handler = handler;
+    this(config, handler, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_MAX_PENDING_SOCKETS);
   }
 
-  @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
+  AgentWebSocketServer(
+      AgentConfig config, Handler handler, Duration handshakeTimeout, int maxPendingSockets) {
+    this.config = Objects.requireNonNull(config, "config");
+    this.handler = Objects.requireNonNull(handler, "handler");
+    Objects.requireNonNull(handshakeTimeout, "handshakeTimeout");
+    if (handshakeTimeout.isZero() || handshakeTimeout.isNegative()) {
+      throw new IllegalArgumentException("handshakeTimeout must be positive");
+    }
+    if (maxPendingSockets < 1) {
+      throw new IllegalArgumentException("maxPendingSockets must be positive");
+    }
+    this.handshakeTimeout = handshakeTimeout;
+    this.pendingSockets = new PendingSockets(running, maxPendingSockets);
+  }
+
   public void start() throws IOException {
     if (!running.compareAndSet(false, true)) {
       return;
@@ -38,10 +58,9 @@ public final class AgentWebSocketServer implements AutoCloseable {
       bindServerSocket(socket, config);
       AgentWebSocketConnectionRunner connectionRunner =
           new AgentWebSocketConnectionRunner(
-              config, handler, running, activeConnection, pendingSocket);
+              config, handler, running, activeConnection, pendingSockets, handshakeTimeout);
       AgentWebSocketAcceptor acceptor =
-          new AgentWebSocketAcceptor(
-              socket, handler, running, activeConnection, pendingSocket, connectionRunner);
+          new AgentWebSocketAcceptor(socket, handler, running, pendingSockets, connectionRunner);
       Thread thread = new Thread(acceptor, "agent-ws-server");
       thread.setDaemon(true);
       serverSocket = socket;
@@ -79,7 +98,6 @@ public final class AgentWebSocketServer implements AutoCloseable {
     }
   }
 
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
   private static void closeAfterFailedStart(ServerSocket socket, Throwable startFailure) {
     try {
       socket.close();
@@ -91,23 +109,23 @@ public final class AgentWebSocketServer implements AutoCloseable {
   }
 
   @Override
-  @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
   public void close() {
     running.set(false);
-    Object slot = activeConnection.getAndSet(null);
-    if (slot instanceof AgentServerConnection connection) {
+    AgentServerConnection connection = activeConnection.getAndSet(null);
+    if (connection != null) {
       try {
         connection.close(SERVER_SHUTDOWN_CLOSE_CODE, "server shutdown");
       } catch (RuntimeException failure) {
         handler.onConnectionError(connection, failure);
       }
     }
-    Socket pending = pendingSocket.getAndSet(null);
-    if (pending != null && !pending.isClosed()) {
-      try {
-        pending.close();
-      } catch (IOException failure) {
-        handler.onConnectionError(null, failure);
+    for (Socket pending : pendingSockets.drain()) {
+      if (!pending.isClosed()) {
+        try {
+          pending.close();
+        } catch (IOException failure) {
+          handler.onConnectionError(null, failure);
+        }
       }
     }
     ServerSocket socket = serverSocket;
@@ -116,6 +134,41 @@ public final class AgentWebSocketServer implements AutoCloseable {
         socket.close();
       } catch (IOException failure) {
         handler.onServerError(failure);
+      }
+    }
+  }
+
+  static final class PendingSockets {
+    private final Object lock = new Object();
+    private final AtomicBoolean running;
+    private final int maxSockets;
+    private final Set<Socket> sockets = new LinkedHashSet<>();
+
+    PendingSockets(AtomicBoolean running, int maxSockets) {
+      this.running = running;
+      this.maxSockets = maxSockets;
+    }
+
+    boolean tryAdd(Socket socket) {
+      synchronized (lock) {
+        if (!running.get() || sockets.size() >= maxSockets) {
+          return false;
+        }
+        return sockets.add(socket);
+      }
+    }
+
+    void remove(Socket socket) {
+      synchronized (lock) {
+        sockets.remove(socket);
+      }
+    }
+
+    List<Socket> drain() {
+      synchronized (lock) {
+        List<Socket> snapshot = List.copyOf(sockets);
+        sockets.clear();
+        return snapshot;
       }
     }
   }
