@@ -39,69 +39,26 @@ final class WireValues {
     return normalized;
   }
 
-  static Map<String, Object> list(Object value, int limit) {
-    return list(value, limit, null, null);
+  static Map<String, Object> list(Page<?> page) {
+    return list(page, null, null);
   }
 
   static Map<String, Object> list(
-      Object value, int limit, Set<String> selectedFields, Set<String> knownFields) {
-    if (value == null) {
-      throw new IllegalArgumentException("list results must be a Page or a collection: null");
+      Page<?> page, Set<String> selectedFields, Set<String> knownFields) {
+    if (page == null) {
+      throw new IllegalArgumentException("list results must be a Page: null");
     }
     ProjectionNode itemNode =
         selectedFields != null ? ProjectionNode.fromFields(selectedFields) : allowedNode(knownFields);
-    if (value instanceof Page<?> typedPage) {
-      Map<String, Object> result = new LinkedHashMap<>();
-      result.put(ApiVocabulary.ITEMS, normalize(typedPage.items(), itemNode));
-      if (typedPage.nextCursor() != null) {
-        result.put(ApiVocabulary.NEXT_CURSOR, typedPage.nextCursor());
-      }
-      if (typedPage.scanProgress() != null) {
-        result.put(ApiVocabulary.SCAN, normalize(typedPage.scanProgress(), ProjectionNode.ALL));
-      }
-      return result;
-    }
-    if (value instanceof Iterable<?> || value.getClass().isArray()) {
-      @SuppressWarnings("unchecked")
-      List<Object> items = (List<Object>) normalize(value, itemNode);
-      return new LinkedHashMap<>(Map.of(ApiVocabulary.ITEMS, items));
-    }
-    throw new IllegalArgumentException(
-        "list results must be a Page or a collection: " + value.getClass().getName());
-  }
-
-  static Map<String, Object> memory(Object value) {
-    return memory(value, null);
-  }
-
-  static Map<String, Object> memory(Object value, Set<String> selectedFields) {
-    if (value != null && value.getClass().isRecord()) {
-      return resource(value, selectedFields);
-    }
-    Map<String, Object> normalized = resource(value);
-    Object data = normalized.get("bytes");
-    Map<String, Object> bytes;
-    if (data instanceof Map<?, ?> map) {
-      @SuppressWarnings("unchecked")
-      Map<String, Object> existing = (Map<String, Object>) map;
-      bytes = existing;
-    } else if (data instanceof String encoded) {
-      bytes = new LinkedHashMap<>();
-      bytes.put(ApiVocabulary.ENCODING, normalized.get(ApiVocabulary.ENCODING));
-      bytes.put("data", encoded);
-      bytes.put(ApiVocabulary.LENGTH, normalized.get(ApiVocabulary.LENGTH));
-    } else {
-      return selectedFields == null
-          ? normalized
-          : ProjectionNode.fromFields(selectedFields).projectMap(normalized);
-    }
     Map<String, Object> result = new LinkedHashMap<>();
-    Object address = normalized.get("address");
-    result.put("address", address != null ? address : normalized.get("start"));
-    result.put("bytes", bytes);
-    return selectedFields == null
-        ? result
-        : ProjectionNode.fromFields(selectedFields).projectMap(result);
+    result.put(ApiVocabulary.ITEMS, normalize(page.items(), itemNode));
+    if (page.nextCursor() != null) {
+      result.put(ApiVocabulary.NEXT_CURSOR, page.nextCursor());
+    }
+    if (page.scanProgress() != null) {
+      result.put(ApiVocabulary.SCAN, normalize(page.scanProgress(), ProjectionNode.ALL));
+    }
+    return result;
   }
 
   static Object normalize(Object value) {
@@ -154,16 +111,6 @@ final class WireValues {
       }
       return result;
     }
-    if (value != null && value.getClass().isArray()) {
-      List<Object> result = new ArrayList<>();
-      for (int index = 0; index < java.lang.reflect.Array.getLength(value); index++) {
-        Object normalized = normalize(java.lang.reflect.Array.get(value, index), activeNode);
-        if (activeNode.includeAll() || normalized instanceof Map<?, ?>) {
-          result.add(normalized);
-        }
-      }
-      return result;
-    }
     if (value instanceof Enum<?> enumValue) {
       return enumValue.name().toLowerCase(Locale.ROOT);
     }
@@ -177,10 +124,7 @@ final class WireValues {
       for (ComponentMeta component : meta.ordered()) {
         Object componentValue = invokeAccessor(component, value);
         if (componentValue == null) continue;
-        String key = component.wireKey();
-        Object normalized = normalize(componentValue, ProjectionNode.ALL);
-        if ("id".equals(key) && normalized instanceof Number) normalized = normalized.toString();
-        result.put(key, normalized);
+        result.put(component.wireKey(), normalize(componentValue, ProjectionNode.ALL));
       }
       return result;
     }
@@ -197,7 +141,6 @@ final class WireValues {
           && !(normalized instanceof List<?>)) {
         continue;
       }
-      if ("id".equals(key) && normalized instanceof Number) normalized = normalized.toString();
       result.put(key, normalized);
     }
     return result;
@@ -213,62 +156,29 @@ final class WireValues {
   }
 
   private static Map<String, Object> normalizeMap(Map<?, ?> map, ProjectionNode node) {
-    Map<String, Object> matched = new LinkedHashMap<>();
-    for (Map.Entry<?, ?> entry : map.entrySet()) {
-      if (entry.getValue() == null) continue;
-      String key = snakeCase(String.valueOf(entry.getKey()));
-      ProjectionNode childNode = node.child(key);
-      if (childNode == null) continue;
-      Object normalized = normalize(entry.getValue(), childNode);
-      if ("bytes".equals(key) && normalized instanceof String encoded) {
-        String encoding =
-            map.get(ApiVocabulary.ENCODING) instanceof String text
-                ? text.toLowerCase(Locale.ROOT)
-                : ApiVocabulary.HEX;
-        Map<String, Object> byteMap =
-            Map.of(
-                ApiVocabulary.ENCODING,
-                encoding,
-                "data",
-                encoded,
-                ApiVocabulary.LENGTH,
-                encodedLength(encoding, encoded));
-        normalized = childNode.includeAll() ? byteMap : childNode.projectMap(byteMap);
+    if (node.includeAll()) {
+      Map<String, Object> result = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        if (entry.getValue() == null) continue;
+        result.put(String.valueOf(entry.getKey()), normalize(entry.getValue(), ProjectionNode.ALL));
       }
+      return result;
+    }
+    Map<String, Object> result = new LinkedHashMap<>();
+    for (Map.Entry<String, ProjectionNode> selected : node.children().entrySet()) {
+      String key = selected.getKey();
+      Object rawValue = map.get(key);
+      if (rawValue == null) continue;
+      ProjectionNode childNode = selected.getValue();
+      Object normalized = normalize(rawValue, childNode);
       if (!childNode.includeAll()
           && !(normalized instanceof Map<?, ?>)
           && !(normalized instanceof List<?>)) {
         continue;
       }
-      if ("id".equals(key) && normalized instanceof Number) {
-        normalized = normalized.toString();
-      }
-      if ((ApiVocabulary.KIND.equals(key)
-              || "flow_override".equals(key)
-              || "source_type".equals(key)
-              || "default_flow_type".equals(key)
-              || "flow_type".equals(key)
-              || "type".equals(key)
-              || "endian".equals(key))
-          && normalized instanceof String text) {
-        normalized = snakeCase(text).toLowerCase(Locale.ROOT);
-      }
-      if (key.endsWith("_at") && normalized instanceof Number epochMillis) {
-        normalized = Instant.ofEpochMilli(epochMillis.longValue()).toString();
-      }
-      matched.put(key, normalized);
+      result.put(key, normalized);
     }
-    if (node.includeAll() || matched.size() <= 1) {
-      return matched;
-    }
-    Map<String, Object> ordered = new LinkedHashMap<>(matched.size());
-    for (String key : node.children().keySet()) {
-      Object value = matched.get(key);
-      if (value != null) {
-        ordered.put(key, value);
-      }
-    }
-    return ordered;
+    return result;
   }
 
   private static ProjectionNode allowedNode(Set<String> knownFields) {
@@ -284,7 +194,7 @@ final class WireValues {
     return new ProjectionNode(false, children);
   }
 
-  static Map<String, Object> restrict(Map<String, Object> value, java.util.Set<String> fields) {
+  static Map<String, Object> restrict(Map<String, Object> value, Set<String> fields) {
     Set<String> roots = new LinkedHashSet<>();
     for (String field : fields) {
       int separator = field.indexOf('.');
@@ -295,17 +205,6 @@ final class WireValues {
       if (value.containsKey(root)) result.put(root, value.get(root));
     }
     return result;
-  }
-
-  private static int encodedLength(String encoding, String data) {
-    if (ApiVocabulary.BASE64.equals(encoding)) {
-      try {
-        return java.util.Base64.getDecoder().decode(data).length;
-      } catch (IllegalArgumentException ignored) {
-        return -1;
-      }
-    }
-    return data.length() % 2 == 0 ? data.length() / 2 : -1;
   }
 
   private record ComponentMeta(String name, String wireKey, Method accessor) {}

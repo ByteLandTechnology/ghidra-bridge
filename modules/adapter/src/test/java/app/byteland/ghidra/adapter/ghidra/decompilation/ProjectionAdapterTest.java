@@ -43,6 +43,7 @@ import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.DefaultAddressFactory;
 import ghidra.program.model.address.GenericAddressSpace;
 import ghidra.program.model.data.BuiltInDataType;
+import ghidra.program.model.data.Category;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.ProgramBasedDataTypeManager;
@@ -295,12 +296,23 @@ class ProjectionAdapterTest {
                   default -> defaultValue(m.getReturnType());
                 });
 
+    Category structsCategory =
+        proxy(
+            Category.class,
+            (p, m, a) ->
+                switch (m.getName()) {
+                  case "getCategoryPath" -> categoryPath;
+                  case "getDataTypes" -> new DataType[] {bigStruct};
+                  default -> defaultValue(m.getReturnType());
+                });
+
     ProgramBasedDataTypeManager dtm =
         proxy(
             ProgramBasedDataTypeManager.class,
             (p, m, a) ->
                 switch (m.getName()) {
                   case "getDataType" -> bigStruct;
+                  case "getCategory" -> categoryPath.equals(a[0]) ? structsCategory : null;
                   case "getAllDataTypes" -> List.<DataType>of(bigStruct).iterator();
                   default -> defaultValue(m.getReturnType());
                 });
@@ -472,8 +484,9 @@ class ProjectionAdapterTest {
             null,
             Set.of("address", "kind"));
     assertEquals(1, projectedCu.items().size());
-    assertNull(projectedCu.items().getFirst().value());
-    assertNull(projectedCu.items().getFirst().representation());
+    assertEquals("ram:00200000", projectedCu.items().getFirst().address());
+    assertEquals(CodeUnitResource.Kind.DATA, projectedCu.items().getFirst().kind());
+    assertNull(projectedCu.items().getFirst().dataType());
     assertNull(projectedCu.items().getFirst().bytes());
 
     // GlobalVariableQueries evaluates name/namespace filters while skipping value/representation.
@@ -549,7 +562,18 @@ class ProjectionAdapterTest {
   @Test
   void decompilationServiceAndGuiDocumentSkipUnrequestedCodeTokensAndLines() {
     Address entry = addr(0x101000L);
+    Program[] programHolder = new Program[1];
     Function fn =
+        proxy(
+            Function.class,
+            (p, m, a) ->
+                switch (m.getName()) {
+                  case "getEntryPoint" -> entry;
+                  case "getName" -> "main";
+                  case "getProgram" -> programHolder[0];
+                  default -> defaultValue(m.getReturnType());
+                });
+    Function guiGuardedFn =
         proxy(
             Function.class,
             (p, m, a) ->
@@ -604,9 +628,12 @@ class ProjectionAdapterTest {
         proxy(
             Listing.class,
             (p, m, a) ->
-                "getFunctionAt".equals(m.getName()) && entry.equals(a[0])
-                    ? fn
-                    : defaultValue(m.getReturnType()));
+                switch (m.getName()) {
+                  case "getFunctionAt" -> entry.equals(a[0]) ? fn : null;
+                  case "getCodeUnitContaining" ->
+                      throw new AssertionError("getCodeUnitContaining must be skipped");
+                  default -> defaultValue(m.getReturnType());
+                });
     FunctionManager fnManager =
         proxy(
             FunctionManager.class,
@@ -624,6 +651,7 @@ class ProjectionAdapterTest {
                   case "getFunctionManager" -> fnManager;
                   default -> defaultValue(m.getReturnType());
                 });
+    programHolder[0] = program;
     GhidraSession session = new GhidraSession(new StubScript(program));
     DecompilationServiceImpl service =
         new DecompilationServiceImpl(session, new LeasePool<>(1, () -> fakeDecomp));
@@ -651,7 +679,7 @@ class ProjectionAdapterTest {
     ClangTokenGroup group = new ClangTokenGroup(null);
     group.AddTokenGroup(new ClangSyntaxToken(group, "return 0;"));
     group.AddTokenGroup(new ClangBreak(group, 0));
-    GuiDocument rendered = GuiDocument.render(fn, group, true, false);
+    GuiDocument rendered = GuiDocument.render(guiGuardedFn, group, true, false);
     assertTrue(rendered.code().contains("return 0;"));
     assertEquals(List.of(), rendered.lines());
   }

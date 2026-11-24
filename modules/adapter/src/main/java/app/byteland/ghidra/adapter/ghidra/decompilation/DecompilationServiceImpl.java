@@ -10,6 +10,7 @@ import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.Program;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,6 +24,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
   private final GhidraSession context;
   private final LeasePool<DecompInterface> decompilerPool;
   private final Map<DecompInterface, Boolean> commentModes =
+      Collections.synchronizedMap(new WeakHashMap<>());
+  private final Map<DecompInterface, Long> programModifications =
       Collections.synchronizedMap(new WeakHashMap<>());
 
   public DecompilationServiceImpl(GhidraSession context) {
@@ -80,8 +83,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
       DecompInterface decompiler = lease.value();
       applyCommentMode(decompiler, includeComments);
-      // The native process keeps program data. Clear it to show the current names and comments.
-      decompiler.flushCache();
+      // The native process keeps program data. Clear it when program modifications occur.
+      flushCacheIfModified(decompiler, function.getProgram());
       DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
       boolean completed = results.decompileCompleted();
       boolean needName = FieldProjections.allows(fields, "name");
@@ -100,22 +103,17 @@ public final class DecompilationServiceImpl implements DecompilationService {
       }
       DecompilationResource.Format effectiveFormat =
           format == null ? DecompilationResource.Format.TEXT : format;
-      ClangTokenGroup markup =
-          (effectiveFormat == DecompilationResource.Format.TOKENS && needTokens)
-                  || (effectiveFormat == DecompilationResource.Format.DOCUMENT
-                      && (needC || needLines))
-              ? results.getCCodeMarkup()
-              : null;
       String code = null;
       List<DecompilationResource.Token> tokens = null;
       List<DecompilationResource.Line> lines = null;
       if (effectiveFormat == DecompilationResource.Format.TEXT) {
-        code = needC ? renderCode(results) : "";
+        code = needC ? GuiDocument.renderText(function, results) : "";
       } else if (effectiveFormat == DecompilationResource.Format.TOKENS) {
-        tokens = needTokens ? renderTokens(markup) : List.of();
+        tokens = needTokens ? renderTokens(results.getCCodeMarkup()) : List.of();
       } else if (effectiveFormat == DecompilationResource.Format.DOCUMENT) {
         if (needC || needLines) {
-          GuiDocument document = GuiDocument.render(function, markup, needC, needLines);
+          GuiDocument document =
+              GuiDocument.render(function, results.getCCodeMarkup(), needC, needLines);
           code = needC ? document.code() : "";
           lines = needLines ? document.lines() : List.of();
         } else {
@@ -125,7 +123,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
       }
       FunctionComments comments =
           includeComments && (needComments || needCommentsComplete || needWarnings)
-              ? FunctionComments.read(function, startedAt, timeoutMs, warnings)
+              ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
               : null;
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
@@ -142,13 +140,6 @@ public final class DecompilationServiceImpl implements DecompilationService {
           comments == null || !needCommentsComplete ? null : comments.complete(),
           needWarnings ? warnings : List.of());
     }
-  }
-
-  private String renderCode(DecompileResults results) {
-    if (results.getDecompiledFunction() == null || results.getDecompiledFunction().getC() == null) {
-      return "";
-    }
-    return DecompilationFormatter.formatCCode(results.getDecompiledFunction().getC());
   }
 
   private List<DecompilationResource.Token> renderTokens(ClangTokenGroup markup) {
@@ -176,6 +167,22 @@ public final class DecompilationServiceImpl implements DecompilationService {
       throw new IllegalStateException("unable to set decompiler display options");
     }
     commentModes.put(decompiler, includeComments);
+  }
+
+  /** Flushes the native cache only when the modification number of the program changes. */
+  private void flushCacheIfModified(DecompInterface decompiler, Program program) {
+    Program target = program != null ? program : context.currentProgramOrNull();
+    if (target == null) {
+      programModifications.remove(decompiler);
+      decompiler.flushCache();
+      return;
+    }
+    long modificationNumber = target.getModificationNumber();
+    if (Long.valueOf(modificationNumber).equals(programModifications.get(decompiler))) return;
+    programModifications.remove(decompiler);
+    if (decompiler.flushCache() >= 0) {
+      programModifications.put(decompiler, modificationNumber);
+    }
   }
 
   static DecompilationResource.Token.Kind tokenKind(ClangToken token) {

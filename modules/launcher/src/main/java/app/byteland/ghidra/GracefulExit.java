@@ -86,7 +86,6 @@ final class GracefulExit implements AutoCloseable {
   }
 
   @Override
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public void close() throws Exception {
     if (!closeStarted.compareAndSet(false, true)) {
       return;

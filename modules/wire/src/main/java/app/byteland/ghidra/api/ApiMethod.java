@@ -18,7 +18,6 @@ import java.util.Set;
  * @param fields set of selectable field projection paths
  * @param identityFields minimum fields in all projections
  * @param handler execution delegate for the operation
- * @param mcpAnnotations hint metadata for each method in the catalog
  */
 public record ApiMethod<Request, Response>(
     String name,
@@ -28,8 +27,7 @@ public record ApiMethod<Request, Response>(
     JsonCodec<Response> responseCodec,
     Set<String> fields,
     List<String> identityFields,
-    Handler<Request, Response> handler,
-    McpAnnotations mcpAnnotations) {
+    Handler<Request, Response> handler) {
 
   public ApiMethod {
     Objects.requireNonNull(name, "name");
@@ -42,7 +40,6 @@ public record ApiMethod<Request, Response>(
     fields = Set.copyOf(fields);
     identityFields = List.copyOf(identityFields);
     Objects.requireNonNull(handler, "handler");
-    Objects.requireNonNull(mcpAnnotations, "mcpAnnotations");
   }
 
   public Object invoke(Object params) throws Exception {
@@ -75,7 +72,7 @@ public record ApiMethod<Request, Response>(
   }
 
   @FunctionalInterface
-  public interface ProjectedHandler<Request, Response> extends Handler<Request, Response> {
+  interface ProjectedHandler<Request, Response> extends Handler<Request, Response> {
     Response handle(Request request, Set<String> projectedFields) throws Exception;
 
     @Override
@@ -132,22 +129,6 @@ public record ApiMethod<Request, Response>(
 
     public static MethodEffects lifecycle(boolean destructive, boolean idempotent) {
       return new MethodEffects(false, false, false, true, destructive, idempotent, false);
-    }
-  }
-
-  /**
-   * Metadata annotations for Model Context Protocol discovery.
-   *
-   * @param title human-readable tool title
-   * @param readOnlyHint hint that indicates a read-only operation
-   * @param destructiveHint hint that indicates a destructive operation
-   * @param idempotentHint hint that indicates an idempotent operation
-   */
-  public record McpAnnotations(
-      String title, boolean readOnlyHint, boolean destructiveHint, boolean idempotentHint) {
-    public static McpAnnotations forMethod(String name, MethodEffects effects) {
-      return new McpAnnotations(
-          name, effects.readOnly(), effects.destructive(), effects.idempotent());
     }
   }
 

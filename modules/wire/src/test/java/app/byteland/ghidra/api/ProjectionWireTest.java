@@ -115,8 +115,7 @@ class ProjectionWireTest {
                       "entry", "0x00101000",
                       "body", Map.of("start", "0x00101000"),
                       "name", "main");
-                },
-            new ApiMethod.McpAnnotations("function.get", true, false, true));
+                });
 
     Object encoded = method.invokeDecoded(Map.of("fields", countingList));
     assertEquals(rawList.size(), listReads.get(), "projection.fields must be read in one pass");
@@ -637,9 +636,7 @@ class ProjectionWireTest {
                                   "dd 1h",
                                   "dd",
                                   List.of("1h"),
-                                  DataTypeReference.named("int"),
-                                  "unselectable-value",
-                                  "unselectable-repr")),
+                                  DataTypeReference.named("int"))),
                           100,
                           null,
                           scan);

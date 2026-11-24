@@ -50,9 +50,7 @@ final class ListingDescriptions {
             : null,
         data != null && FieldProjections.allows(fields, "data_type")
             ? GhidraDataTypeReferences.toReference(data.getDataType())
-            : null,
-        null,
-        null);
+            : null);
   }
 
   static InstructionResource toInstructionItem(Instruction instruction, GhidraSession context) {

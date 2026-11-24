@@ -54,8 +54,6 @@ final class GlobalVariableMethods implements ApiMethodProvider {
     Map<String, Object> globalVariableFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
-                ApiVocabulary.START, WireSchema.string(),
-                ApiVocabulary.END, WireSchema.string(),
                 ApiVocabulary.NAME, WireSchema.string(),
                 ApiVocabulary.NAMESPACE, WireSchema.string(),
                 ApiVocabulary.CASE_SENSITIVE, WireSchema.bool()));
@@ -73,7 +71,7 @@ final class GlobalVariableMethods implements ApiMethodProvider {
               .globalVariableService()
               .listGlobalVariables(
                   new Query(
-                      addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
+                      addressScan(request),
                       optionalText(filter, ApiVocabulary.NAME),
                       optionalText(filter, ApiVocabulary.NAMESPACE),
                       Boolean.TRUE.equals(bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(null)),
