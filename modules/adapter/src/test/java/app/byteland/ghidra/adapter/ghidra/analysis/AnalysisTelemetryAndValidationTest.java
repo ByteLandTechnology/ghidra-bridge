@@ -11,15 +11,19 @@ import app.byteland.ghidra.api.ApiFailures;
 import app.byteland.ghidra.service.analysis.AnalysisResource;
 import ghidra.framework.cmd.BackgroundCommand;
 import ghidra.framework.model.DomainObject;
+import ghidra.framework.model.DomainObjectClosedListener;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.listing.Program;
 import ghidra.util.task.TaskMonitor;
 import ghidra.util.task.TaskMonitorAdapter;
+import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -28,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.Test;
 
 class AnalysisTelemetryAndValidationTest {
@@ -441,6 +446,314 @@ class AnalysisTelemetryAndValidationTest {
     assertEquals("gui analyzer failure", failingGuiTask.snapshot().error());
   }
 
+  @Test
+  void unblocksQueuedCommandImmediatelyOnCancelWithoutCancellingSharedGuiMonitor()
+      throws Exception {
+    CountDownLatch commandQueued = new CountDownLatch(1);
+    CountDownLatch releaseGuiQueue = new CountDownLatch(1);
+    CountDownLatch drainedSkippedCommand = new CountDownLatch(1);
+    AtomicBoolean executionRan = new AtomicBoolean(false);
+    AtomicBoolean applyResult = new AtomicBoolean(true);
+    RecordingTaskMonitor sharedGuiMonitor = new RecordingTaskMonitor();
+
+    ExecutorService guiExecutor = Executors.newSingleThreadExecutor();
+    ExecutorService taskExecutor = Executors.newSingleThreadExecutor();
+    try {
+      guiExecutor.execute(() -> awaitLatch(releaseGuiQueue));
+      FakePluginTool tool =
+          new FakePluginTool(
+              (command, target) -> {
+                commandQueued.countDown();
+                guiExecutor.execute(
+                    () -> {
+                      guiExecutorThread.set(true);
+                      try {
+                        boolean ran = command.applyTo(target, sharedGuiMonitor);
+                        applyResult.set(ran);
+                        if (ran) {
+                          command.taskCompleted();
+                        }
+                      } finally {
+                        guiExecutorThread.remove();
+                        drainedSkippedCommand.countDown();
+                      }
+                    });
+              },
+              () -> true);
+
+      AtomicReference<AnalysisTask> taskRef = new AtomicReference<>();
+      AnalysisTask task =
+          new AnalysisTask(
+              () -> false,
+              ignored ->
+                  taskRef
+                      .get()
+                      .runAnalysis(tool, null, activeMonitor -> executionRan.set(true)));
+      taskRef.set(task);
+
+      Future<?> taskFuture = taskExecutor.submit(task::run);
+      assertTrue(commandQueued.await(5, TimeUnit.SECONDS));
+
+      task.cancel();
+      taskFuture.get(5, TimeUnit.SECONDS);
+
+      AnalysisResource cancelledSnapshot = task.snapshot();
+      assertEquals(AnalysisResource.Status.CANCELLED, cancelledSnapshot.status());
+      assertEquals("Analysis cancelled", cancelledSnapshot.message());
+      assertNull(cancelledSnapshot.error());
+
+      releaseGuiQueue.countDown();
+      assertTrue(drainedSkippedCommand.await(5, TimeUnit.SECONDS));
+      assertFalse(applyResult.get());
+      assertFalse(executionRan.get());
+      assertFalse(sharedGuiMonitor.isCancelled());
+    } finally {
+      releaseGuiQueue.countDown();
+      guiExecutor.shutdownNow();
+      taskExecutor.shutdownNow();
+    }
+  }
+
+  @Test
+  void handlesConcurrentDisposeSilentQueueDropsAndClosedProgramInPluginTool() throws Exception {
+    FakePluginTool alreadyDisposedTool = new FakePluginTool((command, target) -> {}, () -> false);
+    AtomicReference<AnalysisTask> droppedImmediatelyRef = new AtomicReference<>();
+    AnalysisTask droppedImmediatelyTask =
+        new AnalysisTask(
+            () -> false,
+            ignored ->
+                droppedImmediatelyRef.get().runAnalysis(alreadyDisposedTool, null, m -> {}));
+    droppedImmediatelyRef.set(droppedImmediatelyTask);
+    droppedImmediatelyTask.run();
+    assertEquals(AnalysisResource.Status.CANCELLED, droppedImmediatelyTask.snapshot().status());
+    assertEquals("Analysis cancelled", droppedImmediatelyTask.snapshot().message());
+    assertNull(droppedImmediatelyTask.snapshot().error());
+
+    ExecutorService taskExecutor = Executors.newSingleThreadExecutor();
+    ExecutorService guiExecutor = Executors.newSingleThreadExecutor();
+    try {
+      AtomicBoolean toolBusy = new AtomicBoolean(true);
+      CountDownLatch queuedOnBusyTool = new CountDownLatch(1);
+      FakePluginTool clearedQueueTool =
+          new FakePluginTool((command, target) -> queuedOnBusyTool.countDown(), toolBusy::get);
+      AtomicReference<AnalysisTask> clearedQueueRef = new AtomicReference<>();
+      AnalysisTask clearedQueueTask =
+          new AnalysisTask(
+              () -> false,
+              ignored -> clearedQueueRef.get().runAnalysis(clearedQueueTool, null, m -> {}));
+      clearedQueueRef.set(clearedQueueTask);
+
+      Future<?> clearedFuture = taskExecutor.submit(clearedQueueTask::run);
+      assertTrue(queuedOnBusyTool.await(5, TimeUnit.SECONDS));
+      toolBusy.set(false);
+      clearedFuture.get(5, TimeUnit.SECONDS);
+      assertEquals(AnalysisResource.Status.CANCELLED, clearedQueueTask.snapshot().status());
+      assertNull(clearedQueueTask.snapshot().error());
+
+      ClosableProgramStub closableProgram = new ClosableProgramStub();
+      CountDownLatch queuedOnOpenProgram = new CountDownLatch(1);
+      FakePluginTool programClosingTool =
+          new FakePluginTool((command, target) -> queuedOnOpenProgram.countDown(), () -> true);
+      AtomicReference<AnalysisTask> closedProgramRef = new AtomicReference<>();
+      AnalysisTask closedProgramTask =
+          new AnalysisTask(
+              () -> false,
+              ignored ->
+                  closedProgramRef
+                      .get()
+                      .runAnalysis(programClosingTool, closableProgram.proxy(), m -> {}));
+      closedProgramRef.set(closedProgramTask);
+
+      Future<?> closedProgramFuture = taskExecutor.submit(closedProgramTask::run);
+      assertTrue(queuedOnOpenProgram.await(5, TimeUnit.SECONDS));
+      closableProgram.close();
+      closedProgramFuture.get(5, TimeUnit.SECONDS);
+      assertEquals(AnalysisResource.Status.CANCELLED, closedProgramTask.snapshot().status());
+      assertNull(closedProgramTask.snapshot().error());
+
+      RecordingTaskMonitor runningGuiMonitor = new RecordingTaskMonitor();
+      AtomicReference<BackgroundCommand<Program>> runningCommandRef = new AtomicReference<>();
+      CountDownLatch insideApplyTo = new CountDownLatch(1);
+      CountDownLatch allowApplyToExit = new CountDownLatch(1);
+      AtomicBoolean observedCancelBeforeExit = new AtomicBoolean(false);
+      FakePluginTool concurrentDisposeTool =
+          new FakePluginTool(
+              (command, target) -> {
+                runningCommandRef.set(command);
+                guiExecutor.execute(
+                    () -> {
+                      guiExecutorThread.set(true);
+                      try {
+                        command.applyTo(target, runningGuiMonitor);
+                        command.taskCompleted();
+                      } finally {
+                        guiExecutorThread.remove();
+                      }
+                    });
+              },
+              () -> true);
+      AtomicReference<AnalysisTask> concurrentDisposeRef = new AtomicReference<>();
+      AnalysisTask concurrentDisposeTask =
+          new AnalysisTask(
+              () -> false,
+              ignored ->
+                  concurrentDisposeRef
+                      .get()
+                      .runAnalysis(
+                          concurrentDisposeTool,
+                          null,
+                          activeMonitor -> {
+                            activeMonitor.setMessage("Function Start Search");
+                            insideApplyTo.countDown();
+                            awaitLatch(allowApplyToExit);
+                            observedCancelBeforeExit.set(activeMonitor.isCancelled());
+                          }));
+      concurrentDisposeRef.set(concurrentDisposeTask);
+
+      Future<?> concurrentDisposeFuture = taskExecutor.submit(concurrentDisposeTask::run);
+      assertTrue(insideApplyTo.await(5, TimeUnit.SECONDS));
+      runningCommandRef.get().dispose();
+
+      assertTrue(runningGuiMonitor.isCancelled());
+      assertFalse(concurrentDisposeFuture.isDone());
+
+      allowApplyToExit.countDown();
+      concurrentDisposeFuture.get(5, TimeUnit.SECONDS);
+      assertTrue(observedCancelBeforeExit.get());
+      assertEquals(AnalysisResource.Status.CANCELLED, concurrentDisposeTask.snapshot().status());
+      assertEquals("Analysis cancelled", concurrentDisposeTask.snapshot().message());
+      assertNull(concurrentDisposeTask.snapshot().error());
+    } finally {
+      guiExecutor.shutdownNow();
+      taskExecutor.shutdownNow();
+    }
+  }
+
+  @Test
+  void honorsForcedCancelProtectsReusableGuiMonitorAndPropagatesGuiErrors() throws Exception {
+    RecordingTaskMonitor sharedGuiMonitor = new RecordingTaskMonitor();
+    FakePluginTool cancelDisabledTool =
+        new FakePluginTool(
+            (command, target) -> {
+              command.applyTo(target, sharedGuiMonitor);
+              command.taskCompleted();
+            });
+    AtomicReference<AnalysisTask> cancelDisabledRef = new AtomicReference<>();
+    AnalysisTask cancelDisabledTask =
+        new AnalysisTask(
+            () -> false,
+            ignored ->
+                cancelDisabledRef
+                    .get()
+                    .runAnalysis(
+                        cancelDisabledTool,
+                        null,
+                        activeMonitor -> {
+                          activeMonitor.setCancelEnabled(false);
+                          assertFalse(sharedGuiMonitor.isCancelEnabled());
+                          cancelDisabledRef.get().cancel();
+                          assertTrue(activeMonitor.isCancelled());
+                          activeMonitor.setCancelEnabled(true);
+                          assertTrue(sharedGuiMonitor.isCancelled());
+                          activeMonitor.setCancelEnabled(false);
+                        }));
+    cancelDisabledRef.set(cancelDisabledTask);
+    cancelDisabledTask.run();
+    assertEquals(AnalysisResource.Status.CANCELLED, cancelDisabledTask.snapshot().status());
+    assertTrue(sharedGuiMonitor.isCancelEnabled());
+
+    RecordingTaskMonitor reusedGuiMonitor = new RecordingTaskMonitor();
+    FakePluginTool normalGuiTool =
+        new FakePluginTool(
+            (command, target) -> {
+              command.applyTo(target, reusedGuiMonitor);
+              command.taskCompleted();
+            });
+    AtomicReference<AnalysisTask> postCloseCancelRef = new AtomicReference<>();
+    AnalysisTask postCloseCancelTask =
+        new AnalysisTask(
+            () -> true,
+            ignored ->
+                postCloseCancelRef
+                    .get()
+                    .runAnalysis(
+                        normalGuiTool, null, activeMonitor -> activeMonitor.setMessage("Stack")));
+    postCloseCancelRef.set(postCloseCancelTask);
+    postCloseCancelTask.run();
+    assertEquals(AnalysisResource.Status.COMPLETED, postCloseCancelTask.snapshot().status());
+    postCloseCancelTask.cancel();
+    assertFalse(reusedGuiMonitor.isCancelled());
+
+    FakePluginTool errorGuiTool =
+        new FakePluginTool(
+            (command, target) -> {
+              command.applyTo(target, new RecordingTaskMonitor());
+              command.taskCompleted();
+            });
+    AtomicReference<AnalysisTask> errorTaskRef = new AtomicReference<>();
+    AnalysisTask errorGuiTask =
+        new AnalysisTask(
+            () -> false,
+            ignored ->
+                errorTaskRef
+                    .get()
+                    .runAnalysis(
+                        errorGuiTool,
+                        null,
+                        activeMonitor -> {
+                          activeMonitor.setMessage("Aggressive Instruction Finder");
+                          throw new AssertionError("gui invariant broken");
+                        }));
+    errorTaskRef.set(errorGuiTask);
+    AssertionError propagated = assertThrows(AssertionError.class, errorGuiTask::run);
+    assertEquals("gui invariant broken", propagated.getMessage());
+    assertEquals(AnalysisResource.Status.FAILED, errorGuiTask.snapshot().status());
+    assertEquals("Aggressive Instruction Finder", errorGuiTask.snapshot().message());
+    assertEquals("gui invariant broken", errorGuiTask.snapshot().error());
+
+    ExecutorService racePool = Executors.newFixedThreadPool(2);
+    try {
+      for (int i = 0; i < 100; i++) {
+        AnalysisTaskMonitor bridgeSide = new AnalysisTaskMonitor();
+        RecordingTaskMonitor guiSide = new RecordingTaskMonitor();
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        CountDownLatch cancelDone = new CountDownLatch(1);
+        final boolean cancelFromGui = (i % 2) == 0;
+        Future<?> canceller =
+            racePool.submit(
+                () -> {
+                  try {
+                    barrier.await(5, TimeUnit.SECONDS);
+                    if (cancelFromGui) {
+                      guiSide.cancel();
+                    } else {
+                      bridgeSide.requestCancel();
+                    }
+                    return null;
+                  } finally {
+                    cancelDone.countDown();
+                  }
+                });
+        Future<?> attacher =
+            racePool.submit(
+                () -> {
+                  barrier.await(5, TimeUnit.SECONDS);
+                  try (AnalysisTaskMonitor.BridgedMonitor bridged = bridgeSide.bridge(guiSide)) {
+                    assertTrue(cancelDone.await(5, TimeUnit.SECONDS));
+                    assertTrue(bridgeSide.isCancelled());
+                    assertTrue(guiSide.isCancelled());
+                    assertTrue(bridged.isCancelled());
+                  }
+                  return null;
+                });
+        canceller.get(5, TimeUnit.SECONDS);
+        attacher.get(5, TimeUnit.SECONDS);
+      }
+    } finally {
+      racePool.shutdownNow();
+    }
+  }
+
   private static final ThreadLocal<Boolean> guiExecutorThread =
       ThreadLocal.withInitial(() -> false);
 
@@ -518,10 +831,18 @@ class AnalysisTelemetryAndValidationTest {
 
   private static final class FakePluginTool extends PluginTool {
     private final BiConsumer<BackgroundCommand<Program>, Program> dispatcher;
+    private final BooleanSupplier executingCommand;
 
     FakePluginTool(BiConsumer<BackgroundCommand<Program>, Program> dispatcher) {
+      this(dispatcher, null);
+    }
+
+    FakePluginTool(
+        BiConsumer<BackgroundCommand<Program>, Program> dispatcher,
+        BooleanSupplier executingCommand) {
       super();
       this.dispatcher = dispatcher;
+      this.executingCommand = executingCommand;
     }
 
     @Override
@@ -530,10 +851,55 @@ class AnalysisTelemetryAndValidationTest {
     }
 
     @Override
+    public boolean isExecutingCommand() {
+      return executingCommand == null
+          ? super.isExecutingCommand()
+          : executingCommand.getAsBoolean();
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public <T extends DomainObject> void executeBackgroundCommand(
         BackgroundCommand<T> cmd, T obj) {
       dispatcher.accept((BackgroundCommand<Program>) cmd, (Program) obj);
+    }
+  }
+
+  private static final class ClosableProgramStub {
+    private final List<DomainObjectClosedListener> closeListeners = new CopyOnWriteArrayList<>();
+    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final Program programProxy =
+        (Program)
+            Proxy.newProxyInstance(
+                Program.class.getClassLoader(),
+                new Class<?>[] {Program.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "isClosed" -> closed.get();
+                      case "addCloseListener" -> {
+                        closeListeners.add((DomainObjectClosedListener) args[0]);
+                        yield null;
+                      }
+                      case "removeCloseListener" -> {
+                        closeListeners.remove(args[0]);
+                        yield null;
+                      }
+                      case "equals" -> proxy == args[0];
+                      case "hashCode" -> System.identityHashCode(proxy);
+                      case "toString" -> "ClosableProgramStub";
+                      default -> throw new UnsupportedOperationException(method.getName());
+                    });
+
+    Program proxy() {
+      return programProxy;
+    }
+
+    void close() {
+      if (closed.compareAndSet(false, true)) {
+        for (DomainObjectClosedListener listener : closeListeners) {
+          listener.domainObjectClosed(programProxy);
+        }
+      }
     }
   }
 

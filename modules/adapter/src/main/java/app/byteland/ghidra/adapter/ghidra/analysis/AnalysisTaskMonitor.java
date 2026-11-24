@@ -3,13 +3,14 @@ package app.byteland.ghidra.adapter.ghidra.analysis;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.task.CancelledListener;
 import ghidra.util.task.TaskMonitor;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 final class AnalysisTaskMonitor implements TaskMonitor {
-  private final List<CancelledListener> cancelledListeners = new CopyOnWriteArrayList<>();
+  private final Object cancelLock = new Object();
+  private final List<CancelledListener> cancelledListeners = new ArrayList<>();
   private volatile boolean cancelled;
   private volatile boolean cancelEnabled = true;
   private volatile boolean indeterminate = true;
@@ -96,30 +97,54 @@ final class AnalysisTaskMonitor implements TaskMonitor {
 
   @Override
   public void cancel() {
-    if (!cancelEnabled || cancelled) {
-      return;
+    cancelInternal(false);
+  }
+
+  void requestCancel() {
+    cancelInternal(true);
+  }
+
+  private void cancelInternal(boolean ignoreCancelEnabled) {
+    List<CancelledListener> listeners;
+    synchronized (cancelLock) {
+      if (cancelled || (!ignoreCancelEnabled && !cancelEnabled)) {
+        return;
+      }
+      cancelled = true;
+      listeners = List.copyOf(cancelledListeners);
     }
-    cancelled = true;
-    for (CancelledListener listener : cancelledListeners) {
+    for (CancelledListener listener : listeners) {
       listener.cancelled();
     }
   }
 
   @Override
   public void addCancelledListener(CancelledListener listener) {
-    if (listener != null) {
-      cancelledListeners.add(listener);
+    if (listener == null) {
+      return;
+    }
+    synchronized (cancelLock) {
+      if (!cancelledListeners.contains(listener)) {
+        cancelledListeners.add(listener);
+      }
     }
   }
 
   @Override
   public void removeCancelledListener(CancelledListener listener) {
-    cancelledListeners.remove(listener);
+    if (listener == null) {
+      return;
+    }
+    synchronized (cancelLock) {
+      cancelledListeners.remove(listener);
+    }
   }
 
   @Override
   public void setCancelEnabled(boolean cancelEnabled) {
-    this.cancelEnabled = cancelEnabled;
+    synchronized (cancelLock) {
+      this.cancelEnabled = cancelEnabled;
+    }
   }
 
   @Override
@@ -129,7 +154,9 @@ final class AnalysisTaskMonitor implements TaskMonitor {
 
   @Override
   public void clearCancelled() {
-    cancelled = false;
+    synchronized (cancelLock) {
+      cancelled = false;
+    }
   }
 
   @Deprecated(since = "10.3")
@@ -152,30 +179,27 @@ final class AnalysisTaskMonitor implements TaskMonitor {
 
   final class BridgedMonitor implements TaskMonitor, AutoCloseable {
     private final TaskMonitor delegate;
+    private final boolean initialDelegateCancelEnabled;
     private final CancelledListener toDelegate;
     private final CancelledListener fromDelegate;
     private final AtomicBoolean syncingCancel = new AtomicBoolean();
+    private final Object lifecycleLock = new Object();
+    private volatile boolean closed;
 
     private BridgedMonitor(TaskMonitor delegate) {
       this.delegate = delegate;
-      if (AnalysisTaskMonitor.this.isCancelled()) {
-        if (!delegate.isCancelled()) {
-          delegate.cancel();
-        }
-      } else if (delegate.isCancelled()) {
-        AnalysisTaskMonitor.this.cancel();
-      }
-      delegate.setIndeterminate(AnalysisTaskMonitor.this.isIndeterminate());
-      String initialMessage = AnalysisTaskMonitor.this.getMessage();
-      if (!initialMessage.isEmpty()) {
-        delegate.setMessage(initialMessage);
-      }
+      this.initialDelegateCancelEnabled = delegate.isCancelEnabled();
       this.toDelegate =
           () -> {
+            if (closed) {
+              return;
+            }
             if (syncingCancel.compareAndSet(false, true)) {
               try {
-                if (!delegate.isCancelled()) {
-                  delegate.cancel();
+                synchronized (lifecycleLock) {
+                  if (!closed && !delegate.isCancelled()) {
+                    delegate.cancel();
+                  }
                 }
               } finally {
                 syncingCancel.set(false);
@@ -184,18 +208,49 @@ final class AnalysisTaskMonitor implements TaskMonitor {
           };
       this.fromDelegate =
           () -> {
+            if (closed) {
+              return;
+            }
             if (syncingCancel.compareAndSet(false, true)) {
               try {
-                if (!AnalysisTaskMonitor.this.isCancelled()) {
-                  AnalysisTaskMonitor.this.cancel();
+                synchronized (lifecycleLock) {
+                  if (!closed && !AnalysisTaskMonitor.this.isCancelled()) {
+                    AnalysisTaskMonitor.this.requestCancel();
+                  }
                 }
               } finally {
                 syncingCancel.set(false);
               }
             }
           };
+      boolean initialized = false;
       AnalysisTaskMonitor.this.addCancelledListener(toDelegate);
       delegate.addCancelledListener(fromDelegate);
+      try {
+        if (AnalysisTaskMonitor.this.isCancelled()) {
+          toDelegate.cancelled();
+        } else if (delegate.isCancelled()) {
+          fromDelegate.cancelled();
+        }
+        if (!AnalysisTaskMonitor.this.isCancelEnabled()) {
+          delegate.setCancelEnabled(false);
+        }
+        long currentMaximum = AnalysisTaskMonitor.this.getMaximum();
+        if (currentMaximum > 0) {
+          delegate.initialize(currentMaximum);
+          delegate.setProgress(AnalysisTaskMonitor.this.getProgress());
+        }
+        delegate.setIndeterminate(AnalysisTaskMonitor.this.isIndeterminate());
+        String initialMessage = AnalysisTaskMonitor.this.getMessage();
+        if (!initialMessage.isEmpty()) {
+          delegate.setMessage(initialMessage);
+        }
+        initialized = true;
+      } finally {
+        if (!initialized) {
+          close();
+        }
+      }
     }
 
     @Override
@@ -209,13 +264,21 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     @Override
     public void setShowProgressValue(boolean showProgressValue) {
       AnalysisTaskMonitor.this.setShowProgressValue(showProgressValue);
-      delegate.setShowProgressValue(showProgressValue);
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.setShowProgressValue(showProgressValue);
+        }
+      }
     }
 
     @Override
     public void setMessage(String message) {
       AnalysisTaskMonitor.this.setMessage(message);
-      delegate.setMessage(message);
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.setMessage(message);
+        }
+      }
     }
 
     @Override
@@ -226,29 +289,48 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     @Override
     public void setProgress(long progress) {
       AnalysisTaskMonitor.this.setProgress(progress);
-      delegate.setProgress(progress);
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.setProgress(progress);
+        }
+      }
     }
 
     @Override
     public void initialize(long maximum) {
       AnalysisTaskMonitor.this.initialize(maximum);
-      delegate.initialize(maximum);
-      delegate.setIndeterminate(AnalysisTaskMonitor.this.isIndeterminate());
+      boolean currentIndeterminate = AnalysisTaskMonitor.this.isIndeterminate();
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.initialize(maximum);
+          delegate.setIndeterminate(currentIndeterminate);
+        }
+      }
     }
 
     @Override
     public void initialize(long maximum, String message) {
       AnalysisTaskMonitor.this.initialize(maximum);
       AnalysisTaskMonitor.this.setMessage(message);
-      delegate.initialize(maximum, message);
-      delegate.setIndeterminate(AnalysisTaskMonitor.this.isIndeterminate());
+      boolean currentIndeterminate = AnalysisTaskMonitor.this.isIndeterminate();
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.initialize(maximum, message);
+          delegate.setIndeterminate(currentIndeterminate);
+        }
+      }
     }
 
     @Override
     public void setMaximum(long maximum) {
       AnalysisTaskMonitor.this.setMaximum(maximum);
-      delegate.setMaximum(maximum);
-      delegate.setIndeterminate(AnalysisTaskMonitor.this.isIndeterminate());
+      boolean currentIndeterminate = AnalysisTaskMonitor.this.isIndeterminate();
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.setMaximum(maximum);
+          delegate.setIndeterminate(currentIndeterminate);
+        }
+      }
     }
 
     @Override
@@ -259,7 +341,11 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     @Override
     public void setIndeterminate(boolean indeterminate) {
       AnalysisTaskMonitor.this.setIndeterminate(indeterminate);
-      delegate.setIndeterminate(indeterminate);
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.setIndeterminate(indeterminate);
+        }
+      }
     }
 
     @Override
@@ -283,7 +369,11 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     @Override
     public void incrementProgress(long incrementAmount) {
       AnalysisTaskMonitor.this.incrementProgress(incrementAmount);
-      delegate.incrementProgress(incrementAmount);
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.incrementProgress(incrementAmount);
+        }
+      }
     }
 
     @Override
@@ -294,8 +384,8 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     @Override
     public void cancel() {
       AnalysisTaskMonitor.this.cancel();
-      if (!delegate.isCancelled()) {
-        delegate.cancel();
+      if (AnalysisTaskMonitor.this.isCancelled()) {
+        toDelegate.cancelled();
       }
     }
 
@@ -312,7 +402,18 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     @Override
     public void setCancelEnabled(boolean cancelEnabled) {
       AnalysisTaskMonitor.this.setCancelEnabled(cancelEnabled);
-      delegate.setCancelEnabled(cancelEnabled);
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.setCancelEnabled(cancelEnabled);
+        }
+      }
+      if (cancelEnabled) {
+        if (AnalysisTaskMonitor.this.isCancelled() && !delegate.isCancelled()) {
+          toDelegate.cancelled();
+        } else if (delegate.isCancelled() && !AnalysisTaskMonitor.this.isCancelled()) {
+          fromDelegate.cancelled();
+        }
+      }
     }
 
     @Override
@@ -323,7 +424,11 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     @Override
     public void clearCancelled() {
       AnalysisTaskMonitor.this.clearCancelled();
-      delegate.clearCancelled();
+      synchronized (lifecycleLock) {
+        if (!closed) {
+          delegate.clearCancelled();
+        }
+      }
     }
 
     @Deprecated(since = "10.3")
@@ -336,6 +441,15 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     public void close() {
       AnalysisTaskMonitor.this.removeCancelledListener(toDelegate);
       delegate.removeCancelledListener(fromDelegate);
+      synchronized (lifecycleLock) {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        if (delegate.isCancelEnabled() != initialDelegateCancelEnabled) {
+          delegate.setCancelEnabled(initialDelegateCancelEnabled);
+        }
+      }
     }
   }
 }

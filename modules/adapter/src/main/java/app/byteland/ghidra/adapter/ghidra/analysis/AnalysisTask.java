@@ -5,9 +5,11 @@ import app.byteland.ghidra.service.analysis.AnalysisResource;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManagerListener;
 import ghidra.framework.cmd.BackgroundCommand;
+import ghidra.framework.model.DomainObjectClosedListener;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.listing.Program;
 import ghidra.program.util.GhidraProgramUtilities;
+import ghidra.util.task.CancelledListener;
 import ghidra.util.task.TaskMonitor;
 import java.time.Instant;
 import java.util.Collections;
@@ -18,8 +20,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -70,6 +72,9 @@ final class AnalysisTask {
       outcome = Objects.requireNonNull(body.run(), "analysis task outcome");
     } catch (RuntimeException failure) {
       outcome = new TaskOutcome(AnalysisResource.Status.FAILED, errorMessage(failure));
+    } catch (Error fatal) {
+      publish(new TaskOutcome(AnalysisResource.Status.FAILED, errorMessage(fatal)));
+      throw fatal;
     }
     publish(outcome);
   }
@@ -80,7 +85,7 @@ final class AnalysisTask {
       Program program,
       AnalysisOptionChange optionChange) {
     Map<String, String> previousAnalysisOptions = null;
-    AnalysisResource.Status terminalStatus;
+    AnalysisResource.Status terminalStatus = AnalysisResource.Status.FAILED;
     String terminalError = null;
     AtomicBoolean managerCancelled = new AtomicBoolean(false);
     AutoAnalysisManagerListener listener =
@@ -90,6 +95,10 @@ final class AnalysisTask {
       manager.addListener(listener);
       listenerRegistered = true;
       monitor.setMessage("Initializing analysis");
+      if (monitor.isCancelled()) {
+        terminalStatus = AnalysisResource.Status.CANCELLED;
+        return new TaskOutcome(terminalStatus, null);
+      }
       if (manager.isAnalyzing()) {
         throw new IllegalStateException(
             "Ghidra analysis started before the bridge task acquired the analysis manager");
@@ -98,15 +107,19 @@ final class AnalysisTask {
         previousAnalysisOptions = optionChange.previous();
         applyScriptAnalyzerSelection(context, program, optionChange.updates());
       }
-      monitor.setIndeterminate(true);
-      monitor.setMessage("Running analysis");
-      manager.initializeOptions();
-      runAnalysis(manager, program);
-      AnalysisManagerWait.awaitIdle(manager);
-      if (monitor.isCancelled() || managerCancelled.get()) {
+      if (monitor.isCancelled()) {
         terminalStatus = AnalysisResource.Status.CANCELLED;
       } else {
-        terminalStatus = AnalysisResource.Status.COMPLETED;
+        monitor.setIndeterminate(true);
+        monitor.setMessage("Running analysis");
+        manager.initializeOptions();
+        runAnalysis(manager, program);
+        AnalysisManagerWait.awaitIdle(manager);
+        if (monitor.isCancelled() || managerCancelled.get()) {
+          terminalStatus = AnalysisResource.Status.CANCELLED;
+        } else {
+          terminalStatus = AnalysisResource.Status.COMPLETED;
+        }
       }
     } catch (RuntimeException failure) {
       terminalStatus = AnalysisResource.Status.FAILED;
@@ -150,7 +163,7 @@ final class AnalysisTask {
 
   /** Asks the analysis to stop. An active task then ends with the cancelled status. */
   void cancel() {
-    monitor.cancel();
+    monitor.requestCancel();
   }
 
   AnalysisTaskMonitor monitor() {
@@ -285,63 +298,55 @@ final class AnalysisTask {
 
   void runAnalysis(PluginTool tool, Program program, Consumer<TaskMonitor> execution) {
     Objects.requireNonNull(execution, "execution");
+    if (monitor.isCancelled()) {
+      return;
+    }
     if (tool == null || tool.threadIsBackgroundTaskThread()) {
       execution.accept(monitor);
       return;
     }
-    CountDownLatch completed = new CountDownLatch(1);
-    AtomicBoolean started = new AtomicBoolean();
-    AtomicReference<RuntimeException> commandFailure = new AtomicReference<>();
-    BackgroundCommand<Program> command =
-        new BackgroundCommand<>("Auto Analysis", true, true, false) {
-          @Override
-          public boolean applyTo(Program targetProgram, TaskMonitor toolMonitor) {
-            boolean finishedNormally = false;
-            started.set(true);
-            try (AnalysisTaskMonitor.BridgedMonitor bridged = monitor.bridge(toolMonitor)) {
-              if (!bridged.isCancelled()) {
-                execution.accept(bridged);
-              }
-              finishedNormally = true;
-              return true;
-            } catch (RuntimeException failure) {
-              commandFailure.set(failure);
-              finishedNormally = true;
-              return true;
-            } finally {
-              if (!finishedNormally) {
-                completed.countDown();
-              }
-            }
-          }
-
-          @Override
-          public void taskCompleted() {
-            if (!started.get()) {
-              monitor.cancel();
-            }
-            completed.countDown();
-          }
-
-          @Override
-          public void dispose() {
-            if (!started.get()) {
-              monitor.cancel();
-            }
-            completed.countDown();
-          }
-        };
-    tool.executeBackgroundCommand(command, program);
-    try {
-      completed.await();
-    } catch (InterruptedException interrupted) {
-      monitor.cancel();
-      Thread.currentThread().interrupt();
+    if (program != null && program.isClosed()) {
+      monitor.requestCancel();
       return;
     }
-    RuntimeException failure = commandFailure.get();
-    if (failure != null) {
-      throw failure;
+
+    GuiAnalysisCommand command = new GuiAnalysisCommand(monitor, execution);
+    CancelledListener monitorListener = command::onMonitorCancelled;
+    DomainObjectClosedListener closeListener =
+        program == null ? null : ignored -> command.onProgramClosed();
+    monitor.addCancelledListener(monitorListener);
+    if (closeListener != null) {
+      program.addCloseListener(closeListener);
+    }
+    try {
+      if (monitor.isCancelled()) {
+        command.onMonitorCancelled();
+        return;
+      }
+      if (program != null && program.isClosed()) {
+        command.onProgramClosed();
+        return;
+      }
+      tool.executeBackgroundCommand(command, program);
+      command.awaitCompletion(tool, program);
+    } catch (InterruptedException interrupted) {
+      command.onCallerInterrupted();
+      Thread.currentThread().interrupt();
+      return;
+    } finally {
+      monitor.removeCancelledListener(monitorListener);
+      if (closeListener != null) {
+        program.removeCloseListener(closeListener);
+      }
+    }
+    command.rethrowIfFailed();
+  }
+
+  private static Boolean toolExecutingCommandOrNull(PluginTool tool) {
+    try {
+      return tool.isExecutingCommand();
+    } catch (NullPointerException uninitializedTool) {
+      return null;
     }
   }
 
@@ -353,13 +358,230 @@ final class AnalysisTask {
     return "true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value);
   }
 
-  private static String errorMessage(RuntimeException failure) {
+  private static String errorMessage(Throwable failure) {
     String message = failure.getMessage();
     return message == null || message.isBlank() ? failure.toString() : message;
   }
 
   private static String appendError(String current, String additional) {
     return current == null || current.isBlank() ? additional : current + "; " + additional;
+  }
+
+  private static final class GuiAnalysisCommand extends BackgroundCommand<Program> {
+    private static final long QUEUE_POLL_MILLIS = 25L;
+
+    private enum Phase {
+      QUEUED,
+      RUNNING,
+      AWAITING_TASK_COMPLETED,
+      ABORTED_BEFORE_START,
+      DONE
+    }
+
+    private final AnalysisTaskMonitor monitor;
+    private final Consumer<TaskMonitor> execution;
+    private final CountDownLatch completed = new CountDownLatch(1);
+    private final Object lock = new Object();
+    private Phase phase = Phase.QUEUED;
+    private boolean taskCompletedWhileRunning;
+    private Throwable failure;
+
+    private GuiAnalysisCommand(AnalysisTaskMonitor monitor, Consumer<TaskMonitor> execution) {
+      super("Auto Analysis", true, true, false);
+      this.monitor = monitor;
+      this.execution = execution;
+    }
+
+    @Override
+    public boolean applyTo(Program targetProgram, TaskMonitor toolMonitor) {
+      boolean abortBeforeStart = false;
+      synchronized (lock) {
+        if (phase != Phase.QUEUED) {
+          return false;
+        }
+        if (monitor.isCancelled() || (targetProgram != null && targetProgram.isClosed())) {
+          phase = Phase.ABORTED_BEFORE_START;
+          abortBeforeStart = true;
+        } else {
+          phase = Phase.RUNNING;
+        }
+      }
+      if (abortBeforeStart) {
+        monitor.requestCancel();
+        completed.countDown();
+        return false;
+      }
+
+      boolean handoffToTaskCompleted = false;
+      try (AnalysisTaskMonitor.BridgedMonitor bridged = monitor.bridge(toolMonitor)) {
+        if (!bridged.isCancelled()) {
+          execution.accept(bridged);
+        }
+        handoffToTaskCompleted = true;
+        return true;
+      } catch (RuntimeException | Error ex) {
+        synchronized (lock) {
+          failure = ex;
+        }
+        handoffToTaskCompleted = true;
+        return true;
+      } finally {
+        boolean releaseNow;
+        synchronized (lock) {
+          if (handoffToTaskCompleted && !taskCompletedWhileRunning) {
+            phase = Phase.AWAITING_TASK_COMPLETED;
+            releaseNow = false;
+          } else {
+            phase = Phase.DONE;
+            releaseNow = true;
+          }
+        }
+        if (releaseNow) {
+          completed.countDown();
+        }
+      }
+    }
+
+    @Override
+    public void taskCompleted() {
+      boolean cancelMonitor = false;
+      boolean releaseNow = false;
+      synchronized (lock) {
+        switch (phase) {
+          case QUEUED -> {
+            phase = Phase.ABORTED_BEFORE_START;
+            cancelMonitor = true;
+            releaseNow = true;
+          }
+          case RUNNING -> {
+            taskCompletedWhileRunning = true;
+            cancelMonitor = true;
+          }
+          case AWAITING_TASK_COMPLETED -> {
+            phase = Phase.DONE;
+            releaseNow = true;
+          }
+          case ABORTED_BEFORE_START, DONE -> releaseNow = true;
+        }
+      }
+      if (cancelMonitor) {
+        monitor.requestCancel();
+      }
+      if (releaseNow) {
+        completed.countDown();
+      }
+    }
+
+    @Override
+    public void dispose() {
+      boolean releaseNow = false;
+      synchronized (lock) {
+        switch (phase) {
+          case QUEUED -> {
+            phase = Phase.ABORTED_BEFORE_START;
+            releaseNow = true;
+          }
+          case RUNNING -> {
+            // Keep waiting until applyTo unwinds so post-analysis cleanup never races execution.
+          }
+          case AWAITING_TASK_COMPLETED -> {
+            phase = Phase.DONE;
+            releaseNow = true;
+          }
+          case ABORTED_BEFORE_START, DONE -> releaseNow = true;
+        }
+      }
+      monitor.requestCancel();
+      if (releaseNow) {
+        completed.countDown();
+      }
+    }
+
+    private void onMonitorCancelled() {
+      boolean releaseNow = false;
+      synchronized (lock) {
+        if (phase == Phase.QUEUED) {
+          phase = Phase.ABORTED_BEFORE_START;
+          releaseNow = true;
+        }
+      }
+      if (releaseNow) {
+        completed.countDown();
+      }
+    }
+
+    private void onProgramClosed() {
+      boolean releaseNow = false;
+      synchronized (lock) {
+        if (phase == Phase.QUEUED) {
+          phase = Phase.ABORTED_BEFORE_START;
+          releaseNow = true;
+        } else if (phase == Phase.AWAITING_TASK_COMPLETED) {
+          phase = Phase.DONE;
+          releaseNow = true;
+        }
+      }
+      monitor.requestCancel();
+      if (releaseNow) {
+        completed.countDown();
+      }
+    }
+
+    private void onToolIdle() {
+      boolean cancelMonitor = false;
+      boolean releaseNow = false;
+      synchronized (lock) {
+        if (phase == Phase.QUEUED) {
+          phase = Phase.ABORTED_BEFORE_START;
+          cancelMonitor = true;
+          releaseNow = true;
+        } else if (phase == Phase.AWAITING_TASK_COMPLETED) {
+          phase = Phase.DONE;
+          releaseNow = true;
+        }
+      }
+      if (cancelMonitor) {
+        monitor.requestCancel();
+      }
+      if (releaseNow) {
+        completed.countDown();
+      }
+    }
+
+    private void onCallerInterrupted() {
+      monitor.requestCancel();
+      onMonitorCancelled();
+    }
+
+    private void awaitCompletion(PluginTool tool, Program program) throws InterruptedException {
+      while (!completed.await(QUEUE_POLL_MILLIS, TimeUnit.MILLISECONDS)) {
+        if (program != null && program.isClosed()) {
+          onProgramClosed();
+          if (completed.getCount() == 0) {
+            return;
+          }
+        }
+        if (Boolean.FALSE.equals(toolExecutingCommandOrNull(tool))) {
+          onToolIdle();
+          if (completed.getCount() == 0) {
+            return;
+          }
+        }
+      }
+    }
+
+    private void rethrowIfFailed() {
+      Throwable recordedFailure;
+      synchronized (lock) {
+        recordedFailure = failure;
+      }
+      if (recordedFailure instanceof RuntimeException runtimeException) {
+        throw runtimeException;
+      }
+      if (recordedFailure instanceof Error fatalError) {
+        throw fatalError;
+      }
+    }
   }
 
   record AnalysisOptionChange(Map<String, String> previous, Map<String, String> updates) {
