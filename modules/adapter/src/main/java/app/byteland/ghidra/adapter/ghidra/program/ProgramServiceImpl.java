@@ -4,16 +4,17 @@ import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
+import app.byteland.ghidra.service.program.ProgramConflictException;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
+import ghidra.framework.store.LockException;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressOverflowException;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.lang.CompilerSpec;
 import ghidra.program.model.lang.Language;
-import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
-import ghidra.program.model.symbol.Symbol;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -83,6 +84,27 @@ public final class ProgramServiceImpl implements ProgramService {
   @Override
   public void saveProgram() {
     context.saveCurrentProgram();
+  }
+
+  @Override
+  public ProgramResource rebaseProgram(String imageBaseRaw) {
+    Address imageBase = context.parseAddress(imageBaseRaw);
+    try {
+      program.setImageBase(imageBase, true);
+    } catch (AddressOverflowException ex) {
+      throw new ProgramConflictException(
+          "address_overflow",
+          "/image_base",
+          "image base overflows address space: " + ex.getMessage(),
+          ex);
+    } catch (LockException | IllegalStateException ex) {
+      throw new ProgramConflictException(
+          "rebase_conflict",
+          "/image_base",
+          "unable to rebase program: " + ex.getMessage(),
+          ex);
+    }
+    return getProgram();
   }
 
   private static AddressSpaceResource.Kind describeAddressSpaceType(AddressSpace space) {

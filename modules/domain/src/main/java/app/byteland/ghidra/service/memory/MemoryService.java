@@ -20,6 +20,38 @@ public interface MemoryService {
   }
 
   /**
+   * Parameters for a new memory block.
+   */
+  record MemoryBlockCreateRequest(
+      String name,
+      String start,
+      long length,
+      boolean initialized,
+      Integer fillByte,
+      ByteSequence bytes,
+      boolean read,
+      boolean write,
+      boolean execute,
+      boolean isVolatile,
+      boolean overlay,
+      String comment) {
+    public MemoryBlockCreateRequest {
+      if (name == null || name.isBlank()) {
+        throw new IllegalArgumentException("name must not be blank");
+      }
+      if (start == null || start.isBlank()) {
+        throw new IllegalArgumentException("start must not be blank");
+      }
+      if (length < 1) {
+        throw new IllegalArgumentException("length must be positive");
+      }
+      if (fillByte != null && (fillByte < 0 || fillByte > 255)) {
+        throw new IllegalArgumentException("fillByte must be in 0..255");
+      }
+    }
+  }
+
+  /**
    * Returns one page of memory blocks.
    */
   Page<MemoryBlockResource> listMemoryBlocks(MemoryBlockQuery query);
@@ -28,6 +60,11 @@ public interface MemoryService {
    * Returns memory block metadata by block name.
    */
   MemoryBlockResource getMemoryBlockByName(String rawName);
+
+  /**
+   * Creates one memory block and returns its metadata.
+   */
+  MemoryBlockResource createMemoryBlock(MemoryBlockCreateRequest request);
 
   /**
    * Reads raw bytes from a specified memory range.

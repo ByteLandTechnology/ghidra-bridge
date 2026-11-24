@@ -8,12 +8,14 @@
 | `session.get` | `read-only` | Get the bridge session id, status, and program name. |
 | `session.shutdown` | `lifecycle` | Stop the current Ghidra Bridge session. |
 | `program.get` | `read-only` | Get program data from the active program. |
+| `program.rebase` | `destructive mutation` | Change the program image base and return program metadata. |
 | `program.save` | `mutation` | Save the active program to its project file. |
 | `program_language.get` | `read-only` | Get program language data from the active program. |
 | `address_space.list` | `read-only` | List address space data in the active program. |
 | `address.resolve` | `read-only` | Resolve an address and report its memory block, the function that contains it, and its primary symbol. |
 | `memory_block.get` | `read-only` | Get memory block data from the active program. |
 | `memory_block.list` | `read-only` | List memory block data in the active program. |
+| `memory_block.create` | `mutation` | Create an initialized or uninitialized memory block in the active program. |
 | `memory.read` | `read-only` | Read up to 65536 bytes at an address as hex or base64. The default length is 256 and the default encoding is hex. |
 | `memory.write` | `destructive mutation` | Write hex or base64 bytes at an address. |
 | `code_unit.list` | `read-only` | List each code unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |

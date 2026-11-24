@@ -1,5 +1,7 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.text;
+
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,15 @@ final class ProgramMethods implements ApiMethodProvider {
         ApiSchemaCatalog.programFields(),
         List.of(ApiVocabulary.NAME),
         request -> registry.services().programService().getProgram());
+    registry.writeResource(
+        "program.rebase",
+        MethodEffects.mutation(true, true),
+        "Change the program image base and return program metadata.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props("image_base", WireSchema.nonBlankString()), "image_base"),
+        ApiSchemaCatalog.programFields(),
+        List.of(ApiVocabulary.NAME),
+        request -> registry.services().programService().rebaseProgram(text(request, "image_base")));
     registry.writeResult(
         "program.save",
         MethodEffects.mutationWithoutTransaction(false, true),

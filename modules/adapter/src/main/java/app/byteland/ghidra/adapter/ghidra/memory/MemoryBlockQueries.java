@@ -45,7 +45,7 @@ final class MemoryBlockQueries {
     return describeMemoryBlock(block);
   }
 
-  private static MemoryBlockResource describeMemoryBlock(MemoryBlock block) {
+  static MemoryBlockResource describeMemoryBlock(MemoryBlock block) {
     return new MemoryBlockResource(
         block.getName(),
         AddressUtil.canonicalAddress(block.getStart()),
