@@ -56,7 +56,7 @@ class DecompilationServiceImplTest {
 
     try (DecompilationServiceImpl service = new DecompilationServiceImpl(
         fixture.session, new LeasePool<>(1, () -> decompiler))) {
-      // Cold decompile on a freshly opened decompiler skips flushCache.
+      // Cold decompile on a new decompiler skips flushCache.
       DecompilationResource first =
           service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertEquals("literal_demo", first.name());
@@ -74,7 +74,7 @@ class DecompilationServiceImplTest {
       assertEquals(0, decompiler.flushCalls.get());
       assertEquals(2, decompiler.setOptionsCalls.get());
 
-      // Advancing the program modification number triggers a single flush before decompiling.
+      // An increment to the program modification number triggers a new flush once.
       modificationNumber.set(11L);
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, true);
       assertEquals(1, decompiler.flushCalls.get());
@@ -96,12 +96,12 @@ class DecompilationServiceImplTest {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertEquals(0, decompiler.flushCalls.get());
 
-      // Uncommitted edit advances modificationNumber to 51 and flushes.
+      // Uncommitted edit increments modificationNumber to 51 and flushes.
       modificationNumber.set(51L);
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertEquals(1, decompiler.flushCalls.get());
 
-      // Transaction rollback or undo reverts modificationNumber back to 50 (< 51) and flushes.
+      // Transaction rollback or undo resets modificationNumber to 50 (< 51) and flushes.
       modificationNumber.set(50L);
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertEquals(2, decompiler.flushCalls.get());
@@ -130,7 +130,7 @@ class DecompilationServiceImplTest {
       assertEquals(0, decompiler.flushCalls.get());
       assertEquals(1, decompiler.decompileCalls.get());
 
-      // Modification changes to 2, and flushCache throws after marking the cache state dirty.
+      // Modification changes to 2, and flushCache throws after it marks the cache state dirty.
       modificationNumber.set(2L);
       mode.set(1);
       assertThrows(
@@ -145,13 +145,13 @@ class DecompilationServiceImplTest {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
       assertEquals(2, decompiler.flushCalls.get());
 
-      // Even if modificationNumber rolls back to 1 (matching the prior clean value), dirty forces retry.
+      // Even if modificationNumber resets to 1 (equal to the prior clean value), dirty forces retry.
       modificationNumber.set(1L);
       mode.set(0);
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
       assertEquals(3, decompiler.flushCalls.get());
 
-      // Once flushCache succeeds (>= 0), modification 1 is clean again and subsequent reads skip flush.
+      // Once flushCache succeeds (>= 0), modification 1 is clean and subsequent reads skip flush.
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
       assertEquals(3, decompiler.flushCalls.get());
     }
@@ -174,7 +174,7 @@ class DecompilationServiceImplTest {
       assertEquals("literal_demo", first.name());
       assertEquals(0, decompiler.flushCalls.get());
 
-      // Switch to a distinct Program instance that has the exact same modificationNumber (7L).
+      // Switch to a distinct Program instance that has the same modificationNumber (7L).
       fixtureA.script.switchProgram(fixtureB.program);
       DecompilationResource second =
           service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
@@ -185,7 +185,7 @@ class DecompilationServiceImplTest {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertEquals(1, decompiler.flushCalls.get());
 
-      // Missing Program flushes defensively and marks the decompiler dirty for the next Program.
+      // Absent Program flushes the cache and marks the decompiler dirty for the next Program.
       fixtureA.script.hideCurrentProgram = true;
       DecompilationResource orphan =
           service.decompileFunction("0x103000", DecompilationResource.Format.TEXT, 1_200, false);
@@ -200,7 +200,7 @@ class DecompilationServiceImplTest {
       assertEquals(3, decompiler.flushCalls.get());
     }
 
-    // A cold lease whose DecompInterface was opened against a different Program must also flush.
+    // Cold lease whose DecompInterface opened a different Program must also flush.
     FakeDecompiler mismatchedCold = new FakeDecompiler(fixtureB.markup, true, null, () -> 0);
     mismatchedCold.openedProgram = fixtureA.program;
     try (DecompilationServiceImpl service = new DecompilationServiceImpl(
