@@ -8,13 +8,29 @@ CI checks compliance with these rules.
 - Use ASD-STE100 Simplified Technical English for all English text.
 - This rule applies to this file, code comments, commit messages, and documentation.
 
-## Architecture and contracts
+## Environment Setup
 
-- Use JDK 21 and Ghidra 12.1 or newer, and set `GHIDRA_INSTALL_DIR`.
-- Always use the Gradle Wrapper (`./gradlew`) in this repository.
-- Keep Ghidra API imports in `modules/adapter` and `modules/launcher`.
-- Run `./gradlew generateApiContracts` after you change a public API operation.
-- Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand.
+- **JDK**: Use Java 21 (JDK 21).
+- **Ghidra**: Use Ghidra 12.1 or newer (CI uses Ghidra `12.1.2`).
+- **`GHIDRA_INSTALL_DIR`**: Set `GHIDRA_INSTALL_DIR` to the local Ghidra installation directory, or pass `-PghidraInstallDir=/path/to/ghidra`. Gradle needs Ghidra to compile `:adapter`, `:launcher`, and generated scripts, and to run `:adapter` and headless tests.
+- **Gradle Wrapper**: Always run `./gradlew` from the repository root instead of a system Gradle binary.
+
+## Module Layout and Guardrails
+
+The build defines 8 Java subprojects under `modules/`:
+- `:domain` (`modules/domain`)
+- `:wire` (`modules/wire`)
+- `:contracts` (`modules/contracts`)
+- `:runtime` (`modules/runtime`)
+- `:adapter` (`modules/adapter`)
+- `:launcher` (`modules/launcher`)
+- `:transport:websocket` (`modules/transport/websocket`)
+- `:transport:mcp` (`modules/transport/mcp`)
+
+Obey these repository rules when you change code:
+- **Ghidra API boundary**: Keep `ghidra.*` imports in `modules/adapter` and `modules/launcher` (`verifyArchitecture` checks this rule).
+- **Generated contracts**: Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand. Run `./gradlew generateApiContracts` after public interface changes.
+- **Repository hygiene**: Do not commit build directories, IDE files, generated scripts (`Bridge.java`, `GhidraMcp.java`), zero-byte files, or duplicate tracked files.
 
 ## GitHub Actions
 
@@ -25,7 +41,7 @@ CI checks compliance with these rules.
 - Keep weekly `github-actions` updates in `.github/dependabot.yml` for `/` and `/.github/actions/setup-ghidra`.
 - Do not add a `gradle` ecosystem to `.github/dependabot.yml` so `gradle/verification-metadata.xml` stays intact.
 
-## Commit messages
+## Commit Messages
 
 - Obey Conventional Commits, such as `fix(wire): reject unknown fields`.
 - Use no more than 72 characters on each line, with spaces and list markers counted.
@@ -33,18 +49,59 @@ CI checks compliance with these rules.
 - Start the summary with an imperative verb in lowercase letters, with no period at the end.
 - Do not add attribution lines to commit messages or pull request text.
 
-## Verification
+## Verification Commands
 
-Before you submit a change, run the local verification suite:
+### Module Checks and Unit Tests (`check`)
+
+Run JUnit Platform test suites and module checks across all 8 Java subprojects:
 
 ```bash
-./gradlew --no-daemon clean verify
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon check
+```
+
+To run JUnit tests for one subproject during iteration:
+
+```bash
+./gradlew --no-daemon :domain:test
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
+```
+
+### Full Build and Verification (`clean verify`)
+
+Run the full Gradle verification gate used in pull requests and release builds:
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
+```
+
+`verify` runs:
+- `check`: JUnit tests and checks across all 8 Java subprojects.
+- `verifyApiContracts`: Checks that tracked contracts match generated output.
+- `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra (`compileGeneratedScripts`).
+- `verifyArchitecture`: Checks that no module outside `adapter` and `launcher` imports `ghidra.*`.
+
+### Repository Hygiene Check
+
+Check tracked files, build artifacts, duplicates, API method counts, and SHA-pinned GitHub Actions:
+
+```bash
 bash .github/scripts/verify-repository-hygiene.sh
 ```
 
-Repository verification commands:
+### Headless Regression Tests
 
-- `./gradlew --no-daemon clean verify`: Runs tests, `verifyArchitecture`, `verifyApiContracts`, `compileGeneratedScripts`, and `verifyDistribution`.
-- `bash .github/scripts/verify-repository-hygiene.sh`: Checks tracked files, contract counts, and SHA-pinned GitHub Actions.
-- `./gradlew generateApiContracts`: Regenerates `docs/api.md`, `docs/asyncapi.yaml`, and `docs/mcp-tools.json`.
-- `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`: Tests function mutations after `./gradlew buildGhidraScript`.
+Run the headless function-mutation regression test on Linux x86-64 after `clean verify` or `buildGhidraScript`. This test needs `gcc` and `nm`:
+
+```bash
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+```
+
+### Exact Local CI Sequence
+
+Run these three commands in order to match the `verify` job in `.github/workflows/ci.yml`:
+
+```bash
+bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+```
