@@ -48,10 +48,15 @@ final class ProgramEntryQueries {
     ProgramTextMatcher libraryMatcher =
         ProgramTextMatcher.compile(query.library(), query.regex(), query.libraryRegex(), "library");
     ImportCursor cursor = parseImportCursor(query.cursor());
+    String cursorKey =
+        cursor == null
+            ? null
+            : encodeImportCursor(
+                AddressUtil.canonicalAddress(cursor.address()), cursor.library(), cursor.name());
+    Page.Selector<ImportCandidate> selector = Page.selector(limit, cursorKey);
 
     ExternalManager externalManager = program.getExternalManager();
     SymbolIterator symbols = program.getSymbolTable().getExternalSymbols();
-    List<ImportCandidate> candidates = new ArrayList<>();
     while (symbols.hasNext()) {
       Symbol symbol = symbols.next();
       ExternalLocation location = externalManager.getExternalLocation(symbol);
@@ -63,26 +68,12 @@ final class ProgramEntryQueries {
           location != null && location.getExternalSpaceAddress() != null
               ? location.getExternalSpaceAddress()
               : symbol.getAddress();
-      candidates.add(new ImportCandidate(extAddress, library, name, symbol, location));
+      String canonicalAddress = AddressUtil.canonicalAddress(extAddress);
+      selector.offer(
+          encodeImportCursor(canonicalAddress, library, name),
+          new ImportCandidate(extAddress, canonicalAddress, library, name, symbol, location));
     }
-
-    candidates.sort(
-        Comparator.comparing(ImportCandidate::address)
-            .thenComparing(ImportCandidate::library)
-            .thenComparing(ImportCandidate::name));
-
-    List<ImportResource> items = new ArrayList<>();
-    String nextCursor = null;
-    for (ImportCandidate candidate : candidates) {
-      if (cursor != null && compareImport(candidate, cursor) <= 0) continue;
-      if (items.size() >= limit) {
-        ImportResource last = items.getLast();
-        nextCursor = encodeImportCursor(last.address(), last.library(), last.name());
-        break;
-      }
-      items.add(describeImport(candidate));
-    }
-    return Page.of(items, limit, nextCursor);
+    return selector.finish(this::describeImport);
   }
 
   Page<ExportResource> listExports(ExportQuery query) {
@@ -108,34 +99,29 @@ final class ProgramEntryQueries {
     while (addresses.hasNext()) {
       Address address = addresses.next();
       if (cursor != null && address.compareTo(cursor.address()) < 0) continue;
-      List<ExportResource> atAddress = describeEntriesAt(address, symbolTable, includeAliases);
-      for (ExportResource entry : atAddress) {
+      List<EntryCandidate> atAddress = collectEntriesAt(address, symbolTable, includeAliases);
+      for (EntryCandidate candidate : atAddress) {
         if (cursor != null
             && address.equals(cursor.address())
-            && entry.name().compareTo(cursor.name()) <= 0) {
+            && candidate.name().compareTo(cursor.name()) <= 0) {
           continue;
         }
-        if (!matchesExport(entry, query, nameMatcher)) continue;
+        if (!matchesExport(candidate, query, nameMatcher)) continue;
         if (items.size() >= limit) {
           ExportResource last = items.getLast();
           nextCursor = CompositeCursor.key(last.address(), last.name());
           break outer;
         }
-        items.add(entry);
+        items.add(describeExport(candidate));
       }
     }
     return Page.of(items, limit, nextCursor);
   }
 
-  private List<ExportResource> describeEntriesAt(
+  private List<EntryCandidate> collectEntriesAt(
       Address address, SymbolTable symbolTable, boolean includeAliases) {
     String canonicalAddress = AddressUtil.canonicalAddress(address);
     Function function = program.getFunctionManager().getFunctionAt(address);
-    FunctionSummary functionSummary =
-        function == null
-            ? null
-            : new FunctionSummary(
-                AddressUtil.canonicalAddress(function.getEntryPoint()), function.getName());
     Symbol[] symbols = symbolTable.getSymbols(address);
     Integer companionOrdinal = findCompanionOrdinal(symbols);
     List<Symbol> selected = selectEntrySymbols(symbols, symbolTable, address, includeAliases);
@@ -143,33 +129,52 @@ final class ProgramEntryQueries {
       String fallbackName = function != null ? function.getName() : canonicalAddress;
       boolean isFunction = function != null;
       return List.of(
-          new ExportResource(
+          new EntryCandidate(
+              address,
               canonicalAddress,
               fallbackName,
-              CppSymbolNames.demangled(program, fallbackName, address),
               GLOBAL_NAMESPACE,
               isFunction,
-              functionSummary,
+              function,
               companionOrdinal));
     }
 
-    List<ExportResource> entries = new ArrayList<>(selected.size());
+    List<EntryCandidate> entries = new ArrayList<>(selected.size());
     for (Symbol symbol : selected) {
       String name = symbol.getName();
       boolean isFunction = function != null || symbol.getSymbolType() == SymbolType.FUNCTION;
       Integer ordinal = companionOrdinal != null ? companionOrdinal : parseOrdinal(name);
       entries.add(
-          new ExportResource(
+          new EntryCandidate(
+              address,
               canonicalAddress,
               name,
-              CppSymbolNames.demangled(program, name, address),
               resolveNamespace(symbol.getParentNamespace()),
               isFunction,
-              functionSummary,
+              function,
               ordinal));
     }
-    entries.sort(Comparator.comparing(ExportResource::name));
+    if (entries.size() > 1) {
+      entries.sort(Comparator.comparing(EntryCandidate::name));
+    }
     return entries;
+  }
+
+  private ExportResource describeExport(EntryCandidate candidate) {
+    Function function = candidate.function();
+    FunctionSummary functionSummary =
+        function == null
+            ? null
+            : new FunctionSummary(
+                AddressUtil.canonicalAddress(function.getEntryPoint()), function.getName());
+    return new ExportResource(
+        candidate.canonicalAddress(),
+        candidate.name(),
+        CppSymbolNames.demangled(program, candidate.name(), candidate.address()),
+        candidate.namespace(),
+        candidate.isFunction(),
+        functionSummary,
+        candidate.ordinal());
   }
 
   private static List<Symbol> selectEntrySymbols(
@@ -201,7 +206,7 @@ final class ProgramEntryQueries {
   }
 
   private static boolean matchesExport(
-      ExportResource entry, ExportQuery query, ProgramTextMatcher nameMatcher) {
+      EntryCandidate entry, ExportQuery query, ProgramTextMatcher nameMatcher) {
     if (query.namespace() != null && !query.namespace().equals(entry.namespace())) {
       return false;
     }
@@ -228,7 +233,7 @@ final class ProgramEntryQueries {
     String signature = extFunction == null ? null : String.valueOf(extFunction.getSignature());
     List<String> thunkAddresses = collectThunkAddresses(extFunction);
     return new ImportResource(
-        AddressUtil.canonicalAddress(candidate.address()),
+        candidate.canonicalAddress(),
         candidate.library(),
         candidate.name(),
         originalName,
@@ -341,20 +346,22 @@ final class ProgramEntryQueries {
     return new ExportCursor(context.parseAddress(parts.address()), parts.secondary());
   }
 
-  private static int compareImport(ImportCandidate candidate, ImportCursor cursor) {
-    int byAddress = candidate.address().compareTo(cursor.address());
-    if (byAddress != 0) return byAddress;
-    int byLibrary = candidate.library().compareTo(cursor.library());
-    if (byLibrary != 0) return byLibrary;
-    return candidate.name().compareTo(cursor.name());
-  }
-
   private record ImportCandidate(
       Address address,
+      String canonicalAddress,
       String library,
       String name,
       Symbol symbol,
       ExternalLocation location) {}
+
+  private record EntryCandidate(
+      Address address,
+      String canonicalAddress,
+      String name,
+      String namespace,
+      boolean isFunction,
+      Function function,
+      Integer ordinal) {}
 
   private record ImportCursor(Address address, String library, String name) {}
 
