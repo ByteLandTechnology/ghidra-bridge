@@ -45,7 +45,7 @@
 | `symbol.get` | `read-only` | Get symbol data from the active program. |
 | `symbol.list` | `read-only` | List each symbol in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `symbol.patch` | `destructive mutation` | Change symbol data in the active program. |
-| `reference.list` | `read-only` | List references from or to an address. Set filter.direction. |
+| `reference.list` | `read-only` | List references from an address, function, or range, or to an address. Set filter.direction. |
 | `comment.get` | `read-only` | Get comment data from the active program. |
 | `comment.list` | `read-only` | List each comment in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `comment.create` | `mutation` | Create comment data in the active program. |

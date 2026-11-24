@@ -39,6 +39,16 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global caller_multi
+caller_multi:
+ call callee_target
+ nop
+ call callee_target
+ ret
+.global callee_target
+callee_target:
+ mov $7, %eax
+ ret
 """
 
 
@@ -167,6 +177,64 @@ def run_test(headless, root):
                 "resource": {"entry": symbols["label_only"]}, "disassemble": True,
             })["result"]
             assert label["name"] == "label_only"
+
+            callee_created = function(18, "create", {
+                "resource": {"entry": symbols["callee_target"], "name": "callee_target"},
+                "disassemble": True,
+            })["result"]
+            caller_created = function(19, "create", {
+                "resource": {"entry": symbols["caller_multi"], "name": "caller_multi"},
+                "disassemble": True,
+            })["result"]
+            callees_page_1 = function(21, "call.list", {
+                "filter": {"entry": symbols["caller_multi"], "direction": "callees"},
+                "page": {"limit": 1},
+            })["result"]
+            assert len(callees_page_1["items"]) == 1
+            assert callees_page_1["items"][0]["entry"] == callee_created["entry"]
+            assert callees_page_1["items"][0].get("call_site")
+            assert callees_page_1.get("next_cursor")
+            callees_page_2 = function(22, "call.list", {
+                "filter": {"entry": symbols["caller_multi"], "direction": "callees"},
+                "page": {"limit": 1, "cursor": callees_page_1["next_cursor"]},
+            })["result"]
+            assert len(callees_page_2["items"]) == 1
+            assert callees_page_2["items"][0]["entry"] == callee_created["entry"]
+            assert callees_page_2["items"][0].get("call_site")
+            assert callees_page_2["items"][0]["call_site"] != callees_page_1["items"][0]["call_site"]
+            assert "next_cursor" not in callees_page_2
+
+            callers_all = function(23, "call.list", {
+                "filter": {"entry": symbols["callee_target"], "direction": "callers"},
+            })["result"]["items"]
+            assert [row["call_site"] for row in callers_all] == [
+                callees_page_1["items"][0]["call_site"],
+                callees_page_2["items"][0]["call_site"],
+            ]
+            assert all(row["entry"] == caller_created["entry"] for row in callers_all)
+
+            refs_by_entry = tool(24, "ghidra_reference", {
+                "operation": "list",
+                "params": {"filter": {"direction": "from", "entry": symbols["caller_multi"]}},
+            })["result"]["items"]
+            refs_by_range = tool(25, "ghidra_reference", {
+                "operation": "list",
+                "params": {
+                    "filter": {
+                        "direction": "from",
+                        "from_range": {
+                            "start": caller_created["body"]["start"],
+                            "end": caller_created["body"]["end"],
+                        },
+                    },
+                },
+            })["result"]["items"]
+            assert len(refs_by_entry) == 2
+            assert refs_by_entry == refs_by_range
+            assert [ref["from"] for ref in refs_by_entry] == [
+                callees_page_1["items"][0]["call_site"],
+                callees_page_2["items"][0]["call_site"],
+            ]
             print("Function mutation regression checks passed")
         finally:
             if ready:

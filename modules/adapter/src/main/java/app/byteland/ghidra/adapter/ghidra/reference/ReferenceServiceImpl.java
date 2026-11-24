@@ -14,7 +14,15 @@ public final class ReferenceServiceImpl implements ReferenceService {
 
   @Override
   public Page<ReferenceResource> listReferences(
-      String fromRaw, String toRaw, String type, String direction, int limit, String cursor) {
-    return listQueries.listReferences(fromRaw, toRaw, type, direction, limit, cursor);
+      String fromRaw,
+      String entryRaw,
+      ReferenceService.RangeFilter fromRange,
+      String toRaw,
+      String type,
+      String direction,
+      int limit,
+      String cursor) {
+    return listQueries.listReferences(
+        fromRaw, entryRaw, fromRange, toRaw, type, direction, limit, cursor);
   }
 }

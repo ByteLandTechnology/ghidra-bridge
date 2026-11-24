@@ -47,6 +47,33 @@ public record Page<T>(
     return Page.of(items, clamped, next);
   }
 
+  public static <T> Page<T> paginate(
+      List<T> sortedItems,
+      int limit,
+      String cursor,
+      Function<T, String> primaryKey,
+      Function<T, String> secondaryKey) {
+    return paginate(
+        sortedItems,
+        limit,
+        cursor,
+        item -> compositeKey(primaryKey.apply(item), secondaryKey.apply(item)));
+  }
+
+  public static String compositeKey(String primary, String secondary) {
+    return requireCursorComponent(primary, "primary")
+        + "\u0000"
+        + (secondary == null ? "" : requireCursorComponent(secondary, "secondary"));
+  }
+
+  private static String requireCursorComponent(String value, String name) {
+    if (value == null || value.indexOf('\u0000') >= 0 || value.indexOf('\n') >= 0) {
+      throw new IllegalArgumentException(
+          name + " cursor component must be a non-null single-line string without NUL");
+    }
+    return value;
+  }
+
   public static <T> Page<T> of(List<T> items, int limit, String nextCursor) {
     return new Page<>(items, items.size(), limit, nextCursor, null);
   }

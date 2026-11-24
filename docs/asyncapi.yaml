@@ -11322,8 +11322,24 @@
                         - "from"
                         - "to"
                         "type": "string"
+                      "entry":
+                        "minLength": !!int "1"
+                        "type": "string"
                       "from":
                         "type": "string"
+                      "from_range":
+                        "additionalProperties": !!bool "false"
+                        "properties":
+                          "end":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "start":
+                            "minLength": !!int "1"
+                            "type": "string"
+                        "required":
+                        - "start"
+                        - "end"
+                        "type": "object"
                       "to":
                         "type": "string"
                       "type":
@@ -15324,8 +15340,24 @@
                                     - "from"
                                     - "to"
                                     "type": "string"
+                                  "entry":
+                                    "minLength": !!int "1"
+                                    "type": "string"
                                   "from":
                                     "type": "string"
+                                  "from_range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "minLength": !!int "1"
+                                        "type": "string"
+                                      "start":
+                                        "minLength": !!int "1"
+                                        "type": "string"
+                                    "required":
+                                    - "start"
+                                    - "end"
+                                    "type": "object"
                                   "to":
                                     "type": "string"
                                   "type":
@@ -19364,8 +19396,24 @@
                           - "from"
                           - "to"
                           "type": "string"
+                        "entry":
+                          "minLength": !!int "1"
+                          "type": "string"
                         "from":
                           "type": "string"
+                        "from_range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "minLength": !!int "1"
+                              "type": "string"
+                            "start":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "start"
+                          - "end"
+                          "type": "object"
                         "to":
                           "type": "string"
                         "type":
@@ -31042,7 +31090,8 @@
       - "language_id"
       "type": "object"
   "reference.list":
-    "description": "List references from or to an address. Set filter.direction."
+    "description": "List references from an address, function, or range,\
+      \ or to an address. Set filter.direction."
     "effects":
       "allowed_during_analysis": !!bool "true"
       "destructive": !!bool "false"
@@ -31115,8 +31164,24 @@
               - "from"
               - "to"
               "type": "string"
+            "entry":
+              "minLength": !!int "1"
+              "type": "string"
             "from":
               "type": "string"
+            "from_range":
+              "additionalProperties": !!bool "false"
+              "properties":
+                "end":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "start":
+                  "minLength": !!int "1"
+                  "type": "string"
+              "required":
+              - "start"
+              - "end"
+              "type": "object"
             "to":
               "type": "string"
             "type":
