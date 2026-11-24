@@ -82,6 +82,12 @@ The caller selects one of two transaction modes.
 - Execution continues when an item fails.
 - The response returns `{id, result}` rows and `{id, error}` rows.
 
+## Execution Limits
+
+Each `batch.execute` call enforces response size and runtime bounds:
+- **Response size limit (`8 MiB`)**: The serialized batch envelope cannot exceed `8,388,608` UTF-8 bytes. Exceeding the limit aborts remaining items with HTTP status `413` (`code=response_too_large`) in `per_item` mode, or rolls back the transaction (`409`, `code=batch_rolled_back`) in `all_or_none` mode.
+- **Execution deadline (`60,000 ms`)**: Total batch execution is capped at 60 seconds, and each scan or `decompilation.get` item clamps its `timeout_ms` to the remaining batch time. When no time remains or the thread is interrupted, execution stops with HTTP status `408` (`code=operation_timed_out`), rolling back earlier mutations in `all_or_none` mode.
+
 ## Analysis Concurrency
 
 Batch requests inspect the active program state:

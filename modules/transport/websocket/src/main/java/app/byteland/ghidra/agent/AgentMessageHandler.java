@@ -6,6 +6,8 @@ import app.byteland.ghidra.api.BridgeError;
 import java.util.Map;
 
 final class AgentMessageHandler {
+  static final int MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
+
   private final AgentConfig config;
   private final AgentDispatcher dispatcher;
   private final Runnable disconnectAction;
@@ -58,16 +60,34 @@ final class AgentMessageHandler {
   @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void handleRequest(
       AgentClientChannels.MessageChannel channel, MessageEnvelope.Request request) {
-    MessageEnvelope.Response response;
+    String serialized;
     try {
       Object result = dispatcher.dispatch(request.method(), request.params());
-      response = new MessageEnvelope.Response(request.id(), result, null);
+      MessageEnvelope.Response response = new MessageEnvelope.Response(request.id(), result, null);
+      serialized = JsonUtil.toJson(response.toMap(), MAX_MESSAGE_BYTES);
     } catch (Exception error) {
-      response = AgentErrorMapper.errorResponse(request.id(), error);
+      serialized = serializeErrorResponse(request.id(), error);
     }
-    channel.sendText(JsonUtil.toJson(response.toMap()));
+    channel.sendText(serialized);
     if (dispatcher.isShuttingDown()) {
       disconnectAction.run();
+    }
+  }
+
+  private static String serializeErrorResponse(Object requestId, Exception error) {
+    try {
+      return JsonUtil.toJson(
+          AgentErrorMapper.errorResponse(requestId, error).toMap(), MAX_MESSAGE_BYTES);
+    } catch (ApiException oversizedError) {
+      BridgeError fallback =
+          new BridgeError(
+              413, "response_too_large", "Response exceeds maximum size", null, Map.of());
+      MessageEnvelope.Response response =
+          new MessageEnvelope.Response(
+              requestId,
+              null,
+              new MessageEnvelope.RpcError(-32000, fallback.message(), fallback.toMap()));
+      return JsonUtil.toJson(response.toMap(), MAX_MESSAGE_BYTES);
     }
   }
 

@@ -71,7 +71,8 @@ final class DecompilationMethods implements ApiMethodProvider {
                       case "document" -> DecompilationResource.Format.DOCUMENT;
                       default -> DecompilationResource.Format.TEXT;
                     },
-                    integer(request, "timeout_ms", DecompilationService.DEFAULT_TIMEOUT_MS),
+                    BatchMethod.clampTimeoutMs(
+                        integer(request, "timeout_ms", DecompilationService.DEFAULT_TIMEOUT_MS)),
                     bool(request, "include_comments").orElse(false)));
   }
 }

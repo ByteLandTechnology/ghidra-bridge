@@ -33,9 +33,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
       String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
       boolean includeComments) {
     int timeout = timeoutMs == null ? DEFAULT_TIMEOUT_MS : timeoutMs;
-    if (timeout < MIN_TIMEOUT_MS || timeout > MAX_TIMEOUT_MS) {
-      throw new IllegalArgumentException(
-          "timeoutMs must be in " + MIN_TIMEOUT_MS + ".." + MAX_TIMEOUT_MS);
+    if (timeout < 1 || timeout > MAX_TIMEOUT_MS) {
+      throw new IllegalArgumentException("timeoutMs must be in 1.." + MAX_TIMEOUT_MS);
     }
     Function function = context.script().getFunctionAt(context.parseAddress(rawAddress));
     if (function == null) {

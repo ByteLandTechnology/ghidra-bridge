@@ -7,6 +7,7 @@ import app.byteland.ghidra.service.BridgeServices;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.LongSupplier;
 
 /**
  * Dispatches API requests to the registry one at a time and blocks new requests during shutdown.
@@ -21,12 +22,18 @@ public final class AgentDispatcher implements AutoCloseable {
   private volatile boolean shuttingDown;
 
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
+    this(services, config, System::nanoTime);
+  }
+
+  public AgentDispatcher(BridgeServices services, AgentConfig config, LongSupplier nanoTime) {
     Objects.requireNonNull(services, "services");
     this.config = Objects.requireNonNull(config, "config");
+    Objects.requireNonNull(nanoTime, "nanoTime");
     this.services = services;
     this.programName = services.programName();
     this.apiRegistry =
-        new ApiRegistry(services, config.sessionId(), this::sessionInfo, this::markShuttingDown);
+        new ApiRegistry(
+            services, config.sessionId(), this::sessionInfo, this::markShuttingDown, nanoTime);
   }
 
   @Override
