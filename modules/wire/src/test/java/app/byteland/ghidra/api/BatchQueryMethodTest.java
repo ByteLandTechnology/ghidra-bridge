@@ -1,10 +1,8 @@
 package app.byteland.ghidra.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
 import app.byteland.ghidra.service.BridgeServices;
@@ -43,10 +41,7 @@ class BatchQueryMethodTest {
             .filter(method -> "batch.query".equals(method.name()))
             .findFirst()
             .orElseThrow();
-    assertTrue(query.readOnly());
-    assertTrue(query.readOnlyHint());
-    assertFalse(query.destructiveHint());
-    assertTrue(query.idempotentHint());
+    assertEquals("read-only", query.effectSummary());
     assertEquals(
         Map.of(
             "read_only", true,
@@ -62,10 +57,16 @@ class BatchQueryMethodTest {
             .filter(method -> "batch.execute".equals(method.name()))
             .findFirst()
             .orElseThrow();
-    assertFalse(execute.readOnly());
-    assertFalse(execute.readOnlyHint());
-    assertTrue(execute.destructiveHint());
-    assertFalse(execute.idempotentHint());
+    assertEquals("destructive mutation", execute.effectSummary());
+    assertEquals(
+        Map.of(
+            "read_only", false,
+            "mutates_program", true,
+            "requires_transaction", false,
+            "allowed_during_analysis", false,
+            "destructive", true,
+            "idempotent", false),
+        execute.contractValue().get("effects"));
   }
 
   @Test

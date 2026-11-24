@@ -162,7 +162,7 @@ MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映
 - [协议规范 (Protocol)](docs/zh/protocol.md)：JSON-RPC 信封、MCP 端点与错误响应格式。
 - [批处理与事务 (Batch and Transactions)](docs/zh/batch-and-transactions.md)：原子批处理与事务边界机制。
 - [开发指南 (Development)](docs/zh/development.md)：开发环境配置、工作流与质量检查。
-- [方法参考 (Method Reference)](docs/api.md)：全量 56 个方法的详细目录与 Schema。
+- [方法参考 (Method Reference)](docs/api.md)：全量 57 个方法的详细目录与 Schema。
 - [AsyncAPI 契约 (AsyncAPI)](docs/asyncapi.yaml)：WebSocket 形式化契约。
 - [MCP 工具契约 (MCP Tools)](docs/mcp-tools.json)：MCP 工具形式化定义。
 

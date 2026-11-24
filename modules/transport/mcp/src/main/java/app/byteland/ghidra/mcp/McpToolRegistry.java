@@ -34,7 +34,7 @@ final class McpToolRegistry {
         domainOrder.add(target[0]);
       }
       Map<String, Map<String, MethodDescriptor>> bucket =
-          method.readOnly() ? readsByDomain : writesByDomain;
+          isReadOnly(method) ? readsByDomain : writesByDomain;
       bucket.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>())
           .put(target[1], method);
     }
@@ -100,11 +100,11 @@ final class McpToolRegistry {
     String purpose = "listing".equals(base)
         ? "for code units, instructions, and flow overrides" : "for " + base + " data";
     boolean readOnlyHint =
-        operations.values().stream().allMatch(MethodDescriptor::readOnlyHint);
+        operations.values().stream().allMatch(McpToolRegistry::isReadOnly);
     boolean destructiveHint =
-        operations.values().stream().anyMatch(MethodDescriptor::destructiveHint);
+        operations.values().stream().anyMatch(McpToolRegistry::isDestructive);
     boolean idempotentHint =
-        operations.values().stream().allMatch(MethodDescriptor::idempotentHint);
+        operations.values().stream().allMatch(McpToolRegistry::isIdempotent);
     return Map.of("name", toolName(domain),
         "description", "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
@@ -133,7 +133,24 @@ final class McpToolRegistry {
     Map<String, MethodDescriptor> methods = domain == null ? null : domains.get(domain);
     return methods != null
         && !methods.isEmpty()
-        && methods.values().stream().allMatch(MethodDescriptor::readOnlyHint);
+        && methods.values().stream().allMatch(McpToolRegistry::isReadOnly);
+  }
+
+  static boolean isReadOnly(MethodDescriptor descriptor) {
+    return effectFlag(descriptor, "read_only");
+  }
+
+  private static boolean isDestructive(MethodDescriptor descriptor) {
+    return effectFlag(descriptor, "destructive");
+  }
+
+  private static boolean isIdempotent(MethodDescriptor descriptor) {
+    return effectFlag(descriptor, "idempotent");
+  }
+
+  private static boolean effectFlag(MethodDescriptor descriptor, String key) {
+    Object effects = descriptor.contractValue().get("effects");
+    return effects instanceof Map<?, ?> map && Boolean.TRUE.equals(map.get(key));
   }
 
   boolean isWriteOperationForReadOnlyTool(String name, String operation) {

@@ -162,7 +162,7 @@ MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 
 - [プロトコル仕様 (Protocol)](docs/ja/protocol.md): JSON-RPC エンベロープ、MCP エンドポイント、エラー形式。
 - [バッチとトランザクション (Batch and Transactions)](docs/ja/batch-and-transactions.md): アトミックバッチ処理とトランザクション制御。
 - [開発ガイド (Development)](docs/ja/development.md): 開発環境設定、ワークフロー、品質チェック。
-- [メソッドリファレンス (Method Reference)](docs/api.md): 全 56 メソッドの一覧とスキーマ。
+- [メソッドリファレンス (Method Reference)](docs/api.md): 全 57 メソッドの一覧とスキーマ。
 - [AsyncAPI 規約 (AsyncAPI)](docs/asyncapi.yaml): WebSocket の正式な規約。
 - [MCP ツール定義 (MCP Tools)](docs/mcp-tools.json): MCP ツールの正式な定義。
 

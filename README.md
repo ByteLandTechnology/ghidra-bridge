@@ -162,7 +162,7 @@ The MCP tool schema is also available at `ghidra-bridge://contracts/mcp-tools`.
 - [Protocol Specification](docs/protocol.md): JSON-RPC envelopes, MCP endpoints, and error formats.
 - [Batch and Transactions](docs/batch-and-transactions.md): Atomic execution and transaction boundaries.
 - [Development Guide](docs/development.md): Environment configuration, workflows, and quality checks.
-- [Method Reference](docs/api.md): Full 56-method catalog and schemas.
+- [Method Reference](docs/api.md): Full 57-method catalog and schemas.
 - [AsyncAPI Contract](docs/asyncapi.yaml): Formal WebSocket contract.
 - [MCP Tools Contract](docs/mcp-tools.json): Formal MCP tool definitions.
 
@@ -175,6 +175,7 @@ Run the full verification suite before you commit changes:
 ```
 
 The `verify` task checks:
+- JUnit tests across all Java modules.
 - Architecture boundary rules.
 - Generated API contract drift.
 - Generated script build and compilation.
