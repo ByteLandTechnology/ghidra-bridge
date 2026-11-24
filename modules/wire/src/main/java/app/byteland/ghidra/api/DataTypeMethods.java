@@ -14,6 +14,7 @@ import static app.byteland.ghidra.api.ApiRegistry.selector;
 import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
+import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
@@ -142,10 +143,13 @@ final class DataTypeMethods implements ApiMethodProvider {
             throw ApiException.badRequest(
                 ApiVocabulary.INVALID_VALUE, "/source must not be blank", "/source");
           }
-          return registry
-              .services()
-              .dataTypeService()
-              .parseC(source, optionalText(request, ApiVocabulary.CATEGORY_PATH, "/"));
+          return Page.of(
+              registry
+                  .services()
+                  .dataTypeService()
+                  .parseC(source, optionalText(request, ApiVocabulary.CATEGORY_PATH, "/")),
+              ApiRegistry.MAX_LIMIT,
+              null);
         });
     registry.writeResult(
         "data_type.delete",
@@ -226,7 +230,6 @@ final class DataTypeMethods implements ApiMethodProvider {
     registry.services().dataTypeService().patchDataType(path, typedPatch);
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   private List<DataTypePatch.CompositeField> convertedDataTypeFields(Object raw, String target) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.CompositeField> result = new ArrayList<>();
@@ -243,7 +246,6 @@ final class DataTypeMethods implements ApiMethodProvider {
     return List.copyOf(result);
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   private List<DataTypePatch.EnumValue> convertedEnumValues(Object raw) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.EnumValue> result = new ArrayList<>();

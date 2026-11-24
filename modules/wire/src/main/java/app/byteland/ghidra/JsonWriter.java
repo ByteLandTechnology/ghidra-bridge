@@ -3,6 +3,7 @@ package app.byteland.ghidra;
 import java.lang.reflect.Array;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 final class JsonWriter {
   private static final int MAX_NESTING_DEPTH = 500;
@@ -10,6 +11,33 @@ final class JsonWriter {
   private static final char FIRST_NON_CONTROL_CHARACTER = 0x20;
 
   private JsonWriter() {}
+
+  static final class RawJson {
+    private final String json;
+
+    RawJson(String json) {
+      this.json = Objects.requireNonNull(json, "json");
+    }
+
+    String json() {
+      return json;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this == other || (other instanceof RawJson that && json.equals(that.json));
+    }
+
+    @Override
+    public int hashCode() {
+      return json.hashCode();
+    }
+
+    @Override
+    public String toString() {
+      return json;
+    }
+  }
 
   static String toJson(Object value) {
     StringBuilder builder = new StringBuilder();
@@ -20,6 +48,10 @@ final class JsonWriter {
   private static void writeJson(StringBuilder builder, Object value, int depth) {
     if (value == null) {
       builder.append("null");
+      return;
+    }
+    if (value instanceof RawJson raw) {
+      builder.append(raw.json());
       return;
     }
     if (value instanceof String string) {

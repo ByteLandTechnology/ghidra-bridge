@@ -75,7 +75,7 @@ final class FunctionMethods implements ApiMethodProvider {
               .functionService()
               .listFunctions(
                   new FunctionQuery(
-                      addressScan(request, null, null),
+                      addressScan(request),
                       page.limit(),
                       page.cursor(),
                       optionalText(filter, ApiVocabulary.NAME),
@@ -341,7 +341,6 @@ final class FunctionMethods implements ApiMethodProvider {
             signature);
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   private static List<ParameterPatch> convertedParameters(Object raw) {
     if (!(raw instanceof List<?> list)) return null;
     List<ParameterPatch> parameters = new ArrayList<>(list.size());
