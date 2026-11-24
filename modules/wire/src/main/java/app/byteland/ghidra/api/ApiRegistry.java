@@ -553,8 +553,7 @@ public final class ApiRegistry {
             new JsonValueCodec(output),
             fields,
             identityFields,
-            handler,
-            ApiMethod.McpAnnotations.forMethod(name, effects));
+            handler);
     if (methodsByName.putIfAbsent(name, method) != null) {
       throw new IllegalStateException("duplicate API method: " + name);
     }
