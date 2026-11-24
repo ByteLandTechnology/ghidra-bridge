@@ -1,10 +1,18 @@
 package app.byteland.ghidra;
 
 import java.lang.reflect.Array;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.RandomAccess;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 final class JsonWriter {
   private static final int MAX_NESTING_DEPTH = 500;
@@ -18,7 +26,37 @@ final class JsonWriter {
 
   private JsonWriter() {}
 
+  static final class RawJson {
+    private final String json;
+
+    RawJson(String json) {
+      this.json = Objects.requireNonNull(json, "json");
+    }
+
+    String json() {
+      return json;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this == other || (other instanceof RawJson that && json.equals(that.json));
+    }
+
+    @Override
+    public int hashCode() {
+      return json.hashCode();
+    }
+
+    @Override
+    public String toString() {
+      return json;
+    }
+  }
+
   static String toJson(Object value) {
+    if (value instanceof RawJson raw) {
+      return raw.json();
+    }
     StringBuilder builder = new StringBuilder(estimateInitialCapacity(value));
     writeJson(builder, value, 0);
     return builder.toString();
@@ -37,6 +75,9 @@ final class JsonWriter {
     if (value == null) {
       return 4;
     }
+    if (value instanceof RawJson raw) {
+      return Math.min(MAX_INITIAL_CAPACITY, raw.json().length());
+    }
     if (value instanceof String string) {
       return Math.min(MAX_INITIAL_CAPACITY, (long) string.length() + 2);
     }
@@ -47,6 +88,9 @@ final class JsonWriter {
       return 12;
     }
     if (value instanceof Map<?, ?> map) {
+      if (!isEstimableMap(map)) {
+        return 64;
+      }
       int size = map.size();
       if (size == 0) {
         return 2;
@@ -70,6 +114,9 @@ final class JsonWriter {
       return Math.min(MAX_INITIAL_CAPACITY, 2 + entriesEstimate + (size - 1));
     }
     if (value instanceof Collection<?> collection) {
+      if (!isEstimableCollection(collection)) {
+        return 64;
+      }
       int size = collection.size();
       if (size == 0) {
         return 2;
@@ -135,9 +182,41 @@ final class JsonWriter {
     return MIN_INITIAL_CAPACITY;
   }
 
+  private static boolean isEstimableMap(Map<?, ?> map) {
+    if (map instanceof HashMap<?, ?>
+        || map instanceof TreeMap<?, ?>
+        || map instanceof ConcurrentHashMap<?, ?>) {
+      return true;
+    }
+    String className = map.getClass().getName();
+    return className.startsWith("java.util.ImmutableCollections$")
+        || className.equals("java.util.Collections$SingletonMap")
+        || className.equals("java.util.Collections$EmptyMap");
+  }
+
+  private static boolean isEstimableCollection(Collection<?> collection) {
+    if (collection instanceof ArrayList<?>
+        || collection instanceof HashSet<?>
+        || collection instanceof TreeSet<?>
+        || collection instanceof ArrayDeque<?>) {
+      return true;
+    }
+    String className = collection.getClass().getName();
+    return className.startsWith("java.util.ImmutableCollections$")
+        || className.equals("java.util.Arrays$ArrayList")
+        || className.equals("java.util.Collections$SingletonList")
+        || className.equals("java.util.Collections$EmptyList")
+        || className.equals("java.util.Collections$SingletonSet")
+        || className.equals("java.util.Collections$EmptySet");
+  }
+
   private static void writeJson(StringBuilder builder, Object value, int depth) {
     if (value == null) {
       builder.append("null");
+      return;
+    }
+    if (value instanceof RawJson raw) {
+      builder.append(raw.json());
       return;
     }
     if (value instanceof String string) {
