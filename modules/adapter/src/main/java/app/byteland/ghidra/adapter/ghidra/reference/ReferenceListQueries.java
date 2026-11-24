@@ -18,10 +18,6 @@ import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceManager;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
 
 final class ReferenceListQueries {
   private static final long NANOS_PER_MILLISECOND = 1_000_000L;
@@ -64,8 +60,9 @@ final class ReferenceListQueries {
     String normalizedDirection =
         ReferenceQuerySupport.normalizeDirection(direction, fromRaw, toRaw);
     boolean incoming = "to".equals(normalizedDirection);
-    Address fromFilter = fromRaw == null ? null : parseAddress(fromRaw);
-    Address toFilter = toRaw == null ? null : parseAddress(toRaw);
+    Address fromFilter =
+        fromRaw == null || fromRaw.isBlank() ? null : parseAddress(fromRaw);
+    Address toFilter = toRaw == null || toRaw.isBlank() ? null : parseAddress(toRaw);
     Address primaryAnchor = incoming ? toFilter : fromFilter;
 
     if (scope == null
@@ -163,34 +160,56 @@ final class ReferenceListQueries {
         incoming
             ? refManager.getReferenceDestinationIterator(iterationSet, true)
             : refManager.getReferenceSourceIterator(iterationSet, true);
+    int matchedCount = 0;
 
     for (Address anchor : addresses) {
+      if (cursorPosition != null && anchor.compareTo(cursorPosition.address()) < 0) {
+        continue;
+      }
       String anchorCanonical = AddressUtil.canonicalAddress(anchor);
-      List<KeyedReference> atAnchor =
-          referencesAtAnchor(refManager, anchor, anchorCanonical, incoming);
-      AddressResource.FunctionSummary anchorFunction = null;
-      boolean anchorFunctionResolved = false;
-      for (KeyedReference keyed : atAnchor) {
-        if (cursorPosition != null && compare(anchor, keyed.encodedKey(), cursorPosition) <= 0) {
+      String anchorCursor =
+          cursorPosition != null && anchor.equals(cursorPosition.address())
+              ? cursorPosition.key()
+              : null;
+      int needed = limit - matchedCount;
+      Page.Selector<Reference> selector = Page.selector(needed, anchorCursor);
+      String maxUnmatchedKey = null;
+      for (Reference reference : context.references(anchor, incoming)) {
+        String encoded =
+            ReferenceDescriptions.referenceKey(reference, anchor, anchorCanonical).encoded();
+        if (anchorCursor != null && encoded.compareTo(anchorCursor) <= 0) {
           continue;
         }
-        boolean matches =
-            ReferenceQuerySupport.matchesType(type, keyed.reference())
-                && matchesEndpoint(fromFilter, keyed.reference().getFromAddress())
-                && matchesEndpoint(toFilter, keyed.reference().getToAddress());
-        ReferenceResource item = null;
-        if (matches) {
-          if (!anchorFunctionResolved) {
-            anchorFunction = ReferenceDescriptions.functionSummary(functionManager, anchor);
-            anchorFunctionResolved = true;
-          }
-          item =
-              ReferenceDescriptions.describe(
-                  keyed.reference(), functionManager, anchor, anchorCanonical, anchorFunction);
+        if (ReferenceQuerySupport.matchesType(type, reference)
+            && matchesEndpoint(fromFilter, reference.getFromAddress())
+            && matchesEndpoint(toFilter, reference.getToAddress())) {
+          selector.offer(encoded, reference);
+        } else if (maxUnmatchedKey == null || encoded.compareTo(maxUnmatchedKey) > 0) {
+          maxUnmatchedKey = encoded;
         }
-        scan.visit(
-            anchorCanonical, CompositeCursor.key(anchorCanonical, keyed.encodedKey()), item);
-        if (scan.stopped()) break;
+      }
+      if (selector.retainedCount() == 0) {
+        if (maxUnmatchedKey != null) {
+          scan.visit(anchorCanonical, CompositeCursor.key(anchorCanonical, maxUnmatchedKey), null);
+        }
+      } else {
+        AddressResource.FunctionSummary anchorFunction =
+            ReferenceDescriptions.functionSummary(functionManager, anchor);
+        Page<DescribedReference> winners =
+            selector.finish(
+                (reference, encoded) ->
+                    new DescribedReference(
+                        encoded,
+                        ReferenceDescriptions.describe(
+                            reference, functionManager, anchor, anchorCanonical, anchorFunction)));
+        for (DescribedReference winner : winners.items()) {
+          scan.visit(
+              anchorCanonical,
+              CompositeCursor.key(anchorCanonical, winner.encodedKey()),
+              winner.resource());
+          matchedCount++;
+          if (scan.stopped()) break;
+        }
       }
       if (scan.stopped()) break;
     }
@@ -200,13 +219,12 @@ final class ReferenceListQueries {
   private AddressSet resolveTargetAddresses(FlowOverrideScope scope, AddressScanOptions options) {
     if (scope == null) {
       AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
-      return new AddressSet(context.currentProgram(), range.start(), range.end());
+      return new AddressSet(range.start(), range.end());
     }
     AddressSet scoped = new AddressSet(scopes.resolve(scope));
     if (options.start() != null || options.end() != null) {
       AddressScanRanges.Resolved clip = AddressScanRanges.resolve(context, options, true);
-      scoped =
-          scoped.intersect(new AddressSet(context.currentProgram(), clip.start(), clip.end()));
+      scoped = scoped.intersect(new AddressSet(clip.start(), clip.end()));
     }
     return scoped;
   }
@@ -219,24 +237,10 @@ final class ReferenceListQueries {
     if (cursor.compareTo(max) > 0) {
       return new AddressSet();
     }
-    return addresses.intersect(new AddressSet(context.currentProgram(), cursor, max));
-  }
-
-  private static List<KeyedReference> referencesAtAnchor(
-      ReferenceManager refManager, Address anchor, String anchorCanonical, boolean incoming) {
-    Iterable<Reference> raw =
-        incoming
-            ? ReferenceDescriptions.iterable(refManager.getReferencesTo(anchor))
-            : Arrays.asList(refManager.getReferencesFrom(anchor));
-    List<KeyedReference> keyed = new ArrayList<>();
-    for (Reference reference : raw) {
-      keyed.add(
-          new KeyedReference(
-              reference,
-              ReferenceDescriptions.referenceKey(reference, anchor, anchorCanonical).encoded()));
+    if (cursor.getAddressSpace().equals(max.getAddressSpace())) {
+      return addresses.intersect(new AddressSet(cursor, max));
     }
-    keyed.sort(Comparator.comparing(KeyedReference::encodedKey));
-    return keyed;
+    return addresses.intersect(new AddressSet(context.currentProgram(), cursor, max));
   }
 
   private static boolean matchesEndpoint(Address expected, Address actual) {
@@ -249,14 +253,10 @@ final class ReferenceListQueries {
     return new CursorPosition(parseAddress(parts.address()), parts.secondary());
   }
 
-  private static int compare(Address address, String key, CursorPosition cursor) {
-    int byAddress = address.compareTo(cursor.address());
-    return byAddress == 0 ? key.compareTo(cursor.key()) : byAddress;
-  }
-
-  private record KeyedReference(Reference reference, String encodedKey) {}
+  private record DescribedReference(String encodedKey, ReferenceResource resource) {}
 
   private record CursorPosition(Address address, String key) {}
+
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);
   }

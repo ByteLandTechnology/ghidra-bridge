@@ -23,6 +23,11 @@ final class ReferenceDescriptions {
   }
 
   static ReferenceResource describe(
+      Reference reference, Address anchor, String canonicalAnchor) {
+    return describe(reference, (FunctionManager) null, anchor, canonicalAnchor, null);
+  }
+
+  static ReferenceResource describe(
       Reference reference, GhidraSession context, Address anchor, String canonicalAnchor) {
     FunctionManager functionManager =
         context == null ? null : context.currentProgram().getFunctionManager();

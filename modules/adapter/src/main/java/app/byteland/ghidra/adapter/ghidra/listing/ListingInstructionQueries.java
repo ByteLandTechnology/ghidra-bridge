@@ -75,9 +75,7 @@ final class ListingInstructionQueries {
     AddressSet scopedAddresses = new AddressSet(scopes.resolve(selected));
     if (options.start() != null || options.end() != null) {
       AddressScanRanges.Resolved clip = AddressScanRanges.resolve(context, options, true);
-      scopedAddresses =
-          scopedAddresses.intersect(
-              new AddressSet(context.currentProgram(), clip.start(), clip.end()));
+      scopedAddresses = scopedAddresses.intersect(new AddressSet(clip.start(), clip.end()));
     }
     String requestedStart =
         scopedAddresses.isEmpty()
@@ -113,6 +111,9 @@ final class ListingInstructionQueries {
     Address max = addresses.getMaxAddress();
     if (cursor.compareTo(max) >= 0) {
       return new AddressSet();
+    }
+    if (cursor.getAddressSpace().equals(max.getAddressSpace())) {
+      return addresses.intersect(new AddressSet(cursor, max));
     }
     return addresses.intersect(new AddressSet(context.currentProgram(), cursor, max));
   }

@@ -185,7 +185,7 @@ def run_test(headless, root):
                 }
             })
 
-            # Ensure discontiguous split_entry function exists without including gap_interleaved.
+            # Create split_entry and gap_interleaved as separate functions.
             try:
                 tool("ghidra_function", "get", {"selector": {"entry": symbols["gap_interleaved"]}})
             except AssertionError:

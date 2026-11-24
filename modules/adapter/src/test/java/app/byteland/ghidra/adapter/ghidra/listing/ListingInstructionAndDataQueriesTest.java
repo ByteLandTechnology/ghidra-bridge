@@ -12,6 +12,7 @@ import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.ScanProgress;
 import app.byteland.ghidra.service.listing.DataUnitResource;
+import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.InstructionResource;
 import ghidra.app.cmd.disassemble.DisassembleCommand;
 import ghidra.program.model.address.Address;
@@ -20,6 +21,7 @@ import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.data.ByteDataType;
 import ghidra.program.model.data.DWordDataType;
 import ghidra.program.model.data.WordDataType;
+import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
 import java.io.ByteArrayInputStream;
 import java.util.List;
@@ -306,6 +308,62 @@ class ListingInstructionAndDataQueriesTest {
               "ram:0000000000000000");
       assertTrue(resumeMin.items().isEmpty());
       assertTrue(resumeMin.scanProgress().complete());
+    }
+  }
+
+  @Test
+  void functionScopedInstructionListOmitsInterleavedChunkAndHonorsRangeClip() {
+    try (ProgramHolder holder = GhidraTestSupport.createX64Program("scoped_instructions_test")) {
+      holder.inTransaction(
+          program -> {
+            AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+            Address base = space.getAddress(0x5000L);
+            // 0x5000: nop; 0x5001: nop; 0x5002: ret (gap); 0x5003: nop; 0x5004: ret
+            byte[] code = {(byte) 0x90, (byte) 0x90, (byte) 0xc3, (byte) 0x90, (byte) 0xc3};
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    base,
+                    new ByteArrayInputStream(code),
+                    code.length,
+                    TaskMonitor.DUMMY,
+                    false);
+            AddressSet allCode = new AddressSet(base, base.add(4));
+            new DisassembleCommand(allCode, allCode, false).applyTo(program, TaskMonitor.DUMMY);
+            AddressSet discontiguousBody = new AddressSet(base, base.add(1));
+            discontiguousBody.add(base.add(3), base.add(4));
+            program
+                .getFunctionManager()
+                .createFunction("split_fn", base, discontiguousBody, SourceType.USER_DEFINED);
+          });
+
+      ListingInstructionQueries queries =
+          new ListingInstructionQueries(GhidraTestSupport.sessionFor(holder.program()));
+      FlowOverrideScope scope = new FlowOverrideScope.FunctionScope("ram:00005000");
+      AddressScanOptions unbounded =
+          new AddressScanOptions(null, null, AddressScanOptions.DEFAULT_TIMEOUT_MS);
+
+      Page<InstructionResource> page1 =
+          queries.listInstructions(scope, unbounded, 2, "forward", null);
+      assertEquals(
+          List.of("ram:00005000", "ram:00005001"),
+          page1.items().stream().map(InstructionResource::address).toList());
+      assertEquals("ram:00005001", page1.nextCursor());
+
+      Page<InstructionResource> page2 =
+          queries.listInstructions(scope, unbounded, 3, "forward", page1.nextCursor());
+      assertEquals(
+          List.of("ram:00005003", "ram:00005004"),
+          page2.items().stream().map(InstructionResource::address).toList());
+      assertNull(page2.nextCursor());
+
+      Page<InstructionResource> clipped =
+          queries.listInstructions(
+              scope, AddressScanOptions.of("ram:00005001", "ram:00005003", 1000), 10, "forward", null);
+      assertEquals(
+          List.of("ram:00005001", "ram:00005003"),
+          clipped.items().stream().map(InstructionResource::address).toList());
     }
   }
 }

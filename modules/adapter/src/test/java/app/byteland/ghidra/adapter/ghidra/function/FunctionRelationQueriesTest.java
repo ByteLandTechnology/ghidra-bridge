@@ -4,14 +4,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressIterator;
+import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.GenericAddressSpace;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.FunctionManager;
+import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Namespace;
+import ghidra.program.model.symbol.RefType;
+import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceManager;
 import java.lang.reflect.Proxy;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -102,48 +111,36 @@ class FunctionRelationQueriesTest {
     Address siteEarly = RAM.getAddress(0x00400008L);
     Address siteB = RAM.getAddress(0x00400010L);
 
-    ghidra.program.model.address.AddressSet body =
-        new ghidra.program.model.address.AddressSet(
-            RAM.getAddress(0x00400000L), RAM.getAddress(0x00400030L));
+    AddressSet body = new AddressSet(RAM.getAddress(0x00400000L), RAM.getAddress(0x00400030L));
     List<Address> sourceAddrs = List.of(siteLate, siteEarly, siteB);
 
-    ghidra.program.model.symbol.Reference refA2 =
-        callReference(siteLate, helperA.getEntryPoint(), ghidra.program.model.symbol.RefType.UNCONDITIONAL_CALL);
-    ghidra.program.model.symbol.Reference refA1 =
-        callReference(siteEarly, helperA.getEntryPoint(), ghidra.program.model.symbol.RefType.UNCONDITIONAL_CALL);
-    ghidra.program.model.symbol.Reference refDataIgnored =
-        callReference(siteEarly, helperB.getEntryPoint(), ghidra.program.model.symbol.RefType.DATA);
-    ghidra.program.model.symbol.Reference refB =
-        callReference(siteB, helperB.getEntryPoint(), ghidra.program.model.symbol.RefType.COMPUTED_CALL);
+    Reference refA2 = callReference(siteLate, helperA.getEntryPoint(), RefType.UNCONDITIONAL_CALL);
+    Reference refA1 = callReference(siteEarly, helperA.getEntryPoint(), RefType.UNCONDITIONAL_CALL);
+    Reference refDataIgnored = callReference(siteEarly, helperB.getEntryPoint(), RefType.DATA);
+    Reference refB = callReference(siteB, helperB.getEntryPoint(), RefType.COMPUTED_CALL);
 
-    ghidra.program.model.symbol.ReferenceManager refManager =
-        (ghidra.program.model.symbol.ReferenceManager)
+    ReferenceManager refManager =
+        (ReferenceManager)
             Proxy.newProxyInstance(
-                ghidra.program.model.symbol.ReferenceManager.class.getClassLoader(),
-                new Class<?>[] {ghidra.program.model.symbol.ReferenceManager.class},
+                ReferenceManager.class.getClassLoader(),
+                new Class<?>[] {ReferenceManager.class},
                 (proxy, method, args) ->
                     switch (method.getName()) {
                       case "getReferenceSourceIterator" -> addressIterator(sourceAddrs.iterator());
                       case "getReferencesFrom" -> {
                         Address from = (Address) args[0];
-                        if (siteLate.equals(from)) {
-                          yield new ghidra.program.model.symbol.Reference[] {refA2};
-                        }
-                        if (siteEarly.equals(from)) {
-                          yield new ghidra.program.model.symbol.Reference[] {refA1, refDataIgnored};
-                        }
-                        if (siteB.equals(from)) {
-                          yield new ghidra.program.model.symbol.Reference[] {refB};
-                        }
-                        yield new ghidra.program.model.symbol.Reference[0];
+                        if (siteLate.equals(from)) yield new Reference[] {refA2};
+                        if (siteEarly.equals(from)) yield new Reference[] {refA1, refDataIgnored};
+                        if (siteB.equals(from)) yield new Reference[] {refB};
+                        yield new Reference[0];
                       }
                       default -> throw new AssertionError(method.getName());
                     });
-    ghidra.program.model.listing.FunctionManager fnManager =
-        (ghidra.program.model.listing.FunctionManager)
+    FunctionManager fnManager =
+        (FunctionManager)
             Proxy.newProxyInstance(
-                ghidra.program.model.listing.FunctionManager.class.getClassLoader(),
-                new Class<?>[] {ghidra.program.model.listing.FunctionManager.class},
+                FunctionManager.class.getClassLoader(),
+                new Class<?>[] {FunctionManager.class},
                 (proxy, method, args) -> {
                   if ("getFunctionAt".equals(method.getName())) {
                     Address addr = (Address) args[0];
@@ -153,11 +150,11 @@ class FunctionRelationQueriesTest {
                   }
                   throw new AssertionError(method.getName());
                 });
-    ghidra.program.model.listing.Program program =
-        (ghidra.program.model.listing.Program)
+    Program program =
+        (Program)
             Proxy.newProxyInstance(
-                ghidra.program.model.listing.Program.class.getClassLoader(),
-                new Class<?>[] {ghidra.program.model.listing.Program.class},
+                Program.class.getClassLoader(),
+                new Class<?>[] {Program.class},
                 (proxy, method, args) ->
                     switch (method.getName()) {
                       case "getReferenceManager" -> refManager;
@@ -197,11 +194,8 @@ class FunctionRelationQueriesTest {
                 "Ns::A",
                 null)),
         page1.items());
-    assertEquals(
-        app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor.key(
-            "ram:00401000", "ram:00400020"),
-        page1.nextCursor());
-    assertEquals(2, namespaceLookups.get());
+    assertEquals(CompositeCursor.key("ram:00401000", "ram:00400020"), page1.nextCursor());
+    assertEquals(1, namespaceLookups.get());
 
     Page<FunctionCallResource> page2 =
         queries.getCallees("ram:00400000", 2, page1.nextCursor());
@@ -223,30 +217,28 @@ class FunctionRelationQueriesTest {
                 null)),
         page2.items());
     assertNull(page2.nextCursor());
-    assertEquals(4, namespaceLookups.get());
+    assertEquals(3, namespaceLookups.get());
   }
 
-  private static ghidra.program.model.address.AddressIterator addressIterator(
-      java.util.Iterator<Address> iterator) {
-    return (ghidra.program.model.address.AddressIterator)
+  private static AddressIterator addressIterator(Iterator<Address> iterator) {
+    return (AddressIterator)
         Proxy.newProxyInstance(
-            ghidra.program.model.address.AddressIterator.class.getClassLoader(),
-            new Class<?>[] {ghidra.program.model.address.AddressIterator.class},
+            AddressIterator.class.getClassLoader(),
+            new Class<?>[] {AddressIterator.class},
             (proxy, method, args) ->
                 switch (method.getName()) {
                   case "hasNext" -> iterator.hasNext();
                   case "next" -> iterator.next();
-                  case "iterator" -> (ghidra.program.model.address.AddressIterator) proxy;
+                  case "iterator" -> (AddressIterator) proxy;
                   default -> throw new AssertionError(method.getName());
                 });
   }
 
-  private static ghidra.program.model.symbol.Reference callReference(
-      Address from, Address to, ghidra.program.model.symbol.RefType refType) {
-    return (ghidra.program.model.symbol.Reference)
+  private static Reference callReference(Address from, Address to, RefType refType) {
+    return (Reference)
         Proxy.newProxyInstance(
-            ghidra.program.model.symbol.Reference.class.getClassLoader(),
-            new Class<?>[] {ghidra.program.model.symbol.Reference.class},
+            Reference.class.getClassLoader(),
+            new Class<?>[] {Reference.class},
             (proxy, method, args) ->
                 switch (method.getName()) {
                   case "getFromAddress" -> from;
@@ -263,9 +255,9 @@ class FunctionRelationQueriesTest {
             new Class<?>[] {Function.class},
             (proxy, method, args) ->
                 switch (method.getName()) {
-                  case "getProgram" -> null;
                   case "getCallingFunctions" -> callers;
                   case "getCalledFunctions" -> callees;
+                  case "getProgram" -> null;
                   default -> throw new AssertionError(method.getName());
                 });
   }

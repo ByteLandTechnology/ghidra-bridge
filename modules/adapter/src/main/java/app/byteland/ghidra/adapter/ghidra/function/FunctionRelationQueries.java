@@ -7,18 +7,30 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressIterator;
-import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.symbol.ExternalLocation;
+import ghidra.program.model.symbol.ExternalReference;
+import ghidra.program.model.symbol.RefType;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.ReferenceManager;
 import ghidra.util.task.TaskMonitor;
-import java.util.HashSet;
+import ghidra.util.task.TaskMonitorAdapter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 final class FunctionRelationQueries {
+  record PeerCalls(String entry, Function function, List<String> callSites) {}
+
+  record CollectedPeers(List<PeerCalls> peers, boolean timedOut) {}
+
   private final FunctionResolver resolver;
 
   FunctionRelationQueries(FunctionResolver resolver) {
@@ -35,111 +47,196 @@ final class FunctionRelationQueries {
 
   private Page<FunctionCallResource> getFunctionRelations(
       String rawAddress, boolean callers, int limit, String cursor) {
-    Function function = resolver.resolveFunction(rawAddress);
-    Page.Selector<CallEdge> selector = Page.selector(limit, cursor);
-    Set<String> seenEntries = new HashSet<>();
-    Program program = function.getProgram();
-    if (program != null) {
-      if (callers) {
-        offerCallerReferences(function, program, selector, seenEntries);
-      } else {
-        offerCalleeReferences(function, program, selector, seenEntries);
-      }
+    if (cursor != null && cursor.indexOf('\0') >= 0) {
+      CompositeCursor.parse(cursor, "function_call");
     }
-    Iterable<Function> related =
-        callers
-            ? function.getCallingFunctions(TaskMonitor.DUMMY)
-            : function.getCalledFunctions(TaskMonitor.DUMMY);
-    for (Function relatedFunction : related) {
-      String entry = AddressUtil.canonicalAddress(relatedFunction.getEntryPoint());
-      if (seenEntries.add(entry)) {
-        selector.offer(edgeCursorKey(entry, null), new CallEdge(relatedFunction, entry, null));
+    Function function = resolver.resolveFunction(rawAddress);
+    CollectedPeers collected = collectPeers(function, callers, Long.MAX_VALUE);
+    Page.Selector<CandidateCall> selector = Page.selector(limit, cursor);
+    for (PeerCalls peer : collected.peers()) {
+      if (peer.callSites().isEmpty()) {
+        selector.offer(
+            cursorKey(peer.entry(), null), new CandidateCall(peer.entry(), peer.function(), null));
+      } else {
+        for (String site : peer.callSites()) {
+          selector.offer(
+              cursorKey(peer.entry(), site),
+              new CandidateCall(peer.entry(), peer.function(), site));
+        }
       }
     }
     FunctionCallResource.Direction direction =
         callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;
-    return selector.finish(edge -> toResource(edge, direction));
+    Map<Function, PeerMetadata> metadataByFunction = new HashMap<>();
+    return selector.finish(
+        candidate -> {
+          PeerMetadata metadata =
+              metadataByFunction.computeIfAbsent(candidate.function(), PeerMetadata::from);
+          return new FunctionCallResource(
+              candidate.entry(),
+              metadata.name(),
+              candidate.callSite(),
+              direction,
+              metadata.namespace(),
+              metadata.demangled());
+        });
   }
 
-  private static void offerCallerReferences(
-      Function targetFunction,
-      Program program,
-      Page.Selector<CallEdge> selector,
-      Set<String> seenEntries) {
+  CollectedPeers collectPeers(Function function, boolean callers, long deadlineNanos) {
+    TaskMonitor monitor =
+        deadlineNanos == Long.MAX_VALUE ? TaskMonitor.DUMMY : new DeadlineMonitor(deadlineNanos);
+    Map<String, PeerAccumulator> peersByEntry = new TreeMap<>();
+    Set<Function> related =
+        callers ? function.getCallingFunctions(monitor) : function.getCalledFunctions(monitor);
+    if (monitor.isCancelled()) {
+      return new CollectedPeers(List.of(), true);
+    }
+    for (Function peer : related) {
+      if (isExpired(deadlineNanos)) {
+        return new CollectedPeers(List.of(), true);
+      }
+      String entry = AddressUtil.canonicalAddress(peer.getEntryPoint());
+      peersByEntry.computeIfAbsent(entry, ignored -> new PeerAccumulator(peer));
+    }
+
+    boolean timedOut =
+        callers
+            ? collectCallerSites(function, peersByEntry, deadlineNanos)
+            : collectCalleeSites(function, peersByEntry, deadlineNanos);
+    if (timedOut) {
+      return new CollectedPeers(List.of(), true);
+    }
+
+    List<PeerCalls> peers = new ArrayList<>(peersByEntry.size());
+    for (Map.Entry<String, PeerAccumulator> item : peersByEntry.entrySet()) {
+      peers.add(
+          new PeerCalls(
+              item.getKey(),
+              item.getValue().function(),
+              List.copyOf(item.getValue().callSites())));
+    }
+    return new CollectedPeers(List.copyOf(peers), false);
+  }
+
+  private static boolean collectCallerSites(
+      Function function, Map<String, PeerAccumulator> peersByEntry, long deadlineNanos) {
+    Program program = function.getProgram();
+    if (program == null) return false;
     ReferenceManager refManager = program.getReferenceManager();
-    FunctionManager functionManager = program.getFunctionManager();
-    Set<EdgeKey> seenEdges = new HashSet<>();
-    ReferenceIterator refs = refManager.getReferencesTo(targetFunction.getEntryPoint());
+    FunctionManager fnManager = program.getFunctionManager();
+    if (refManager == null || fnManager == null) return false;
+    ReferenceIterator refs = refManager.getReferencesTo(function.getEntryPoint());
+    if (refs == null) return false;
     while (refs.hasNext()) {
-      Reference ref = refs.next();
-      if (!ref.getReferenceType().isCall()) {
-        continue;
+      if (isExpired(deadlineNanos)) return true;
+      Reference reference = refs.next();
+      Address fromAddress = reference.getFromAddress();
+      if (fromAddress == null || !fromAddress.isMemoryAddress()) continue;
+      RefType refType = reference.getReferenceType();
+      if (!refType.isCall() && !refType.isFlow()) continue;
+      Function caller = fnManager.getFunctionContaining(fromAddress);
+      if (caller == null) continue;
+      String callerEntry = AddressUtil.canonicalAddress(caller.getEntryPoint());
+      PeerAccumulator accumulator = null;
+      if (refType.isCall()) {
+        accumulator =
+            peersByEntry.computeIfAbsent(callerEntry, ignored -> new PeerAccumulator(caller));
+      } else if (!callerEntry.equals(AddressUtil.canonicalAddress(function.getEntryPoint()))) {
+        accumulator = peersByEntry.get(callerEntry);
       }
-      Address callSiteAddress = ref.getFromAddress();
-      Function caller = functionManager.getFunctionContaining(callSiteAddress);
-      if (caller == null) {
-        continue;
-      }
-      String entry = AddressUtil.canonicalAddress(caller.getEntryPoint());
-      String callSite = AddressUtil.canonicalAddress(callSiteAddress);
-      seenEntries.add(entry);
-      if (seenEdges.add(new EdgeKey(entry, callSite))) {
-        selector.offer(edgeCursorKey(entry, callSite), new CallEdge(caller, entry, callSite));
+      if (accumulator != null) {
+        accumulator.callSites().add(AddressUtil.canonicalAddress(fromAddress));
       }
     }
+    return false;
   }
 
-  private static void offerCalleeReferences(
-      Function callerFunction,
-      Program program,
-      Page.Selector<CallEdge> selector,
-      Set<String> seenEntries) {
-    AddressSetView body = callerFunction.getBody();
-    if (body == null) {
-      return;
-    }
+  private static boolean collectCalleeSites(
+      Function function, Map<String, PeerAccumulator> peersByEntry, long deadlineNanos) {
+    Program program = function.getProgram();
+    if (program == null || function.getBody() == null) return false;
     ReferenceManager refManager = program.getReferenceManager();
-    FunctionManager functionManager = program.getFunctionManager();
-    Set<EdgeKey> seenEdges = new HashSet<>();
-    AddressIterator sources = refManager.getReferenceSourceIterator(body, true);
-    for (Address fromAddress : sources) {
-      String callSite = AddressUtil.canonicalAddress(fromAddress);
-      for (Reference ref : refManager.getReferencesFrom(fromAddress)) {
-        if (!ref.getReferenceType().isCall()) {
-          continue;
+    FunctionManager fnManager = program.getFunctionManager();
+    if (refManager == null || fnManager == null) return false;
+    AddressIterator sources = refManager.getReferenceSourceIterator(function.getBody(), true);
+    if (sources == null) return false;
+    while (sources.hasNext()) {
+      if (isExpired(deadlineNanos)) return true;
+      Address sourceAddress = sources.next();
+      String site = AddressUtil.canonicalAddress(sourceAddress);
+      Reference[] outgoing = refManager.getReferencesFrom(sourceAddress);
+      if (outgoing == null) continue;
+      for (Reference reference : outgoing) {
+        RefType refType = reference.getReferenceType();
+        if (!refType.isCall() && !refType.isFlow()) continue;
+        Function callee = resolveTargetFunction(fnManager, reference);
+        if (callee == null) continue;
+        String calleeEntry = AddressUtil.canonicalAddress(callee.getEntryPoint());
+        PeerAccumulator accumulator = null;
+        if (refType.isCall()) {
+          accumulator =
+              peersByEntry.computeIfAbsent(calleeEntry, ignored -> new PeerAccumulator(callee));
+        } else if (!calleeEntry.equals(AddressUtil.canonicalAddress(function.getEntryPoint()))) {
+          accumulator = peersByEntry.get(calleeEntry);
         }
-        Function callee = functionManager.getFunctionAt(ref.getToAddress());
-        if (callee == null) {
-          continue;
-        }
-        String entry = AddressUtil.canonicalAddress(callee.getEntryPoint());
-        seenEntries.add(entry);
-        if (seenEdges.add(new EdgeKey(entry, callSite))) {
-          selector.offer(edgeCursorKey(entry, callSite), new CallEdge(callee, entry, callSite));
+        if (accumulator != null) {
+          accumulator.callSites().add(site);
         }
       }
     }
+    return false;
   }
 
-  private static String edgeCursorKey(String entry, String callSite) {
+  private static Function resolveTargetFunction(FunctionManager fnManager, Reference reference) {
+    Address toAddress = reference.getToAddress();
+    if (toAddress != null) {
+      Function direct = fnManager.getFunctionAt(toAddress);
+      if (direct != null) return direct;
+    }
+    if (reference instanceof ExternalReference externalRef) {
+      ExternalLocation location = externalRef.getExternalLocation();
+      if (location != null) return location.getFunction();
+    }
+    return null;
+  }
+
+  static String cursorKey(String entry, String callSite) {
     return callSite == null ? entry : CompositeCursor.key(entry, callSite);
   }
 
-  private static FunctionCallResource toResource(
-      CallEdge edge, FunctionCallResource.Direction direction) {
-    Function relatedFunction = edge.function();
-    String name = relatedFunction.getName();
-    return new FunctionCallResource(
-        edge.entry(),
-        name,
-        edge.callSite(),
-        direction,
-        relatedFunction.getParentNamespace().getName(true),
-        CppSymbolNames.demangled(
-            relatedFunction.getProgram(), name, relatedFunction.getEntryPoint()));
+  private static boolean isExpired(long deadlineNanos) {
+    return deadlineNanos != Long.MAX_VALUE && System.nanoTime() >= deadlineNanos;
   }
 
-  private record CallEdge(Function function, String entry, String callSite) {}
+  private record CandidateCall(String entry, Function function, String callSite) {}
 
-  private record EdgeKey(String entry, String callSite) {}
+  private record PeerMetadata(String name, String namespace, String demangled) {
+    static PeerMetadata from(Function function) {
+      String name = function.getName();
+      return new PeerMetadata(
+          name,
+          function.getParentNamespace().getName(true),
+          CppSymbolNames.demangled(function.getProgram(), name, function.getEntryPoint()));
+    }
+  }
+
+  private record PeerAccumulator(Function function, TreeSet<String> callSites) {
+    PeerAccumulator(Function function) {
+      this(function, new TreeSet<>());
+    }
+  }
+
+  private static final class DeadlineMonitor extends TaskMonitorAdapter {
+    private final long deadlineNanos;
+
+    DeadlineMonitor(long deadlineNanos) {
+      super(true);
+      this.deadlineNanos = deadlineNanos;
+    }
+
+    @Override
+    public boolean isCancelled() {
+      return System.nanoTime() >= deadlineNanos || super.isCancelled();
+    }
+  }
 }
