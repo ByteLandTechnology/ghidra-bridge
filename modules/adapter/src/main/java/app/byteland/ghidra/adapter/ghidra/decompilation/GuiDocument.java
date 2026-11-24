@@ -13,6 +13,8 @@ import ghidra.app.decompiler.ClangLine;
 import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.ClangVariableDecl;
+import ghidra.app.decompiler.DecompileResults;
+import ghidra.app.decompiler.DecompiledFunction;
 import ghidra.app.decompiler.PrettyPrinter;
 import ghidra.app.decompiler.component.DecompilerUtils;
 import ghidra.program.model.address.Address;
@@ -29,6 +31,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 record GuiDocument(String code, List<Line> lines) {
+  static String renderText(Function function, DecompileResults results) {
+    if (results == null) return "";
+    ClangTokenGroup markup = results.getCCodeMarkup();
+    if (markup != null) {
+      return renderText(function, markup);
+    }
+    DecompiledFunction decompiled = results.getDecompiledFunction();
+    return decompiled == null || decompiled.getC() == null ? "" : decompiled.getC();
+  }
+
+  static String renderText(Function function, ClangTokenGroup markup) {
+    if (markup == null) return "";
+    StringBuilder code = new StringBuilder();
+    for (ClangLine line : new PrettyPrinter(function, markup, null).getLines()) {
+      code.append(PrettyPrinter.getText(line)).append('\n');
+    }
+    return code.toString();
+  }
+
   static GuiDocument render(Function function, ClangTokenGroup markup) {
     return render(function, markup, null);
   }
@@ -38,8 +59,7 @@ record GuiDocument(String code, List<Line> lines) {
     if (markup == null) return new GuiDocument("", List.of());
     Program program = function.getProgram();
     String entry = AddressUtil.canonicalAddress(function.getEntryPoint());
-    String namespace =
-        function.getSymbol() == null ? function.getName() : function.getSymbol().getName(true);
+    String[] namespaceHolder = new String[1];
     List<ClangLine> nativeLines = new PrettyPrinter(function, markup, null).getLines();
     List<Line> lines = new ArrayList<>();
     StringBuilder code = new StringBuilder();
@@ -56,7 +76,7 @@ record GuiDocument(String code, List<Line> lines) {
         String text = token.getText();
         Token.Kind kind = DecompilationServiceImpl.tokenKind(token);
         SymbolResource symbol = describeTokenSymbol(
-            program, entry, namespace, token, kind, highFunction);
+            program, function, entry, namespaceHolder, token, kind, highFunction);
         tokens.add(new LocatedToken(
             kind, text, column, column + text.length(),
             canonical(token.getMinAddress()), canonical(token.getMaxAddress()),
@@ -77,8 +97,9 @@ record GuiDocument(String code, List<Line> lines) {
 
   private static SymbolResource describeTokenSymbol(
       Program program,
+      Function function,
       String entry,
-      String namespace,
+      String[] namespaceHolder,
       ClangToken token,
       Token.Kind kind,
       HighFunction highFunction) {
@@ -93,6 +114,12 @@ record GuiDocument(String code, List<Line> lines) {
     HighSymbol highSymbol = resolveHighSymbol(token, highFunction);
     if (highSymbol == null || highSymbol.isGlobal()) {
       return null;
+    }
+    String namespace = namespaceHolder[0];
+    if (namespace == null) {
+      Symbol functionSymbol = function.getSymbol();
+      namespace = functionSymbol == null ? function.getName() : functionSymbol.getName(true);
+      namespaceHolder[0] = namespace;
     }
     Symbol dbSymbol = highSymbol.getSymbol();
     String sourceType =

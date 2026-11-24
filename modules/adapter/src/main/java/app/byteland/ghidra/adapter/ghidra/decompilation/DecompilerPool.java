@@ -17,22 +17,26 @@ import java.util.function.Supplier;
 /** Shares a bounded pool of {@link DecompInterface} instances across session services. */
 public final class DecompilerPool implements AutoCloseable {
   private final LeasePool<DecompInterface> pool;
+  private final Supplier<Program> fallbackProgram;
   private final Map<DecompInterface, Boolean> commentModes =
+      Collections.synchronizedMap(new WeakHashMap<>());
+  private final Map<DecompInterface, Long> programModifications =
       Collections.synchronizedMap(new WeakHashMap<>());
 
   DecompilerPool(
       int maxSize, Supplier<DecompInterface> factory, Consumer<DecompInterface> destroyer) {
-    this.pool = new LeasePool<>(maxSize, factory, destroyer);
+    this(new LeasePool<>(maxSize, factory, destroyer), () -> null);
   }
 
-  private DecompilerPool(LeasePool<DecompInterface> pool) {
+  DecompilerPool(LeasePool<DecompInterface> pool, Supplier<Program> fallbackProgram) {
     this.pool = Objects.requireNonNull(pool, "pool");
+    this.fallbackProgram = Objects.requireNonNull(fallbackProgram, "fallbackProgram");
   }
 
   /** Creates a bounded decompiler pool for {@code program}. */
   public static DecompilerPool create(Program program) {
     Objects.requireNonNull(program, "program");
-    return new DecompilerPool(DecompilerPoolFactory.create(program));
+    return new DecompilerPool(DecompilerPoolFactory.create(program), () -> program);
   }
 
   /** Decompiles {@code function} with a bounded timeout and comment display mode. */
@@ -42,8 +46,8 @@ public final class DecompilerPool implements AutoCloseable {
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
       DecompInterface decompiler = lease.value();
       applyCommentMode(decompiler, includeComments);
-      // The native process keeps program data. Clear it to show the current names and comments.
-      decompiler.flushCache();
+      // The native process keeps program data. Clear it when program modifications occur.
+      flushCacheIfModified(decompiler, function.getProgram());
       return decompiler.decompileFunction(function, timeoutSeconds, null);
     }
   }
@@ -85,5 +89,23 @@ public final class DecompilerPool implements AutoCloseable {
       throw new IllegalStateException("unable to set decompiler display options");
     }
     commentModes.put(decompiler, includeComments);
+  }
+
+  /** Flushes the native cache only when the modification number of the program changes. */
+  private void flushCacheIfModified(DecompInterface decompiler, Program program) {
+    Program target = program != null ? program : fallbackProgram.get();
+    if (target == null) {
+      programModifications.remove(decompiler);
+      decompiler.flushCache();
+      return;
+    }
+    long modificationNumber = target.getModificationNumber();
+    if (Long.valueOf(modificationNumber).equals(programModifications.get(decompiler))) {
+      return;
+    }
+    programModifications.remove(decompiler);
+    if (decompiler.flushCache() >= 0) {
+      programModifications.put(decompiler, modificationNumber);
+    }
   }
 }

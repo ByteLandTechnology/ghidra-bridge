@@ -115,6 +115,14 @@ public interface FunctionService {
   void removeParameter(String rawAddress, int ordinal);
 
   /**
+   * Updates a local variable in a function by name.
+   */
+  default void patchLocalVariable(
+      String rawAddress, String variableName, String newName, DataTypeReference newDataType) {
+    patchLocalVariable(rawAddress, variableName, null, newName, newDataType);
+  }
+
+  /**
    * Updates a local variable in a function.
    */
   void patchLocalVariable(

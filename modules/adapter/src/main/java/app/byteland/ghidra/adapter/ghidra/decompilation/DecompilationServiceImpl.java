@@ -8,6 +8,7 @@ import app.byteland.ghidra.service.decompilation.DecompilationService;
 import app.byteland.ghidra.service.function.FunctionResource;
 import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.ClangTokenGroup;
+import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighFunction;
@@ -29,6 +30,14 @@ public final class DecompilationServiceImpl implements DecompilationService {
   public DecompilationServiceImpl(GhidraSession context, DecompilerPool decompilerPool) {
     this.context = Objects.requireNonNull(context, "context");
     this.decompilerPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
+  }
+
+  DecompilationServiceImpl(GhidraSession context, LeasePool<DecompInterface> decompilerPool) {
+    this(
+        Objects.requireNonNull(context, "context"),
+        new DecompilerPool(
+            Objects.requireNonNull(decompilerPool, "decompilerPool"),
+            context::currentProgramOrNull));
   }
 
   @Override
@@ -67,9 +76,13 @@ public final class DecompilationServiceImpl implements DecompilationService {
     ClangTokenGroup markup = results.getCCodeMarkup();
     HighFunction highFunction = completed ? results.getHighFunction() : null;
     List<FunctionResource.LocalVariableResource> localVariables =
-        FunctionDescriptions.describeLocalVariables(function, highFunction);
+        highFunction == null
+            ? null
+            : FunctionDescriptions.describeLocalVariables(function, highFunction);
     String code =
-        effectiveFormat == DecompilationResource.Format.TEXT ? renderCode(results) : null;
+        effectiveFormat == DecompilationResource.Format.TEXT
+            ? GuiDocument.renderText(function, results)
+            : null;
     List<DecompilationResource.Token> tokens =
         effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
     List<DecompilationResource.Line> lines = null;
@@ -78,8 +91,10 @@ public final class DecompilationServiceImpl implements DecompilationService {
       code = document.code();
       lines = document.lines();
     }
-    FunctionComments comments = includeComments
-        ? FunctionComments.read(function, startedAt, timeoutMs, warnings) : null;
+    FunctionComments comments =
+        includeComments
+            ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
+            : null;
     return new DecompilationResource(
         AddressUtil.canonicalAddress(function.getEntryPoint()),
         function.getName(), effectiveFormat, completed,
@@ -87,13 +102,6 @@ public final class DecompilationServiceImpl implements DecompilationService {
         code, tokens, lines, localVariables,
         comments == null ? null : comments.items(),
         comments == null ? null : comments.complete(), warnings);
-  }
-
-  private String renderCode(DecompileResults results) {
-    if (results.getDecompiledFunction() == null || results.getDecompiledFunction().getC() == null) {
-      return "";
-    }
-    return DecompilationFormatter.formatCCode(results.getDecompiledFunction().getC());
   }
 
   private List<DecompilationResource.Token> renderTokens(ClangTokenGroup markup) {
