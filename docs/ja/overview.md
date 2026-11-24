@@ -122,6 +122,8 @@ format を `document` にした `decompilation.get` は、1 回の逆コンパ�
 `data_type.parse_c` は 1 つのトランザクションで C 宣言（`struct`、`union`、`enum`、`typedef`）を解析し、作成した型を対象カテゴリに保存します。
 `function.patch` は省略可能な `patch.signature` 文字列を受け付け、1 回の操作で C 関数プロトタイプを適用します。
 プロトタイプは戻り値の型、関数名、呼び出し規約、可変長引数フラグ、およびパラメータ一覧を設定します。
+また、`function.patch` は `patch.parameters` を受け付け、1 つのトランザクションでパラメータ一覧全体を置き換えます。
+`patch.signature` と `patch.parameters` のどちらも、互換性のあるカスタム変数ストレージを保持します。
 
 ## 次のステップ
 

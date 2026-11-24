@@ -32,6 +32,10 @@ recv_packet:
 log_packet:
  xor %eax, %eax
  ret
+.global custom_packet
+custom_packet:
+ xor %eax, %eax
+ ret
 
 .section .data
 .global packet_ring
@@ -125,6 +129,7 @@ def run_test(headless, root):
             assert help_dt["method"] == "data_type.parse_c"
             help_fn = tool(3, "ghidra_help", {"domain": "function", "operation": "patch"})
             assert "signature" in help_fn["inputSchema"]["properties"]["patch"]["properties"]
+            assert "parameters" in help_fn["inputSchema"]["properties"]["patch"]["properties"]
 
             # 2. Parse multi-type C header declarations in one transaction
             declarations = """
@@ -391,6 +396,134 @@ def run_test(headless, root):
             rx_fields = [f for f in patched_dt["fields"] if f["name"] == "rx_buf"]
             assert len(rx_fields) == 1
             assert rx_fields[0]["data_type"]["kind"] == "pointer"
+
+            # 8. Atomic function.patch parameters and custom VariableStorageReference preservation
+            tool(
+                22,
+                "ghidra_function",
+                {
+                    "operation": "create",
+                    "params": {
+                        "resource": {"entry": symbols["custom_packet"], "name": "custom_packet"},
+                        "disassemble": True,
+                    },
+                },
+            )
+            sig_params_conflict = tool(
+                23,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["custom_packet"]},
+                        "patch": {
+                            "signature": "int custom_packet(void)",
+                            "parameters": [],
+                        },
+                    },
+                },
+                success=False,
+            )
+            assert sig_params_conflict["status"] == 400
+            assert sig_params_conflict["code"] == "conflicting_fields"
+            assert sig_params_conflict["target"] == "/patch/signature"
+
+            custom_patched = tool(
+                24,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["custom_packet"]},
+                        "patch": {
+                            "return_type": "uint64_t",
+                            "return_storage": {"kind": "register", "register": "RAX"},
+                            "parameters": [
+                                {
+                                    "name": "first",
+                                    "data_type": "uint64_t",
+                                    "storage": {"kind": "register", "register": "R12"},
+                                },
+                                {
+                                    "name": "second",
+                                    "data_type": "const uint8_t (*)[16]",
+                                    "storage": {"kind": "register", "register": "R13"},
+                                },
+                            ],
+                        },
+                    },
+                },
+            )["result"]
+            assert custom_patched["has_custom_variable_storage"] is True
+            r12_ser = custom_patched["parameters"][0]["storage"]["serialization"]
+            r13_ser = custom_patched["parameters"][1]["storage"]["serialization"]
+            assert r12_ser != r13_ser
+            assert custom_patched["parameters"][1]["data_type"]["kind"] == "pointer"
+            assert custom_patched["parameters"][1]["data_type"]["target"]["kind"] == "array"
+            assert custom_patched["parameters"][1]["data_type"]["target"]["count"] == 16
+
+            # Swap [first, second] -> [second, first] without explicit storage and verify R13/R12 stay paired
+            reordered_custom = tool(
+                25,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["custom_packet"]},
+                        "patch": {
+                            "parameters": [
+                                {"name": "second", "data_type": "const uint8_t (*)[16]"},
+                                {"name": "first", "data_type": "uint64_t"},
+                            ],
+                        },
+                    },
+                },
+            )["result"]
+            assert reordered_custom["has_custom_variable_storage"] is True
+            assert [p["name"] for p in reordered_custom["parameters"]] == ["second", "first"]
+            assert reordered_custom["parameters"][0]["storage"]["serialization"] == r13_ser
+            assert reordered_custom["parameters"][1]["storage"]["serialization"] == r12_ser
+
+            # Apply full C signature and verify custom storage stays attached to first/second
+            sig_custom = tool(
+                26,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["custom_packet"]},
+                        "patch": {
+                            "signature": (
+                                "uint64_t custom_packet("
+                                "uint64_t first, const uint8_t (*second)[16], size_t extra)"
+                            )
+                        },
+                    },
+                },
+            )["result"]
+            assert sig_custom["has_custom_variable_storage"] is True
+            assert [p["name"] for p in sig_custom["parameters"]] == ["first", "second", "extra"]
+            assert sig_custom["parameters"][0]["storage"]["serialization"] == r12_ser
+            assert sig_custom["parameters"][1]["storage"]["serialization"] == r13_ser
+
+            # Clear parameters and disable custom storage
+            cleared_custom = tool(
+                27,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["custom_packet"]},
+                        "patch": {
+                            "return_type": "void",
+                            "parameters": [],
+                            "has_custom_variable_storage": False,
+                        },
+                    },
+                },
+            )["result"]
+            assert cleared_custom["has_custom_variable_storage"] is False
+            assert cleared_custom["parameter_count"] == 0
 
             print("C declaration and prototype regression checks passed")
         finally:

@@ -225,6 +225,16 @@ final class ApiSchemaCatalog {
 
   static Map<String, Object> functionPatchSchema() {
     Map<String, Object> storage = storageSchema();
+    Map<String, Object> parameter =
+        WireSchema.object(
+            props(
+                NAME,
+                WireSchema.string(),
+                DATA_TYPE,
+                WireSchema.dataTypeReference(),
+                STORAGE,
+                storage),
+            DATA_TYPE);
     return nonEmptyObject(
         props(
             NAME,
@@ -239,6 +249,8 @@ final class ApiSchemaCatalog {
             storage,
             CALLING_CONVENTION,
             WireSchema.string(),
+            PARAMETERS,
+            WireSchema.array(parameter, 0, MAX_NESTED_ITEMS),
             "is_inline",
             WireSchema.bool(),
             HAS_NO_RETURN,

@@ -14,6 +14,8 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeConflictHandler;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.FunctionDefinitionDataType;
+import ghidra.program.model.data.ParameterDefinition;
+import ghidra.program.model.data.PointerDataType;
 import ghidra.program.model.data.ProgramBasedDataTypeManager;
 import ghidra.program.model.data.StandAloneDataTypeManager;
 import ghidra.program.model.data.TypedefDataType;
@@ -21,8 +23,12 @@ import ghidra.program.model.listing.Program;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Shared Ghidra C parser helpers for C type expressions, headers, and function prototypes.
@@ -30,6 +36,11 @@ import java.util.List;
 public final class GhidraCParserSupport {
   public static final int MAX_TYPE_EXPRESSION_BYTES = 4_096;
   public static final int MAX_SIGNATURE_BYTES = 8_192;
+
+  private static final Pattern ARRAY_BOUNDS_SUFFIX_PATTERN =
+      Pattern.compile("^(\\[\\s*\\d+\\s*\\])+$");
+  private static final Set<String> POINTER_QUALIFIERS =
+      Set.of("const", "volatile", "restrict", "__restrict", "__restrict__", "_Restrict");
 
   private GhidraCParserSupport() {}
 
@@ -79,6 +90,33 @@ public final class GhidraCParserSupport {
     if (normalized.endsWith(";")) {
       normalized = normalized.substring(0, normalized.length() - 1).trim();
     }
+    RewrittenPrototype rewritten =
+        rewritePointerToArrayParameters(scratch, lookupManagers, normalized);
+    FunctionDefinitionDataType parsed =
+        parseSignatureDirect(scratch, lookupManagers, rewritten.prototype(), prototype);
+    if (!rewritingsEmpty(rewritten)) {
+      ParameterDefinition[] arguments = parsed.getArguments();
+      for (Map.Entry<Integer, DataType> entry : rewritten.parameterTypes().entrySet()) {
+        int index = entry.getKey();
+        if (index < arguments.length) {
+          arguments[index].setDataType(entry.getValue());
+        }
+      }
+      parsed.setArguments(arguments);
+    }
+    return parsed;
+  }
+
+  private static boolean rewritingsEmpty(RewrittenPrototype rewritten) {
+    return rewritten.parameterTypes().isEmpty();
+  }
+
+  private static FunctionDefinitionDataType parseSignatureDirect(
+      StandAloneDataTypeManager scratch,
+      DataTypeManager[] lookupManagers,
+      String normalized,
+      String originalPrototype)
+      throws ParseException {
     DataTypeManagerService managerService = dataTypeManagerService(lookupManagers);
     Program scratchProgram = scratchProgram(scratch);
     try {
@@ -99,12 +137,188 @@ public final class GhidraCParserSupport {
       String messages = parser.getParseMessages();
       throw new ParseException(
           messages == null || messages.isBlank()
-              ? "invalid C function signature: " + prototype
+              ? "invalid C function signature: " + originalPrototype
               : cleanWhitespace(messages));
     } catch (TokenMgrError tokenError) {
       throw new ParseException(cleanParseMessage(tokenError, parser.getParseMessages()));
     }
   }
+
+  private static RewrittenPrototype rewritePointerToArrayParameters(
+      StandAloneDataTypeManager scratch, DataTypeManager[] lookupManagers, String normalized)
+      throws ParseException {
+    if (!normalized.endsWith(")")) {
+      return new RewrittenPrototype(normalized, Map.of());
+    }
+    int openParamList = findMatchingOpenParen(normalized, normalized.length() - 1);
+    if (openParamList <= 0) {
+      return new RewrittenPrototype(normalized, Map.of());
+    }
+    String beforeParams = normalized.substring(0, openParamList).trim();
+    if (beforeParams.isEmpty() || beforeParams.endsWith(")")) {
+      return new RewrittenPrototype(normalized, Map.of());
+    }
+    String rawParamList = normalized.substring(openParamList + 1, normalized.length() - 1);
+    if (rawParamList.indexOf('(') < 0 || rawParamList.indexOf('[') < 0) {
+      return new RewrittenPrototype(normalized, Map.of());
+    }
+    List<String> params = splitTopLevelComma(rawParamList);
+    Map<Integer, DataType> overriddenTypes = new HashMap<>();
+    List<String> updatedParams = new ArrayList<>(params.size());
+    for (int index = 0; index < params.size(); index++) {
+      String param = params.get(index).trim();
+      PointerToArrayDecl decl = parsePointerToArrayDeclarator(param);
+      if (decl == null) {
+        updatedParams.add(param);
+        continue;
+      }
+      String arrayPrototype =
+          "void __ghidra_bridge_array_elem(" + decl.baseSpec() + decl.arraySuffix() + ")";
+      FunctionDefinitionDataType arrayHolder =
+          parseSignatureDirect(scratch, lookupManagers, arrayPrototype, param);
+      if (arrayHolder.getArguments().length != 1
+          || arrayHolder.getArguments()[0].getDataType() == null) {
+        throw new ParseException("invalid pointer-to-array parameter: " + param);
+      }
+      DataType target = arrayHolder.getArguments()[0].getDataType();
+      for (int ptr = 0; ptr < decl.pointerCount(); ptr++) {
+        target = new PointerDataType(target, scratch);
+      }
+      overriddenTypes.put(index, target);
+      updatedParams.add(decl.parameterName() == null ? "int" : "int " + decl.parameterName());
+    }
+    if (overriddenTypes.isEmpty()) {
+      return new RewrittenPrototype(normalized, Map.of());
+    }
+    String rebuilt =
+        normalized.substring(0, openParamList + 1)
+            + String.join(", ", updatedParams)
+            + ")";
+    return new RewrittenPrototype(rebuilt, overriddenTypes);
+  }
+
+  private static PointerToArrayDecl parsePointerToArrayDeclarator(String param) {
+    int openParen = -1;
+    for (int index = 0; index < param.length(); index++) {
+      char ch = param.charAt(index);
+      if (ch == '[') {
+        return null;
+      }
+      if (ch == '(') {
+        openParen = index;
+        break;
+      }
+    }
+    if (openParen <= 0) {
+      return null;
+    }
+    int closeParen = findMatchingCloseParen(param, openParen);
+    if (closeParen < 0) {
+      return null;
+    }
+    String baseSpec = param.substring(0, openParen).trim();
+    String insideParen = param.substring(openParen + 1, closeParen).trim();
+    String arraySuffix = param.substring(closeParen + 1).trim();
+    if (baseSpec.isEmpty() || !ARRAY_BOUNDS_SUFFIX_PATTERN.matcher(arraySuffix).matches()) {
+      return null;
+    }
+    int cursor = 0;
+    int pointerCount = 0;
+    String parameterName = null;
+    while (cursor < insideParen.length()) {
+      char ch = insideParen.charAt(cursor);
+      if (Character.isWhitespace(ch)) {
+        cursor++;
+      } else if (ch == '*') {
+        if (parameterName != null) {
+          return null;
+        }
+        pointerCount++;
+        cursor++;
+      } else if (isIdentifierStart(ch)) {
+        int start = cursor++;
+        while (cursor < insideParen.length() && isIdentifierChar(insideParen.charAt(cursor))) {
+          cursor++;
+        }
+        String token = insideParen.substring(start, cursor);
+        if (POINTER_QUALIFIERS.contains(token)) {
+          if (pointerCount == 0 || parameterName != null) {
+            return null;
+          }
+        } else if (parameterName == null && pointerCount > 0) {
+          parameterName = token;
+        } else {
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+    return pointerCount > 0
+        ? new PointerToArrayDecl(baseSpec, pointerCount, parameterName, arraySuffix)
+        : null;
+  }
+
+  private static int findMatchingOpenParen(String text, int closeIndex) {
+    int depth = 0;
+    for (int index = closeIndex; index >= 0; index--) {
+      char ch = text.charAt(index);
+      if (ch == ')') {
+        depth++;
+      } else if (ch == '(') {
+        depth--;
+        if (depth == 0) {
+          return index;
+        }
+      }
+    }
+    return -1;
+  }
+
+  private static int findMatchingCloseParen(String text, int openIndex) {
+    int depth = 0;
+    for (int index = openIndex; index < text.length(); index++) {
+      char ch = text.charAt(index);
+      if (ch == '(') {
+        depth++;
+      } else if (ch == ')') {
+        depth--;
+        if (depth == 0) {
+          return index;
+        }
+      }
+    }
+    return -1;
+  }
+
+  private static List<String> splitTopLevelComma(String text) {
+    List<String> parts = new ArrayList<>();
+    int parenDepth = 0;
+    int bracketDepth = 0;
+    int start = 0;
+    for (int index = 0; index < text.length(); index++) {
+      char ch = text.charAt(index);
+      if (ch == '(') {
+        parenDepth++;
+      } else if (ch == ')') {
+        parenDepth--;
+      } else if (ch == '[') {
+        bracketDepth++;
+      } else if (ch == ']') {
+        bracketDepth--;
+      } else if (ch == ',' && parenDepth == 0 && bracketDepth == 0) {
+        parts.add(text.substring(start, index));
+        start = index + 1;
+      }
+    }
+    parts.add(text.substring(start));
+    return parts;
+  }
+
+  private record RewrittenPrototype(String prototype, Map<Integer, DataType> parameterTypes) {}
+
+  private record PointerToArrayDecl(
+      String baseSpec, int pointerCount, String parameterName, String arraySuffix) {}
 
   public static void resolveReferencedStdintTypedefs(
       DataType type,

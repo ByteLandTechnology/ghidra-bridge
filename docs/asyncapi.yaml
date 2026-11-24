@@ -10203,6 +10203,48 @@
                       "name":
                         "minLength": !!int "1"
                         "type": "string"
+                      "parameters":
+                        "items":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "data_type":
+                              "$ref": "#/$defs/data_type_reference"
+                            "name":
+                              "type": "string"
+                            "storage":
+                              "oneOf":
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "serialization"
+                                    "type": "string"
+                                  "serialization":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "serialization"
+                                "type": "object"
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "register"
+                                    "type": "string"
+                                  "register":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "register"
+                                "type": "object"
+                          "required":
+                          - "data_type"
+                          "type": "object"
+                        "maxItems": !!int "1000"
+                        "minItems": !!int "0"
+                        "type": "array"
                       "return_storage":
                         "oneOf":
                         - "additionalProperties": !!bool "false"
@@ -15232,6 +15274,48 @@
                                   "name":
                                     "minLength": !!int "1"
                                     "type": "string"
+                                  "parameters":
+                                    "items":
+                                      "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "data_type":
+                                          "$ref": "#/$defs/data_type_reference"
+                                        "name":
+                                          "type": "string"
+                                        "storage":
+                                          "oneOf":
+                                          - "additionalProperties": !!bool "false"
+                                            "properties":
+                                              "kind":
+                                                "enum":
+                                                - "serialization"
+                                                "type": "string"
+                                              "serialization":
+                                                "minLength": !!int "1"
+                                                "type": "string"
+                                            "required":
+                                            - "kind"
+                                            - "serialization"
+                                            "type": "object"
+                                          - "additionalProperties": !!bool "false"
+                                            "properties":
+                                              "kind":
+                                                "enum":
+                                                - "register"
+                                                "type": "string"
+                                              "register":
+                                                "minLength": !!int "1"
+                                                "type": "string"
+                                            "required":
+                                            - "kind"
+                                            - "register"
+                                            "type": "object"
+                                      "required":
+                                      - "data_type"
+                                      "type": "object"
+                                    "maxItems": !!int "1000"
+                                    "minItems": !!int "0"
+                                    "type": "array"
                                   "return_storage":
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
@@ -19351,6 +19435,48 @@
                         "name":
                           "minLength": !!int "1"
                           "type": "string"
+                        "parameters":
+                          "items":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "data_type":
+                                "$ref": "#/$defs/data_type_reference"
+                              "name":
+                                "type": "string"
+                              "storage":
+                                "oneOf":
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "kind":
+                                      "enum":
+                                      - "serialization"
+                                      "type": "string"
+                                    "serialization":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "serialization"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "kind":
+                                      "enum":
+                                      - "register"
+                                      "type": "string"
+                                    "register":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "register"
+                                  "type": "object"
+                            "required":
+                            - "data_type"
+                            "type": "object"
+                          "maxItems": !!int "1000"
+                          "minItems": !!int "0"
+                          "type": "array"
                         "return_storage":
                           "oneOf":
                           - "additionalProperties": !!bool "false"
@@ -28075,6 +28201,48 @@
             "name":
               "minLength": !!int "1"
               "type": "string"
+            "parameters":
+              "items":
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "data_type":
+                    "$ref": "#/$defs/data_type_reference"
+                  "name":
+                    "type": "string"
+                  "storage":
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "serialization"
+                          "type": "string"
+                        "serialization":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "serialization"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "register"
+                          "type": "string"
+                        "register":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "register"
+                      "type": "object"
+                "required":
+                - "data_type"
+                "type": "object"
+              "maxItems": !!int "1000"
+              "minItems": !!int "0"
+              "type": "array"
             "return_storage":
               "oneOf":
               - "additionalProperties": !!bool "false"

@@ -57,7 +57,13 @@ final class FunctionSignaturePatchSupport {
 
   private FunctionSignaturePatchSupport() {}
 
-  static Function applySignature(GhidraSession context, Function function, String rawSignature) {
+  record AppliedSignature(Function function, boolean explicitCallingConvention) {}
+
+  static AppliedSignature applySignature(
+      GhidraSession context,
+      Function function,
+      String rawSignature,
+      boolean preserveExistingName) {
     if (rawSignature == null || rawSignature.isBlank()) {
       throw new DataTypeMutationValidationException(
           SIGNATURE_TARGET, "/patch/signature must not be blank");
@@ -112,6 +118,10 @@ final class FunctionSignaturePatchSupport {
 
       materializeSignatureDataTypes(parsed, programDtm, stdintFallback);
 
+      FunctionRenameOption renameOption =
+          preserveExistingName || parsed.getName().equals(function.getName())
+              ? FunctionRenameOption.NO_CHANGE
+              : FunctionRenameOption.RENAME;
       ApplyFunctionSignatureCmd command =
           new ApplyFunctionSignatureCmd(
               function.getEntryPoint(),
@@ -120,14 +130,16 @@ final class FunctionSignaturePatchSupport {
               extracted.callingConvention() == null,
               false,
               DataTypeConflictHandler.DEFAULT_HANDLER,
-              FunctionRenameOption.RENAME);
+              renameOption);
       if (!command.applyTo(program, context.script().getMonitor())) {
         String status = command.getStatusMsg();
         throw new DataTypeMutationValidationException(
             SIGNATURE_TARGET,
             status == null || status.isBlank() ? "unable to apply function signature" : status);
       }
-      return FunctionMutationSupport.refreshFunction(context, function, "signature update");
+      Function refreshed =
+          FunctionMutationSupport.refreshFunction(context, function, "signature update");
+      return new AppliedSignature(refreshed, extracted.callingConvention() != null);
     }
   }
 

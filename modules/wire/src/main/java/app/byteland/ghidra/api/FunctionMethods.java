@@ -7,6 +7,7 @@ import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
 import static app.byteland.ghidra.api.ApiRegistry.nullableText;
+import static app.byteland.ghidra.api.ApiRegistry.objectAt;
 import static app.byteland.ghidra.api.ApiRegistry.optionalInteger;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 import static app.byteland.ghidra.api.ApiRegistry.patch;
@@ -21,6 +22,8 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
+import app.byteland.ghidra.service.function.FunctionService.ParameterPatch;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -319,7 +322,14 @@ final class FunctionMethods implements ApiMethodProvider {
             "/patch/signature cannot be combined with /patch/calling_convention",
             "/patch/signature");
       }
+      if (patch.containsKey(ApiVocabulary.PARAMETERS)) {
+        throw ApiException.badRequest(
+            "conflicting_fields",
+            "/patch/signature cannot be combined with /patch/parameters",
+            "/patch/signature");
+      }
     }
+    List<ParameterPatch> parameters = convertedParameters(patch.get(ApiVocabulary.PARAMETERS));
     DataTypeReference returnType = dataType(patch.get("return_type"), "/patch/return_type");
     registry
         .services()
@@ -333,12 +343,28 @@ final class FunctionMethods implements ApiMethodProvider {
             returnType,
             storage(patch.get("return_storage")),
             optionalText(patch, "calling_convention"),
+            parameters,
             new FunctionAttributePatch(
                 bool(patch, "is_inline").orElse(null),
                 bool(patch, "has_no_return").orElse(null),
                 bool(patch, "has_var_args").orElse(null),
                 bool(patch, "has_custom_variable_storage").orElse(null),
                 optionalInteger(patch, "stack_purge_size")));
+  }
+
+  private static List<ParameterPatch> convertedParameters(Object raw) {
+    if (!(raw instanceof List<?> list)) return null;
+    List<ParameterPatch> parameters = new ArrayList<>(list.size());
+    for (int index = 0; index < list.size(); index++) {
+      String itemTarget = "/patch/parameters/" + index;
+      Map<String, Object> item = objectAt(list.get(index), itemTarget);
+      parameters.add(
+          new ParameterPatch(
+              optionalText(item, ApiVocabulary.NAME),
+              dataType(item.get(ApiVocabulary.DATA_TYPE), itemTarget + "/data_type"),
+              storage(item.get(ApiVocabulary.STORAGE))));
+    }
+    return List.copyOf(parameters);
   }
 
   private FunctionResource.ParameterResource functionParameter(String entry, int ordinal) {

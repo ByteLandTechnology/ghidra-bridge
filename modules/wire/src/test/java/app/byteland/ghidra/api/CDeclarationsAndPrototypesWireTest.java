@@ -377,6 +377,68 @@ class CDeclarationsAndPrototypesWireTest {
     assertEquals(400, ccConflict.status());
     assertEquals("conflicting_fields", ccConflict.error().code());
     assertEquals("/patch/signature", ccConflict.error().target());
+
+    ApiException paramsConflict =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "function.patch",
+                    Map.of(
+                        "selector", Map.of("entry", "0x100000"),
+                        "patch",
+                        Map.of(
+                            "signature", "int recv_packet(void)",
+                            "parameters", List.of()))));
+    assertEquals(400, paramsConflict.status());
+    assertEquals("conflicting_fields", paramsConflict.error().code());
+    assertEquals("/patch/signature", paramsConflict.error().target());
+
+    // 7. function.patch atomic parameters support (C type strings, storage, and empty list)
+    registry.dispatch(
+        "function.patch",
+        Map.of(
+            "selector", Map.of("entry", "0x100000"),
+            "patch",
+            Map.of(
+                "return_type", "int",
+                "parameters",
+                List.of(
+                    Map.of(
+                        "name", "sock",
+                        "data_type", "Socket *",
+                        "storage", Map.of("kind", "register", "register", "R12")),
+                    Map.of("data_type", Map.of("kind", "named", "name", "/ulong"))))));
+    assertEquals("patchFunction", invokedWriteMethod.get());
+    assertEquals(
+        List.of(
+            new FunctionService.ParameterPatch(
+                "sock",
+                DataTypeReference.cExpression("Socket *"),
+                VariableStorageReference.register("R12")),
+            new FunctionService.ParameterPatch(
+                null, DataTypeReference.named("/ulong"), null)),
+        writeArguments.get().get(8));
+
+    registry.dispatch(
+        "function.patch",
+        Map.of(
+            "selector", Map.of("entry", "0x100000"),
+            "patch", Map.of("parameters", List.of())));
+    assertEquals(List.of(), writeArguments.get().get(8));
+
+    ApiException blankNestedParamType =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "function.patch",
+                    Map.of(
+                        "selector", Map.of("entry", "0x100000"),
+                        "patch",
+                        Map.of("parameters", List.of(Map.of("name", "bad", "data_type", "   "))))));
+    assertEquals(400, blankNestedParamType.status());
+    assertEquals("/patch/parameters/0/data_type", blankNestedParamType.error().target());
   }
 
   private interface Handler {

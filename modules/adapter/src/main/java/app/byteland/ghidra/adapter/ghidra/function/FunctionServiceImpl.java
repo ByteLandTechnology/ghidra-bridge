@@ -21,6 +21,7 @@ import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolType;
 import ghidra.util.exception.InvalidInputException;
+import java.util.List;
 import java.util.Set;
 
 public final class FunctionServiceImpl implements FunctionService {
@@ -124,6 +125,31 @@ public final class FunctionServiceImpl implements FunctionService {
       VariableStorageReference returnStorage,
       String callingConvention,
       FunctionAttributePatch attributes) {
+    patchFunction(
+        rawAddress,
+        newName,
+        newComment,
+        commentPresent,
+        signature,
+        returnType,
+        returnStorage,
+        callingConvention,
+        null,
+        attributes);
+  }
+
+  @Override
+  public void patchFunction(
+      String rawAddress,
+      String newName,
+      String newComment,
+      boolean commentPresent,
+      String signature,
+      DataTypeReference returnType,
+      VariableStorageReference returnStorage,
+      String callingConvention,
+      List<ParameterPatch> parameters,
+      FunctionAttributePatch attributes) {
     FunctionMutations.patchFunction(
         context,
         lookupQueries.resolveFunction(rawAddress),
@@ -134,6 +160,7 @@ public final class FunctionServiceImpl implements FunctionService {
         returnType,
         returnStorage,
         callingConvention,
+        parameters,
         attributes,
         dataTypeResolver);
   }

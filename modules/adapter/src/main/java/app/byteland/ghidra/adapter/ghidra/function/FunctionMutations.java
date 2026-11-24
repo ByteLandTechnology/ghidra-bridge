@@ -4,6 +4,7 @@ import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.adapter.ghidra.ScriptSymbolRenamer;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
+import app.byteland.ghidra.service.function.FunctionService.ParameterPatch;
 import app.byteland.ghidra.service.function.VariableStorageReference;
 import ghidra.app.cmd.function.UpdateFunctionCommand;
 import ghidra.program.model.data.DataType;
@@ -39,21 +40,39 @@ final class FunctionMutations {
       DataTypeReference returnType,
       VariableStorageReference returnStorage,
       String callingConvention,
+      List<ParameterPatch> parameters,
       FunctionAttributePatch attributes,
       ParameterDataTypeResolver dataTypeResolver) {
     FunctionAttributePatch attributePatch =
         attributes == null ? FunctionAttributePatch.empty() : attributes;
     Function updated = function;
+    boolean hasExplicitName = newName != null && !newName.isBlank();
 
     if (signature != null) {
-      if (returnType != null || callingConvention != null) {
+      if (returnType != null || callingConvention != null || parameters != null) {
         throw new IllegalArgumentException(
-            "signature cannot be combined with returnType or callingConvention");
+            "signature cannot be combined with returnType, callingConvention, or parameters");
       }
-      updated = FunctionSignaturePatchSupport.applySignature(context, updated, signature);
+      boolean oldCustomStorage = updated.hasCustomVariableStorage();
+      VariableStorage oldReturnStorage = updated.getReturn().getVariableStorage();
+      List<FunctionParameterPatchSupport.ParameterSnapshot> oldParameters =
+          FunctionParameterPatchSupport.snapshotParameters(updated);
+      FunctionSignaturePatchSupport.AppliedSignature applied =
+          FunctionSignaturePatchSupport.applySignature(
+              context, updated, signature, hasExplicitName);
+      updated =
+          FunctionParameterPatchSupport.reconcileCustomStorageAfterSignature(
+              context,
+              applied.function(),
+              applied.explicitCallingConvention(),
+              returnStorage,
+              attributePatch.hasCustomVariableStorage(),
+              oldCustomStorage,
+              oldReturnStorage,
+              oldParameters);
     }
 
-    if (newName != null && !newName.isBlank() && !updated.getName().equals(newName)) {
+    if (hasExplicitName && !updated.getName().equals(newName)) {
       Symbol symbol = context.script().getSymbolAt(updated.getEntryPoint());
       if (symbol == null) {
         throw new IllegalArgumentException("function symbol not found");
@@ -75,15 +94,30 @@ final class FunctionMutations {
       }
     }
 
-    updated =
-        patchSignature(
-            context,
-            updated,
-            returnType,
-            returnStorage,
-            callingConvention,
-            attributePatch.hasCustomVariableStorage(),
-            dataTypeResolver);
+    if (signature == null) {
+      if (parameters != null) {
+        updated =
+            FunctionParameterPatchSupport.patchParameters(
+                context,
+                updated,
+                returnType,
+                returnStorage,
+                callingConvention,
+                attributePatch.hasCustomVariableStorage(),
+                parameters,
+                dataTypeResolver);
+      } else {
+        updated =
+            patchSignature(
+                context,
+                updated,
+                returnType,
+                returnStorage,
+                callingConvention,
+                attributePatch.hasCustomVariableStorage(),
+                dataTypeResolver);
+      }
+    }
 
     updated =
         patchAttribute(

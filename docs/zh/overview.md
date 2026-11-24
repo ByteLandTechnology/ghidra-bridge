@@ -122,6 +122,8 @@ token 的 `location_address` 是 Ghidra GUI 为该 token 选择的地址。
 `data_type.parse_c` 在一个事务中解析 C 声明（`struct`、`union`、`enum` 和 `typedef`），并将创建的类型保存到目标分类。
 `function.patch` 接受可选的 `patch.signature` 字符串，以单步应用 C 函数原型。
 该原型会同时设置返回类型、函数名、调用约定、可变参数标志和参数列表。
+`function.patch` 还接受 `patch.parameters`，可在单个事务中原子替换完整参数列表。
+`patch.signature` 与 `patch.parameters` 均会保留兼容的自定义变量存储位置。
 
 ## 后续阅读
 

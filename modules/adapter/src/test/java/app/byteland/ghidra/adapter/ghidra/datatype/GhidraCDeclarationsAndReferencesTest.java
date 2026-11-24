@@ -71,6 +71,12 @@ class GhidraCDeclarationsAndReferencesTest {
       Array arrayType = assertInstanceOf(Array.class, fixedArray);
       assertEquals(4, arrayType.getNumElements());
 
+      DataType ptrToArrayType =
+          GhidraDataTypeReferences.resolve(dtm, DataTypeReference.cExpression("int (*)[4]"));
+      Pointer ptrToArray = assertInstanceOf(Pointer.class, ptrToArrayType);
+      Array pointedArray = assertInstanceOf(Array.class, ptrToArray.getDataType());
+      assertEquals(4, pointedArray.getNumElements());
+
       DataType fnPtrType =
           GhidraDataTypeReferences.resolve(
               dtm, DataTypeReference.cExpression("int (*)(void *)"));
