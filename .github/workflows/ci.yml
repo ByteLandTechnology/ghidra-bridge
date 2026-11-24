@@ -43,9 +43,7 @@ jobs:
         run: ./gradlew --no-daemon clean verify
 
       - name: Test function mutations
-        run: |
-          ./gradlew --no-daemon test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
   release:
     # Update the release PR or create a release after main passes verification.
@@ -114,9 +112,7 @@ jobs:
         run: bash .github/scripts/package-release.sh "$RELEASE_VERSION"
 
       - name: Test release build
-        run: |
-          ./gradlew --no-daemon test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
       - name: Upload release assets
         env:

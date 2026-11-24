@@ -82,15 +82,17 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
-Before you submit a change, run the verification and test suites:
+Before you submit a change, run the verification suite that matches CI:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
-./gradlew --no-daemon test
 ```
 
+On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
+
 The verification tasks check:
+- **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
@@ -115,7 +117,7 @@ release-please reads Conventional Commit messages to select the version:
 The `publish` job gets the release commit without persisted credentials.
 Before Gradle runs, it checks `HEAD`, the `v<version>` tag, the remote tag SHA, the draft state,
 `.release-please-manifest.json`, and `version.txt`.
-Next, it builds the release archive, runs all JUnit tests, and runs `tests/function_mutation_regression.py`.
+Next, it builds the release archive with `clean verify` (which runs all JUnit tests) and runs `tests/function_mutation_regression.py`.
 Then it verifies non-empty files and the SHA-256 checksum, uploads two assets, and makes the draft release public:
 
 - `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
