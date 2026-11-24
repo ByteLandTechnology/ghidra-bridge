@@ -250,8 +250,7 @@ class WireSchemaSnapshotTest {
         responseCodec,
         Set.of(),
         List.of(),
-        request -> Map.of(),
-        ApiMethod.McpAnnotations.forMethod("custom.read", effects));
+        request -> Map.of());
   }
 
   private static BridgeServices inertServices() {
