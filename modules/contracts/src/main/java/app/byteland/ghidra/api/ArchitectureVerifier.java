@@ -15,7 +15,6 @@ import java.util.stream.Stream;
  */
 final class ArchitectureVerifier {
   private static final Set<String> PERMITTED_GHIDRA_MODULES = Set.of("adapter", "launcher");
-  private static final Set<String> IGNORED_DIRECTORIES = Set.of(".gradle", "build");
 
   private ArchitectureVerifier() {}
 
@@ -42,7 +41,7 @@ final class ArchitectureVerifier {
       for (Path entry : entries.sorted().toList()) {
         String name = entry.getFileName().toString();
         if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-          if (IGNORED_DIRECTORIES.contains(name)) {
+          if (RepositoryRulesVerifier.isIgnoredDirectory(name)) {
             continue;
           }
           if (directory.equals(modulesRoot) && PERMITTED_GHIDRA_MODULES.contains(name)) {

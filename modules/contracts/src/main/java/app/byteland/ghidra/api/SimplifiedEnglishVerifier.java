@@ -158,8 +158,7 @@ final class SimplifiedEnglishVerifier {
           "wait",
           "write");
 
-  private static final Set<String> IGNORED_DIRECTORIES =
-      Set.of(".git", ".gradle", ".worktrees", "build", "node_modules", "target", "ja", "zh");
+  private static final Set<String> LOCALIZED_DIRECTORIES = Set.of("ja", "zh");
 
   private static final Set<String> CHECKED_EXTENSIONS =
       Set.of(
@@ -219,7 +218,8 @@ final class SimplifiedEnglishVerifier {
       for (Path entry : entries.toList()) {
         String name = entry.getFileName().toString();
         if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-          if (!IGNORED_DIRECTORIES.contains(name)) {
+          if (!RepositoryRulesVerifier.isIgnoredDirectory(name)
+              && !LOCALIZED_DIRECTORIES.contains(name)) {
             walkDirectory(entry, files);
           }
         } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)

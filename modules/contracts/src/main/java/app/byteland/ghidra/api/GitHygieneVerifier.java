@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 final class GitHygieneVerifier {
   private static final Pattern UNEXPECTED_FILES =
       Pattern.compile(
-          "(^|/)(build|out|bin)/|(^|/)\\.gradle/|(^|/)\\.idea/|(^|/)\\.vscode/"
+          "(^|/)(build|out|bin|ghidra-dist)/|(^|/)\\.gradle/|(^|/)\\.idea/|(^|/)\\.vscode/"
               + "|(^|/)\\.DS_Store$|\\.iml$");
   private static final Pattern LEGACY_GRADLE =
       Pattern.compile("(^|/)(build|settings)\\.gradle\\.kts$");
@@ -140,10 +140,13 @@ final class GitHygieneVerifier {
   private static void collectMarkdownFiles(Path directory, Set<Path> files) throws IOException {
     try (Stream<Path> entries = Files.list(directory)) {
       for (Path entry : entries.sorted().toList()) {
+        String name = entry.getFileName().toString();
         if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-          collectMarkdownFiles(entry, files);
+          if (!RepositoryRulesVerifier.isIgnoredDirectory(name)) {
+            collectMarkdownFiles(entry, files);
+          }
         } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)
-            && entry.getFileName().toString().endsWith(".md")) {
+            && name.endsWith(".md")) {
           files.add(entry);
         }
       }

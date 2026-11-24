@@ -4,12 +4,21 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Runs typed repository hygiene, architecture, contract, and prose checks.
  */
 public final class RepositoryRulesVerifier {
+  private static final Set<String> IGNORED_DIRECTORIES =
+      Set.of("bin", "build", "ghidra-dist", "node_modules", "out", "target");
+
   private RepositoryRulesVerifier() {}
+
+  static boolean isIgnoredDirectory(String name) {
+    return (name.startsWith(".") && !".github".equals(name))
+        || IGNORED_DIRECTORIES.contains(name);
+  }
 
   public static void main(String[] args) throws IOException {
     boolean architectureOnly = false;

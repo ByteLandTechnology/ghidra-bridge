@@ -28,6 +28,40 @@ class RepositoryRulesVerifierTest {
   }
 
   @Test
+  void verifiersIgnoreUntrackedGhidraDistAndLocalIgnoredDirectories(@TempDir Path tempDir)
+      throws Exception {
+    Path repoRoot = locateRepositoryRoot();
+    initMinimalGitRepo(tempDir);
+    writeText(
+        tempDir.resolve("docs/mcp-tools.json"),
+        Files.readString(repoRoot.resolve("docs/mcp-tools.json"), StandardCharsets.UTF_8));
+    writeText(tempDir.resolve(".gitignore"), "ghidra-dist/\nout/\n.idea/\n.agents/\n");
+    writeText(
+        tempDir.resolve("modules/domain/src/main/java/demo/CleanService.java"),
+        "// Read one program item.\npackage demo;\nclass CleanService {}\n");
+    runGit(tempDir, "add", ".");
+
+    writeText(
+        tempDir.resolve("ghidra-dist/ghidra_12.1.2_PUBLIC/Extensions/Eclipse/GhidraDev/README.md"),
+        "Developing and debugging could allow items via e.g. `ghidra.function` "
+            + "at https://github.com/byteland-app/ghidra-bridge.\n");
+    writeText(
+        tempDir.resolve("ghidra-dist/ghidra_12.1.2_PUBLIC/Ghidra/Features/Base/sample.yml"),
+        "description: This could fail during installing.\n");
+    writeText(
+        tempDir.resolve(".idea/workspace.md"),
+        "Developing via `ghidra.memory` and byteland-app.\n");
+    writeText(
+        tempDir.resolve(".agents/scratch.md"),
+        "Debugging doesn't follow STE via `ghidra.help`.\n");
+    writeText(
+        tempDir.resolve("out/generated.md"),
+        "Building could utilize `ghidra.program`.\n");
+
+    assertDoesNotThrow(() -> RepositoryRulesVerifier.verify(tempDir));
+  }
+
+  @Test
   void gitHygieneFailsImmediatelyOnNonZeroGitStatus(@TempDir Path tempDir) {
     List<String> violations = new ArrayList<>();
     IllegalStateException error =
@@ -75,7 +109,8 @@ class RepositoryRulesVerifierTest {
     initMinimalGitRepo(tempDir);
     Files.writeString(tempDir.resolve(".gitignore"), "ignored.log\n", StandardCharsets.UTF_8);
     Files.writeString(tempDir.resolve("ignored.log"), "secret log\n", StandardCharsets.UTF_8);
-    writeText(tempDir.resolve("build/out.txt"), "generated\n");
+    writeText(tempDir.resolve("build/out.txt"), "generated build\n");
+    writeText(tempDir.resolve("ghidra-dist/sample.txt"), "extracted ghidra\n");
     writeText(tempDir.resolve("settings.gradle.kts"), "rootProject.name = \"demo\"\n");
     writeText(tempDir.resolve("src/Main.java"), "class Main {}\n");
     writeText(tempDir.resolve("Bridge.java"), "class Bridge {}\n");
@@ -92,6 +127,8 @@ class RepositoryRulesVerifierTest {
 
     assertTrue(violations.stream().anyMatch(item -> item.contains("ignored.log: ignored files")));
     assertTrue(violations.stream().anyMatch(item -> item.contains("build/out.txt: generated")));
+    assertTrue(
+        violations.stream().anyMatch(item -> item.contains("ghidra-dist/sample.txt: generated")));
     assertTrue(
         violations.stream().anyMatch(item -> item.contains("settings.gradle.kts: obsolete")));
     assertTrue(violations.stream().anyMatch(item -> item.contains("src/Main.java: the root")));

@@ -22,8 +22,6 @@ import org.snakeyaml.engine.v2.api.LoadSettings;
  * Checks MCP tool contracts, GitHub YAML files, URLs, and shell error masks.
  */
 final class ContractAndWorkflowVerifier {
-  private static final Set<String> IGNORED_DIRECTORIES =
-      Set.of(".git", ".gradle", ".worktrees", "build", "node_modules", "target");
   private static final Set<String> TOKEN_SCAN_EXTENSIONS = Set.of("json", "md", "yaml", "yml");
   private static final Set<String> URL_SCAN_EXTENSIONS =
       Set.of("gradle", "json", "md", "py", "sh", "template", "toml", "yaml", "yml");
@@ -471,7 +469,7 @@ final class ContractAndWorkflowVerifier {
       for (Path entry : entries.sorted().toList()) {
         String name = entry.getFileName().toString();
         if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-          if (!IGNORED_DIRECTORIES.contains(name)) {
+          if (!RepositoryRulesVerifier.isIgnoredDirectory(name)) {
             collectWorkspaceFiles(entry, files);
           }
         } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
@@ -485,8 +483,11 @@ final class ContractAndWorkflowVerifier {
       Path directory, Set<String> extensions, List<Path> files) throws IOException {
     try (Stream<Path> entries = Files.list(directory)) {
       for (Path entry : entries.sorted().toList()) {
+        String name = entry.getFileName().toString();
         if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-          collectFilesByExtension(entry, extensions, files);
+          if (!RepositoryRulesVerifier.isIgnoredDirectory(name)) {
+            collectFilesByExtension(entry, extensions, files);
+          }
         } else if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)
             && extensions.contains(extensionOf(entry))) {
           files.add(entry);
