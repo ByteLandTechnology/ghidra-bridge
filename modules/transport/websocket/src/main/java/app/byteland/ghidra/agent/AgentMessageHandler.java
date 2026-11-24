@@ -16,7 +16,6 @@ final class AgentMessageHandler {
     this.disconnectAction = disconnectAction;
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   void handleMessage(AgentClientChannels.MessageChannel channel, String message) {
     if (channel == null) return;
     Object parsed;
@@ -32,7 +31,7 @@ final class AgentMessageHandler {
     handleParsed(channel, parsed);
   }
 
-  @SuppressWarnings({"unchecked", "PMD.AvoidCatchingGenericException"})
+  @SuppressWarnings("unchecked")
   void handleParsed(AgentClientChannels.MessageChannel channel, Object parsed) {
     if (channel == null) return;
     if (!(parsed instanceof Map<?, ?> raw)) {
@@ -83,7 +82,6 @@ final class AgentMessageHandler {
     }
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static String serializeErrorResponse(Object requestId, Exception error) {
     try {
       return JsonUtil.toJson(AgentErrorMapper.errorResponse(requestId, error).toMap());
@@ -106,7 +104,6 @@ final class AgentMessageHandler {
     }
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void disconnectOnShutdown() {
     try {
       disconnectAction.run();

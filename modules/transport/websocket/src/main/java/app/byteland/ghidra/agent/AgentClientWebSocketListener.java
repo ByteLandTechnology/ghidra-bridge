@@ -59,7 +59,6 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
     disconnected();
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static void abortWebSocket(WebSocket webSocket) {
     if (webSocket == null) return;
     try {

@@ -487,7 +487,8 @@ class WebSocketEnvelopeAndSendErrorTest {
                   try (Socket peer = rawServer.accept()) {
                     peer.setTcpNoDelay(true);
                     WebSocketHandshake.HandshakeRequest handshake =
-                        WebSocketHandshake.readHandshake(peer.getInputStream());
+                        WebSocketHandshake.readHandshake(
+                            peer, System.nanoTime() + TimeUnit.SECONDS.toNanos(5));
                     WebSocketHandshake.writeHandshakeResponse(
                         peer.getOutputStream(), handshake.acceptKey());
                     // Read the masked ready frame from the outbound AgentClient.

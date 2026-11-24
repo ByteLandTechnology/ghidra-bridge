@@ -54,7 +54,6 @@ final class AgentClientChannels {
     }
 
     @Override
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     public synchronized void sendText(String message) {
       try {
         await(webSocket.sendText(message, true), "sendText", operationTimeout);
@@ -161,7 +160,6 @@ final class AgentClientChannels {
     }
 
     @Override
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     public void sendText(String message) {
       try {
         connection.sendText(message);
