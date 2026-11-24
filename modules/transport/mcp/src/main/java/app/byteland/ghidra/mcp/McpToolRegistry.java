@@ -93,8 +93,20 @@ final class McpToolRegistry {
         || inputSchema.containsKey("anyOf")) {
       throw new IllegalArgumentException("MCP inputSchema must be a flat object: " + name);
     }
-    Map<String, Object> tool = new LinkedHashMap<>(descriptor.mcpTool());
+    Map<?, ?> effects = (Map<?, ?>) descriptor.contractValue().get("effects");
+    Map<String, Object> tool = new LinkedHashMap<>();
     tool.put("name", name);
+    tool.put("title", descriptor.name());
+    tool.put("description", descriptor.description());
+    tool.put(
+        "annotations",
+        Map.of(
+            "readOnlyHint", Boolean.TRUE.equals(effects.get("read_only")),
+            "destructiveHint", Boolean.TRUE.equals(effects.get("destructive")),
+            "idempotentHint", Boolean.TRUE.equals(effects.get("idempotent")),
+            "openWorldHint", false));
+    tool.put("inputSchema", inputSchema);
+    tool.put("outputSchema", descriptor.outputSchema());
     return Collections.unmodifiableMap(tool);
   }
 

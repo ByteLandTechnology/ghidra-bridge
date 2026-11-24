@@ -47,9 +47,19 @@ class McpToolRegistryTest {
 
       MethodDescriptor descriptor = registry.findOperationTool(name);
       assertNotNull(descriptor, name);
+      assertEquals(descriptor.name(), tool.get("title"), name);
+      assertEquals(descriptor.description(), tool.get("description"), name);
       assertEquals(descriptor.inputSchema(), tool.get("inputSchema"), name);
       assertEquals(descriptor.outputSchema(), tool.get("outputSchema"), name);
-      assertEquals(descriptor.mcpTool().get("annotations"), tool.get("annotations"), name);
+      Map<?, ?> effects = (Map<?, ?>) descriptor.contractValue().get("effects");
+      assertEquals(
+          Map.of(
+              "readOnlyHint", effects.get("read_only"),
+              "destructiveHint", effects.get("destructive"),
+              "idempotentHint", effects.get("idempotent"),
+              "openWorldHint", false),
+          tool.get("annotations"),
+          name);
 
       Map<?, ?> inputSchema = (Map<?, ?>) tool.get("inputSchema");
       assertEquals("object", inputSchema.get("type"), name);

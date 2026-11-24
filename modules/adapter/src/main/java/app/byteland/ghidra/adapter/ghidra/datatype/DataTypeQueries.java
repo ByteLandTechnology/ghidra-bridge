@@ -7,8 +7,9 @@ import ghidra.program.model.data.Category;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeManager;
-import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
@@ -21,17 +22,20 @@ final class DataTypeQueries {
     String normalizedPath = categoryPath == null || categoryPath.isBlank() ? "/" : categoryPath;
     Category category = manager.getCategory(new CategoryPath(normalizedPath));
     if (category == null) throw new NoSuchElementException("category not found: " + normalizedPath);
-    List<DataTypeCategoryResource> all = new ArrayList<>();
-    for (Category child : category.getCategories()) {
-      all.add(
-          new DataTypeCategoryResource(
-              child.getCategoryPath().getPath(),
-              child.getName(),
-              child.getCategories().length,
-              child.getDataTypes().length));
+    Page.Selector<Category> selector = Page.selector(limit, cursor);
+    Category[] children = category.getCategories();
+    if (children != null) {
+      for (Category child : children) {
+        selector.offer(child.getCategoryPath().getPath(), child);
+      }
     }
-    all.sort(Comparator.comparing(DataTypeCategoryResource::path));
-    return Page.paginate(all, limit, cursor, DataTypeCategoryResource::path);
+    return selector.finish(
+        (child, path) ->
+            new DataTypeCategoryResource(
+                path,
+                child.getName(),
+                child.getCategories().length,
+                child.getDataTypes().length));
   }
 
   static Page<DataTypeResource> searchDataTypes(
@@ -41,18 +45,68 @@ final class DataTypeQueries {
       String kind,
       int limit,
       String cursor) {
+    int clamped = Page.clampLimit(limit);
+    DataTypeResource.Kind expectedKind = parseKindOrNull(kind);
+    if (kind != null && expectedKind == null) {
+      return Page.of(List.of(), clamped, null);
+    }
+    Iterator<DataType> iterator;
+    if (categoryPath != null) {
+      Category category = resolveCategoryOrNull(manager, categoryPath);
+      if (category == null) {
+        return Page.of(List.of(), clamped, null);
+      }
+      DataType[] categoryTypes = category.getDataTypes();
+      iterator =
+          categoryTypes == null
+              ? Collections.emptyIterator()
+              : Arrays.asList(categoryTypes).iterator();
+    } else {
+      iterator = manager.getAllDataTypes();
+    }
     String lowerQuery = query == null ? "" : query.toLowerCase(Locale.ROOT);
-    List<DataTypeResource> all = new ArrayList<>();
-    java.util.Iterator<DataType> iterator = manager.getAllDataTypes();
+    Page.Selector<DataType> selector = Page.selector(clamped, cursor);
     while (iterator.hasNext()) {
       DataType dataType = iterator.next();
-      if (!dataType.getName().toLowerCase(Locale.ROOT).contains(lowerQuery)) continue;
-      DataTypeResource resource = DataTypeDescriptions.summarize(dataType);
-      if (categoryPath != null && !categoryPath.equals(resource.categoryPath())) continue;
-      if (kind != null && !kind.equalsIgnoreCase(resource.kind().name())) continue;
-      all.add(resource);
+      String name = dataType.getName();
+      if (!lowerQuery.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(lowerQuery)) continue;
+      String path = dataType.getPathName();
+      if (categoryPath != null
+          && !categoryPath.equals(DataTypeDescriptions.categoryFromPath(path, name))) {
+        continue;
+      }
+      if (expectedKind != null && DataTypeDescriptions.classifyKind(dataType) != expectedKind) {
+        continue;
+      }
+      selector.offer(path, dataType);
     }
-    all.sort(Comparator.comparing(DataTypeResource::path));
-    return Page.paginate(all, limit, cursor, DataTypeResource::path);
+    return selector.finish(DataTypeDescriptions::summarize);
+  }
+
+  private static Category resolveCategoryOrNull(DataTypeManager manager, String categoryPath) {
+    if (categoryPath.isEmpty() || !categoryPath.startsWith("/")) {
+      return null;
+    }
+    CategoryPath parsed;
+    try {
+      parsed = new CategoryPath(categoryPath);
+    } catch (IllegalArgumentException invalid) {
+      return null;
+    }
+    if (!categoryPath.equals(parsed.getPath())) {
+      return null;
+    }
+    return manager.getCategory(parsed);
+  }
+
+  private static DataTypeResource.Kind parseKindOrNull(String kind) {
+    if (kind == null) {
+      return null;
+    }
+    try {
+      return DataTypeResource.Kind.valueOf(kind.toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException unknown) {
+      return null;
+    }
   }
 }

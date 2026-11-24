@@ -48,7 +48,6 @@ final class StrictObjectCodec implements JsonCodec<Map<String, Object>> {
     Map<String, Object> pageProperties = new LinkedHashMap<>();
     Map<String, Object> scanProperties = new LinkedHashMap<>();
     Map<String, Object> projectionProperties = new LinkedHashMap<>();
-    boolean hasScanRange = properties.containsKey("range");
     for (Map.Entry<?, ?> entry : properties.entrySet()) {
       String name = String.valueOf(entry.getKey());
       Object fieldSchema = entry.getValue();
@@ -56,9 +55,6 @@ final class StrictObjectCodec implements JsonCodec<Map<String, Object>> {
         case "limit", "cursor" -> pageProperties.put(name, fieldSchema);
         case "range", "timeout_ms" -> scanProperties.put(name, fieldSchema);
         case "fields" -> projectionProperties.put(name, fieldSchema);
-        case "filter" ->
-            publishedProperties.put(
-                name, hasScanRange ? withoutLegacyRange(fieldSchema) : fieldSchema);
         default -> publishedProperties.put(name, fieldSchema);
       }
     }
@@ -104,20 +100,6 @@ final class StrictObjectCodec implements JsonCodec<Map<String, Object>> {
     for (Map.Entry<?, ?> entry : nested.entrySet()) {
       target.put(String.valueOf(entry.getKey()), entry.getValue());
     }
-  }
-
-  @SuppressWarnings("unchecked")
-  private static Object withoutLegacyRange(Object fieldSchema) {
-    if (!(fieldSchema instanceof Map<?, ?> rawSchema)
-        || !(rawSchema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> rawProperties)) {
-      return fieldSchema;
-    }
-    Map<String, Object> properties = new LinkedHashMap<>((Map<String, Object>) rawProperties);
-    properties.remove("start");
-    properties.remove("end");
-    Map<String, Object> schema = new LinkedHashMap<>((Map<String, Object>) rawSchema);
-    schema.put(ApiVocabulary.PROPERTIES, properties);
-    return schema;
   }
 
   private static Map<String, Object> nestedObject(Map<String, Object> properties) {

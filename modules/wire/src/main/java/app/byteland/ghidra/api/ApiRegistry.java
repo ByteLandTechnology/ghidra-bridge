@@ -3,6 +3,7 @@ package app.byteland.ghidra.api;
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.BridgeServices;
+import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import app.byteland.ghidra.service.function.VariableStorageReference;
@@ -22,7 +23,7 @@ import java.util.function.Supplier;
 public final class ApiRegistry {
   public static final String INTERFACE_VERSION = "0.2.0";
   public static final int DEFAULT_LIMIT = 100;
-  public static final int MAX_LIMIT = app.byteland.ghidra.service.Page.MAX_LIMIT;
+  public static final int MAX_LIMIT = Page.MAX_LIMIT;
   public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
@@ -75,11 +76,7 @@ public final class ApiRegistry {
         "metadata");
   }
 
-  @SuppressWarnings({
-    ApiVocabulary.UNCHECKED,
-    "PMD.UseProperClassLoader",
-    "PMD.CompareObjectsWithEquals"
-  })
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
   private static <T> T inertService(Class<T> type) {
     return (T)
         java.lang.reflect.Proxy.newProxyInstance(
@@ -227,7 +224,7 @@ public final class ApiRegistry {
 
   @FunctionalInterface
   interface PagedHandler {
-    Object handle(Map<String, Object> request, PageRequest page) throws Exception;
+    Page<?> handle(Map<String, Object> request, PageRequest page) throws Exception;
   }
 
   void read(
@@ -433,7 +430,7 @@ public final class ApiRegistry {
       Map<String, Object> input,
       Set<String> fields,
       List<String> identityFields,
-      ApiMethod.Handler<Map<String, Object>, Object> handler) {
+      ApiMethod.Handler<Map<String, Object>, Page<?>> handler) {
     register(
         name,
         effects,
@@ -451,7 +448,7 @@ public final class ApiRegistry {
         fields,
         identityFields,
         request -> {
-          Map<String, Object> normalizedList = WireValues.list(handler.handle(request), MAX_LIMIT);
+          Map<String, Object> normalizedList = WireValues.list(handler.handle(request));
           return Map.of(
               ApiVocabulary.ITEMS, restrictAndSortItems(normalizedList, fields, identityFields));
         });
@@ -553,8 +550,7 @@ public final class ApiRegistry {
             new JsonValueCodec(output),
             fields,
             identityFields,
-            handler,
-            ApiMethod.McpAnnotations.forMethod(name, effects));
+            handler);
     if (methodsByName.putIfAbsent(name, method) != null) {
       throw new IllegalStateException("duplicate API method: " + name);
     }
@@ -615,11 +611,11 @@ public final class ApiRegistry {
   private Map<String, Object> canonicalList(
       String resource,
       Map<String, Object> request,
-      Object raw,
+      Page<?> raw,
       PageRequest page,
       Set<String> fields,
       List<String> identityFields) {
-    Map<String, Object> result = WireValues.list(raw, page.limit());
+    Map<String, Object> result = WireValues.list(raw);
     List<Map<String, Object>> normalizedItems =
         restrictAndSortItems(result, fields, identityFields);
     Optional<Object> next = Optional.ofNullable(result.get("next_cursor"));
@@ -672,7 +668,6 @@ public final class ApiRegistry {
     return 0;
   }
 
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
   private static boolean sameReference(Object left, Object right) {
     return left == right;
   }
@@ -692,31 +687,27 @@ public final class ApiRegistry {
     return new PageRequest(pageLimit(request), cursor, fingerprint);
   }
 
-  static AddressScanOptions addressScan(
-      Map<String, Object> request, String legacyStartField, String legacyEndField) {
-    Map<String, Object> range =
-        request.get("range") instanceof Map<?, ?> ? object(request, "range") : Map.of();
-    Map<String, Object> legacy = filter(request);
-    String rangeStart = optionalText(range, ApiVocabulary.START);
-    String rangeEnd = optionalText(range, ApiVocabulary.END);
-    String legacyStart = legacyStartField == null ? null : optionalText(legacy, legacyStartField);
-    String legacyEnd = legacyEndField == null ? null : optionalText(legacy, legacyEndField);
-    rejectRangeConflict(rangeStart, legacyStart, ApiVocabulary.START, legacyStartField);
-    rejectRangeConflict(rangeEnd, legacyEnd, ApiVocabulary.END, legacyEndField);
-    return new AddressScanOptions(
-        rangeStart == null ? legacyStart : rangeStart,
-        rangeEnd == null ? legacyEnd : rangeEnd,
-        integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS));
+  static AddressScanOptions addressScan(Map<String, Object> request) {
+    return addressScan(request, null);
   }
 
-  private static void rejectRangeConflict(
-      String rangeValue, String legacyValue, String rangeField, String legacyField) {
-    if (rangeValue != null && legacyValue != null && !rangeValue.equals(legacyValue)) {
+  static AddressScanOptions addressScan(Map<String, Object> request, String filterStartField) {
+    Map<String, Object> range =
+        request.get("range") instanceof Map<?, ?> ? object(request, "range") : Map.of();
+    String rangeStart = optionalText(range, ApiVocabulary.START);
+    String rangeEnd = optionalText(range, ApiVocabulary.END);
+    String filterStart =
+        filterStartField == null ? null : optionalText(filter(request), filterStartField);
+    if (rangeStart != null && filterStart != null && !rangeStart.equals(filterStart)) {
       throw ApiException.badRequest(
           "conflicting_range",
-          "range." + rangeField + " conflicts with filter." + legacyField,
-          "/scan/range/" + rangeField);
+          "range.start conflicts with filter." + filterStartField,
+          "/scan/range/start");
     }
+    return new AddressScanOptions(
+        rangeStart == null ? filterStart : rangeStart,
+        rangeEnd,
+        integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS));
   }
 
   static void validateByteLength(Map<String, Object> bytes, String target) {
@@ -858,7 +849,6 @@ public final class ApiRegistry {
         .toList();
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   static List<String> stringList(Object value) {
     if (!(value instanceof List<?> list)) return null;
     return list.stream().map(String.class::cast).toList();
