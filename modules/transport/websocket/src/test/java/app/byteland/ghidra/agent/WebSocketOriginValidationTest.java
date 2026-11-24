@@ -356,8 +356,20 @@ class WebSocketOriginValidationTest {
 
   private static WebSocketHandshake.HandshakeRequest readHandshake(String rawRequest)
       throws IOException {
+    ByteArrayInputStream input =
+        new ByteArrayInputStream(rawRequest.getBytes(StandardCharsets.US_ASCII));
+    Socket socket =
+        new Socket() {
+          @Override
+          public InputStream getInputStream() {
+            return input;
+          }
+
+          @Override
+          public void setSoTimeout(int timeout) {}
+        };
     return WebSocketHandshake.readHandshake(
-        new ByteArrayInputStream(rawRequest.getBytes(StandardCharsets.US_ASCII)));
+        socket, System.nanoTime() + TimeUnit.SECONDS.toNanos(5));
   }
 
   private static String rawUpgradeRequest(String hostHeader, List<String> extraHeaders) {
