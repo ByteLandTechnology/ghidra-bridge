@@ -1,11 +1,11 @@
 package app.byteland.ghidra.agent;
 
-import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -14,15 +14,15 @@ import java.util.concurrent.atomic.AtomicReference;
 final class AgentWebSocketConnectionRunner {
   static final Duration DEFAULT_KEEPALIVE_INTERVAL = Duration.ofSeconds(5);
   static final Duration DEFAULT_PONG_TIMEOUT = Duration.ofSeconds(10);
-  private static final int HANDSHAKE_TIMEOUT_MILLIS = 10_000;
   private static final String NORMAL_CLOSE_REASON = "closed";
   private static final String KEEPALIVE_TIMEOUT_REASON = "keepalive timeout";
 
   private final AgentConfig config;
   private final AgentWebSocketServer.Handler handler;
   private final AtomicBoolean running;
-  private final AtomicReference<Object> activeConnection;
-  private final AtomicReference<Socket> pendingSocket;
+  private final AtomicReference<AgentServerConnection> activeConnection;
+  private final AgentWebSocketServer.PendingSockets pendingSockets;
+  private final long handshakeTimeoutNanos;
   private final int keepaliveIntervalMillis;
   private final long pongTimeoutNanos;
 
@@ -30,14 +30,16 @@ final class AgentWebSocketConnectionRunner {
       AgentConfig config,
       AgentWebSocketServer.Handler handler,
       AtomicBoolean running,
-      AtomicReference<Object> activeConnection,
-      AtomicReference<Socket> pendingSocket) {
+      AtomicReference<AgentServerConnection> activeConnection,
+      AgentWebSocketServer.PendingSockets pendingSockets,
+      Duration handshakeTimeout) {
     this(
         config,
         handler,
         running,
         activeConnection,
-        pendingSocket,
+        pendingSockets,
+        handshakeTimeout,
         DEFAULT_KEEPALIVE_INTERVAL,
         DEFAULT_PONG_TIMEOUT);
   }
@@ -46,53 +48,67 @@ final class AgentWebSocketConnectionRunner {
       AgentConfig config,
       AgentWebSocketServer.Handler handler,
       AtomicBoolean running,
-      AtomicReference<Object> activeConnection,
-      AtomicReference<Socket> pendingSocket,
+      AtomicReference<AgentServerConnection> activeConnection,
+      AgentWebSocketServer.PendingSockets pendingSockets,
+      Duration handshakeTimeout,
       Duration keepaliveInterval,
       Duration pongTimeout) {
-    this.config = Objects.requireNonNull(config, "config");
-    this.handler = Objects.requireNonNull(handler, "handler");
-    this.running = Objects.requireNonNull(running, "running");
-    this.activeConnection = Objects.requireNonNull(activeConnection, "activeConnection");
-    this.pendingSocket = Objects.requireNonNull(pendingSocket, "pendingSocket");
+    this.config = config;
+    this.handler = handler;
+    this.running = running;
+    this.activeConnection = activeConnection;
+    this.pendingSockets = pendingSockets;
+    this.handshakeTimeoutNanos = handshakeTimeout.toNanos();
     this.keepaliveIntervalMillis = toTimeoutMillis(keepaliveInterval, "keepaliveInterval");
     this.pongTimeoutNanos = requirePositiveDuration(pongTimeout, "pongTimeout").toNanos();
   }
 
-  @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CloseResource"})
   void runConnection(Socket socket) {
     AgentServerConnection connection = null;
+    boolean opened = false;
     CloseState closeState =
         new CloseState(WebSocketFrames.NORMAL_CLOSE_STATUS, NORMAL_CLOSE_REASON);
     try {
-      socket.setTcpNoDelay(true);
-      socket.setSoTimeout(HANDSHAKE_TIMEOUT_MILLIS);
-      WebSocketHandshake.HandshakeRequest request =
-          WebSocketHandshake.readHandshake(socket.getInputStream());
-      int boundPort = socket.getLocalPort() > 0 ? socket.getLocalPort() : config.port();
-      WebSocketHandshakeValidator.validate(config, boundPort, socket.getLocalAddress(), request);
-      socket.setSoTimeout(keepaliveIntervalMillis);
-      connection = new AgentServerConnection(socket);
-      if (!activeConnection.compareAndSet(
-          AgentWebSocketServer.RESERVED_CONNECTION_SLOT, connection)) {
-        connection.markClosed();
-        closeState.reason = "server shutdown";
-        return;
-      }
-      pendingSocket.compareAndSet(socket, null);
-      WebSocketHandshake.writeHandshakeResponse(socket.getOutputStream(), request.acceptKey());
-      handler.onOpen(connection);
-      runFrameLoop(socket, connection, closeState);
-    } catch (WebSocketHandshake.HttpHandshakeException e) {
-      closeState.reason = e.getMessage();
-      pendingSocket.compareAndSet(socket, null);
-      activeConnection.compareAndSet(AgentWebSocketServer.RESERVED_CONNECTION_SLOT, null);
-      try {
-        WebSocketHandshake.writeHttpResponse(
-            socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
-      } catch (IOException responseFailure) {
-        e.addSuppressed(responseFailure);
-        handler.onConnectionError(connection, e);
+      try (socket) {
+        socket.setTcpNoDelay(true);
+        long deadlineNanos = System.nanoTime() + handshakeTimeoutNanos;
+        WebSocketHandshake.HandshakeRequest request;
+        try {
+          request = WebSocketHandshake.readHandshake(socket, deadlineNanos);
+          WebSocketHandshakeValidator.validate(config, request);
+        } catch (WebSocketHandshake.HttpHandshakeException e) {
+          closeState.reason = e.getMessage();
+          writeHandshakeFailure(socket, e);
+          return;
+        }
+        if (!running.get()) {
+          return;
+        }
+        socket.setSoTimeout(keepaliveIntervalMillis);
+        AgentServerConnection candidate = new AgentServerConnection(socket);
+        if (!activeConnection.compareAndSet(null, candidate)) {
+          candidate.markClosed();
+          if (running.get()) {
+            WebSocketHandshake.writeHttpResponse(
+                socket.getOutputStream(),
+                409,
+                "Conflict",
+                List.of(),
+                "Bridge already has an active client");
+          }
+          return;
+        }
+        pendingSockets.remove(socket);
+        if (!running.get()) {
+          activeConnection.compareAndSet(candidate, null);
+          candidate.markClosed();
+          return;
+        }
+        connection = candidate;
+        WebSocketHandshake.writeHandshakeResponse(socket.getOutputStream(), request.acceptKey());
+        opened = true;
+        handler.onOpen(connection);
+        runFrameLoop(socket, connection, closeState);
       }
     } catch (EOFException ignored) {
       closeState.reason = "peer disconnected";
@@ -105,21 +121,25 @@ final class AgentWebSocketConnectionRunner {
       closeState.reason = e.getMessage() == null ? "runtime error" : e.getMessage();
       handler.onConnectionError(connection, e);
     } finally {
-      pendingSocket.compareAndSet(socket, null);
-      activeConnection.compareAndSet(
-          connection != null ? connection : AgentWebSocketServer.RESERVED_CONNECTION_SLOT, null);
+      pendingSockets.remove(socket);
       if (connection != null) {
+        activeConnection.compareAndSet(connection, null);
         connection.markClosed();
       }
-      try {
-        socket.close();
-      } catch (IOException closeFailure) {
-        if (running.get()) {
-          handler.onConnectionError(connection, closeFailure);
-        }
-      }
-      if (connection != null) {
+      if (opened) {
         handler.onClose(connection, closeState.code, closeState.reason);
+      }
+    }
+  }
+
+  private void writeHandshakeFailure(Socket socket, WebSocketHandshake.HttpHandshakeException e) {
+    try {
+      WebSocketHandshake.writeHttpResponse(
+          socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
+    } catch (IOException responseFailure) {
+      e.addSuppressed(responseFailure);
+      if (running.get()) {
+        handler.onConnectionError(null, e);
       }
     }
   }
@@ -181,7 +201,9 @@ final class AgentWebSocketConnectionRunner {
         awaitingPong = false;
         continue;
       }
-      if (awaitingPong && System.nanoTime() - pongDeadlineNanos >= 0L) {
+      if (frame.opcode() != WebSocketFrames.CLOSE_OPCODE
+          && awaitingPong
+          && System.nanoTime() - pongDeadlineNanos >= 0L) {
         closeWith(
             connection,
             closeState,
@@ -228,8 +250,7 @@ final class AgentWebSocketConnectionRunner {
         }
         fragments.append(frame.payloadView());
         if (frame.fin()) {
-          byte[] assembled = fragments.finish();
-          String text = WebSocketFrames.decodeUtf8(assembled);
+          String text = fragments.finishUtf8();
           handler.onText(connection, text);
         }
         return true;
@@ -295,10 +316,13 @@ final class AgentWebSocketConnectionRunner {
   }
 
   private static final class FragmentAssembler {
-    private ByteArrayOutputStream buffer;
+    private static final int INITIAL_CAPACITY = 256;
+    private byte[] buffer;
+    private int length;
+    private boolean active;
 
     boolean inProgress() {
-      return buffer != null;
+      return active;
     }
 
     void start(byte[] payload) throws WebSocketFrames.WebSocketProtocolException {
@@ -306,23 +330,44 @@ final class AgentWebSocketConnectionRunner {
         throw new WebSocketFrames.WebSocketProtocolException(
             WebSocketFrames.MESSAGE_TOO_BIG_CLOSE_STATUS, "Message exceeds 16 MiB limit");
       }
-      buffer = new ByteArrayOutputStream(Math.max(256, payload.length));
-      buffer.writeBytes(payload);
+      int capacity =
+          Math.min(WebSocketFrames.MAX_MESSAGE_BYTES, Math.max(INITIAL_CAPACITY, payload.length));
+      buffer = new byte[capacity];
+      System.arraycopy(payload, 0, buffer, 0, payload.length);
+      length = payload.length;
+      active = true;
     }
 
     void append(byte[] payload) throws WebSocketFrames.WebSocketProtocolException {
-      if ((long) buffer.size() + payload.length > WebSocketFrames.MAX_MESSAGE_BYTES) {
-        buffer = null;
+      long required = (long) length + payload.length;
+      if (required > WebSocketFrames.MAX_MESSAGE_BYTES) {
+        reset();
         throw new WebSocketFrames.WebSocketProtocolException(
             WebSocketFrames.MESSAGE_TOO_BIG_CLOSE_STATUS, "Message exceeds 16 MiB limit");
       }
-      buffer.writeBytes(payload);
+      if (required > buffer.length) {
+        int newCapacity =
+            (int)
+                Math.min(
+                    WebSocketFrames.MAX_MESSAGE_BYTES,
+                    Math.max((long) buffer.length << 1, required));
+        buffer = Arrays.copyOf(buffer, newCapacity);
+      }
+      System.arraycopy(payload, 0, buffer, length, payload.length);
+      length = (int) required;
     }
 
-    byte[] finish() {
-      byte[] assembled = buffer.toByteArray();
+    String finishUtf8() throws WebSocketFrames.WebSocketProtocolException {
+      byte[] assembled = buffer;
+      int assembledLength = length;
+      reset();
+      return WebSocketFrames.decodeUtf8(assembled, 0, assembledLength);
+    }
+
+    private void reset() {
       buffer = null;
-      return assembled;
+      length = 0;
+      active = false;
     }
   }
 

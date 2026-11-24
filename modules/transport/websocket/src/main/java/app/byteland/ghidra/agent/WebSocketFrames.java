@@ -20,6 +20,8 @@ final class WebSocketFrames {
   static final int CLOSE_OPCODE = 0x8;
   static final int PING_OPCODE = 0x9;
   static final int PONG_OPCODE = 0xA;
+  static final long MAX_FRAME_PAYLOAD_BYTES = 16L * 1024 * 1024; // 16 MiB
+  static final int MAX_MESSAGE_BYTES = 16 * 1024 * 1024; // 16 MiB
 
   static final int NORMAL_CLOSE_STATUS = 1000;
   static final int GOING_AWAY_CLOSE_STATUS = 1001;
@@ -27,7 +29,6 @@ final class WebSocketFrames {
   static final int UNSUPPORTED_DATA_CLOSE_STATUS = 1003;
   static final int INVALID_PAYLOAD_CLOSE_STATUS = 1007;
   static final int MESSAGE_TOO_BIG_CLOSE_STATUS = 1009;
-  static final int MAX_MESSAGE_BYTES = 16 * 1024 * 1024; // 16 MiB
 
   private static final int FINAL_FRAGMENT_FLAG = 0x80;
   private static final int RESERVED_BITS_MASK = 0x70;
@@ -40,7 +41,6 @@ final class WebSocketFrames {
   private static final int LONG_LENGTH_MARKER = 127;
   private static final int MAX_UNSIGNED_SHORT = 0xFFFF;
   private static final int MASK_KEY_LENGTH = 4;
-  private static final long MAX_FRAME_PAYLOAD_BYTES = MAX_MESSAGE_BYTES;
 
   private WebSocketFrames() {}
 
@@ -267,7 +267,6 @@ final class WebSocketFrames {
       return payloadBytes.clone();
     }
 
-    @SuppressWarnings("PMD.MethodReturnsInternalArray")
     byte[] payloadView() {
       return payloadBytes;
     }

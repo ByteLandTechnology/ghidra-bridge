@@ -1,6 +1,7 @@
 package app.byteland.ghidra.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedInputStream;
@@ -26,81 +27,23 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
-class AgentWebSocketTransportHardeningTest {
+class AgentWebSocketFrameAndKeepaliveTest {
   private static final byte[] CLIENT_MASK = new byte[] {0x12, 0x34, 0x56, 0x78};
 
   @Test
-  void rejectsExternalOriginAndForgedHostDuringHandshake() throws Exception {
-    RecordingHandler handler = new RecordingHandler();
-    try (ServerHandle handle = startServer(handler, Duration.ofSeconds(5), Duration.ofSeconds(10))) {
-      int port = handle.port();
-
-      HttpStatus forbiddenOrigin =
-          rawHandshake(
-              port,
-              List.of(
-                  "Host: 127.0.0.1:" + port,
-                  "Origin: https://evil.example",
-                  "Upgrade: websocket",
-                  "Connection: Upgrade",
-                  "Sec-WebSocket-Version: 13",
-                  "Sec-WebSocket-Key: " + sampleKey()));
-      assertEquals(403, forbiddenOrigin.code());
-
-      HttpStatus forgedHost =
-          rawHandshake(
-              port,
-              List.of(
-                  "Host: evil.rebind.example",
-                  "Upgrade: websocket",
-                  "Connection: Upgrade",
-                  "Sec-WebSocket-Version: 13",
-                  "Sec-WebSocket-Key: " + sampleKey()));
-      assertEquals(403, forgedHost.code());
-
-      HttpStatus duplicateHost =
-          rawHandshake(
-              port,
-              List.of(
-                  "Host: 127.0.0.1:" + port,
-                  "Host: evil.rebind.example",
-                  "Upgrade: websocket",
-                  "Connection: Upgrade",
-                  "Sec-WebSocket-Version: 13",
-                  "Sec-WebSocket-Key: " + sampleKey()));
-      assertEquals(403, duplicateHost.code());
-
-      HttpStatus wrongPortHost =
-          rawHandshake(
-              port,
-              List.of(
-                  "Host: 127.0.0.1:" + (port == 65535 ? port - 1 : port + 1),
-                  "Upgrade: websocket",
-                  "Connection: Upgrade",
-                  "Sec-WebSocket-Version: 13",
-                  "Sec-WebSocket-Key: " + sampleKey()));
-      assertEquals(403, wrongPortHost.code());
-
-      try (RawWebSocketClient valid =
-          connectUpgraded(port, List.of("Origin: http://localhost:3000"))) {
-        assertEquals(101, valid.handshakeStatus());
-      }
-    }
-  }
-
-  @Test
-  void reassemblesFragmentedUtf8TextWithInterleavedPingAndPong() throws Exception {
+  void reassemblesFragmentedUtf8TextWithInterleavedPingAndEmptyFragments() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (ServerHandle handle = startServer(handler, Duration.ofSeconds(5), Duration.ofSeconds(10));
-        RawWebSocketClient client = connectUpgraded(handle.port(), List.of())) {
+        RawWebSocketClient client = connectUpgraded(handle.port())) {
       String message = "{\"jsonrpc\":\"2.0\",\"id\":1,\"text\":\"🚀こんにちは世界\"}";
       byte[] utf8 = message.getBytes(StandardCharsets.UTF_8);
       int rocketIndex = message.indexOf("🚀");
       int split1 = message.substring(0, rocketIndex).getBytes(StandardCharsets.UTF_8).length + 2;
       int split2 = split1 + 5;
 
+      client.writeMaskedFrame(false, WebSocketFrames.TEXT_OPCODE, new byte[0]);
       client.writeMaskedFrame(
-          false, WebSocketFrames.TEXT_OPCODE, Arrays.copyOfRange(utf8, 0, split1));
+          false, WebSocketFrames.CONTINUATION_OPCODE, Arrays.copyOfRange(utf8, 0, split1));
       client.writeMaskedFrame(
           true, WebSocketFrames.PING_OPCODE, "hb".getBytes(StandardCharsets.UTF_8));
 
@@ -111,30 +54,50 @@ class AgentWebSocketTransportHardeningTest {
       client.writeMaskedFrame(
           false, WebSocketFrames.CONTINUATION_OPCODE, Arrays.copyOfRange(utf8, split1, split2));
       client.writeMaskedFrame(
-          true,
+          false,
           WebSocketFrames.CONTINUATION_OPCODE,
           Arrays.copyOfRange(utf8, split2, utf8.length));
+      client.writeMaskedFrame(true, WebSocketFrames.CONTINUATION_OPCODE, new byte[0]);
 
-      String received = handler.receivedTexts.poll(5, TimeUnit.SECONDS);
-      assertEquals(message, received);
+      assertEquals(message, handler.receivedTexts.poll(5, TimeUnit.SECONDS));
+
+      client.writeMaskedFrame(
+          false, WebSocketFrames.TEXT_OPCODE, "second-".getBytes(StandardCharsets.UTF_8));
+      client.writeMaskedFrame(
+          true, WebSocketFrames.CONTINUATION_OPCODE, "message".getBytes(StandardCharsets.UTF_8));
+      assertEquals("second-message", handler.receivedTexts.poll(5, TimeUnit.SECONDS));
     }
   }
 
   @Test
-  void closesOversizedMessagesWith1009() throws Exception {
-    int nineMiB = 9 * 1024 * 1024;
+  void acceptsExact16MiBFragmentedMessageAndClosesOversizedMessagesWith1009() throws Exception {
     int eightMiB = 8 * 1024 * 1024;
-    byte[] firstPart = new byte[nineMiB];
-    Arrays.fill(firstPart, (byte) 'a');
-    byte[] secondPart = new byte[eightMiB];
-    Arrays.fill(secondPart, (byte) 'b');
+    int nineMiB = 9 * 1024 * 1024;
+    byte[] exactFirst = new byte[eightMiB];
+    Arrays.fill(exactFirst, (byte) 'a');
+    byte[] exactSecond = new byte[eightMiB];
+    Arrays.fill(exactSecond, (byte) 'b');
 
+    RecordingHandler exactHandler = new RecordingHandler();
+    try (ServerHandle handle =
+            startServer(exactHandler, Duration.ofSeconds(5), Duration.ofSeconds(10));
+        RawWebSocketClient client = connectUpgraded(handle.port())) {
+      client.writeMaskedFrame(false, WebSocketFrames.TEXT_OPCODE, exactFirst);
+      client.writeMaskedFrame(true, WebSocketFrames.CONTINUATION_OPCODE, exactSecond);
+      String assembled = exactHandler.receivedTexts.poll(10, TimeUnit.SECONDS);
+      assertEquals(WebSocketFrames.MAX_MESSAGE_BYTES, assembled.length());
+      assertEquals('a', assembled.charAt(0));
+      assertEquals('b', assembled.charAt(assembled.length() - 1));
+    }
+
+    byte[] nineMiBPart = new byte[nineMiB];
+    Arrays.fill(nineMiBPart, (byte) 'x');
     RecordingHandler fragmentedHandler = new RecordingHandler();
     try (ServerHandle handle =
             startServer(fragmentedHandler, Duration.ofSeconds(5), Duration.ofSeconds(10));
-        RawWebSocketClient client = connectUpgraded(handle.port(), List.of())) {
-      client.writeMaskedFrame(false, WebSocketFrames.TEXT_OPCODE, firstPart);
-      client.writeMaskedFrame(true, WebSocketFrames.CONTINUATION_OPCODE, secondPart);
+        RawWebSocketClient client = connectUpgraded(handle.port())) {
+      client.writeMaskedFrame(false, WebSocketFrames.TEXT_OPCODE, nineMiBPart);
+      client.writeMaskedFrame(true, WebSocketFrames.CONTINUATION_OPCODE, exactSecond);
 
       ServerFrame closeFrame = client.readUntilOpcode(WebSocketFrames.CLOSE_OPCODE);
       assertEquals(1009, WebSocketFrames.closeStatus(closeFrame.payload()));
@@ -144,8 +107,8 @@ class AgentWebSocketTransportHardeningTest {
     RecordingHandler singleFrameHandler = new RecordingHandler();
     try (ServerHandle handle =
             startServer(singleFrameHandler, Duration.ofSeconds(5), Duration.ofSeconds(10));
-        RawWebSocketClient client = connectUpgraded(handle.port(), List.of())) {
-      client.writeOversizedHeaderOnly(WebSocketFrames.MAX_MESSAGE_BYTES + 1L);
+        RawWebSocketClient client = connectUpgraded(handle.port())) {
+      client.writeOversizedHeaderOnly(WebSocketFrames.MAX_FRAME_PAYLOAD_BYTES + 1L);
       ServerFrame closeFrame = client.readUntilOpcode(WebSocketFrames.CLOSE_OPCODE);
       assertEquals(1009, WebSocketFrames.closeStatus(closeFrame.payload()));
       assertEquals(1009, singleFrameHandler.awaitCloseCode());
@@ -173,6 +136,14 @@ class AgentWebSocketTransportHardeningTest {
 
     assertCloseStatusForClientAction(
         1002,
+        client -> {
+          client.writeMaskedFrame(
+              false, WebSocketFrames.TEXT_OPCODE, "part1".getBytes(StandardCharsets.UTF_8));
+          client.writeMaskedFrame(true, WebSocketFrames.BINARY_OPCODE, new byte[] {1});
+        });
+
+    assertCloseStatusForClientAction(
+        1002,
         client ->
             client.writeUnmaskedFrame(
                 true, WebSocketFrames.TEXT_OPCODE, "plain".getBytes(StandardCharsets.UTF_8)));
@@ -184,7 +155,24 @@ class AgentWebSocketTransportHardeningTest {
                 false, WebSocketFrames.PING_OPCODE, "bad".getBytes(StandardCharsets.UTF_8)));
 
     assertCloseStatusForClientAction(
+        1002, client -> client.writeMaskedFrame(true, WebSocketFrames.PING_OPCODE, new byte[126]));
+
+    assertCloseStatusForClientAction(
         1002, client -> client.writeReservedBitsFrame("rsv".getBytes(StandardCharsets.UTF_8)));
+
+    assertCloseStatusForClientAction(
+        1002, client -> client.writeMaskedFrame(true, 0x3, new byte[0]));
+
+    assertCloseStatusForClientAction(
+        1002, client -> client.writeMaskedFrame(true, WebSocketFrames.CLOSE_OPCODE, new byte[] {1}));
+
+    assertCloseStatusForClientAction(
+        1002,
+        client ->
+            client.writeMaskedFrame(
+                true,
+                WebSocketFrames.CLOSE_OPCODE,
+                ByteBuffer.allocate(2).putShort((short) 1005).array()));
 
     assertCloseStatusForClientAction(
         1003,
@@ -195,17 +183,39 @@ class AgentWebSocketTransportHardeningTest {
         client ->
             client.writeMaskedFrame(
                 true, WebSocketFrames.TEXT_OPCODE, new byte[] {(byte) 0xFF, (byte) 0xFE}));
+
+    assertCloseStatusForClientAction(
+        1007,
+        client -> {
+          client.writeMaskedFrame(false, WebSocketFrames.TEXT_OPCODE, new byte[] {(byte) 0xE2});
+          client.writeMaskedFrame(
+              true, WebSocketFrames.CONTINUATION_OPCODE, new byte[] {(byte) 0x28, (byte) 0xA1});
+        });
+
+    assertCloseStatusForClientAction(
+        1007,
+        client ->
+            client.writeMaskedFrame(
+                true,
+                WebSocketFrames.CLOSE_OPCODE,
+                ByteBuffer.allocate(4)
+                    .putShort((short) 1000)
+                    .put((byte) 0xFF)
+                    .put((byte) 0xFE)
+                    .array()));
   }
 
   @Test
   void reclaimsHalfOpenConnectionSlotAfterKeepaliveTimeoutAndPreservesResponsiveClient()
       throws Exception {
-    assertTrue(
-        !Modifier.isPublic(
+    assertFalse(
+        Modifier.isPublic(
             AgentWebSocketServer.class
                 .getDeclaredConstructor(
                     AgentConfig.class,
                     AgentWebSocketServer.Handler.class,
+                    Duration.class,
+                    int.class,
                     Duration.class,
                     Duration.class)
                 .getModifiers()));
@@ -215,7 +225,7 @@ class AgentWebSocketTransportHardeningTest {
         startServer(handler, Duration.ofMillis(80), Duration.ofMillis(160))) {
       int port = handle.port();
 
-      try (RawWebSocketClient silentClient = connectUpgraded(port, List.of())) {
+      try (RawWebSocketClient silentClient = connectUpgraded(port)) {
         HttpStatus conflictWhileActive =
             rawHandshake(
                 port,
@@ -235,7 +245,7 @@ class AgentWebSocketTransportHardeningTest {
         assertEquals(1001, handler.awaitCloseCode());
       }
 
-      try (RawWebSocketClient healthyClient = connectUpgraded(port, List.of())) {
+      try (RawWebSocketClient healthyClient = connectUpgraded(port)) {
         assertEquals(101, healthyClient.handshakeStatus());
         for (int i = 0; i < 2; i++) {
           ServerFrame ping = healthyClient.readServerFrame();
@@ -249,11 +259,27 @@ class AgentWebSocketTransportHardeningTest {
     }
   }
 
+  @Test
+  void closesStalledPartialFrameAndReclaimsConnectionSlot() throws Exception {
+    RecordingHandler handler = new RecordingHandler();
+    try (ServerHandle handle =
+        startServer(handler, Duration.ofMillis(100), Duration.ofMillis(200))) {
+      int port = handle.port();
+      try (RawWebSocketClient partialClient = connectUpgraded(port)) {
+        partialClient.writeSingleRawByte(0x80 | WebSocketFrames.TEXT_OPCODE);
+        assertEquals(1000, handler.awaitCloseCode());
+      }
+      try (RawWebSocketClient replacementClient = connectUpgraded(port)) {
+        assertEquals(101, replacementClient.handshakeStatus());
+      }
+    }
+  }
+
   private static void assertCloseStatusForClientAction(
       int expectedStatus, ClientAction clientAction) throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (ServerHandle handle = startServer(handler, Duration.ofSeconds(5), Duration.ofSeconds(10));
-        RawWebSocketClient client = connectUpgraded(handle.port(), List.of())) {
+        RawWebSocketClient client = connectUpgraded(handle.port())) {
       clientAction.run(client);
       ServerFrame closeFrame = client.readUntilOpcode(WebSocketFrames.CLOSE_OPCODE);
       assertEquals(expectedStatus, WebSocketFrames.closeStatus(closeFrame.payload()));
@@ -269,7 +295,13 @@ class AgentWebSocketTransportHardeningTest {
       AgentConfig config =
           new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "test-session", null);
       AgentWebSocketServer server =
-          new AgentWebSocketServer(config, handler, keepaliveInterval, pongTimeout);
+          new AgentWebSocketServer(
+              config,
+              handler,
+              AgentWebSocketServer.DEFAULT_HANDSHAKE_TIMEOUT,
+              AgentWebSocketServer.DEFAULT_MAX_PENDING_SOCKETS,
+              keepaliveInterval,
+              pongTimeout);
       try {
         server.start();
         return new ServerHandle(server, port);
@@ -298,8 +330,7 @@ class AgentWebSocketTransportHardeningTest {
     }
   }
 
-  private static RawWebSocketClient connectUpgraded(int port, List<String> extraHeaders)
-      throws IOException {
+  private static RawWebSocketClient connectUpgraded(int port) throws IOException {
     Socket socket = new Socket("127.0.0.1", port);
     socket.setSoTimeout(5_000);
     List<String> headers = new ArrayList<>();
@@ -308,7 +339,6 @@ class AgentWebSocketTransportHardeningTest {
     headers.add("Connection: Upgrade");
     headers.add("Sec-WebSocket-Version: 13");
     headers.add("Sec-WebSocket-Key: " + sampleKey());
-    headers.addAll(extraHeaders);
     writeUpgradeRequest(socket.getOutputStream(), headers);
     InputStream input = new BufferedInputStream(socket.getInputStream());
     HttpStatus status = readHttpHeaders(input);
@@ -384,6 +414,11 @@ class AgentWebSocketTransportHardeningTest {
 
     int handshakeStatus() {
       return status;
+    }
+
+    void writeSingleRawByte(int value) throws IOException {
+      output.write(value);
+      output.flush();
     }
 
     void writeMaskedFrame(boolean fin, int opcode, byte[] payload) throws IOException {

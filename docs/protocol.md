@@ -98,7 +98,6 @@ The server replies with an error envelope for a bad message and keeps the socket
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
 - `400`: Absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
 - `401`: Absent or invalid bearer token.
-- `403`: Absent, duplicate, or invalid `Host` header, or an unpermitted `Origin` header.
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
@@ -119,20 +118,18 @@ The server closes the socket with these status codes:
 
 ## Model Context Protocol (MCP)
 
-The bridge implements MCP Streamable HTTP protocol version `2026-07-28` and legacy SSE sessions on virtual threads.
+The bridge implements MCP Streamable HTTP protocol version `2026-07-28`.
+The server does not use MCP sessions and does not send server-sent events.
 
 ### HTTP Request Rules
 
 The MCP HTTP server handles requests:
-- **POST**: Dispatches JSON-RPC 2.0 requests, or delivers messages to `?sessionId=<id>` for an active legacy SSE session.
-- **Body Limit**: A `POST` body larger than 4 MiB returns status `413`.
-- **GET**: Opens a legacy SSE stream when `Accept` includes `text/event-stream` with a non-zero `q` weight. Modern MCP headers (`MCP-Protocol-Version`, `Mcp-Session-Id`, `Last-Event-Id`) must be absent. Other `GET` requests return status `405` with `Allow: POST, GET, HEAD, OPTIONS`. When all 16 concurrent SSE slots are full, `GET` returns status `503`.
-- **HEAD**: Returns status `200` with no body.
+- **POST**: Dispatches JSON-RPC 2.0 requests.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
-- **Other methods**: The server returns status `405` with `Allow: POST, GET, HEAD, OPTIONS`.
-- **Host**: Every request must send one `Host` header for the bound listener address and port. Other values return status `403`.
-- **Origin**: An `Origin` header must use `http` or `https` on a loopback host or the configured `host`. Other values return status `403`.
-- **Content Type**: A `POST` request must send media type `application/json` (case-insensitive, RFC 9110 parameters permitted). Other values return status `415`.
+- **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
+- **Other methods**: The server returns status `405`.
+- **Origin**: A request with an `Origin` header that is not a loopback host or the configured `host` returns status `403`.
+- **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.
 
 ### Initialization Compatibility

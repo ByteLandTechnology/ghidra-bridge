@@ -98,7 +98,6 @@ WebSocket 消息严格遵循 JSON-RPC 2.0 协议规范。
 在连接建立之前，服务端以 HTTP 状态码拒绝非法的升级请求：
 - `400`：缺少升级头部、WebSocket 版本不受支持，或在查询字符串中携带 Token。
 - `401`：缺少 Bearer Token 或 Token 无效。
-- `403`：缺少、重复或非法的 `Host` 头部，或不被许可的 `Origin` 头部。
 - `404`：请求路径与配置的 `path` 不一致。
 - `405`：升级请求未使用 GET 方法。
 - `409`：已有其他客户端处于连接状态。
@@ -119,20 +118,18 @@ WebSocket 消息严格遵循 JSON-RPC 2.0 协议规范。
 
 ## Model Context Protocol (MCP)
 
-桥接服务实现 MCP Streamable HTTP 协议（版本号 `2026-07-28`），并在虚拟线程上支持兼容旧版的 SSE 会话。
+桥接服务实现 MCP Streamable HTTP 协议，版本号为 `2026-07-28`。
+服务端不使用 MCP 会话，也不发送服务端推送事件（SSE）。
 
 ### HTTP 交互规范
 
 MCP HTTP 服务端按以下规则处理请求：
-- **POST**：分发处理 JSON-RPC 2.0 请求，或将消息投递至活动旧版 SSE 会话的 `?sessionId=<id>`。
-- **请求体上限**：超过 4 MiB 的 `POST` 请求体返回状态码 `413`。
-- **GET**：仅当 `Accept` 包含非零 `q` 权重的 `text/event-stream` 且未携带新版 MCP 头部（`MCP-Protocol-Version`、`Mcp-Session-Id`、`Last-Event-Id`）时建立旧版 SSE 流；其他 `GET` 请求返回状态码 `405` 并附带 `Allow: POST, GET, HEAD, OPTIONS`。当 16 个并发 SSE 会话槽位已满时，`GET` 返回状态码 `503`。
-- **HEAD**：返回状态码 `200`，不含响应体。
+- **POST**：分发处理 JSON-RPC 2.0 请求。
 - **OPTIONS**：处理 CORS 预检请求并返回状态码 `204`。
-- **其他方法**：服务端返回状态码 `405` 并附带 `Allow: POST, GET, HEAD, OPTIONS`。
-- **Host**：每个请求都必须发送单个与绑定监听地址及端口匹配的 `Host` 头部，否则返回状态码 `403`。
-- **Origin**：若请求携带的 `Origin` 头部不是回环主机或配置 `host` 上的 `http` 或 `https` 源，返回状态码 `403`。
-- **内容类型**：`POST` 请求必须发送 `application/json` 媒体类型（大小写不敏感，可携带符合 RFC 9110 的参数），否则返回状态码 `415`。
+- **GET**：服务端直接返回状态码 `405` 并附带 `Allow: POST, OPTIONS` 响应头。
+- **其他方法**：服务端返回状态码 `405`。
+- **Origin**：若请求携带的 `Origin` 头部既不是回环主机也不是配置的 `host`，返回状态码 `403`。
+- **内容类型**：POST 请求必须发送 `Content-Type: application/json`，否则返回状态码 `415`。
 - **通知**：不含 `id` 的请求返回状态码 `202`，且不含响应体。
 
 ### 初始化兼容
