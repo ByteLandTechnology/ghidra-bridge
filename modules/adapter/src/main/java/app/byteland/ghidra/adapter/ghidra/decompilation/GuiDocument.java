@@ -9,6 +9,8 @@ import ghidra.app.decompiler.ClangFuncNameToken;
 import ghidra.app.decompiler.ClangLine;
 import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.ClangTokenGroup;
+import ghidra.app.decompiler.DecompileResults;
+import ghidra.app.decompiler.DecompiledFunction;
 import ghidra.app.decompiler.PrettyPrinter;
 import ghidra.app.decompiler.component.DecompilerUtils;
 import ghidra.program.model.address.Address;
@@ -19,6 +21,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 record GuiDocument(String code, List<Line> lines) {
+  static String renderText(Function function, DecompileResults results) {
+    if (results == null) return "";
+    ClangTokenGroup markup = results.getCCodeMarkup();
+    if (markup != null) {
+      return renderText(function, markup);
+    }
+    DecompiledFunction decompiled = results.getDecompiledFunction();
+    return decompiled == null || decompiled.getC() == null ? "" : decompiled.getC();
+  }
+
+  static String renderText(Function function, ClangTokenGroup markup) {
+    if (markup == null) return "";
+    StringBuilder code = new StringBuilder();
+    for (ClangLine line : new PrettyPrinter(function, markup, null).getLines()) {
+      code.append(PrettyPrinter.getText(line)).append('\n');
+    }
+    return code.toString();
+  }
+
   static GuiDocument render(Function function, ClangTokenGroup markup) {
     if (markup == null) return new GuiDocument("", List.of());
     Program program = function.getProgram();
