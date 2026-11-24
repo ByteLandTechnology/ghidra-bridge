@@ -140,7 +140,6 @@ final class WebSocketFrames {
       return payloadBytes.clone();
     }
 
-    @SuppressWarnings("PMD.MethodReturnsInternalArray")
     byte[] payloadView() {
       return payloadBytes;
     }

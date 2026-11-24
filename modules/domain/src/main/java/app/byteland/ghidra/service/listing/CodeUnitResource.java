@@ -12,9 +12,7 @@ public record CodeUnitResource(
     String text,
     String mnemonic,
     List<String> operands,
-    DataTypeReference dataType,
-    String value,
-    String representation) {
+    DataTypeReference dataType) {
   public CodeUnitResource {
     operands = immutableCopyOrNull(operands);
   }
