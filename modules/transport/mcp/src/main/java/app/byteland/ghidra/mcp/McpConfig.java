@@ -30,6 +30,8 @@ public record McpConfig(
     Set<String> allowedOrigins) {
   public static final int DEFAULT_PORT = 8766;
   public static final String DEFAULT_TOOL_PREFIX = "ghidra";
+  public static final String ALLOWED_ORIGINS_ENV = "GHIDRA_MCP_ALLOWED_ORIGINS";
+  private static final String NONE_ORIGINS = "none";
   private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,63}");
   private static final String DEFAULT_LOOPBACK_HOST =
       InetAddress.getLoopbackAddress().getHostAddress();
@@ -46,7 +48,7 @@ public record McpConfig(
 
   public McpConfig(
       String host, int port, String path, String token, String sessionId, String toolPrefix) {
-    this(host, port, path, token, sessionId, toolPrefix, Set.of());
+    this(host, port, path, token, sessionId, toolPrefix, null);
   }
 
   public McpConfig {
@@ -61,7 +63,12 @@ public record McpConfig(
   }
 
   public static McpConfig fromMap(Map<String, String> args) {
+    return fromMap(args, System.getenv());
+  }
+
+  static McpConfig fromMap(Map<String, String> args, Map<String, String> env) {
     Objects.requireNonNull(args, "args");
+    Objects.requireNonNull(env, "env");
     AgentConfig.rejectUnknown(args, ALLOWED);
     return new McpConfig(
         args.get("host"),
@@ -70,7 +77,7 @@ public record McpConfig(
         args.get("token"),
         args.get("session_id"),
         args.get("tool_prefix"),
-        parseAllowedOrigins(args.get("allowed_origins")));
+        parseAllowedOrigins(resolveRawAllowedOrigins(args, env)));
   }
 
   public String endpoint() {
@@ -85,9 +92,23 @@ public record McpConfig(
     }
   }
 
+  private static String resolveRawAllowedOrigins(Map<String, String> args, Map<String, String> env) {
+    String fromArgs = AgentConfig.optionalText(args.get("allowed_origins"));
+    if (fromArgs != null) {
+      return fromArgs;
+    }
+    if (args.containsKey("allowed_origins")) {
+      return null;
+    }
+    return AgentConfig.optionalText(env.get(ALLOWED_ORIGINS_ENV));
+  }
+
   private static Set<String> parseAllowedOrigins(String value) {
     String normalizedValue = AgentConfig.optionalText(value);
     if (normalizedValue == null) {
+      return null;
+    }
+    if (NONE_ORIGINS.equalsIgnoreCase(normalizedValue)) {
       return Set.of();
     }
     Set<String> origins = new LinkedHashSet<>();
@@ -96,13 +117,20 @@ public record McpConfig(
       if (candidate.isEmpty()) {
         throw new IllegalArgumentException("allowed_origins must not contain empty entries");
       }
+      if (NONE_ORIGINS.equalsIgnoreCase(candidate)) {
+        throw new IllegalArgumentException(
+            "allowed_origins cannot combine 'none' with other origins");
+      }
       origins.add(parseOrigin(candidate).normalized());
     }
     return Collections.unmodifiableSet(origins);
   }
 
   private static Set<String> normalizeAllowedOrigins(Set<String> origins, String token) {
-    if (origins == null || origins.isEmpty()) {
+    if (origins == null) {
+      return null;
+    }
+    if (origins.isEmpty()) {
       return Set.of();
     }
     Set<String> normalized = new LinkedHashSet<>();

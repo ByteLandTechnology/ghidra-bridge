@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -136,10 +137,7 @@ public final class Bootstrap {
     script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
     script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
     script.println(
-        "[ghidra-mcp]   Allowed Origins: "
-            + (mcpConfig.allowedOrigins().isEmpty()
-                ? "none"
-                : String.join(", ", mcpConfig.allowedOrigins())));
+        "[ghidra-mcp]   Allowed Origins: " + formatAllowedOrigins(mcpConfig.allowedOrigins()));
 
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
@@ -231,14 +229,22 @@ public final class Bootstrap {
             + LOOPBACK_HOST
             + " port=8766 path=/mcp"
             + " session_id=<current-program-name> tool_prefix=ghidra"
-            + " allowed_origins=<none>");
+            + " allowed_origins=<loopback-and-host>");
     script.printerr(
         "[ghidra-mcp] Example: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp session_id=demo-session"
-            + " token=secret allowed_origins=http://"
-            + LOOPBACK_HOST
-            + ":6274");
+            + " token=secret allowed_origins=https://inspector.example.com");
+  }
+
+  private static String formatAllowedOrigins(Set<String> allowedOrigins) {
+    if (allowedOrigins == null) {
+      return "loopback and host (default)";
+    }
+    if (allowedOrigins.isEmpty()) {
+      return "none";
+    }
+    return String.join(", ", allowedOrigins);
   }
 
   private static EffectiveConfig resolveConfig(String[] args, Program program) {

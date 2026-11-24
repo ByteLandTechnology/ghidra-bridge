@@ -2,6 +2,7 @@ package app.byteland.ghidra.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
@@ -40,7 +41,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -275,178 +275,111 @@ class McpHttpServerOriginTest {
         "http://[0:0:0:0:0:0:0:1]:8766",
         "http://[::ffff:127.0.0.1]:8766"
       })
-  void rejectsLoopbackOriginsByDefaultAndAllowsExplicitlyAllowlistedLoopbackOrigins(
-      String allowedOrigin) throws Exception {
-    HttpRequest defaultPreflight =
+  void allowsLoopbackOriginsAcrossPreflightPostAndSse(String allowedOrigin) throws Exception {
+    HttpRequest preflightReq =
         HttpRequest.newBuilder(endpoint)
             .header("Origin", allowedOrigin)
             .header("Access-Control-Request-Method", "POST")
             .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
             .build();
-    HttpResponse<String> defaultPreflightResp =
-        client.send(defaultPreflight, HttpResponse.BodyHandlers.ofString());
-    assertEquals(403, defaultPreflightResp.statusCode());
-    assertNoCorsHeaders(defaultPreflightResp);
+    HttpResponse<String> preflightResp =
+        client.send(preflightReq, HttpResponse.BodyHandlers.ofString());
+    assertEquals(204, preflightResp.statusCode());
+    assertEquals(
+        allowedOrigin,
+        preflightResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+    assertEquals("Origin", preflightResp.headers().firstValue("Vary").orElse(null));
 
-    try (McpHttpServer allowlistedServer =
-        startServerOnLoopback(dispatcher, requestLogs, Set.of(allowedOrigin))) {
-      URI allowlistedEndpoint = URI.create(allowlistedServer.endpoint());
-      String expectedAllowOrigin = McpConfig.tryNormalizeOrigin(allowedOrigin);
-
-      HttpRequest preflightReq =
-          HttpRequest.newBuilder(allowlistedEndpoint)
-              .header("Origin", allowedOrigin)
-              .header("Access-Control-Request-Method", "POST")
-              .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
-              .build();
-      HttpResponse<String> preflightResp =
-          client.send(preflightReq, HttpResponse.BodyHandlers.ofString());
-      assertEquals(204, preflightResp.statusCode());
-      assertEquals(
-          expectedAllowOrigin,
-          preflightResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
-      assertEquals("Origin", preflightResp.headers().firstValue("Vary").orElse(null));
-
-      HttpRequest postReq =
-          HttpRequest.newBuilder(allowlistedEndpoint)
-              .header("Origin", allowedOrigin)
-              .header("Content-Type", "application/json")
-              .header("MCP-Protocol-Version", "2026-07-28")
-              .header("Mcp-Method", "tools/call")
-              .header("Mcp-Name", "ghidra_program")
-              .POST(HttpRequest.BodyPublishers.ofString(programGetBody))
-              .build();
-      HttpResponse<String> postResp = client.send(postReq, HttpResponse.BodyHandlers.ofString());
-      assertEquals(200, postResp.statusCode());
-      assertEquals(
-          expectedAllowOrigin,
-          postResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
-      assertEquals("Origin", postResp.headers().firstValue("Vary").orElse(null));
-    }
+    HttpRequest postReq =
+        HttpRequest.newBuilder(endpoint)
+            .header("Origin", allowedOrigin)
+            .header("Content-Type", "application/json")
+            .header("MCP-Protocol-Version", "2026-07-28")
+            .header("Mcp-Method", "tools/call")
+            .header("Mcp-Name", "ghidra_program")
+            .POST(HttpRequest.BodyPublishers.ofString(programGetBody))
+            .build();
+    HttpResponse<String> postResp = client.send(postReq, HttpResponse.BodyHandlers.ofString());
+    assertEquals(200, postResp.statusCode());
+    assertEquals(
+        allowedOrigin, postResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+    assertEquals("Origin", postResp.headers().firstValue("Vary").orElse(null));
   }
 
   @Test
-  void rejectsGetSseOriginByDefaultAndAllowsExplicitlyAllowlistedGetSseStream() throws Exception {
-    HttpRequest defaultGetReq =
+  void allowsLoopbackGetSseStreamWithValidatedOrigin() throws Exception {
+    HttpRequest getReq =
         HttpRequest.newBuilder(endpoint)
             .header("Origin", "http://localhost:3000")
             .header("Accept", "text/event-stream")
             .GET()
             .build();
-    HttpResponse<String> defaultGetResp =
-        client.send(defaultGetReq, HttpResponse.BodyHandlers.ofString());
-    assertEquals(403, defaultGetResp.statusCode());
-    assertNoCorsHeaders(defaultGetResp);
-
-    try (McpHttpServer allowlistedServer =
-        startServerOnLoopback(dispatcher, requestLogs, Set.of("http://localhost:3000"))) {
-      HttpRequest getReq =
-          HttpRequest.newBuilder(URI.create(allowlistedServer.endpoint()))
-              .header("Origin", "http://localhost:3000")
-              .header("Accept", "text/event-stream")
-              .GET()
-              .build();
-      HttpResponse<InputStream> resp =
-          client.send(getReq, HttpResponse.BodyHandlers.ofInputStream());
-      try (InputStream body = resp.body();
-          BufferedReader reader =
-              new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
-        assertEquals(200, resp.statusCode());
-        assertEquals(
-            "http://localhost:3000",
-            resp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
-        String eventLine = reader.readLine();
-        assertEquals("event: endpoint", eventLine);
-      }
+    HttpResponse<InputStream> resp = client.send(getReq, HttpResponse.BodyHandlers.ofInputStream());
+    try (InputStream body = resp.body();
+        BufferedReader reader =
+            new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
+      assertEquals(200, resp.statusCode());
+      assertEquals(
+          "http://localhost:3000",
+          resp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+      String eventLine = reader.readLine();
+      assertEquals("event: endpoint", eventLine);
     }
   }
 
   @Test
-  void matchesExplicitAllowedOriginsCaseInsensitivelyWithoutDns() {
+  void matchesConfiguredHostCaseInsensitivelyAndAcrossIpv6RepresentationsWithoutDns() {
     // Hostname match without DNS resolution (.invalid is RFC 2606 guaranteed non-resolvable)
-    McpConfig externalAllowlist =
-        McpConfig.fromMap(
-            Map.of("token", "secret", "allowed_origins", "https://ghidra-host.invalid:8443"));
     assertTrue(
         McpHttpServer.isAllowedOrigin(
-            List.of("https://GHIDRA-HOST.INVALID:8443"), externalAllowlist.allowedOrigins()));
+            List.of("https://GHIDRA-HOST.INVALID:8443"), "ghidra-host.invalid"));
     assertFalse(
         McpHttpServer.isAllowedOrigin(
-            List.of("https://other-host.invalid:8443"), externalAllowlist.allowedOrigins()));
-    assertFalse(McpHttpServer.isAllowedOrigin(List.of("https://untrusted.invalid"), Set.of()));
+            List.of("https://other-host.invalid:8443"), "ghidra-host.invalid"));
+    assertFalse(
+        McpHttpServer.isAllowedOrigin(
+            List.of("https://untrusted.invalid"), "127.0.0.1"));
 
     // Configured non-loopback IPv4 and IPv6 literal match
-    McpConfig ipAllowlist =
-        McpConfig.fromMap(
-            Map.of(
-                "token",
-                "secret",
-                "allowed_origins",
-                "http://192.168.1.50:8766,http://[FD00::1]:8766"));
+    assertTrue(
+        McpHttpServer.isAllowedOrigin(List.of("http://192.168.1.50:8766"), "192.168.1.50"));
+    assertFalse(
+        McpHttpServer.isAllowedOrigin(List.of("http://192.168.1.51:8766"), "192.168.1.50"));
+    assertTrue(
+        McpHttpServer.isAllowedOrigin(List.of("http://[fd00::1]:8766"), "[FD00::1]"));
     assertTrue(
         McpHttpServer.isAllowedOrigin(
-            List.of("http://192.168.1.50:8766"), ipAllowlist.allowedOrigins()));
+            List.of("http://[fd00:0:0:0:0:0:0:1]:8766"), "fd00::1"));
     assertFalse(
-        McpHttpServer.isAllowedOrigin(
-            List.of("http://192.168.1.51:8766"), ipAllowlist.allowedOrigins()));
-    assertTrue(
-        McpHttpServer.isAllowedOrigin(
-            List.of("http://[fd00::1]:8766"), ipAllowlist.allowedOrigins()));
-    assertFalse(
-        McpHttpServer.isAllowedOrigin(
-            List.of("http://[fd00::2]:8766"), ipAllowlist.allowedOrigins()));
+        McpHttpServer.isAllowedOrigin(List.of("http://[fd00::2]:8766"), "fd00::1"));
+
+    // Malformed IP literals return null without an exception or DNS query
+    assertNull(McpHttpServer.parseIpLiteral("127.0.0.1.evil.example"));
+    assertNull(McpHttpServer.parseIpLiteral("127.0.0.01"));
+    assertNull(McpHttpServer.parseIpLiteral("127.1"));
+    assertNull(McpHttpServer.parseIpLiteral(":::1"));
+    assertNull(McpHttpServer.parseIpLiteral("::1%lo0"));
   }
 
   @Test
-  void requiresExplicitAllowlistOnNonLoopbackLiveServerAndRejectsOtherOrigins() throws Exception {
+  void allowsConfiguredNonLoopbackHostOriginOnLiveServerAndRejectsOtherNonLoopbackOrigins()
+      throws Exception {
     String nonLoopbackHost = findLocalNonLoopbackIpv4();
     org.junit.jupiter.api.Assumptions.assumeTrue(
         nonLoopbackHost != null, "No non-loopback IPv4 interface available");
-
-    int defaultPort;
-    try (ServerSocket probe =
-        new ServerSocket(0, 1, InetAddress.getByName(nonLoopbackHost))) {
-      defaultPort = probe.getLocalPort();
-    }
-    McpConfig defaultNonLoopbackConfig =
-        new McpConfig(
-            nonLoopbackHost, defaultPort, "/mcp", "secret-token", "custom-session", "ghidra");
-    try (McpHttpServer defaultNonLoopbackServer =
-        new McpHttpServer(defaultNonLoopbackConfig, dispatcher)) {
-      defaultNonLoopbackServer.start();
-      URI defaultNonLoopbackEndpoint = URI.create(defaultNonLoopbackServer.endpoint());
-      String hostOrigin = "http://" + nonLoopbackHost + ":" + defaultPort;
-
-      HttpRequest unallowlistedHostPreflight =
-          HttpRequest.newBuilder(defaultNonLoopbackEndpoint)
-              .header("Origin", hostOrigin)
-              .header("Access-Control-Request-Method", "POST")
-              .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
-              .build();
-      HttpResponse<String> unallowlistedResp =
-          client.send(unallowlistedHostPreflight, HttpResponse.BodyHandlers.ofString());
-      assertEquals(403, unallowlistedResp.statusCode());
-      assertNoCorsHeaders(unallowlistedResp);
-    }
 
     int customPort;
     try (ServerSocket probe =
         new ServerSocket(0, 1, InetAddress.getByName(nonLoopbackHost))) {
       customPort = probe.getLocalPort();
     }
-    String matchingOrigin = "http://" + nonLoopbackHost + ":" + customPort;
     McpConfig customConfig =
         new McpConfig(
-            nonLoopbackHost,
-            customPort,
-            "/mcp",
-            "secret-token",
-            "custom-session",
-            "ghidra",
-            Set.of(matchingOrigin));
+            nonLoopbackHost, customPort, "/mcp", "secret-token", "custom-session", "ghidra");
     try (McpHttpServer customServer = new McpHttpServer(customConfig, dispatcher)) {
       customServer.start();
       URI customEndpoint = URI.create(customServer.endpoint());
+      String matchingOrigin = "http://" + nonLoopbackHost + ":" + customPort;
 
       HttpRequest allowedPreflight =
           HttpRequest.newBuilder(customEndpoint)
@@ -522,21 +455,13 @@ class McpHttpServerOriginTest {
 
   private static McpHttpServer startServerOnLoopback(
       AgentDispatcher dispatcher, List<String> requestLogs) throws IOException {
-    return startServerOnLoopback(dispatcher, requestLogs, Set.of());
-  }
-
-  private static McpHttpServer startServerOnLoopback(
-      AgentDispatcher dispatcher, List<String> requestLogs, Set<String> allowedOrigins)
-      throws IOException {
     IOException lastError = null;
     for (int attempt = 0; attempt < 5; attempt++) {
       int port;
       try (ServerSocket probe = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
         port = probe.getLocalPort();
       }
-      McpConfig config =
-          new McpConfig(
-              "127.0.0.1", port, "/mcp", null, "test-session", "ghidra", allowedOrigins);
+      McpConfig config = new McpConfig("127.0.0.1", port, "/mcp", null, "test-session", "ghidra");
       try {
         McpHttpServer candidate = new McpHttpServer(config, dispatcher, requestLogs::add);
         candidate.start();

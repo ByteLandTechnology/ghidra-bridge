@@ -2,11 +2,11 @@ package app.byteland.ghidra.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
@@ -38,6 +38,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
@@ -46,44 +47,80 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class McpOriginSecurityTest {
-  private static final String ALLOWED_INSPECTOR_ORIGIN = "http://127.0.0.1:6274";
+  private static final String INSPECTOR_ORIGIN = "http://127.0.0.1:6274";
+  private static final String EXTERNAL_TRUSTED_ORIGIN = "https://inspector.trusted.example";
 
   @Test
-  void configDefaultsToEmptyAllowedOriginsAndNormalizesEntries() {
-    McpConfig defaults = McpConfig.fromMap(Map.of());
-    assertEquals(Set.of(), defaults.allowedOrigins());
+  void configLeavesOverrideUnsetByDefaultAndSupportsExplicitAndEnvOverrides() {
+    McpConfig defaults = McpConfig.fromMap(Map.of(), Map.of());
+    assertNull(defaults.allowedOrigins());
 
     McpConfig sixArg = new McpConfig("127.0.0.1", 8766, "/mcp", null, "demo", "ghidra");
-    assertEquals(Set.of(), sixArg.allowedOrigins());
+    assertNull(sixArg.allowedOrigins());
 
-    McpConfig blankArg = McpConfig.fromMap(Map.of("allowed_origins", "   "));
-    assertEquals(Set.of(), blankArg.allowedOrigins());
+    McpConfig blankArg = McpConfig.fromMap(Map.of("allowed_origins", "   "), Map.of());
+    assertNull(blankArg.allowedOrigins());
+
+    McpConfig blankEnv =
+        McpConfig.fromMap(Map.of(), Map.of(McpConfig.ALLOWED_ORIGINS_ENV, "   "));
+    assertNull(blankEnv.allowedOrigins());
+
+    McpConfig strictDenyArg = McpConfig.fromMap(Map.of("allowed_origins", " NONE "), Map.of());
+    assertEquals(Set.of(), strictDenyArg.allowedOrigins());
+
+    McpConfig strictDenyEnv =
+        McpConfig.fromMap(Map.of(), Map.of(McpConfig.ALLOWED_ORIGINS_ENV, "none"));
+    assertEquals(Set.of(), strictDenyEnv.allowedOrigins());
+
+    McpConfig strictDenyCtor =
+        new McpConfig("127.0.0.1", 8766, "/mcp", null, "demo", "ghidra", Set.of());
+    assertEquals(Set.of(), strictDenyCtor.allowedOrigins());
 
     McpConfig normalized =
         McpConfig.fromMap(
             Map.of(
                 "allowed_origins",
-                "HTTP://LocalHost:6274, http://127.0.0.1:80 , http://[::1]:6274"));
+                "HTTP://LocalHost:6274, http://127.0.0.1:80 , http://[::1]:6274"),
+            Map.of());
     assertEquals(
         Set.of("http://localhost:6274", "http://127.0.0.1", "http://[::1]:6274"),
         normalized.allowedOrigins());
 
-    McpConfig externalWithToken =
+    McpConfig fromEnvWithToken =
         McpConfig.fromMap(
+            Map.of("token", "secret"),
             Map.of(
-                "token",
-                "secret",
-                "allowed_origins",
+                McpConfig.ALLOWED_ORIGINS_ENV,
                 "HTTPS://Trusted.Example:443,https://app.trusted.example:8443"));
     assertEquals(
         Set.of("https://trusted.example", "https://app.trusted.example:8443"),
-        externalWithToken.allowedOrigins());
+        fromEnvWithToken.allowedOrigins());
+
+    // Startup argument overrides GHIDRA_MCP_ALLOWED_ORIGINS.
+    McpConfig argOverridesEnv =
+        McpConfig.fromMap(
+            Map.of("allowed_origins", INSPECTOR_ORIGIN),
+            Map.of(McpConfig.ALLOWED_ORIGINS_ENV, "*"));
+    assertEquals(Set.of(INSPECTOR_ORIGIN), argOverridesEnv.allowedOrigins());
+
+    McpConfig argNoneOverridesEnv =
+        McpConfig.fromMap(
+            Map.of("allowed_origins", "none"),
+            Map.of(McpConfig.ALLOWED_ORIGINS_ENV, INSPECTOR_ORIGIN));
+    assertEquals(Set.of(), argNoneOverridesEnv.allowedOrigins());
+
+    McpConfig blankArgClearsEnv =
+        McpConfig.fromMap(
+            Map.of("allowed_origins", ""),
+            Map.of(McpConfig.ALLOWED_ORIGINS_ENV, INSPECTOR_ORIGIN));
+    assertNull(blankArgClearsEnv.allowedOrigins());
   }
 
   @ParameterizedTest
@@ -94,6 +131,8 @@ class McpOriginSecurityTest {
         "https://*.trusted.example",
         "null",
         "NULL",
+        "none,http://127.0.0.1:6274",
+        "http://127.0.0.1:6274,none",
         "http://127.0.0.1:6274/",
         "http://127.0.0.1:6274/mcp",
         "http://127.0.0.1:6274?foo=bar",
@@ -117,28 +156,41 @@ class McpOriginSecurityTest {
         ",http://127.0.0.1:6274",
         ","
       })
-  void configRejectsInvalidAllowedOrigins(String invalidOrigin) {
+  void configRejectsInvalidAllowedOriginsInArgsAndEnv(String invalidOrigin) {
     assertThrows(
         IllegalArgumentException.class,
-        () -> McpConfig.fromMap(Map.of("token", "secret", "allowed_origins", invalidOrigin)));
+        () ->
+            McpConfig.fromMap(
+                Map.of("token", "secret", "allowed_origins", invalidOrigin), Map.of()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            McpConfig.fromMap(
+                Map.of("token", "secret"), Map.of(McpConfig.ALLOWED_ORIGINS_ENV, invalidOrigin)));
   }
 
   @Test
   void configRequiresTokenForNonLoopbackAllowedOrigins() {
     assertThrows(
         IllegalArgumentException.class,
-        () -> McpConfig.fromMap(Map.of("allowed_origins", "https://trusted.example")));
+        () -> McpConfig.fromMap(Map.of("allowed_origins", "https://trusted.example"), Map.of()));
     assertThrows(
         IllegalArgumentException.class,
         () ->
             McpConfig.fromMap(
-                Map.of("allowed_origins", "http://127.0.0.1:6274,https://trusted.example")));
+                Map.of(), Map.of(McpConfig.ALLOWED_ORIGINS_ENV, "https://trusted.example")));
     assertThrows(
         IllegalArgumentException.class,
-        () -> McpConfig.fromMap(Map.of("allowed_origins", "http://192.168.1.10:6274")));
+        () ->
+            McpConfig.fromMap(
+                Map.of("allowed_origins", "http://127.0.0.1:6274,https://trusted.example"),
+                Map.of()));
     assertThrows(
         IllegalArgumentException.class,
-        () -> McpConfig.fromMap(Map.of("allowed_origins", "http://0.0.0.0:6274")));
+        () -> McpConfig.fromMap(Map.of("allowed_origins", "http://192.168.1.10:6274"), Map.of()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> McpConfig.fromMap(Map.of("allowed_origins", "http://0.0.0.0:6274"), Map.of()));
 
     Set<String> withNull = new HashSet<>(Collections.singletonList(null));
     assertThrows(
@@ -147,43 +199,31 @@ class McpOriginSecurityTest {
   }
 
   @Test
-  void defaultServerRejectsCrossOriginRequestsAndAllowsOriginlessClients() throws Exception {
+  void defaultServerPermitsLocalToolsOutOfTheBoxAndRejectsExternalOrigins() throws Exception {
     AtomicInteger programCalls = new AtomicInteger();
-    try (RunningServer running = startServer(Map.of(), programCalls)) {
+    try (RunningServer running = startServer(Map.of(), Map.of(), programCalls)) {
       HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
       URI endpoint = URI.create(running.server().endpoint());
       String programGetBody = programGetRequestBody();
 
-      HttpRequest preflightReq =
+      // Untrusted external browser origin fails with 403 and no CORS headers.
+      HttpRequest externalPreflight =
           HttpRequest.newBuilder(endpoint)
               .header("Origin", "https://untrusted.example")
               .header("Access-Control-Request-Method", "POST")
               .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
               .build();
-      HttpResponse<String> preflightResp =
-          client.send(preflightReq, HttpResponse.BodyHandlers.ofString());
-      assertEquals(403, preflightResp.statusCode());
-      assertTrue(preflightResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
-      assertTrue(preflightResp.headers().firstValue("Vary").isEmpty());
+      HttpResponse<String> externalPreflightResp =
+          client.send(externalPreflight, HttpResponse.BodyHandlers.ofString());
+      assertEquals(403, externalPreflightResp.statusCode());
+      assertTrue(externalPreflightResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
+      assertTrue(externalPreflightResp.headers().firstValue("Vary").isEmpty());
 
-      HttpRequest postReq =
-          HttpRequest.newBuilder(endpoint)
-              .header("Origin", "https://untrusted.example")
-              .header("Content-Type", "application/json")
-              .header("MCP-Protocol-Version", "2026-07-28")
-              .header("Mcp-Method", "tools/call")
-              .header("Mcp-Name", "ghidra_program")
-              .POST(HttpRequest.BodyPublishers.ofString(programGetBody))
-              .build();
-      HttpResponse<String> postResp = client.send(postReq, HttpResponse.BodyHandlers.ofString());
-      assertEquals(403, postResp.statusCode());
-      assertTrue(postResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
-      assertEquals(0, programCalls.get());
-
-      for (String loopbackOrigin : List.of("http://localhost:3000", ALLOWED_INSPECTOR_ORIGIN)) {
-        HttpRequest localOriginPost =
+      // Local MCP Inspector origins succeed out of the box without extra configuration.
+      for (String localOrigin : List.of(INSPECTOR_ORIGIN, "http://localhost:6274")) {
+        HttpRequest localPost =
             HttpRequest.newBuilder(endpoint)
-                .header("Origin", loopbackOrigin)
+                .header("Origin", localOrigin)
                 .header("Content-Type", "application/json")
                 .header("MCP-Protocol-Version", "2026-07-28")
                 .header("Mcp-Method", "tools/call")
@@ -191,14 +231,57 @@ class McpOriginSecurityTest {
                 .POST(HttpRequest.BodyPublishers.ofString(programGetBody))
                 .build();
         HttpResponse<String> localResp =
-            client.send(localOriginPost, HttpResponse.BodyHandlers.ofString());
-        assertEquals(403, localResp.statusCode());
-        assertTrue(localResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
+            client.send(localPost, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, localResp.statusCode());
+        assertEquals(
+            localOrigin,
+            localResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+        assertEquals("Origin", localResp.headers().firstValue("Vary").orElse(null));
+      }
+      assertEquals(2, programCalls.get());
+    }
+  }
+
+  @Test
+  void strictDefaultDenyOverrideRejectsAllOriginsAndPermitsOriginlessClients() throws Exception {
+    AtomicInteger programCalls = new AtomicInteger();
+    try (RunningServer running =
+        startServer(Map.of(), Map.of(McpConfig.ALLOWED_ORIGINS_ENV, "none"), programCalls)) {
+      HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+      URI endpoint = URI.create(running.server().endpoint());
+      String programGetBody = programGetRequestBody();
+
+      for (String origin :
+          List.of("https://untrusted.example", "http://localhost:3000", INSPECTOR_ORIGIN)) {
+        HttpRequest preflightReq =
+            HttpRequest.newBuilder(endpoint)
+                .header("Origin", origin)
+                .header("Access-Control-Request-Method", "POST")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> preflightResp =
+            client.send(preflightReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, preflightResp.statusCode());
+        assertTrue(preflightResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
+        assertTrue(preflightResp.headers().firstValue("Vary").isEmpty());
+
+        HttpRequest postReq =
+            HttpRequest.newBuilder(endpoint)
+                .header("Origin", origin)
+                .header("Content-Type", "application/json")
+                .header("MCP-Protocol-Version", "2026-07-28")
+                .header("Mcp-Method", "tools/call")
+                .header("Mcp-Name", "ghidra_program")
+                .POST(HttpRequest.BodyPublishers.ofString(programGetBody))
+                .build();
+        HttpResponse<String> postResp = client.send(postReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, postResp.statusCode());
+        assertTrue(postResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
       }
 
       HttpRequest headWithOrigin =
           HttpRequest.newBuilder(endpoint)
-              .header("Origin", "http://localhost:3000")
+              .header("Origin", INSPECTOR_ORIGIN)
               .method("HEAD", HttpRequest.BodyPublishers.noBody())
               .build();
       HttpResponse<Void> headResp =
@@ -208,7 +291,7 @@ class McpOriginSecurityTest {
 
       HttpRequest sseWithOrigin =
           HttpRequest.newBuilder(endpoint)
-              .header("Origin", "http://localhost:3000")
+              .header("Origin", INSPECTOR_ORIGIN)
               .header("Accept", "text/event-stream")
               .GET()
               .build();
@@ -218,7 +301,7 @@ class McpOriginSecurityTest {
       assertTrue(sseResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
       assertEquals(0, programCalls.get());
 
-      // CLI and desktop clients that omit Origin succeed without CORS headers.
+      // CLI and desktop clients without Origin succeed without CORS Allow-Origin headers.
       HttpRequest cliPost =
           HttpRequest.newBuilder(endpoint)
               .header("Content-Type", "application/json")
@@ -232,99 +315,84 @@ class McpOriginSecurityTest {
       assertTrue(cliResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
       assertTrue(cliResp.headers().firstValue("Vary").isEmpty());
       assertEquals(1, programCalls.get());
-
-      HttpRequest cliHead =
-          HttpRequest.newBuilder(endpoint)
-              .method("HEAD", HttpRequest.BodyPublishers.noBody())
-              .build();
-      HttpResponse<Void> cliHeadResp = client.send(cliHead, HttpResponse.BodyHandlers.discarding());
-      assertEquals(200, cliHeadResp.statusCode());
-      assertTrue(cliHeadResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
-
-      HttpRequest cliOptions =
-          HttpRequest.newBuilder(endpoint)
-              .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
-              .build();
-      HttpResponse<String> cliOptionsResp =
-          client.send(cliOptions, HttpResponse.BodyHandlers.ofString());
-      assertEquals(204, cliOptionsResp.statusCode());
-      assertTrue(cliOptionsResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
     }
   }
 
   @Test
-  void allowlistedOriginSucceedsAcrossHandlersWhileOtherAndMultiValuedOriginsFail()
+  void explicitAllowlistOverridesDefaultLoopbackAndPermitsNonLoopbackOriginWithToken()
       throws Exception {
     AtomicInteger programCalls = new AtomicInteger();
     try (RunningServer running =
-        startServer(Map.of("allowed_origins", ALLOWED_INSPECTOR_ORIGIN), programCalls)) {
+        startServer(
+            Map.of(
+                "token",
+                "secret-token",
+                "allowed_origins",
+                INSPECTOR_ORIGIN + "," + EXTERNAL_TRUSTED_ORIGIN),
+            Map.of(),
+            programCalls)) {
       HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
       URI endpoint = URI.create(running.server().endpoint());
       String programGetBody = programGetRequestBody();
 
-      // OPTIONS preflight for a permitted origin
-      HttpRequest allowedPreflight =
-          HttpRequest.newBuilder(endpoint)
-              .header("Origin", ALLOWED_INSPECTOR_ORIGIN)
-              .header("Access-Control-Request-Method", "POST")
-              .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
-              .build();
-      HttpResponse<String> allowedPreflightResp =
-          client.send(allowedPreflight, HttpResponse.BodyHandlers.ofString());
-      assertEquals(204, allowedPreflightResp.statusCode());
-      assertEquals(
-          ALLOWED_INSPECTOR_ORIGIN,
-          allowedPreflightResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
-      assertEquals(
-          "Origin", allowedPreflightResp.headers().firstValue("Vary").orElse(null));
-      assertFalse(
-          allowedPreflightResp.headers().firstValue("Access-Control-Allow-Methods").isEmpty());
+      for (String permittedOrigin : List.of(INSPECTOR_ORIGIN, EXTERNAL_TRUSTED_ORIGIN)) {
+        HttpRequest preflight =
+            HttpRequest.newBuilder(endpoint)
+                .header("Origin", permittedOrigin)
+                .header("Access-Control-Request-Method", "POST")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> preflightResp =
+            client.send(preflight, HttpResponse.BodyHandlers.ofString());
+        assertEquals(204, preflightResp.statusCode());
+        assertEquals(
+            permittedOrigin,
+            preflightResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+        assertEquals("Origin", preflightResp.headers().firstValue("Vary").orElse(null));
 
-      // HEAD for a permitted origin
-      HttpRequest allowedHead =
-          HttpRequest.newBuilder(endpoint)
-              .header("Origin", ALLOWED_INSPECTOR_ORIGIN)
-              .method("HEAD", HttpRequest.BodyPublishers.noBody())
-              .build();
-      HttpResponse<Void> allowedHeadResp =
-          client.send(allowedHead, HttpResponse.BodyHandlers.discarding());
-      assertEquals(200, allowedHeadResp.statusCode());
-      assertEquals(
-          ALLOWED_INSPECTOR_ORIGIN,
-          allowedHeadResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
-      assertEquals("Origin", allowedHeadResp.headers().firstValue("Vary").orElse(null));
+        HttpRequest head =
+            HttpRequest.newBuilder(endpoint)
+                .header("Origin", permittedOrigin)
+                .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<Void> headResp = client.send(head, HttpResponse.BodyHandlers.discarding());
+        assertEquals(200, headResp.statusCode());
+        assertEquals(
+            permittedOrigin,
+            headResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
 
-      // POST for a permitted origin
-      HttpRequest allowedPost =
-          HttpRequest.newBuilder(endpoint)
-              .header("Origin", ALLOWED_INSPECTOR_ORIGIN)
-              .header("Content-Type", "application/json")
-              .header("MCP-Protocol-Version", "2026-07-28")
-              .header("Mcp-Method", "tools/call")
-              .header("Mcp-Name", "ghidra_program")
-              .POST(HttpRequest.BodyPublishers.ofString(programGetBody))
-              .build();
-      HttpResponse<String> allowedPostResp =
-          client.send(allowedPost, HttpResponse.BodyHandlers.ofString());
-      assertEquals(200, allowedPostResp.statusCode());
-      assertEquals(
-          ALLOWED_INSPECTOR_ORIGIN,
-          allowedPostResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
-      assertEquals("Origin", allowedPostResp.headers().firstValue("Vary").orElse(null));
-      assertEquals(1, programCalls.get());
+        HttpRequest post =
+            HttpRequest.newBuilder(endpoint)
+                .header("Origin", permittedOrigin)
+                .header("Authorization", "Bearer secret-token")
+                .header("Content-Type", "application/json")
+                .header("MCP-Protocol-Version", "2026-07-28")
+                .header("Mcp-Method", "tools/call")
+                .header("Mcp-Name", "ghidra_program")
+                .POST(HttpRequest.BodyPublishers.ofString(programGetBody))
+                .build();
+        HttpResponse<String> postResp = client.send(post, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, postResp.statusCode());
+        assertEquals(
+            permittedOrigin,
+            postResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+        assertEquals("Origin", postResp.headers().firstValue("Vary").orElse(null));
+      }
+      assertEquals(2, programCalls.get());
 
-      // GET SSE for a permitted origin
-      HttpRequest allowedSse =
+      // GET SSE for a listed non-loopback origin succeeds when authenticated.
+      HttpRequest sseReq =
           HttpRequest.newBuilder(endpoint)
-              .header("Origin", ALLOWED_INSPECTOR_ORIGIN)
+              .header("Origin", EXTERNAL_TRUSTED_ORIGIN)
+              .header("Authorization", "Bearer secret-token")
               .header("Accept", "text/event-stream")
               .GET()
               .build();
       HttpResponse<InputStream> sseStreamResp =
-          client.send(allowedSse, HttpResponse.BodyHandlers.ofInputStream());
+          client.send(sseReq, HttpResponse.BodyHandlers.ofInputStream());
       assertEquals(200, sseStreamResp.statusCode());
       assertEquals(
-          ALLOWED_INSPECTOR_ORIGIN,
+          EXTERNAL_TRUSTED_ORIGIN,
           sseStreamResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
       assertEquals("Origin", sseStreamResp.headers().firstValue("Vary").orElse(null));
       try (BufferedReader reader =
@@ -333,21 +401,23 @@ class McpOriginSecurityTest {
         assertEquals("event: endpoint", reader.readLine());
       }
 
-      // Unlisted or invalid origins (different host, scheme, port, null, path slash, or comma list)
-      for (String disallowed :
+      // Unlisted origins (even loopback ones) fail when the explicit override is active.
+      for (String rejected :
           List.of(
               "https://untrusted.example",
               "http://localhost:6274",
+              "http://localhost:3000",
               "https://127.0.0.1:6274",
               "http://127.0.0.1:6275",
               "http://127.0.0.1",
               "http://127.0.0.1:6274/",
               "null",
               "*",
-              ALLOWED_INSPECTOR_ORIGIN + ", https://untrusted.example")) {
+              INSPECTOR_ORIGIN + ", https://untrusted.example")) {
         HttpRequest badPost =
             HttpRequest.newBuilder(endpoint)
-                .header("Origin", disallowed)
+                .header("Origin", rejected)
+                .header("Authorization", "Bearer secret-token")
                 .header("Content-Type", "application/json")
                 .header("MCP-Protocol-Version", "2026-07-28")
                 .header("Mcp-Method", "tools/call")
@@ -355,13 +425,13 @@ class McpOriginSecurityTest {
                 .POST(HttpRequest.BodyPublishers.ofString(programGetBody))
                 .build();
         HttpResponse<String> badResp = client.send(badPost, HttpResponse.BodyHandlers.ofString());
-        assertEquals(403, badResp.statusCode(), "Expected 403 for origin: " + disallowed);
+        assertEquals(403, badResp.statusCode(), "Expected 403 for origin: " + rejected);
         assertTrue(badResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
         assertTrue(badResp.headers().firstValue("Vary").isEmpty());
       }
-      assertEquals(1, programCalls.get());
+      assertEquals(2, programCalls.get());
 
-      // Multi-valued and empty Origin headers on the wire must return 403 without CORS headers.
+      // Multi-valued and empty Origin headers on the wire return 403 without CORS headers.
       String duplicateDifferent =
           sendRawHttp(
               endpoint,
@@ -372,7 +442,7 @@ class McpOriginSecurityTest {
                   + endpoint.getAuthority()
                   + "\r\n"
                   + "Origin: "
-                  + ALLOWED_INSPECTOR_ORIGIN
+                  + INSPECTOR_ORIGIN
                   + "\r\n"
                   + "Origin: https://untrusted.example\r\n"
                   + "Connection: close\r\n\r\n");
@@ -391,10 +461,10 @@ class McpOriginSecurityTest {
                   + endpoint.getAuthority()
                   + "\r\n"
                   + "Origin: "
-                  + ALLOWED_INSPECTOR_ORIGIN
+                  + INSPECTOR_ORIGIN
                   + "\r\n"
                   + "Origin: "
-                  + ALLOWED_INSPECTOR_ORIGIN
+                  + INSPECTOR_ORIGIN
                   + "\r\n"
                   + "Connection: close\r\n\r\n");
       assertTrue(duplicateSame.startsWith("HTTP/1.1 403"), duplicateSame);
@@ -415,6 +485,32 @@ class McpOriginSecurityTest {
       assertTrue(blankOrigin.startsWith("HTTP/1.1 403"), blankOrigin);
       assertFalse(
           blankOrigin.toLowerCase().contains("access-control-allow-origin"), blankOrigin);
+    }
+  }
+
+  @Test
+  void readsEnvironmentVariableFromProcessEnvironmentInFromMap() throws Exception {
+    String javaBin =
+        ProcessHandle.current()
+            .info()
+            .command()
+            .orElseGet(() -> Path.of(System.getProperty("java.home"), "bin", "java").toString());
+    ProcessBuilder pb =
+        new ProcessBuilder(
+            javaBin, "-cp", System.getProperty("java.class.path"), EnvProbe.class.getName());
+    pb.environment().put(McpConfig.ALLOWED_ORIGINS_ENV, "HTTPS://Inspector.Trusted.Example:443");
+    pb.redirectErrorStream(true);
+    Process process = pb.start();
+    String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    assertTrue(process.waitFor(15, TimeUnit.SECONDS), "EnvProbe timed out: " + output);
+    assertEquals(0, process.exitValue(), "EnvProbe failed: " + output);
+    assertEquals("ORIGINS=[https://inspector.trusted.example]", output.trim());
+  }
+
+  public static final class EnvProbe {
+    public static void main(String[] args) {
+      McpConfig config = McpConfig.fromMap(Map.of("token", "secret"));
+      System.out.println("ORIGINS=" + config.allowedOrigins());
     }
   }
 
@@ -443,7 +539,8 @@ class McpOriginSecurityTest {
   }
 
   private static RunningServer startServer(
-      Map<String, String> extraArgs, AtomicInteger programCalls) throws IOException {
+      Map<String, String> extraArgs, Map<String, String> env, AtomicInteger programCalls)
+      throws IOException {
     ProgramService programService =
         proxy(
             ProgramService.class,
@@ -501,17 +598,8 @@ class McpOriginSecurityTest {
       args.put("host", "127.0.0.1");
       args.put("port", Integer.toString(port));
       args.put("session_id", "demo-session");
-      McpConfig mcpConfig = McpConfig.fromMap(args);
-      AgentConfig agentConfig =
-          new AgentConfig(
-              null,
-              mcpConfig.host(),
-              mcpConfig.port(),
-              mcpConfig.path(),
-              mcpConfig.token(),
-              mcpConfig.sessionId(),
-              null);
-      AgentDispatcher dispatcher = new AgentDispatcher(services, agentConfig);
+      McpConfig mcpConfig = McpConfig.fromMap(args, env);
+      AgentDispatcher dispatcher = new AgentDispatcher(services, mcpConfig.sessionId());
       try {
         McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher);
         server.start();

@@ -121,7 +121,7 @@ MCP HTTP サーバーは次のルールに従ってリクエストを処理し�
 - **OPTIONS**: CORS プリフライトリクエストを処理し、ステータス `204` を返します。
 - **GET**: ステータス `405` と `Allow: POST, OPTIONS` ヘッダーを返します。
 - **その他のメソッド**: ステータス `405` を返します。
-- **Origin**: デフォルトでは、`Origin` ヘッダーを含むリクエストは CORS ヘッダーなしでステータス `403` を返します。カンマ区切りの `http://` または `https://` オリジン一覧（`scheme://host[:port]`）を `allowed_origins` に指定した場合のみ、一致する単一値の `Origin` リクエストを許可し、`Access-Control-Allow-Origin` と `Vary: Origin` を返します。
+- **Origin**: デフォルトでは、ループバックでも設定済みの `host` でもない `Origin` ヘッダーには CORS ヘッダーなしでステータス `403` を返します。`allowed_origins` または `GHIDRA_MCP_ALLOWED_ORIGINS` に `scheme://host[:port]` の一覧を指定すると列挙されたオリジンのみを許可し（`Access-Control-Allow-Origin` と `Vary: Origin` を返却）、`none` を指定するとすべての `Origin` ヘッダーを拒否します。
 - **Content-Type**: POST リクエストは `Content-Type: application/json` を送信する必要があります。それ以外はステータス `415` を返します。
 - **通知**: `id` を持たないリクエストは、本文なしでステータス `202` を返します。
 
@@ -282,7 +282,7 @@ MCP は操作を 15 個のツールに分類します:
 
 - **ループバック既定**: リスナーはデフォルトで `127.0.0.1` にバインドされます。`token` を設定していないループバックリスナーは認証不要です。
 - **外部リスナー**: 外部ネットワークインターフェース上のリスナーには `token` が必須です。
-- **ブラウザオリジン分離**: MCP HTTP サーバーはデフォルトですべての `Origin` ヘッダーを拒否します。特定の `scheme://host[:port]` ブラウザオリジンを許可するには `allowed_origins` を設定します。`allowed_origins` にループバック以外のオリジンが含まれる場合は `token` が必須です。
+- **ブラウザオリジンポリシー**: MCP HTTP サーバーはデフォルトでループバックおよび設定済みの `host` オリジンを許可します。`allowed_origins` または `GHIDRA_MCP_ALLOWED_ORIGINS`（`allowed_origins` が優先）で規定を上書きでき、`none` を指定するとすべての `Origin` ヘッダーを拒否します。ループバック以外のオリジンには `token` が必須です。
 - **Authorization ヘッダー**: 認証情報は `Authorization: Bearer <token>` 経由で送信します。
 - **URL トークンの拒否**: クエリ文字列に含まれるトークンは HTTP 400 で拒否されます。
 - **ログの保護**: シークレットトークンがログに出力されることはありません。
