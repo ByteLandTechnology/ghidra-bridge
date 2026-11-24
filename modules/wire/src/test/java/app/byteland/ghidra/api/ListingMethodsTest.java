@@ -68,8 +68,6 @@ class ListingMethodsTest {
                                 "NOP",
                                 "NOP",
                                 List.of(),
-                                null,
-                                null,
                                 null)),
                         25,
                         "ram:00100000",

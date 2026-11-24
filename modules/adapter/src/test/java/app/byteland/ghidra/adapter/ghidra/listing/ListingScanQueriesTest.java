@@ -23,9 +23,12 @@ import ghidra.program.model.address.GenericAddressSpace;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.lang.InstructionPrototype;
 import ghidra.program.model.listing.CodeUnit;
+import ghidra.program.model.listing.CodeUnitIterator;
 import ghidra.program.model.listing.Data;
+import ghidra.program.model.listing.DataIterator;
 import ghidra.program.model.listing.FlowOverride;
 import ghidra.program.model.listing.Instruction;
+import ghidra.program.model.listing.InstructionIterator;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.Memory;
@@ -34,6 +37,7 @@ import ghidra.util.task.TaskMonitor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.TreeMap;
@@ -112,25 +116,33 @@ class ListingScanQueriesTest {
 
     Page<InstructionResource> instrPage1 =
         service.listInstructions(new AddressScanOptions("0x2000", "0x2006", 1_000), 1, null);
-    assertEquals(List.of("ram:00002000"), instrPage1.items().stream().map(InstructionResource::address).toList());
+    assertEquals(
+        List.of("ram:00002000"),
+        instrPage1.items().stream().map(InstructionResource::address).toList());
     assertEquals(FlowOverrideValue.NONE, instrPage1.items().getFirst().flowOverride());
     assertEquals("ram:00002000", instrPage1.nextCursor());
 
     Page<InstructionResource> instrPage2 =
         service.listInstructions(
             new AddressScanOptions("0x2000", "0x2006", 1_000), 5, instrPage1.nextCursor());
-    assertEquals(List.of("ram:00002004"), instrPage2.items().stream().map(InstructionResource::address).toList());
+    assertEquals(
+        List.of("ram:00002004"),
+        instrPage2.items().stream().map(InstructionResource::address).toList());
     assertNull(instrPage2.nextCursor());
 
     Page<DataUnitResource> dataPage1 =
         service.listDataUnits(new AddressScanOptions("0x3000", "0x3008", 1_000), 1, null);
-    assertEquals(List.of("ram:00003002"), dataPage1.items().stream().map(DataUnitResource::address).toList());
+    assertEquals(
+        List.of("ram:00003002"),
+        dataPage1.items().stream().map(DataUnitResource::address).toList());
     assertEquals("ram:00003002", dataPage1.nextCursor());
 
     Page<DataUnitResource> dataPage2 =
         service.listDataUnits(
             new AddressScanOptions("0x3000", "0x3008", 1_000), 5, dataPage1.nextCursor());
-    assertEquals(List.of("ram:00003006"), dataPage2.items().stream().map(DataUnitResource::address).toList());
+    assertEquals(
+        List.of("ram:00003006"),
+        dataPage2.items().stream().map(DataUnitResource::address).toList());
     assertNull(dataPage2.nextCursor());
   }
 
@@ -167,16 +179,35 @@ class ListingScanQueriesTest {
     Listing listing =
         proxy(
             Listing.class,
-            (method, args) ->
-                switch (method) {
-                  case "getInstructionAt" -> instructions.get((Address) args[0]);
-                  case "getInstructionAfter" -> higherValue(instructions, (Address) args[0]);
-                  case "getDefinedDataAt" -> definedData.get((Address) args[0]);
-                  case "getDefinedDataAfter" -> higherValue(definedData, (Address) args[0]);
-                  case "getUndefinedDataAt" -> undefinedData.get((Address) args[0]);
-                  case "getUndefinedDataAfter" -> higherValue(undefinedData, (Address) args[0]);
-                  default -> throw new AssertionError(method);
-                });
+            (method, args) -> {
+              NavigableMap<Address, CodeUnit> allCodeUnits =
+                  mergedCodeUnits(instructions, definedData, undefinedData);
+              return switch (method) {
+                case "getCodeUnits" -> {
+                  assertTrue((Boolean) args[1]);
+                  yield iteratorProxy(
+                      CodeUnitIterator.class,
+                      allCodeUnits.tailMap((Address) args[0], true).values().iterator());
+                }
+                case "getInstructions" -> {
+                  assertTrue((Boolean) args[1]);
+                  yield iteratorProxy(
+                      InstructionIterator.class,
+                      instructions.tailMap((Address) args[0], true).values().iterator());
+                }
+                case "getDefinedData" -> {
+                  assertTrue((Boolean) args[1]);
+                  yield iteratorProxy(
+                      DataIterator.class,
+                      definedData.tailMap((Address) args[0], true).values().iterator());
+                }
+                case "getCodeUnitAt" -> allCodeUnits.get((Address) args[0]);
+                case "getCodeUnitAfter" -> higherValue(allCodeUnits, (Address) args[0]);
+                case "getCodeUnitBefore" -> lowerValue(allCodeUnits, (Address) args[0]);
+                case "getCodeUnitContaining" -> containingValue(allCodeUnits, (Address) args[0]);
+                default -> throw new AssertionError(method);
+              };
+            });
     return proxy(
         Program.class,
         (method, args) ->
@@ -190,9 +221,44 @@ class ListingScanQueriesTest {
             });
   }
 
+  private static NavigableMap<Address, CodeUnit> mergedCodeUnits(
+      NavigableMap<Address, Instruction> instructions,
+      NavigableMap<Address, Data> definedData,
+      NavigableMap<Address, Data> undefinedData) {
+    NavigableMap<Address, CodeUnit> merged = new TreeMap<>();
+    merged.putAll(instructions);
+    merged.putAll(definedData);
+    merged.putAll(undefinedData);
+    return merged;
+  }
+
+  private static <T, E> T iteratorProxy(Class<T> type, Iterator<E> delegate) {
+    return proxy(
+        type,
+        (method, args) ->
+            switch (method) {
+              case "hasNext" -> delegate.hasNext();
+              case "next" -> delegate.next();
+              case "iterator" -> delegate;
+              default -> throw new AssertionError(method);
+            });
+  }
+
   private static <V extends CodeUnit> V higherValue(NavigableMap<Address, V> map, Address address) {
     var entry = map.higherEntry(address);
     return entry == null ? null : entry.getValue();
+  }
+
+  private static <V extends CodeUnit> V lowerValue(NavigableMap<Address, V> map, Address address) {
+    var entry = map.lowerEntry(address);
+    return entry == null ? null : entry.getValue();
+  }
+
+  private static CodeUnit containingValue(NavigableMap<Address, CodeUnit> map, Address address) {
+    var entry = map.floorEntry(address);
+    if (entry == null) return null;
+    CodeUnit unit = entry.getValue();
+    return unit.getMaxAddress().compareTo(address) >= 0 ? unit : null;
   }
 
   private static Instruction stubInstruction(

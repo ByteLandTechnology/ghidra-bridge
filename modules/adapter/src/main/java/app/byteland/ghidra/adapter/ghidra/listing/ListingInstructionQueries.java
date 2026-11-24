@@ -9,6 +9,7 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.listing.InstructionResource;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Instruction;
+import ghidra.program.model.listing.InstructionIterator;
 import java.util.NoSuchElementException;
 
 final class ListingInstructionQueries {
@@ -23,20 +24,24 @@ final class ListingInstructionQueries {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
+    Address iterationStart = iterationStart(range, cursor);
 
     BoundedAddressScan<InstructionResource> scan =
         BoundedAddressScan.start(
             normalizedLimit, options.timeoutMs(), range.startText(), range.endText());
-    Instruction instruction =
-        cursor == null
-            ? firstInstruction(range.start())
-            : context.script().getInstructionAfter(cursor);
-    while (instruction != null) {
-      if (range.afterEnd(instruction.getAddress())) break;
-      String address = AddressUtil.canonicalAddress(instruction.getAddress());
-      scan.visit(address, address, ListingDescriptions.toInstructionItem(instruction, context));
+    if (range.afterEnd(iterationStart)) {
+      return scan.finish();
+    }
+    InstructionIterator instructions =
+        context.currentProgram().getListing().getInstructions(iterationStart, true);
+    while (instructions.hasNext()) {
+      Instruction instruction = instructions.next();
+      Address address = instruction.getAddress();
+      if (atOrBeforeCursor(address, cursor)) continue;
+      if (range.afterEnd(address)) break;
+      String canonical = AddressUtil.canonicalAddress(address);
+      scan.visit(canonical, canonical, ListingDescriptions.toInstructionItem(instruction, context));
       if (scan.stopped()) break;
-      instruction = context.script().getInstructionAfter(instruction);
     }
 
     return scan.finish();
@@ -55,11 +60,11 @@ final class ListingInstructionQueries {
     return context.parseAddress(rawAddress);
   }
 
-  private Instruction firstInstruction(Address start) {
-    Instruction instruction = context.script().getInstructionAt(start);
-    if (instruction != null) {
-      return instruction;
-    }
-    return context.script().getInstructionAfter(start);
+  static Address iterationStart(AddressScanRanges.Resolved range, Address cursor) {
+    return cursor != null && cursor.compareTo(range.start()) > 0 ? cursor : range.start();
+  }
+
+  static boolean atOrBeforeCursor(Address address, Address cursor) {
+    return cursor != null && address.compareTo(cursor) <= 0;
   }
 }

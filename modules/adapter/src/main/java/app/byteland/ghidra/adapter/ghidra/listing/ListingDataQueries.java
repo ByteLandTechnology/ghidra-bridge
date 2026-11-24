@@ -9,6 +9,7 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.listing.DataUnitResource;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Data;
+import ghidra.program.model.listing.DataIterator;
 
 final class ListingDataQueries {
   private final GhidraSession context;
@@ -22,17 +23,24 @@ final class ListingDataQueries {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
+    Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor);
 
     BoundedAddressScan<DataUnitResource> scan =
         BoundedAddressScan.start(
             normalizedLimit, options.timeoutMs(), range.startText(), range.endText());
-    Data data = cursor == null ? firstData(range.start()) : context.script().getDataAfter(cursor);
-    while (data != null) {
-      if (range.afterEnd(data.getAddress())) break;
-      String address = AddressUtil.canonicalAddress(data.getAddress());
-      scan.visit(address, address, ListingDescriptions.toDataItem(data, context));
+    if (range.afterEnd(iterationStart)) {
+      return scan.finish();
+    }
+    DataIterator dataUnits =
+        context.currentProgram().getListing().getDefinedData(iterationStart, true);
+    while (dataUnits.hasNext()) {
+      Data data = dataUnits.next();
+      Address address = data.getAddress();
+      if (ListingInstructionQueries.atOrBeforeCursor(address, cursor)) continue;
+      if (range.afterEnd(address)) break;
+      String canonical = AddressUtil.canonicalAddress(address);
+      scan.visit(canonical, canonical, ListingDescriptions.toDataItem(data, context));
       if (scan.stopped()) break;
-      data = context.script().getDataAfter(data);
     }
 
     return scan.finish();
@@ -40,13 +48,5 @@ final class ListingDataQueries {
 
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);
-  }
-
-  private Data firstData(Address start) {
-    Data data = context.script().getDataAt(start);
-    if (data != null) {
-      return data;
-    }
-    return context.script().getDataAfter(start);
   }
 }

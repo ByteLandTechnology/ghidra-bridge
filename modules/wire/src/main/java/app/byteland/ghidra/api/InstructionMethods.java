@@ -39,13 +39,7 @@ final class InstructionMethods implements ApiMethodProvider {
                 .getInstruction(text(selector(request), ApiVocabulary.ADDRESS)));
     registry.scanList(
         "instruction.list",
-        ApiSchemaCatalog.scanListInput(
-            WireSchema.object(
-                ApiSchemaCatalog.props(
-                    ApiVocabulary.START,
-                    WireSchema.string(),
-                    ApiVocabulary.END,
-                    WireSchema.string()))),
+        ApiSchemaCatalog.scanListInput(WireSchema.object(Map.of())),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
         (request, page) ->
@@ -53,7 +47,7 @@ final class InstructionMethods implements ApiMethodProvider {
                 .services()
                 .listingService()
                 .listInstructions(
-                    addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
+                    addressScan(request),
                     page.limit(),
                     page.cursor()));
     Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
@@ -81,7 +75,7 @@ final class InstructionMethods implements ApiMethodProvider {
                   flowOverrides(
                       filter(request).get("flow_overrides"),
                       List.of("branch", "call", "call_return", "return")),
-                  addressScan(request, null, null),
+                  addressScan(request),
                   page.limit(),
                   page.cursor());
         });
