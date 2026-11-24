@@ -121,7 +121,7 @@ class ListingCodeUnitQueriesTest {
       ListingCodeUnitQueries queries =
           new ListingCodeUnitQueries(GhidraTestSupport.sessionFor(spy.wrap(holder.program())));
 
-      // Completed instruction scan across 64 KB undefined gap + trailing undefined tail
+      // Completed instruction scan across 64 KB undefined gap and final undefined tail
       Page<CodeUnitResource> instructions =
           queries.listCodeUnits(
               AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
