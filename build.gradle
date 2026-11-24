@@ -1,5 +1,11 @@
 plugins {
-    id 'base'
+    id 'java-base'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 group = 'app.byteland'
@@ -214,8 +220,6 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     source project(':launcher').layout.buildDirectory.dir('generated/scripts')
     classpath = ghidraJars
     destinationDirectory = layout.buildDirectory.dir('compiled-scripts')
-    sourceCompatibility = '21'
-    targetCompatibility = '21'
     options.encoding = 'UTF-8'
     options.release = 21
     options.compilerArgs.addAll(['-Xlint:all', '-Werror'])
