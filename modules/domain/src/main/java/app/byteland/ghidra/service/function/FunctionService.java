@@ -3,12 +3,24 @@ package app.byteland.ghidra.service.function;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
  * Manages functions, parameters, local variables, and call graphs.
  */
 public interface FunctionService {
+  /**
+   * Ordered parameter replacement entry for atomic prototype updates.
+   */
+  record ParameterPatch(
+      String name, DataTypeReference dataType, VariableStorageReference storage) {
+    public ParameterPatch {
+      Objects.requireNonNull(dataType, "dataType");
+    }
+  }
+
   /**
    * Patch for Boolean and integer function attributes.
    */
@@ -69,6 +81,31 @@ public interface FunctionService {
   /**
    * Updates function name, comments, signature, and attributes.
    */
+  default void patchFunction(
+      String rawAddress,
+      String newName,
+      String newComment,
+      boolean commentPresent,
+      DataTypeReference returnType,
+      VariableStorageReference returnStorage,
+      String callingConvention,
+      FunctionAttributePatch attributes) {
+    patchFunction(
+        rawAddress,
+        newName,
+        newComment,
+        commentPresent,
+        returnType,
+        returnStorage,
+        callingConvention,
+        attributes,
+        null,
+        null);
+  }
+
+  /**
+   * Updates function name, comments, parameters, prototype signature, and attributes.
+   */
   void patchFunction(
       String rawAddress,
       String newName,
@@ -77,7 +114,9 @@ public interface FunctionService {
       DataTypeReference returnType,
       VariableStorageReference returnStorage,
       String callingConvention,
-      FunctionAttributePatch attributes);
+      FunctionAttributePatch attributes,
+      List<ParameterPatch> parameters,
+      String signature);
 
   /**
    * Returns one page of functions that call the target function.

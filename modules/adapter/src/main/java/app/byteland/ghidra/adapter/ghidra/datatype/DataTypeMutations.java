@@ -1,5 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
+import app.byteland.ghidra.adapter.ghidra.GhidraCTypeParser;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
@@ -8,6 +9,7 @@ import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeConflictHandler;
+import ghidra.program.model.data.DataTypeDependencyException;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.EnumDataType;
 import ghidra.program.model.data.FunctionDefinition;
@@ -36,6 +38,38 @@ final class DataTypeMutations {
       int size,
       FunctionSignature signature,
       Function<DataTypeReference, DataType> resolver) {
+    writeStructuredDataType(
+        manager, categoryPath, kind, name, baseType, size, signature, resolver, false);
+  }
+
+  static void upsertDataType(
+      DataTypeManager manager,
+      String categoryPath,
+      DataTypeResource.Kind kind,
+      String name,
+      DataTypeReference baseType,
+      int size,
+      FunctionSignature signature,
+      Function<DataTypeReference, DataType> resolver) {
+    writeStructuredDataType(
+        manager, categoryPath, kind, name, baseType, size, signature, resolver, true);
+  }
+
+  static String writeDeclaration(
+      DataTypeManager manager, String categoryPath, String declaration, boolean upsert) {
+    return GhidraCTypeParser.writeSingleDeclaration(manager, categoryPath, declaration, upsert);
+  }
+
+  private static void writeStructuredDataType(
+      DataTypeManager manager,
+      String categoryPath,
+      DataTypeResource.Kind kind,
+      String name,
+      DataTypeReference baseType,
+      int size,
+      FunctionSignature signature,
+      Function<DataTypeReference, DataType> resolver,
+      boolean upsert) {
     String normalizedCategoryPath =
         categoryPath == null || categoryPath.isBlank() ? "/" : categoryPath;
     CategoryPath path = new CategoryPath(normalizedCategoryPath);
@@ -59,8 +93,11 @@ final class DataTypeMutations {
         if (existing instanceof FunctionDefinition existingFunction) {
           overwriteFunctionDefinition(existingFunction, prototype);
         } else if (existing != null) {
-          throw new IllegalArgumentException(
-              "function data type path collides with a non-function data type: " + exactPath);
+          if (!upsert) {
+            throw new IllegalArgumentException(
+                "function data type path collides with a non-function data type: " + exactPath);
+          }
+          replaceExistingDataType(manager, existing, prototype, exactPath);
         } else {
           DataType resolved =
               manager.addDataType(prototype, DataTypeConflictHandler.DEFAULT_HANDLER);
@@ -73,7 +110,22 @@ final class DataTypeMutations {
       }
       default -> throw new IllegalArgumentException("unsupported create kind: " + kind);
     }
+    DataType existing = manager.getDataType(path, name);
+    if (upsert && existing != null) {
+      replaceExistingDataType(manager, existing, candidate, path.getPath(name));
+      return;
+    }
     manager.addDataType(candidate, DataTypeConflictHandler.DEFAULT_HANDLER);
+  }
+
+  private static void replaceExistingDataType(
+      DataTypeManager manager, DataType existing, DataType candidate, String exactPath) {
+    try {
+      manager.replaceDataType(existing, candidate, false);
+    } catch (DataTypeDependencyException error) {
+      throw new IllegalArgumentException(
+          "unable to replace data type at " + exactPath + ": " + error.getMessage(), error);
+    }
   }
 
   private static FunctionDefinition buildFunctionDefinition(

@@ -83,18 +83,21 @@ final class DataTypeMethods implements ApiMethodProvider {
                   page.limit(),
                   page.cursor());
         });
+    Map<String, Object> writeInput =
+        ApiSchemaCatalog.nonEmptyInput(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.RESOURCE, ApiSchemaCatalog.dataTypeResourceSchema(),
+                "declaration", WireSchema.nonBlankString(),
+                ApiVocabulary.CATEGORY_PATH, WireSchema.string()));
     registry.writeResource(
         "data_type.create",
         MethodEffects.mutation(false, false),
-        ApiSchemaCatalog.input(
-            ApiSchemaCatalog.props(
-                ApiVocabulary.RESOURCE, ApiSchemaCatalog.dataTypeResourceSchema()),
-            ApiVocabulary.RESOURCE),
+        writeInput,
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
         request -> {
-          createDataType(request);
-          return registry.services().dataTypeService().getDataType(dataTypePath(resource(request)));
+          String createdPath = createDataType(request);
+          return registry.services().dataTypeService().getDataType(createdPath);
         });
     registry.writeResource(
         "data_type.patch",
@@ -119,15 +122,12 @@ final class DataTypeMethods implements ApiMethodProvider {
     registry.writeResource(
         "data_type.upsert",
         MethodEffects.mutation(true, true),
-        ApiSchemaCatalog.input(
-            ApiSchemaCatalog.props(
-                ApiVocabulary.RESOURCE, ApiSchemaCatalog.functionDataTypeResourceSchema()),
-            ApiVocabulary.RESOURCE),
+        writeInput,
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
         request -> {
-          upsertFunctionDataType(request);
-          return registry.services().dataTypeService().getDataType(dataTypePath(resource(request)));
+          String upsertedPath = upsertDataType(request);
+          return registry.services().dataTypeService().getDataType(upsertedPath);
         });
     registry.writeResult(
         "data_type.delete",
@@ -146,37 +146,86 @@ final class DataTypeMethods implements ApiMethodProvider {
         });
   }
 
-  private void createDataType(Map<String, Object> request) {
-    Map<String, Object> resource = resource(request);
-    try {
-      registry.services().dataTypeService().getDataType(dataTypePath(resource));
-      throw new ApiException(409, "data_type_exists", "data type already exists", "/resource");
-    } catch (NoSuchElementException ignored) {
+  private String createDataType(Map<String, Object> request) {
+    return writeDataType(request, false);
+  }
+
+  private String upsertDataType(Map<String, Object> request) {
+    return writeDataType(request, true);
+  }
+
+  private String writeDataType(Map<String, Object> request, boolean upsert) {
+    boolean hasResource = request.containsKey(ApiVocabulary.RESOURCE);
+    boolean hasDeclaration = request.containsKey("declaration");
+    if (hasResource && hasDeclaration) {
+      throw ApiException.badRequest(
+          "conflicting_fields", "resource and declaration are mutually exclusive", "/declaration");
     }
-    createDataTypeResource(resource);
+    if (!hasResource && !hasDeclaration) {
+      throw ApiException.badRequest(
+          ApiVocabulary.MISSING_FIELD, "resource or declaration is required", "");
+    }
+    if (hasDeclaration) {
+      String declaration = text(request, "declaration");
+      if (declaration.isBlank()) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE, "/declaration must not be blank", "/declaration");
+      }
+      String categoryPath = optionalText(request, ApiVocabulary.CATEGORY_PATH, "/");
+      return upsert
+          ? registry
+              .services()
+              .dataTypeService()
+              .upsertDataTypeFromDeclaration(categoryPath, declaration)
+          : registry
+              .services()
+              .dataTypeService()
+              .createDataTypeFromDeclaration(categoryPath, declaration);
+    }
+    if (request.containsKey(ApiVocabulary.CATEGORY_PATH)) {
+      throw ApiException.badRequest(
+          "conflicting_fields",
+          "top-level category_path is only valid with declaration; use resource.category_path",
+          "/category_path");
+    }
+    Map<String, Object> resource = resource(request);
+    String path = dataTypePath(resource);
+    if (!upsert) {
+      try {
+        registry.services().dataTypeService().getDataType(path);
+        throw new ApiException(409, "data_type_exists", "data type already exists", "/resource");
+      } catch (NoSuchElementException ignored) {
+      }
+      writeDataTypeResource(resource, false);
+    } else {
+      writeDataTypeResource(resource, true);
+    }
+    return path;
   }
 
-  private void upsertFunctionDataType(Map<String, Object> request) {
-    createDataTypeResource(resource(request));
-  }
-
-  private void createDataTypeResource(Map<String, Object> resource) {
+  private void writeDataTypeResource(Map<String, Object> resource, boolean upsert) {
     String kind = text(resource, ApiVocabulary.KIND);
     FunctionSignature signature = null;
     if (ApiVocabulary.FUNCTION.equals(kind)) {
       signature = functionSignature(resource.get("signature"), "/resource/signature");
     }
     DataTypeReference baseType = dataType(resource.get("base_type"), "/resource/base_type");
-    registry
-        .services()
-        .dataTypeService()
-        .createDataType(
-            optionalText(resource, ApiVocabulary.CATEGORY_PATH, "/"),
-            DataTypeResource.Kind.valueOf(kind.toUpperCase(java.util.Locale.ROOT)),
-            text(resource, ApiVocabulary.NAME),
-            baseType,
-            integer(resource, "size", 0),
-            signature);
+    String categoryPath = optionalText(resource, ApiVocabulary.CATEGORY_PATH, "/");
+    DataTypeResource.Kind resourceKind =
+        DataTypeResource.Kind.valueOf(kind.toUpperCase(java.util.Locale.ROOT));
+    String name = text(resource, ApiVocabulary.NAME);
+    int size = integer(resource, "size", 0);
+    if (upsert) {
+      registry
+          .services()
+          .dataTypeService()
+          .upsertDataType(categoryPath, resourceKind, name, baseType, size, signature);
+    } else {
+      registry
+          .services()
+          .dataTypeService()
+          .createDataType(categoryPath, resourceKind, name, baseType, size, signature);
+    }
   }
 
   private void patchDataType(Map<String, Object> request) {

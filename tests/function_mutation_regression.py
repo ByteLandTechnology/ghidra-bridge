@@ -167,6 +167,83 @@ def run_test(headless, root):
                 "resource": {"entry": symbols["label_only"]}, "disassemble": True,
             })["result"]
             assert label["name"] == "label_only"
+
+            created_dt = tool(21, "ghidra_data_type", {
+                "operation": "create",
+                "params": {
+                    "category_path": "/pkg",
+                    "declaration": "struct Item { int id; const char *label; };",
+                },
+            })["result"]
+            assert created_dt["path"] == "/pkg/Item"
+            assert created_dt["kind"] == "struct"
+            tool(22, "ghidra_data_type", {
+                "operation": "create",
+                "params": {"declaration": "struct A { int x; }; struct B { int y; };"},
+            }, success=False)
+            tool(23, "ghidra_data_type", {
+                "operation": "create",
+                "params": {"declaration": ";"},
+            }, success=False)
+            upserted_dt = tool(24, "ghidra_data_type", {
+                "operation": "upsert",
+                "params": {
+                    "category_path": "/pkg",
+                    "declaration": "struct Item { long id; const char *label; int flags[4]; };",
+                },
+            })["result"]
+            assert upserted_dt["path"] == "/pkg/Item"
+
+            patched_custom = function(25, "patch", {
+                "selector": {"entry": symbols["label_only"]},
+                "patch": {
+                    "return_type": "unsigned int",
+                    "return_storage": {"kind": "register", "register": "EAX"},
+                    "has_custom_variable_storage": True,
+                    "parameters": [
+                        {
+                            "name": "item",
+                            "data_type": "/pkg/Item *",
+                            "storage": {"kind": "register", "register": "R8"},
+                        },
+                        {
+                            "name": "cb",
+                            "data_type": "void (*)(int)",
+                            "storage": {"kind": "register", "register": "R9"},
+                        },
+                    ],
+                },
+            })["result"]
+            assert patched_custom["has_custom_variable_storage"] is True
+            assert [p["name"] for p in patched_custom["parameters"]] == ["item", "cb"]
+            s0 = patched_custom["parameters"][0]["storage"]
+            s1 = patched_custom["parameters"][1]["storage"]
+
+            swapped = function(26, "patch", {
+                "selector": {"entry": symbols["label_only"]},
+                "patch": {
+                    "parameters": [
+                        {"name": "cb", "data_type": "void (*)(int)", "storage": s1},
+                        {"name": "item", "data_type": "/pkg/Item *", "storage": s0},
+                    ],
+                },
+            })["result"]
+            assert swapped["has_custom_variable_storage"] is True
+            assert [p["name"] for p in swapped["parameters"]] == ["cb", "item"]
+            assert swapped["parameters"][0]["storage"] == s1
+            assert swapped["parameters"][1]["storage"] == s0
+
+            sig_patched = function(27, "patch", {
+                "selector": {"entry": symbols["label_only"]},
+                "patch": {
+                    "signature": "int label_sig(const char *msg, /pkg/Item *item)",
+                },
+            })["result"]
+            assert sig_patched["name"] == "label_sig"
+            assert sig_patched["has_custom_variable_storage"] is True
+            assert [p["name"] for p in sig_patched["parameters"]] == ["msg", "item"]
+            assert sig_patched["parameters"][0]["storage"] == s1
+            assert sig_patched["parameters"][1]["storage"] == s0
             print("Function mutation regression checks passed")
         finally:
             if ready:

@@ -61,6 +61,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -133,6 +135,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -227,6 +231,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -298,6 +304,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -356,6 +364,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -438,6 +448,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -561,6 +573,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -646,6 +660,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -704,6 +720,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -798,6 +816,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -889,6 +909,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -947,6 +969,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -1087,6 +1111,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -1145,6 +1171,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -1277,6 +1305,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -1354,6 +1384,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -1412,6 +1444,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -1531,6 +1565,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -1608,6 +1644,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -1685,6 +1723,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -1769,6 +1809,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -1869,6 +1911,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -1927,6 +1971,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -2069,6 +2115,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -2127,6 +2175,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -2269,6 +2319,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -2327,6 +2379,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -2433,6 +2487,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -2706,6 +2762,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -2764,6 +2822,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -3079,6 +3139,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -3352,6 +3414,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -3632,6 +3696,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -3727,6 +3793,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -3829,6 +3897,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -3920,6 +3990,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -3978,6 +4050,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -4058,6 +4132,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -4133,6 +4209,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -4208,6 +4286,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -4268,6 +4348,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -4384,6 +4466,8 @@
                                     "$defs":
                                       "data_type_reference":
                                         "oneOf":
+                                        - "minLength": !!int "1"
+                                          "type": "string"
                                         - "additionalProperties": !!bool "false"
                                           "properties":
                                             "kind":
@@ -4540,6 +4624,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -4615,6 +4701,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -4673,6 +4761,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -4791,6 +4881,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -4866,6 +4958,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -4924,6 +5018,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -5009,6 +5105,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -5075,6 +5173,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -5133,6 +5233,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -5241,6 +5343,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -5307,6 +5411,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -5373,6 +5479,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -5446,6 +5554,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -5504,6 +5614,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -5584,6 +5696,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -5751,6 +5865,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -5809,6 +5925,8 @@
                           "$defs":
                             "data_type_reference":
                               "oneOf":
+                              - "minLength": !!int "1"
+                                "type": "string"
                               - "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
@@ -5985,6 +6103,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -6152,6 +6272,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -6319,6 +6441,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -6493,6 +6617,8 @@
                   - "$defs":
                       "data_type_reference":
                         "oneOf":
+                        - "minLength": !!int "1"
+                          "type": "string"
                         - "additionalProperties": !!bool "false"
                           "properties":
                             "kind":
@@ -6670,6 +6796,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -6747,6 +6875,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -6839,6 +6969,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -6916,6 +7048,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7017,6 +7151,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7094,6 +7230,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7188,6 +7326,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7298,6 +7438,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7405,6 +7547,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7517,6 +7661,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7641,6 +7787,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7755,6 +7903,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -7869,6 +8019,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8004,6 +8156,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8131,6 +8285,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8239,6 +8395,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8374,6 +8532,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8469,6 +8629,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8568,6 +8730,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8663,6 +8827,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8753,6 +8919,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8862,6 +9030,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -8992,6 +9162,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -9173,6 +9345,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -9324,6 +9498,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -9456,6 +9632,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -9619,6 +9797,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -9712,6 +9892,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -9786,6 +9968,52 @@
                       "name":
                         "minLength": !!int "1"
                         "type": "string"
+                      "parameters":
+                        "items":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "data_type":
+                              "$ref": "#/$defs/data_type_reference"
+                            "name":
+                              "type": "string"
+                            "ordinal":
+                              "maximum": !!int "2147483647"
+                              "minimum": !!int "0"
+                              "type": "integer"
+                            "storage":
+                              "oneOf":
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "serialization"
+                                    "type": "string"
+                                  "serialization":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "serialization"
+                                "type": "object"
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "register"
+                                    "type": "string"
+                                  "register":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "register"
+                                "type": "object"
+                          "required":
+                          - "data_type"
+                          "type": "object"
+                        "maxItems": !!int "1000"
+                        "minItems": !!int "0"
+                        "type": "array"
                       "return_storage":
                         "oneOf":
                         - "additionalProperties": !!bool "false"
@@ -9816,6 +10044,9 @@
                           "type": "object"
                       "return_type":
                         "$ref": "#/$defs/data_type_reference"
+                      "signature":
+                        "minLength": !!int "1"
+                        "type": "string"
                       "stack_purge_size":
                         "maximum": !!int "2147483647"
                         "minimum": !!int "0"
@@ -9857,6 +10088,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -9945,6 +10178,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10079,6 +10314,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10211,6 +10448,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10304,6 +10543,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10407,6 +10648,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10529,6 +10772,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10625,6 +10870,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10709,6 +10956,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10837,6 +11086,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -10914,6 +11165,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11022,6 +11275,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11163,6 +11418,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11261,6 +11518,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11386,6 +11645,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11498,6 +11759,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11634,6 +11897,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11735,6 +12000,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11842,6 +12109,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -11943,6 +12212,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -12040,6 +12311,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -12150,6 +12423,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -12263,6 +12538,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -12386,6 +12663,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -12438,7 +12717,13 @@
                       - "kind"
                       "type": "object"
                 "additionalProperties": !!bool "false"
+                "minProperties": !!int "1"
                 "properties":
+                  "category_path":
+                    "type": "string"
+                  "declaration":
+                    "minLength": !!int "1"
+                    "type": "string"
                   "resource":
                     "oneOf":
                     - "additionalProperties": !!bool "false"
@@ -12561,8 +12846,6 @@
                       - "name"
                       - "signature"
                       "type": "object"
-                "required":
-                - "resource"
                 "type": "object"
             "required":
             - "jsonrpc"
@@ -12587,6 +12870,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -12945,6 +13230,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -12997,59 +13284,135 @@
                       - "kind"
                       "type": "object"
                 "additionalProperties": !!bool "false"
+                "minProperties": !!int "1"
                 "properties":
+                  "category_path":
+                    "type": "string"
+                  "declaration":
+                    "minLength": !!int "1"
+                    "type": "string"
                   "resource":
-                    "additionalProperties": !!bool "false"
-                    "properties":
-                      "category_path":
-                        "type": "string"
-                      "kind":
-                        "enum":
-                        - "function"
-                        "type": "string"
-                      "name":
-                        "minLength": !!int "1"
-                        "type": "string"
-                      "signature":
-                        "additionalProperties": !!bool "false"
-                        "properties":
-                          "calling_convention":
-                            "minLength": !!int "1"
-                            "type": "string"
-                          "has_no_return":
-                            "type": "boolean"
-                          "has_var_args":
-                            "type": "boolean"
-                          "parameters":
-                            "items":
-                              "additionalProperties": !!bool "false"
-                              "properties":
-                                "data_type":
-                                  "$ref": "#/$defs/data_type_reference"
-                                "name":
-                                  "type": "string"
-                              "required":
-                              - "data_type"
-                              "type": "object"
-                            "maxItems": !!int "1000"
-                            "minItems": !!int "0"
-                            "type": "array"
-                          "return_type":
-                            "$ref": "#/$defs/data_type_reference"
-                        "required":
-                        - "return_type"
-                        - "parameters"
-                        - "calling_convention"
-                        - "has_var_args"
-                        - "has_no_return"
-                        "type": "object"
-                    "required":
-                    - "kind"
-                    - "name"
-                    - "signature"
-                    "type": "object"
-                "required":
-                - "resource"
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "category_path":
+                          "type": "string"
+                        "kind":
+                          "enum":
+                          - "struct"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "size":
+                          "maximum": !!int "2147483647"
+                          "minimum": !!int "0"
+                          "type": "integer"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "category_path":
+                          "type": "string"
+                        "kind":
+                          "enum":
+                          - "union"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "category_path":
+                          "type": "string"
+                        "kind":
+                          "enum":
+                          - "enum"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "size":
+                          "maximum": !!int "8"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "base_type":
+                          "$ref": "#/$defs/data_type_reference"
+                        "category_path":
+                          "type": "string"
+                        "kind":
+                          "enum":
+                          - "typedef"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      - "base_type"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "category_path":
+                          "type": "string"
+                        "kind":
+                          "enum":
+                          - "function"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "signature":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "calling_convention":
+                              "minLength": !!int "1"
+                              "type": "string"
+                            "has_no_return":
+                              "type": "boolean"
+                            "has_var_args":
+                              "type": "boolean"
+                            "parameters":
+                              "items":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "data_type":
+                                    "$ref": "#/$defs/data_type_reference"
+                                  "name":
+                                    "type": "string"
+                                "required":
+                                - "data_type"
+                                "type": "object"
+                              "maxItems": !!int "1000"
+                              "minItems": !!int "0"
+                              "type": "array"
+                            "return_type":
+                              "$ref": "#/$defs/data_type_reference"
+                          "required":
+                          - "return_type"
+                          - "parameters"
+                          - "calling_convention"
+                          - "has_var_args"
+                          - "has_no_return"
+                          "type": "object"
+                      "required":
+                      - "kind"
+                      - "name"
+                      - "signature"
+                      "type": "object"
                 "type": "object"
             "required":
             - "jsonrpc"
@@ -13074,6 +13437,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -13162,6 +13527,8 @@
                 "$defs":
                   "data_type_reference":
                     "oneOf":
+                    - "minLength": !!int "1"
+                      "type": "string"
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
@@ -14639,6 +15006,52 @@
                                   "name":
                                     "minLength": !!int "1"
                                     "type": "string"
+                                  "parameters":
+                                    "items":
+                                      "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "data_type":
+                                          "$ref": "#/$defs/data_type_reference"
+                                        "name":
+                                          "type": "string"
+                                        "ordinal":
+                                          "maximum": !!int "2147483647"
+                                          "minimum": !!int "0"
+                                          "type": "integer"
+                                        "storage":
+                                          "oneOf":
+                                          - "additionalProperties": !!bool "false"
+                                            "properties":
+                                              "kind":
+                                                "enum":
+                                                - "serialization"
+                                                "type": "string"
+                                              "serialization":
+                                                "minLength": !!int "1"
+                                                "type": "string"
+                                            "required":
+                                            - "kind"
+                                            - "serialization"
+                                            "type": "object"
+                                          - "additionalProperties": !!bool "false"
+                                            "properties":
+                                              "kind":
+                                                "enum":
+                                                - "register"
+                                                "type": "string"
+                                              "register":
+                                                "minLength": !!int "1"
+                                                "type": "string"
+                                            "required":
+                                            - "kind"
+                                            - "register"
+                                            "type": "object"
+                                      "required":
+                                      - "data_type"
+                                      "type": "object"
+                                    "maxItems": !!int "1000"
+                                    "minItems": !!int "0"
+                                    "type": "array"
                                   "return_storage":
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
@@ -14669,6 +15082,9 @@
                                       "type": "object"
                                   "return_type":
                                     "$ref": "#/$defs/data_type_reference"
+                                  "signature":
+                                    "minLength": !!int "1"
+                                    "type": "string"
                                   "stack_purge_size":
                                     "maximum": !!int "2147483647"
                                     "minimum": !!int "0"
@@ -15850,7 +16266,13 @@
                         "properties":
                           "arguments":
                             "additionalProperties": !!bool "false"
+                            "minProperties": !!int "1"
                             "properties":
+                              "category_path":
+                                "type": "string"
+                              "declaration":
+                                "minLength": !!int "1"
+                                "type": "string"
                               "resource":
                                 "oneOf":
                                 - "additionalProperties": !!bool "false"
@@ -15973,8 +16395,6 @@
                                   - "name"
                                   - "signature"
                                   "type": "object"
-                            "required":
-                            - "resource"
                             "type": "object"
                           "id":
                             "minLength": !!int "1"
@@ -16291,59 +16711,135 @@
                         "properties":
                           "arguments":
                             "additionalProperties": !!bool "false"
+                            "minProperties": !!int "1"
                             "properties":
+                              "category_path":
+                                "type": "string"
+                              "declaration":
+                                "minLength": !!int "1"
+                                "type": "string"
                               "resource":
-                                "additionalProperties": !!bool "false"
-                                "properties":
-                                  "category_path":
-                                    "type": "string"
-                                  "kind":
-                                    "enum":
-                                    - "function"
-                                    "type": "string"
-                                  "name":
-                                    "minLength": !!int "1"
-                                    "type": "string"
-                                  "signature":
-                                    "additionalProperties": !!bool "false"
-                                    "properties":
-                                      "calling_convention":
-                                        "minLength": !!int "1"
-                                        "type": "string"
-                                      "has_no_return":
-                                        "type": "boolean"
-                                      "has_var_args":
-                                        "type": "boolean"
-                                      "parameters":
-                                        "items":
-                                          "additionalProperties": !!bool "false"
-                                          "properties":
-                                            "data_type":
-                                              "$ref": "#/$defs/data_type_reference"
-                                            "name":
-                                              "type": "string"
-                                          "required":
-                                          - "data_type"
-                                          "type": "object"
-                                        "maxItems": !!int "1000"
-                                        "minItems": !!int "0"
-                                        "type": "array"
-                                      "return_type":
-                                        "$ref": "#/$defs/data_type_reference"
-                                    "required":
-                                    - "return_type"
-                                    - "parameters"
-                                    - "calling_convention"
-                                    - "has_var_args"
-                                    - "has_no_return"
-                                    "type": "object"
-                                "required":
-                                - "kind"
-                                - "name"
-                                - "signature"
-                                "type": "object"
-                            "required":
-                            - "resource"
+                                "oneOf":
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "category_path":
+                                      "type": "string"
+                                    "kind":
+                                      "enum":
+                                      - "struct"
+                                      "type": "string"
+                                    "name":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                    "size":
+                                      "maximum": !!int "2147483647"
+                                      "minimum": !!int "0"
+                                      "type": "integer"
+                                  "required":
+                                  - "kind"
+                                  - "name"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "category_path":
+                                      "type": "string"
+                                    "kind":
+                                      "enum":
+                                      - "union"
+                                      "type": "string"
+                                    "name":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "name"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "category_path":
+                                      "type": "string"
+                                    "kind":
+                                      "enum":
+                                      - "enum"
+                                      "type": "string"
+                                    "name":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                    "size":
+                                      "maximum": !!int "8"
+                                      "minimum": !!int "1"
+                                      "type": "integer"
+                                  "required":
+                                  - "kind"
+                                  - "name"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "base_type":
+                                      "$ref": "#/$defs/data_type_reference"
+                                    "category_path":
+                                      "type": "string"
+                                    "kind":
+                                      "enum":
+                                      - "typedef"
+                                      "type": "string"
+                                    "name":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "name"
+                                  - "base_type"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "category_path":
+                                      "type": "string"
+                                    "kind":
+                                      "enum":
+                                      - "function"
+                                      "type": "string"
+                                    "name":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                    "signature":
+                                      "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "calling_convention":
+                                          "minLength": !!int "1"
+                                          "type": "string"
+                                        "has_no_return":
+                                          "type": "boolean"
+                                        "has_var_args":
+                                          "type": "boolean"
+                                        "parameters":
+                                          "items":
+                                            "additionalProperties": !!bool "false"
+                                            "properties":
+                                              "data_type":
+                                                "$ref": "#/$defs/data_type_reference"
+                                              "name":
+                                                "type": "string"
+                                            "required":
+                                            - "data_type"
+                                            "type": "object"
+                                          "maxItems": !!int "1000"
+                                          "minItems": !!int "0"
+                                          "type": "array"
+                                        "return_type":
+                                          "$ref": "#/$defs/data_type_reference"
+                                      "required":
+                                      - "return_type"
+                                      - "parameters"
+                                      - "calling_convention"
+                                      - "has_var_args"
+                                      - "has_no_return"
+                                      "type": "object"
+                                  "required":
+                                  - "kind"
+                                  - "name"
+                                  - "signature"
+                                  "type": "object"
                             "type": "object"
                           "id":
                             "minLength": !!int "1"
@@ -16426,6 +16922,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -16514,6 +17012,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -16647,6 +17147,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -16738,6 +17240,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -16796,6 +17300,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -16888,6 +17394,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -16965,6 +17473,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -17050,6 +17560,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -17115,6 +17627,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -17202,6 +17716,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -18679,6 +19195,52 @@
                         "name":
                           "minLength": !!int "1"
                           "type": "string"
+                        "parameters":
+                          "items":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "data_type":
+                                "$ref": "#/$defs/data_type_reference"
+                              "name":
+                                "type": "string"
+                              "ordinal":
+                                "maximum": !!int "2147483647"
+                                "minimum": !!int "0"
+                                "type": "integer"
+                              "storage":
+                                "oneOf":
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "kind":
+                                      "enum":
+                                      - "serialization"
+                                      "type": "string"
+                                    "serialization":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "serialization"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "kind":
+                                      "enum":
+                                      - "register"
+                                      "type": "string"
+                                    "register":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "register"
+                                  "type": "object"
+                            "required":
+                            - "data_type"
+                            "type": "object"
+                          "maxItems": !!int "1000"
+                          "minItems": !!int "0"
+                          "type": "array"
                         "return_storage":
                           "oneOf":
                           - "additionalProperties": !!bool "false"
@@ -18709,6 +19271,9 @@
                             "type": "object"
                         "return_type":
                           "$ref": "#/$defs/data_type_reference"
+                        "signature":
+                          "minLength": !!int "1"
+                          "type": "string"
                         "stack_purge_size":
                           "maximum": !!int "2147483647"
                           "minimum": !!int "0"
@@ -19890,7 +20455,13 @@
               "properties":
                 "arguments":
                   "additionalProperties": !!bool "false"
+                  "minProperties": !!int "1"
                   "properties":
+                    "category_path":
+                      "type": "string"
+                    "declaration":
+                      "minLength": !!int "1"
+                      "type": "string"
                     "resource":
                       "oneOf":
                       - "additionalProperties": !!bool "false"
@@ -20013,8 +20584,6 @@
                         - "name"
                         - "signature"
                         "type": "object"
-                  "required":
-                  - "resource"
                   "type": "object"
                 "id":
                   "minLength": !!int "1"
@@ -20331,59 +20900,135 @@
               "properties":
                 "arguments":
                   "additionalProperties": !!bool "false"
+                  "minProperties": !!int "1"
                   "properties":
+                    "category_path":
+                      "type": "string"
+                    "declaration":
+                      "minLength": !!int "1"
+                      "type": "string"
                     "resource":
-                      "additionalProperties": !!bool "false"
-                      "properties":
-                        "category_path":
-                          "type": "string"
-                        "kind":
-                          "enum":
-                          - "function"
-                          "type": "string"
-                        "name":
-                          "minLength": !!int "1"
-                          "type": "string"
-                        "signature":
-                          "additionalProperties": !!bool "false"
-                          "properties":
-                            "calling_convention":
-                              "minLength": !!int "1"
-                              "type": "string"
-                            "has_no_return":
-                              "type": "boolean"
-                            "has_var_args":
-                              "type": "boolean"
-                            "parameters":
-                              "items":
-                                "additionalProperties": !!bool "false"
-                                "properties":
-                                  "data_type":
-                                    "$ref": "#/$defs/data_type_reference"
-                                  "name":
-                                    "type": "string"
-                                "required":
-                                - "data_type"
-                                "type": "object"
-                              "maxItems": !!int "1000"
-                              "minItems": !!int "0"
-                              "type": "array"
-                            "return_type":
-                              "$ref": "#/$defs/data_type_reference"
-                          "required":
-                          - "return_type"
-                          - "parameters"
-                          - "calling_convention"
-                          - "has_var_args"
-                          - "has_no_return"
-                          "type": "object"
-                      "required":
-                      - "kind"
-                      - "name"
-                      - "signature"
-                      "type": "object"
-                  "required":
-                  - "resource"
+                      "oneOf":
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "category_path":
+                            "type": "string"
+                          "kind":
+                            "enum":
+                            - "struct"
+                            "type": "string"
+                          "name":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "size":
+                            "maximum": !!int "2147483647"
+                            "minimum": !!int "0"
+                            "type": "integer"
+                        "required":
+                        - "kind"
+                        - "name"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "category_path":
+                            "type": "string"
+                          "kind":
+                            "enum":
+                            - "union"
+                            "type": "string"
+                          "name":
+                            "minLength": !!int "1"
+                            "type": "string"
+                        "required":
+                        - "kind"
+                        - "name"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "category_path":
+                            "type": "string"
+                          "kind":
+                            "enum":
+                            - "enum"
+                            "type": "string"
+                          "name":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "size":
+                            "maximum": !!int "8"
+                            "minimum": !!int "1"
+                            "type": "integer"
+                        "required":
+                        - "kind"
+                        - "name"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "base_type":
+                            "$ref": "#/$defs/data_type_reference"
+                          "category_path":
+                            "type": "string"
+                          "kind":
+                            "enum":
+                            - "typedef"
+                            "type": "string"
+                          "name":
+                            "minLength": !!int "1"
+                            "type": "string"
+                        "required":
+                        - "kind"
+                        - "name"
+                        - "base_type"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "category_path":
+                            "type": "string"
+                          "kind":
+                            "enum":
+                            - "function"
+                            "type": "string"
+                          "name":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "signature":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "calling_convention":
+                                "minLength": !!int "1"
+                                "type": "string"
+                              "has_no_return":
+                                "type": "boolean"
+                              "has_var_args":
+                                "type": "boolean"
+                              "parameters":
+                                "items":
+                                  "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "data_type":
+                                      "$ref": "#/$defs/data_type_reference"
+                                    "name":
+                                      "type": "string"
+                                  "required":
+                                  - "data_type"
+                                  "type": "object"
+                                "maxItems": !!int "1000"
+                                "minItems": !!int "0"
+                                "type": "array"
+                              "return_type":
+                                "$ref": "#/$defs/data_type_reference"
+                            "required":
+                            - "return_type"
+                            - "parameters"
+                            - "calling_convention"
+                            - "has_var_args"
+                            - "has_no_return"
+                            "type": "object"
+                        "required":
+                        - "kind"
+                        - "name"
+                        - "signature"
+                        "type": "object"
                   "type": "object"
                 "id":
                   "minLength": !!int "1"
@@ -20441,6 +21086,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -20559,6 +21206,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -20675,6 +21324,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -20733,6 +21384,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -20883,6 +21536,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -20965,6 +21620,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21041,6 +21698,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21136,6 +21795,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21229,6 +21890,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21306,6 +21969,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21423,6 +22088,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21481,6 +22148,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -21599,6 +22268,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21687,6 +22358,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21763,6 +22436,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21845,6 +22520,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21921,6 +22598,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -21973,7 +22652,13 @@
             - "kind"
             "type": "object"
       "additionalProperties": !!bool "false"
+      "minProperties": !!int "1"
       "properties":
+        "category_path":
+          "type": "string"
+        "declaration":
+          "minLength": !!int "1"
+          "type": "string"
         "resource":
           "oneOf":
           - "additionalProperties": !!bool "false"
@@ -22096,13 +22781,13 @@
             - "name"
             - "signature"
             "type": "object"
-      "required":
-      - "resource"
       "type": "object"
     "output_schema":
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -22280,6 +22965,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -22366,6 +23053,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -22460,6 +23149,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -22637,6 +23328,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -22741,6 +23434,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -22799,6 +23494,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -22985,6 +23682,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -23324,6 +24023,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -23501,6 +24202,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -23553,64 +24256,142 @@
             - "kind"
             "type": "object"
       "additionalProperties": !!bool "false"
+      "minProperties": !!int "1"
       "properties":
+        "category_path":
+          "type": "string"
+        "declaration":
+          "minLength": !!int "1"
+          "type": "string"
         "resource":
-          "additionalProperties": !!bool "false"
-          "properties":
-            "category_path":
-              "type": "string"
-            "kind":
-              "enum":
-              - "function"
-              "type": "string"
-            "name":
-              "minLength": !!int "1"
-              "type": "string"
-            "signature":
-              "additionalProperties": !!bool "false"
-              "properties":
-                "calling_convention":
-                  "minLength": !!int "1"
-                  "type": "string"
-                "has_no_return":
-                  "type": "boolean"
-                "has_var_args":
-                  "type": "boolean"
-                "parameters":
-                  "items":
-                    "additionalProperties": !!bool "false"
-                    "properties":
-                      "data_type":
-                        "$ref": "#/$defs/data_type_reference"
-                      "name":
-                        "type": "string"
-                    "required":
-                    - "data_type"
-                    "type": "object"
-                  "maxItems": !!int "1000"
-                  "minItems": !!int "0"
-                  "type": "array"
-                "return_type":
-                  "$ref": "#/$defs/data_type_reference"
-              "required":
-              - "return_type"
-              - "parameters"
-              - "calling_convention"
-              - "has_var_args"
-              - "has_no_return"
-              "type": "object"
-          "required":
-          - "kind"
-          - "name"
-          - "signature"
-          "type": "object"
-      "required":
-      - "resource"
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "category_path":
+                "type": "string"
+              "kind":
+                "enum":
+                - "struct"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+              "size":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "0"
+                "type": "integer"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "category_path":
+                "type": "string"
+              "kind":
+                "enum":
+                - "union"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "category_path":
+                "type": "string"
+              "kind":
+                "enum":
+                - "enum"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+              "size":
+                "maximum": !!int "8"
+                "minimum": !!int "1"
+                "type": "integer"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "base_type":
+                "$ref": "#/$defs/data_type_reference"
+              "category_path":
+                "type": "string"
+              "kind":
+                "enum":
+                - "typedef"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            - "base_type"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "category_path":
+                "type": "string"
+              "kind":
+                "enum":
+                - "function"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+              "signature":
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "calling_convention":
+                    "minLength": !!int "1"
+                    "type": "string"
+                  "has_no_return":
+                    "type": "boolean"
+                  "has_var_args":
+                    "type": "boolean"
+                  "parameters":
+                    "items":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "data_type":
+                          "$ref": "#/$defs/data_type_reference"
+                        "name":
+                          "type": "string"
+                      "required":
+                      - "data_type"
+                      "type": "object"
+                    "maxItems": !!int "1000"
+                    "minItems": !!int "0"
+                    "type": "array"
+                  "return_type":
+                    "$ref": "#/$defs/data_type_reference"
+                "required":
+                - "return_type"
+                - "parameters"
+                - "calling_convention"
+                - "has_var_args"
+                - "has_no_return"
+                "type": "object"
+            "required":
+            - "kind"
+            - "name"
+            - "signature"
+            "type": "object"
       "type": "object"
     "output_schema":
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -23788,6 +24569,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -23879,6 +24662,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -23937,6 +24722,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -24028,6 +24815,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -24136,6 +24925,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -24194,6 +24985,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -24342,6 +25135,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -24451,6 +25246,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -24511,6 +25308,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -24627,6 +25426,8 @@
                       "$defs":
                         "data_type_reference":
                           "oneOf":
+                          - "minLength": !!int "1"
+                            "type": "string"
                           - "additionalProperties": !!bool "false"
                             "properties":
                               "kind":
@@ -24773,6 +25574,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -24935,6 +25738,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -24993,6 +25798,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -25146,6 +25953,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -25278,6 +26087,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -25336,6 +26147,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -25453,6 +26266,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -25527,6 +26342,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -25810,6 +26627,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -25896,6 +26715,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -26009,6 +26830,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -26293,6 +27116,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -26437,6 +27262,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -26495,6 +27322,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -26820,6 +27649,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -26894,6 +27725,52 @@
             "name":
               "minLength": !!int "1"
               "type": "string"
+            "parameters":
+              "items":
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "data_type":
+                    "$ref": "#/$defs/data_type_reference"
+                  "name":
+                    "type": "string"
+                  "ordinal":
+                    "maximum": !!int "2147483647"
+                    "minimum": !!int "0"
+                    "type": "integer"
+                  "storage":
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "serialization"
+                          "type": "string"
+                        "serialization":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "serialization"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "register"
+                          "type": "string"
+                        "register":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "register"
+                      "type": "object"
+                "required":
+                - "data_type"
+                "type": "object"
+              "maxItems": !!int "1000"
+              "minItems": !!int "0"
+              "type": "array"
             "return_storage":
               "oneOf":
               - "additionalProperties": !!bool "false"
@@ -26924,6 +27801,9 @@
                 "type": "object"
             "return_type":
               "$ref": "#/$defs/data_type_reference"
+            "signature":
+              "minLength": !!int "1"
+              "type": "string"
             "stack_purge_size":
               "maximum": !!int "2147483647"
               "minimum": !!int "0"
@@ -26946,6 +27826,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -27230,6 +28112,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -27333,6 +28217,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -27391,6 +28277,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -27481,6 +28369,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -27565,6 +28455,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -27666,6 +28558,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -27781,6 +28675,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -27886,6 +28782,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -27977,6 +28875,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28090,6 +28990,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28196,6 +29098,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28272,6 +29176,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28360,6 +29266,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28448,6 +29356,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28537,6 +29447,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28625,6 +29537,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28741,6 +29655,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -28799,6 +29715,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -28928,6 +29846,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29008,6 +29928,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29096,6 +30018,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29172,6 +30096,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29259,6 +30185,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29349,6 +30277,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29460,6 +30390,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29571,6 +30503,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29629,6 +30563,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -29781,6 +30717,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29888,6 +30826,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -29983,6 +30923,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30071,6 +31013,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30189,6 +31133,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30282,6 +31228,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30377,6 +31325,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30482,6 +31432,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30540,6 +31492,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -30644,6 +31598,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30726,6 +31682,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30823,6 +31781,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30898,6 +31858,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -30973,6 +31935,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31054,6 +32018,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31160,6 +32126,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31218,6 +32186,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -31313,6 +32283,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31386,6 +32358,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31461,6 +32435,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31537,6 +32513,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31626,6 +32604,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31715,6 +32695,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31801,6 +32783,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31923,6 +32907,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -31981,6 +32967,8 @@
             "$defs":
               "data_type_reference":
                 "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
                 - "additionalProperties": !!bool "false"
                   "properties":
                     "kind":
@@ -32109,6 +33097,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":
@@ -32188,6 +33178,8 @@
       "$defs":
         "data_type_reference":
           "oneOf":
+          - "minLength": !!int "1"
+            "type": "string"
           - "additionalProperties": !!bool "false"
             "properties":
               "kind":

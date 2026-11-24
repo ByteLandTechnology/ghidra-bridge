@@ -887,6 +887,13 @@ public final class ApiRegistry {
 
   static DataTypeReference dataType(Object raw, String target) {
     if (raw == null) return null;
+    if (raw instanceof String expression) {
+      if (expression.isBlank()) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE, target + " must not be blank", target);
+      }
+      return DataTypeReference.expression(expression);
+    }
     Map<String, Object> value = objectAt(raw, target);
     String kind = text(value, ApiVocabulary.KIND);
     return switch (kind) {

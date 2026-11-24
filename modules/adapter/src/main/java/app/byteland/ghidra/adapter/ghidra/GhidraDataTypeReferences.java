@@ -57,10 +57,13 @@ public final class GhidraDataTypeReferences {
         DataType elementType = resolve(programDataTypeManager, array.element(), depth + 1);
         yield buildArrayDataType(elementType, array.count(), programDataTypeManager);
       }
+      case DataTypeReference.Expression expression ->
+          GhidraCTypeParser.resolveExpression(
+              programDataTypeManager, expression.expression(), depth);
     };
   }
 
-  private static DataType buildArrayDataType(
+  static DataType buildArrayDataType(
       DataType elementType, int count, DataTypeManager manager) {
     if (isBareFunctionDefinition(elementType)) {
       throw new IllegalArgumentException(
@@ -88,7 +91,7 @@ public final class GhidraDataTypeReferences {
     return array;
   }
 
-  private static Pointer resolveUntypedPointer(DataTypeManager programDataTypeManager) {
+  static Pointer resolveUntypedPointer(DataTypeManager programDataTypeManager) {
     Pointer pointer = new PointerDataType(programDataTypeManager);
     if (pointer.getDataType() != null) {
       throw new IllegalArgumentException("Ghidra generic pointer unexpectedly has a pointee");
@@ -197,7 +200,7 @@ public final class GhidraDataTypeReferences {
     }
   }
 
-  private static void requireCanDescend(int depth) {
+  static void requireCanDescend(int depth) {
     if (depth >= MAX_NESTING_DEPTH) {
       throw new IllegalArgumentException(
           "data type reference exceeds the maximum nesting depth of " + MAX_NESTING_DEPTH);
@@ -257,7 +260,7 @@ public final class GhidraDataTypeReferences {
     return current instanceof FunctionDefinition;
   }
 
-  private static void requirePointerIdentityCanBePreserved(
+  static void requirePointerIdentityCanBePreserved(
       DataTypeManager programDataTypeManager, Pointer requestedPointer) {
     Category category = programDataTypeManager.getCategory(requestedPointer.getCategoryPath());
     if (category == null) {

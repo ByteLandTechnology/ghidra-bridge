@@ -57,6 +57,29 @@ public interface DataTypeService {
       FunctionSignature signature);
 
   /**
+   * Creates or replaces a data type in the program data manager.
+   */
+  default void upsertDataType(
+      String categoryPath,
+      DataTypeResource.Kind kind,
+      String name,
+      DataTypeReference baseType,
+      int size,
+      FunctionSignature signature) {
+    createDataType(categoryPath, kind, name, baseType, size, signature);
+  }
+
+  /**
+   * Creates one top-level data type from a C declaration string and returns its canonical path.
+   */
+  String createDataTypeFromDeclaration(String categoryPath, String declaration);
+
+  /**
+   * Creates or replaces one top-level data type from a C declaration string and returns its path.
+   */
+  String upsertDataTypeFromDeclaration(String categoryPath, String declaration);
+
+  /**
    * Updates a data type definition that exists.
    *
    * @param path full path of data type to modify

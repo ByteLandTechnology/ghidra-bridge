@@ -6,9 +6,21 @@ public sealed interface DataTypeReference
     permits DataTypeReference.Named,
         DataTypeReference.Pointer,
         DataTypeReference.Array,
-        DataTypeReference.UntypedPointer {
+        DataTypeReference.UntypedPointer,
+        DataTypeReference.Expression {
 
   String kind();
+
+  record Expression(String expression) implements DataTypeReference {
+    public Expression {
+      expression = requiredText(expression, "expression");
+    }
+
+    @Override
+    public String kind() {
+      return "expression";
+    }
+  }
 
   record Named(String name) implements DataTypeReference {
     public Named {
@@ -67,6 +79,10 @@ public sealed interface DataTypeReference
 
   static DataTypeReference untypedPointer() {
     return new UntypedPointer();
+  }
+
+  static DataTypeReference expression(String expression) {
+    return new Expression(expression);
   }
 
   private static String requiredText(String value, String field) {

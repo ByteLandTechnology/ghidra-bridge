@@ -7,6 +7,7 @@ import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
 import static app.byteland.ghidra.api.ApiRegistry.nullableText;
+import static app.byteland.ghidra.api.ApiRegistry.objectAt;
 import static app.byteland.ghidra.api.ApiRegistry.optionalInteger;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 import static app.byteland.ghidra.api.ApiRegistry.patch;
@@ -21,6 +22,8 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
+import app.byteland.ghidra.service.function.FunctionService.ParameterPatch;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -302,6 +305,20 @@ final class FunctionMethods implements ApiMethodProvider {
     String entry = text(selector(request), ApiVocabulary.ENTRY);
     Map<String, Object> patch = patch(request);
     DataTypeReference returnType = dataType(patch.get("return_type"), "/patch/return_type");
+    List<ParameterPatch> parameters = decodeParameters(patch.get(ApiVocabulary.PARAMETERS));
+    String signature = optionalText(patch, ApiVocabulary.SIGNATURE);
+    if (signature != null) {
+      if (signature.isBlank()) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE, "/patch/signature must not be blank", "/patch/signature");
+      }
+      if (returnType != null || parameters != null) {
+        throw ApiException.badRequest(
+            "conflicting_signature_fields",
+            "signature cannot be combined with return_type or parameters",
+            "/patch/signature");
+      }
+    }
     registry
         .services()
         .functionService()
@@ -318,7 +335,32 @@ final class FunctionMethods implements ApiMethodProvider {
                 bool(patch, "has_no_return").orElse(null),
                 bool(patch, "has_var_args").orElse(null),
                 bool(patch, "has_custom_variable_storage").orElse(null),
-                optionalInteger(patch, "stack_purge_size")));
+                optionalInteger(patch, "stack_purge_size")),
+            parameters,
+            signature);
+  }
+
+  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
+  private static List<ParameterPatch> decodeParameters(Object raw) {
+    if (!(raw instanceof List<?> list)) return null;
+    List<ParameterPatch> decoded = new ArrayList<>(list.size());
+    for (int index = 0; index < list.size(); index++) {
+      String target = "/patch/parameters/" + index;
+      Map<String, Object> item = objectAt(list.get(index), target);
+      Integer ordinal = optionalInteger(item, ApiVocabulary.ORDINAL);
+      if (ordinal != null && ordinal != index) {
+        throw ApiException.badRequest(
+            "invalid_ordinal",
+            target + "/ordinal must match array index " + index,
+            target + "/ordinal");
+      }
+      decoded.add(
+          new ParameterPatch(
+              optionalText(item, ApiVocabulary.NAME),
+              dataType(item.get(ApiVocabulary.DATA_TYPE), target + "/data_type"),
+              storage(item.get(ApiVocabulary.STORAGE))));
+    }
+    return List.copyOf(decoded);
   }
 
   private FunctionResource.ParameterResource functionParameter(String entry, int ordinal) {

@@ -60,6 +60,12 @@ project(':adapter') {
         compileOnly 'com.github.spotbugs:spotbugs-annotations:4.9.8'
         testImplementation ghidraJars
     }
+    tasks.named('test', Test) {
+        dependsOn rootProject.tasks.named('verifyGhidraInstallDir')
+        if (ghidraInstallDir != null) {
+            systemProperty 'ghidraInstallDir', ghidraInstallDir.absolutePath
+        }
+    }
 }
 project(':transport:websocket') {
     dependencies { api project(':runtime') }

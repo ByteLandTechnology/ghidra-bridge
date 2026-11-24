@@ -107,6 +107,10 @@ final class ApiSchemaCatalog {
     return WireSchema.withDefinitions(WireSchema.object(properties));
   }
 
+  static Map<String, Object> nonEmptyInput(Map<String, Map<String, Object>> properties) {
+    return WireSchema.withDefinitions(nonEmptyObject(properties));
+  }
+
   static Map<String, Object> listInput(Map<String, Object> filter) {
     return input(
         props(
@@ -225,6 +229,14 @@ final class ApiSchemaCatalog {
 
   static Map<String, Object> functionPatchSchema() {
     Map<String, Object> storage = storageSchema();
+    Map<String, Object> parameter =
+        WireSchema.object(
+            props(
+                ORDINAL, WireSchema.integer(0, Integer.MAX_VALUE),
+                NAME, WireSchema.string(),
+                DATA_TYPE, WireSchema.dataTypeReference(),
+                STORAGE, storage),
+            DATA_TYPE);
     return nonEmptyObject(
         props(
             NAME,
@@ -235,6 +247,10 @@ final class ApiSchemaCatalog {
             WireSchema.dataTypeReference(),
             "return_storage",
             storage,
+            PARAMETERS,
+            WireSchema.array(parameter, 0, MAX_NESTED_ITEMS),
+            SIGNATURE,
+            WireSchema.nonBlankString(),
             CALLING_CONVENTION,
             WireSchema.string(),
             "is_inline",

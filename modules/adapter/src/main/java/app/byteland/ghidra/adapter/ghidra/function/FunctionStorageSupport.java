@@ -266,7 +266,7 @@ final class FunctionStorageSupport {
     return baseType(dataType) instanceof VoidDataType;
   }
 
-  private static boolean isFloat(DataType dataType) {
+  static boolean isFloat(DataType dataType) {
     return dataType instanceof AbstractFloatDataType;
   }
 

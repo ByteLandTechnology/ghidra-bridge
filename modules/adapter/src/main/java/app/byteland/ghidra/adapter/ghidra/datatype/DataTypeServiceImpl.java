@@ -60,6 +60,35 @@ public final class DataTypeServiceImpl implements DataTypeService {
   }
 
   @Override
+  public void upsertDataType(
+      String categoryPath,
+      DataTypeResource.Kind kind,
+      String name,
+      DataTypeReference baseType,
+      int size,
+      FunctionSignature signature) {
+    DataTypeMutations.upsertDataType(
+        dataTypeManager(),
+        categoryPath,
+        kind,
+        name,
+        baseType,
+        size,
+        signature,
+        this::resolveDataTypeReference);
+  }
+
+  @Override
+  public String createDataTypeFromDeclaration(String categoryPath, String declaration) {
+    return DataTypeMutations.writeDeclaration(dataTypeManager(), categoryPath, declaration, false);
+  }
+
+  @Override
+  public String upsertDataTypeFromDeclaration(String categoryPath, String declaration) {
+    return DataTypeMutations.writeDeclaration(dataTypeManager(), categoryPath, declaration, true);
+  }
+
+  @Override
   public void patchDataType(String path, DataTypePatch patch) {
     DataType dataType = requireDataType(path);
     switch (patch) {
