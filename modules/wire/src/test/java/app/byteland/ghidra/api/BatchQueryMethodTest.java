@@ -189,22 +189,45 @@ class BatchQueryMethodTest {
     assertEquals(400, mutationRejected.error().status());
     assertEquals("validation_failed", mutationRejected.error().code());
     assertEquals("/items", mutationRejected.error().target());
-    assertEquals(1, programReads.get(), "prevalidation must reject before executing item 0");
+    assertEquals(1, programReads.get(), "prevalidation must reject before it runs item 0");
 
     // Non-batchable read-only metadata methods (such as interface.get or batch.query) also fail.
-    ApiException nestedRejected =
-        assertThrows(
-            ApiException.class,
-            () ->
-                registry.dispatch(
-                    "batch.query",
-                    Map.of(
-                        "items",
-                        List.of(
-                            Map.of(
-                                "id", "nested", "method", "interface.get", "arguments", Map.of())))));
-    assertEquals(400, nestedRejected.error().status());
-    assertEquals("validation_failed", nestedRejected.error().code());
+    for (String nonBatchable : List.of("interface.get", "batch.query", "batch.execute")) {
+      ApiException nestedRejected =
+          assertThrows(
+              ApiException.class,
+              () ->
+                  registry.dispatch(
+                      "batch.query",
+                      Map.of(
+                          "items",
+                          List.of(
+                              Map.of(
+                                  "id",
+                                  "nested",
+                                  "method",
+                                  nonBatchable,
+                                  "arguments",
+                                  Map.of())))));
+      assertEquals(400, nestedRejected.error().status());
+      assertEquals("validation_failed", nestedRejected.error().code());
+    }
+
+    // all_or_none mode runs read-only items without a transaction and stops on item errors.
+    @SuppressWarnings("unchecked")
+    Map<String, Object> allOrNoneOk =
+        (Map<String, Object>)
+            registry.dispatch(
+                "batch.query",
+                Map.of(
+                    "transaction_mode",
+                    "all_or_none",
+                    "items",
+                    List.of(
+                        Map.of("id", "p2", "method", "program.get", "arguments", Map.of()),
+                        Map.of("id", "s2", "method", "session.get", "arguments", Map.of()))));
+    assertEquals(2, ((List<?>) allOrNoneOk.get("items")).size());
+    assertEquals(2, programReads.get());
   }
 
   @FunctionalInterface

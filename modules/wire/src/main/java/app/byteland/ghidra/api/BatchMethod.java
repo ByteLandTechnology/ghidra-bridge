@@ -87,7 +87,7 @@ final class BatchMethod {
 
   Registration queryRegistration() {
     return new Registration(
-        MethodEffects.metadata(),
+        batchEffects(readOnlyBatchableMethods),
         batchCodec(
             queryRequestSchema, readOnlyBatchableMethods, NOT_READ_ONLY_BATCHABLE_MESSAGE),
         batchResultSchema(),

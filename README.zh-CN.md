@@ -131,17 +131,16 @@ WebSocket 采用标准的 JSON-RPC 2.0 格式进行请求交互：
 
 ### Model Context Protocol (MCP)
 
-MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映射为 26 个工具：
-- `ghidra_help`：发现领域、列出操作或查看操作 Schema。
-- 14 个只读领域工具：`ghidra_program`、`ghidra_memory`、`ghidra_function`、`ghidra_batch` 和其他只读领域工具。
-- 11 个写入领域工具：`ghidra_program_write`、`ghidra_memory_write`、`ghidra_function_write`、`ghidra_batch_write` 和其他 `_write` 领域工具。
+MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映射为 15 个工具：
+- `ghidra.help`：发现领域、列出操作或查看操作 Schema。
+- 14 个领域工具：`ghidra.program`、`ghidra.memory`、`ghidra.function` 和其他领域工具。
 
 使用操作名及其参数调用领域工具。
-例如，`program.get` 方法对应 `ghidra_program` 的 `get` 操作：
+例如，`program.get` 方法对应 `ghidra.program` 的 `get` 操作：
 
 ```json
 {
-  "name": "ghidra_program",
+  "name": "ghidra.program",
   "arguments": {
     "operation": "get",
     "params": {}

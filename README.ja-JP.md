@@ -131,17 +131,16 @@ WebSocket では標準的な JSON-RPC 2.0 形式でリクエストを送信し�
 
 ### Model Context Protocol (MCP)
 
-MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 26 個のツールとして公開します:
-- `ghidra_help`: ドメインの探索、操作一覧の取得、スキーマの確認。
-- 14 個の読み取り専用ドメインツール: `ghidra_program`、`ghidra_memory`、`ghidra_function`、`ghidra_batch`、および他の読み取り専用ドメインツール。
-- 11 個の書き込みドメインツール: `ghidra_program_write`、`ghidra_memory_write`、`ghidra_function_write`、`ghidra_batch_write`、および他の `_write` ドメインツール。
+MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 15 個のツールとして公開します:
+- `ghidra.help`: ドメインの探索、操作一覧の取得、スキーマの確認。
+- 14 個のドメインツール: `ghidra.program`、`ghidra.memory`、`ghidra.function`、および他のドメインツール。
 
 操作名とパラメータを指定してドメインツールを呼び出します。
-たとえば、`program.get` メソッドは `ghidra_program` の `get` 操作です:
+たとえば、`program.get` メソッドは `ghidra.program` の `get` 操作です:
 
 ```json
 {
-  "name": "ghidra_program",
+  "name": "ghidra.program",
   "arguments": {
     "operation": "get",
     "params": {}

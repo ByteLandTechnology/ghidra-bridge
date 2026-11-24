@@ -178,7 +178,7 @@ MCP HTTP 服务端按以下规则处理请求：
 - `server/discover`：返回服务端标识与支持的能力特性。
 - `ping`：在使用初始化流程的版本中检查服务端健康状态。
   桥接在 `2026-07-28` 中保留此兼容方法。
-- `tools/list`：返回全部 26 个工具的 Schema 定义。
+- `tools/list`：返回全部 15 个工具的 Schema 定义。
 - `tools/call`：执行具体的工具操作并返回结构化内容。
 - `resources/list`：列出可用资源，例如 `ghidra-bridge://contracts/mcp-tools`。
 - `resources/read`：读取资源内容。
@@ -197,13 +197,11 @@ MCP HTTP 服务端按以下规则处理请求：
 
 ### 工具调用规范
 
-MCP 将操作组织为 26 个工具：
-- `ghidra_help`：查找领域、列出可用操作及查看操作 Schema。
-- 14 个只读领域工具：`ghidra_bridge`、`ghidra_program`、`ghidra_address`、`ghidra_memory`、`ghidra_listing`、`ghidra_global_variable`、`ghidra_function`、`ghidra_analysis`、`ghidra_decompilation`、`ghidra_symbol`、`ghidra_reference`、`ghidra_comment`、`ghidra_data_type`、`ghidra_batch`。
-- 11 个写入领域工具：`ghidra_bridge_write`、`ghidra_program_write`、`ghidra_memory_write`、`ghidra_listing_write`、`ghidra_global_variable_write`、`ghidra_function_write`、`ghidra_analysis_write`、`ghidra_symbol_write`、`ghidra_comment_write`、`ghidra_data_type_write`、`ghidra_batch_write`。
+MCP 将操作组织为 15 个工具：
+- `ghidra.help`：查找领域、列出可用操作及查看操作 Schema。
+- 14 个领域工具：`ghidra.bridge`、`ghidra.program`、`ghidra.address`、`ghidra.memory`、`ghidra.listing`、`ghidra.global_variable`、`ghidra.function`、`ghidra.analysis`、`ghidra.decompilation`、`ghidra.symbol`、`ghidra.reference`、`ghidra.comment`、`ghidra.data_type`、`ghidra.batch`。
 
 领域工具共公开 56 个方法。`interface.get` 仅通过 WebSocket 提供。
-只读工具在分发前拒绝写入操作，并返回 JSON-RPC 错误 `-32602`。
 
 ### 工具名前缀
 

@@ -512,17 +512,8 @@ public final class McpHttpServer implements AutoCloseable {
       String operation = requireString(arguments.get("operation"), "operation", id);
       MethodDescriptor tool = toolRegistry.findTool(name, operation);
       if (tool == null) {
-        if (toolRegistry.isWriteOperationForReadOnlyTool(name, operation)) {
-          throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
-              "Write operation " + operation + " is not available on read-only tool "
-                  + name + "; use " + name + "_write");
-        }
         throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
             "Unknown operation " + operation + " for " + name);
-      }
-      if (toolRegistry.isReadOnlyTool(name) && !McpToolRegistry.isReadOnly(tool)) {
-        throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
-            "Read-only tool " + name + " cannot run operation " + operation);
       }
       Map<String, Object> operationParams = requireArguments(arguments.get("params"), id);
       Object result = dispatcher.dispatch(tool.name(), operationParams);
@@ -531,8 +522,6 @@ public final class McpHttpServer implements AutoCloseable {
       }
       log.ok().status(200);
       return toolResult(Map.of("operation", operation, "result", result), false, statelessProtocol);
-    } catch (JsonRpcError error) {
-      throw error;
     } catch (Exception error) {
       log.error().status(200);
       return toolResult(errorPayload(error), true, statelessProtocol);

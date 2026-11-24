@@ -131,17 +131,16 @@ Call `interface.get` to discover all methods and schemas that the server support
 
 ### Model Context Protocol (MCP)
 
-MCP exposes the same operations, except `interface.get`, through 26 tools over Streamable HTTP:
-- `ghidra_help`: Discover domains, list operations, or view schemas.
-- 14 Read-Only Domain Tools: `ghidra_program`, `ghidra_memory`, `ghidra_function`, `ghidra_batch`, and other read-only domain tools.
-- 11 Write Domain Tools: `ghidra_program_write`, `ghidra_memory_write`, `ghidra_function_write`, `ghidra_batch_write`, and other `_write` domain tools.
+MCP exposes the same operations, except `interface.get`, through 15 tools over Streamable HTTP:
+- `ghidra.help`: Discover domains, list operations, or view schemas.
+- 14 Domain Tools: `ghidra.program`, `ghidra.memory`, `ghidra.function`, and other domain tools.
 
 Call a domain tool with an operation name and its parameters.
-For example, the `program.get` method is the `get` operation of `ghidra_program`:
+For example, the `program.get` method is the `get` operation of `ghidra.program`:
 
 ```json
 {
-  "name": "ghidra_program",
+  "name": "ghidra.program",
   "arguments": {
     "operation": "get",
     "params": {}
