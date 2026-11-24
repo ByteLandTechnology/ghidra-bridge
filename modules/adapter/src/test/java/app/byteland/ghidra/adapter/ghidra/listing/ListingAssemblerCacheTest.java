@@ -1,11 +1,13 @@
 package app.byteland.ghidra.adapter.ghidra.listing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ghidra.app.plugin.assembler.Assembler;
+import ghidra.app.plugin.assembler.AssemblyError;
 import ghidra.program.model.lang.LanguageID;
 import ghidra.program.model.listing.Program;
 import java.lang.reflect.Proxy;
@@ -47,6 +49,35 @@ class ListingAssemblerCacheTest {
     IllegalArgumentException error =
         assertThrows(IllegalArgumentException.class, () -> cache.get(unsupported));
     assertTrue(error.getMessage().contains("does not support Sleigh assembly"));
+  }
+
+  @Test
+  void translatesAssemblyErrorToIllegalArgumentException() {
+    AtomicInteger attempts = new AtomicInteger();
+    ListingAssemblerCache cache =
+        new ListingAssemblerCache(
+            program -> {
+              if (attempts.incrementAndGet() == 1) {
+                throw new AssemblyError("corrupt Sleigh specification");
+              }
+              throw new AssemblyError("   ");
+            });
+
+    Program broken = stubProgram("x86:LE:64:default");
+    IllegalArgumentException firstError =
+        assertThrows(IllegalArgumentException.class, () -> cache.get(broken));
+    assertEquals(
+        "unable to initialize Sleigh assembler: corrupt Sleigh specification",
+        firstError.getMessage());
+    assertInstanceOf(AssemblyError.class, firstError.getCause());
+
+    IllegalArgumentException blankDetailError =
+        assertThrows(IllegalArgumentException.class, () -> cache.get(broken));
+    assertEquals(
+        "unable to initialize Sleigh assembler: x86:LE:64:default",
+        blankDetailError.getMessage());
+    assertInstanceOf(AssemblyError.class, blankDetailError.getCause());
+    assertEquals(2, attempts.get());
   }
 
   private static Program stubProgram(String languageId) {

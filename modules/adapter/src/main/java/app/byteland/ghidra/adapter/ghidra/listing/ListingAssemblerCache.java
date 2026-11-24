@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.listing;
 
 import ghidra.app.plugin.assembler.Assembler;
 import ghidra.app.plugin.assembler.Assemblers;
+import ghidra.app.plugin.assembler.AssemblyError;
 import ghidra.program.model.listing.Program;
 import java.util.Map;
 import java.util.Objects;
@@ -37,13 +38,16 @@ final class ListingAssemblerCache {
   private Assembler createAssembler(Program program) {
     try {
       return Objects.requireNonNull(factory.apply(program), "assembler");
-    } catch (UnsupportedOperationException exception) {
+    } catch (UnsupportedOperationException | AssemblyError exception) {
       String detail = exception.getMessage();
       if (detail == null || detail.isBlank()) {
         detail = program.getLanguageID().getIdAsString();
       }
-      throw new IllegalArgumentException(
-          "program language does not support Sleigh assembly: " + detail, exception);
+      String prefix =
+          exception instanceof AssemblyError
+              ? "unable to initialize Sleigh assembler: "
+              : "program language does not support Sleigh assembly: ";
+      throw new IllegalArgumentException(prefix + detail, exception);
     }
   }
 }
