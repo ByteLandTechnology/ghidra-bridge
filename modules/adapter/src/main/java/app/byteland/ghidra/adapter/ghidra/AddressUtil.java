@@ -5,6 +5,7 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.address.AddressFormatException;
 import ghidra.program.model.address.AddressSpace;
+import ghidra.program.model.address.SegmentedAddressSpace;
 import java.util.Locale;
 
 /**
@@ -21,7 +22,10 @@ public final class AddressUtil {
       throw new IllegalArgumentException("address is required");
     }
     String value = rawAddress.trim();
-    Address address = toAddress(script, value);
+    Address address = tryCanonicalSpaceAddress(script.getAddressFactory(), value);
+    if (address == null) {
+      address = toAddress(script, value);
+    }
     if (address == null) {
       address = toAddress(script, "0x" + value);
     }
@@ -32,6 +36,46 @@ public final class AddressUtil {
       throw new IllegalArgumentException("unable to parse address: " + rawAddress);
     }
     return address;
+  }
+
+  private static Address tryCanonicalSpaceAddress(AddressFactory addressFactory, String value) {
+    if (addressFactory == null) {
+      return null;
+    }
+    int idx = value.indexOf(':');
+    if (idx <= 0 || idx + 1 >= value.length()) {
+      return null;
+    }
+    String offsetPart = normalizeOffset(value.substring(idx + 1));
+    if (!isHexDigits(offsetPart)) {
+      return null;
+    }
+    AddressSpace namedSpace = addressFactory.getAddressSpace(value.substring(0, idx));
+    if (namedSpace == null || namedSpace instanceof SegmentedAddressSpace) {
+      return null;
+    }
+    try {
+      return namedSpace.getAddress(offsetPart);
+    } catch (AddressFormatException ignored) {
+      return null;
+    }
+  }
+
+  private static boolean isHexDigits(String value) {
+    if (value == null || value.isEmpty()) {
+      return false;
+    }
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      boolean hex =
+          (ch >= '0' && ch <= '9')
+              || (ch >= 'a' && ch <= 'f')
+              || (ch >= 'A' && ch <= 'F');
+      if (!hex) {
+        return false;
+      }
+    }
+    return true;
   }
 
   public static String canonicalAddress(Address address) {

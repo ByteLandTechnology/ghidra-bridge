@@ -5,7 +5,6 @@ import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.memory.MemoryBlockResource;
 import ghidra.program.model.mem.MemoryBlock;
-import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
 
@@ -24,17 +23,17 @@ final class MemoryBlockQueries {
       Boolean read,
       String nameFilterRaw) {
     String normalizedName = MemoryPageSupport.normalizeNameFilter(nameFilterRaw);
-    List<MemoryBlock> ordered =
-        java.util.Arrays.stream(memoryBlocks())
-            .filter(
-                block ->
-                    MemoryPageSupport.matchesFilters(block, execute, write, read, normalizedName))
-            .sorted(java.util.Comparator.comparing(MemoryBlock::getName))
-            .toList();
-    Page<MemoryBlock> page = Page.paginate(ordered, limit, cursor, MemoryBlock::getName);
-    List<MemoryBlockResource> blocks =
-        page.items().stream().map(MemoryBlockQueries::describeMemoryBlock).toList();
-    return Page.of(blocks, page.limit(), page.nextCursor());
+    Page.Selector<MemoryBlock> selector = Page.selector(limit, cursor);
+    for (MemoryBlock block : memoryBlocks()) {
+      if (!MemoryPageSupport.matchesFilters(block, execute, write, read, normalizedName)) {
+        continue;
+      }
+      String blockName = block.getName();
+      if (selector.acceptsKey(blockName)) {
+        selector.offer(blockName, block);
+      }
+    }
+    return selector.finish(MemoryBlockQueries::describeMemoryBlock);
   }
 
   MemoryBlockResource getMemoryBlockByName(String rawName) {

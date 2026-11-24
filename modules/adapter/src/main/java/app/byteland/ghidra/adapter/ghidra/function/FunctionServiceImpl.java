@@ -34,7 +34,7 @@ public final class FunctionServiceImpl implements FunctionService {
     this.context = context;
     this.lookupQueries = new FunctionLookupQueries(context);
     this.listQueries = new FunctionListQueries(context, lookupQueries);
-    this.relationQueries = new FunctionRelationQueries(lookupQueries);
+    this.relationQueries = new FunctionRelationQueries(context, lookupQueries);
     this.dataTypeResolver =
         input ->
             GhidraDataTypeReferences.resolve(context.currentProgram().getDataTypeManager(), input);

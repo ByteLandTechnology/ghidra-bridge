@@ -1,14 +1,23 @@
 package app.byteland.ghidra.adapter.ghidra.reference;
 
+import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Reference;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 final class ReferenceListQueries {
+  private static final String REFERENCE_RESOURCE = "reference";
+  private static final String EXT_FROM_CANONICAL =
+      AddressUtil.canonicalAddress(Address.EXT_FROM_ADDRESS);
+
   private final GhidraSession context;
 
   ReferenceListQueries(GhidraSession context) {
@@ -22,36 +31,147 @@ final class ReferenceListQueries {
         ReferenceQuerySupport.normalizeDirection(direction, fromRaw, toRaw);
     ReferenceQuerySupport.requireTarget(normalizedDirection, fromRaw, toRaw);
 
-    String target = "to".equals(normalizedDirection) ? toRaw : fromRaw;
+    boolean isTo = "to".equals(normalizedDirection);
+    String target = isTo ? toRaw : fromRaw;
     Address anchor = parseAddress(target);
-    List<KeyedReference> matched = new ArrayList<>();
-    String nextCursor = null;
-    Iterable<Reference> refs = context.references(anchor, "to".equals(normalizedDirection));
-    for (Reference reference : refs) {
+    String canonicalAnchor = AddressUtil.canonicalAddress(anchor);
+    boolean hasCursor = cursor != null && !cursor.isBlank();
+    if (!hasCursor || context.isAnalyzing()) {
+      return selectReferencesBounded(
+          anchor, canonicalAnchor, isTo, type, normalizedLimit, cursor);
+    }
+
+    long modNumber = context.modificationNumber();
+    String normalizedType = type == null ? null : type.toUpperCase(Locale.ROOT);
+    QuerySnapshotCache.Key cacheKey =
+        QuerySnapshotCache.Key.of(
+            REFERENCE_RESOURCE, modNumber, normalizedDirection, canonicalAnchor, normalizedType);
+    String[] sortedKeys = context.querySnapshots().get(cacheKey);
+    if (sortedKeys == null) {
+      List<String> keys = new ArrayList<>();
+      for (Reference reference : context.references(anchor, isTo)) {
+        if (!ReferenceQuerySupport.matchesType(type, reference)) {
+          continue;
+        }
+        keys.add(encodedKey(reference, anchor, canonicalAnchor, isTo));
+      }
+      sortedKeys = keys.toArray(String[]::new);
+      Arrays.sort(sortedKeys);
+      if (context.isAnalyzing()) {
+        return selectReferencesBounded(
+            anchor, canonicalAnchor, isTo, type, normalizedLimit, cursor);
+      }
+      if (context.modificationNumber() == modNumber) {
+        context.querySnapshots().put(cacheKey, sortedKeys);
+      }
+    }
+    return QuerySnapshotCache.slice(
+        sortedKeys,
+        normalizedLimit,
+        cursor,
+        encodedKey -> resolveReference(anchor, isTo, encodedKey),
+        ReferenceDescriptions::describe);
+  }
+
+  private Page<ReferenceResource> selectReferencesBounded(
+      Address anchor,
+      String canonicalAnchor,
+      boolean isTo,
+      String type,
+      int normalizedLimit,
+      String cursor) {
+    Page.Selector<KeyedReference> selector = Page.selector(normalizedLimit, cursor);
+    for (Reference reference : context.references(anchor, isTo)) {
       if (!ReferenceQuerySupport.matchesType(type, reference)) {
         continue;
       }
-      String encoded = ReferenceDescriptions.referenceKey(reference).encoded();
-      matched.add(new KeyedReference(reference, encoded));
-    }
-    matched.sort(java.util.Comparator.comparing(KeyedReference::encodedKey));
-    List<KeyedReference> pageReferences = new ArrayList<>();
-    for (KeyedReference keyed : matched) {
-      if (cursor != null && !cursor.isBlank() && keyed.encodedKey().compareTo(cursor) <= 0) {
-        continue;
+      String encoded = encodedKey(reference, anchor, canonicalAnchor, isTo);
+      if (selector.acceptsKey(encoded)) {
+        selector.offer(encoded, new KeyedReference(reference, encoded));
       }
-      pageReferences.add(keyed);
-      if (pageReferences.size() > normalizedLimit) break;
     }
-    if (pageReferences.size() > normalizedLimit) {
-      pageReferences.remove(pageReferences.size() - 1);
-      nextCursor = pageReferences.getLast().encodedKey();
+    return selector.finish(keyed -> ReferenceDescriptions.describe(keyed.reference()));
+  }
+
+  private static String encodedKey(
+      Reference reference, Address anchor, String canonicalAnchor, boolean isTo) {
+    Address fromAddress = reference.getFromAddress();
+    Address toAddress = reference.getToAddress();
+    String from =
+        !isTo && anchor.equals(fromAddress)
+            ? canonicalAnchor
+            : AddressUtil.canonicalAddress(fromAddress);
+    String to =
+        isTo && anchor.equals(toAddress)
+            ? canonicalAnchor
+            : AddressUtil.canonicalAddress(toAddress);
+    return ReferenceCursorKey.encode(
+        from, to, reference.getReferenceType().getName(), reference.getOperandIndex());
+  }
+
+  private Reference resolveReference(Address anchor, boolean isTo, String encodedKey) {
+    ReferenceCursorKey key = ReferenceCursorKey.decode(encodedKey);
+    if (isTo) {
+      Address fromAddress =
+          EXT_FROM_CANONICAL.equals(key.from())
+              ? Address.EXT_FROM_ADDRESS
+              : tryParseAddress(key.from());
+      if (fromAddress == null) {
+        return null;
+      }
+      Reference exact = context.reference(fromAddress, anchor, key.operandIndex());
+      if (exact != null && matchesDecodedKey(exact, key)) {
+        return exact;
+      }
+      Program program = context.currentProgramOrNull();
+      if (program != null && program.getReferenceManager() != null) {
+        for (Reference candidate :
+            program.getReferenceManager().getReferencesFrom(fromAddress, key.operandIndex())) {
+          if (matchesDecodedKey(candidate, key)) {
+            return candidate;
+          }
+        }
+      } else {
+        for (Reference candidate : context.references(fromAddress, false)) {
+          if (matchesDecodedKey(candidate, key)) {
+            return candidate;
+          }
+        }
+      }
+      return null;
     }
-    List<ReferenceResource> items =
-        pageReferences.stream()
-            .map(keyed -> ReferenceDescriptions.describe(keyed.reference()))
-            .toList();
-    return Page.of(items, normalizedLimit, nextCursor);
+
+    Program program = context.currentProgramOrNull();
+    if (program != null && program.getReferenceManager() != null) {
+      for (Reference candidate :
+          program.getReferenceManager().getReferencesFrom(anchor, key.operandIndex())) {
+        if (matchesDecodedKey(candidate, key)) {
+          return candidate;
+        }
+      }
+      return null;
+    }
+    for (Reference candidate : context.references(anchor, false)) {
+      if (matchesDecodedKey(candidate, key)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private static boolean matchesDecodedKey(Reference candidate, ReferenceCursorKey key) {
+    return candidate.getOperandIndex() == key.operandIndex()
+        && key.type().equals(candidate.getReferenceType().getName())
+        && key.from().equals(AddressUtil.canonicalAddress(candidate.getFromAddress()))
+        && key.to().equals(AddressUtil.canonicalAddress(candidate.getToAddress()));
+  }
+
+  private Address tryParseAddress(String rawAddress) {
+    try {
+      return parseAddress(rawAddress);
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
   }
 
   private record KeyedReference(Reference reference, String encodedKey) {}

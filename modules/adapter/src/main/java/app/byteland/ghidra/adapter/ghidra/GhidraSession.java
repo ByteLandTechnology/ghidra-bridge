@@ -2,22 +2,46 @@ package app.byteland.ghidra.adapter.ghidra;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceManager;
+import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 /**
  * Coordinates Ghidra program access, commands, and transaction lifecycles.
  */
-public final class GhidraSession {
+public final class GhidraSession implements AutoCloseable {
   private final GhidraScript ghidraScript;
+  private final QuerySnapshotCache querySnapshots;
+  private final BooleanSupplier analyzingSupplier;
   private final Object executionLock = new Object();
   private int transactionDepth;
 
   public GhidraSession(GhidraScript script) {
+    this(
+        script,
+        new QuerySnapshotCache(),
+        () -> {
+          Program program = script.getCurrentProgram();
+          return program != null
+              && AutoAnalysisManager.hasAutoAnalysisManager(program)
+              && AutoAnalysisManager.getAnalysisManager(program).isAnalyzing();
+        });
+  }
+
+  public GhidraSession(
+      GhidraScript script,
+      QuerySnapshotCache querySnapshots,
+      BooleanSupplier analyzingSupplier) {
     this.ghidraScript = Objects.requireNonNull(script, "script");
+    this.querySnapshots = Objects.requireNonNull(querySnapshots, "querySnapshots");
+    this.analyzingSupplier = Objects.requireNonNull(analyzingSupplier, "analyzingSupplier");
   }
 
   @SuppressFBWarnings(
@@ -25,6 +49,27 @@ public final class GhidraSession {
       justification = "Adapter collaborators require the live GhidraScript execution context")
   public GhidraScript script() {
     return ghidraScript;
+  }
+
+  @SuppressFBWarnings(
+      value = "EI_EXPOSE_REP",
+      justification = "Adapter query collaborators share the session-scoped snapshot cache")
+  public QuerySnapshotCache querySnapshots() {
+    return querySnapshots;
+  }
+
+  public long modificationNumber() {
+    Program program = currentProgramOrNull();
+    return program == null ? 0L : program.getModificationNumber();
+  }
+
+  public boolean isAnalyzing() {
+    return analyzingSupplier.getAsBoolean();
+  }
+
+  @Override
+  public void close() {
+    querySnapshots.clear();
   }
 
   public Program currentProgram() {
@@ -72,10 +117,30 @@ public final class GhidraSession {
     return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
-  public java.util.List<ghidra.program.model.symbol.Reference> references(
-      Address address, boolean to) {
-    return java.util.Arrays.asList(
-        to ? ghidraScript.getReferencesTo(address) : ghidraScript.getReferencesFrom(address));
+  public Iterable<Reference> references(Address address, boolean to) {
+    if (to) {
+      Program program = currentProgramOrNull();
+      if (program != null && program.getReferenceManager() != null) {
+        ReferenceManager referenceManager = program.getReferenceManager();
+        return () -> referenceManager.getReferencesTo(address);
+      }
+      return Arrays.asList(ghidraScript.getReferencesTo(address));
+    }
+    return Arrays.asList(ghidraScript.getReferencesFrom(address));
+  }
+
+  public Reference reference(Address fromAddress, Address toAddress, int operandIndex) {
+    Program program = currentProgramOrNull();
+    if (program != null && program.getReferenceManager() != null) {
+      return program.getReferenceManager().getReference(fromAddress, toAddress, operandIndex);
+    }
+    for (Reference candidate : references(fromAddress, false)) {
+      if (toAddress.equals(candidate.getToAddress())
+          && candidate.getOperandIndex() == operandIndex) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
@@ -109,7 +174,11 @@ public final class GhidraSession {
         try {
           ghidraScript.end(commit);
         } finally {
-          ghidraScript.start();
+          try {
+            ghidraScript.start();
+          } finally {
+            querySnapshots.clear();
+          }
         }
       }
     }
@@ -118,8 +187,12 @@ public final class GhidraSession {
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
     synchronized (executionLock) {
-      if (ghidraScript.runCommand(command)) {
-        return;
+      try {
+        if (ghidraScript.runCommand(command)) {
+          return;
+        }
+      } finally {
+        querySnapshots.clear();
       }
     }
     String status = command.getStatusMsg();
