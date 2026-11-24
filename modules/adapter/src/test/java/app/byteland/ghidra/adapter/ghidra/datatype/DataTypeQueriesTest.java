@@ -2,8 +2,11 @@ package app.byteland.ghidra.adapter.ghidra.datatype;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
 import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeCategoryResource;
@@ -13,17 +16,22 @@ import ghidra.framework.cmd.Command;
 import ghidra.program.model.data.Category;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.DataTypeConflictHandler;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.Structure;
+import ghidra.program.model.data.StructureDataType;
 import ghidra.program.model.listing.Program;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -48,7 +56,7 @@ class DataTypeQueriesTest {
     assertEquals(10, fixture.summarizeCalls.get(), "zero discarded DataTypeResource summaries");
 
     // Second page (first cursor call) populates 1 snapshot; pages 3..12 hit the cached snapshot
-    // without calling getAllDataTypes() again!
+    // without calling getAllDataTypes() again.
     List<String> warmSweepPaths = new ArrayList<>();
     warmSweepPaths.addAll(firstPage.items().stream().map(DataTypeResource::path).toList());
     String cursor = firstPage.nextCursor();
@@ -66,7 +74,7 @@ class DataTypeQueriesTest {
     assertEquals(120, fixture.summarizeCalls.get(), "each of 120 types summarized once total");
 
     // Verify identical items, sort order, and cursors across:
-    // (a) TTL expiry between pages, (b) LRU eviction, and (c) analysis bypass!
+    // (a) TTL expiry between pages, (b) LRU eviction, and (c) analysis bypass.
     List<String> ttlExpiredSweep = sweepWithMode(fixture, SweepMode.EXPIRE_TTL_EACH_PAGE);
     List<String> evictedSweep = sweepWithMode(fixture, SweepMode.CLEAR_CACHE_EACH_PAGE);
     List<String> analyzingSweep = sweepWithMode(fixture, SweepMode.ANALYZING_BYPASS);
@@ -170,6 +178,178 @@ class DataTypeQueriesTest {
     assertNull(unknownKind.nextCursor());
   }
 
+  @Test
+  void realProgramSessionCachesSnapshotsAndInvalidatesAcrossProgramModification() {
+    try (GhidraTestSupport.ProgramHolder holder =
+        GhidraTestSupport.createX64Program("dt-snapshots")) {
+      CategoryPath realCategory = new CategoryPath("/real");
+      holder.inTransaction(
+          program -> {
+            DataTypeManager dtm = program.getDataTypeManager();
+            for (int i = 0; i < 6; i++) {
+              dtm.addDataType(
+                  new StructureDataType(realCategory, String.format("Struct_%02d", i), 8),
+                  DataTypeConflictHandler.DEFAULT_HANDLER);
+            }
+          });
+
+      GhidraSession session = GhidraTestSupport.sessionFor(holder.program());
+      DataTypeServiceImpl service = new DataTypeServiceImpl(session);
+
+      Page<DataTypeResource> first = service.searchDataTypes("struct_", "/real", "struct", 2, null);
+      assertEquals(
+          List.of("/real/Struct_00", "/real/Struct_01"),
+          first.items().stream().map(DataTypeResource::path).toList());
+      assertEquals(0, session.querySnapshots().entryCount());
+
+      Page<DataTypeResource> second =
+          service.searchDataTypes("struct_", "/real", "struct", 2, first.nextCursor());
+      assertEquals(
+          List.of("/real/Struct_02", "/real/Struct_03"),
+          second.items().stream().map(DataTypeResource::path).toList());
+      assertEquals(1, session.querySnapshots().entryCount());
+
+      holder.inTransaction(
+          program ->
+              program
+                  .getDataTypeManager()
+                  .addDataType(
+                      new StructureDataType(realCategory, "Struct_02_inserted", 8),
+                      DataTypeConflictHandler.DEFAULT_HANDLER));
+
+      Page<DataTypeResource> refreshedSecond =
+          service.searchDataTypes("struct_", "/real", "struct", 2, first.nextCursor());
+      assertEquals(
+          List.of("/real/Struct_02", "/real/Struct_02_inserted"),
+          refreshedSecond.items().stream().map(DataTypeResource::path).toList());
+
+      session.close();
+      assertEquals(0, session.querySnapshots().entryCount());
+    }
+  }
+
+  @Test
+  void listCategoriesSelectsChildPathsBeforeReadingCountsAndSupportsCursor() {
+    Set<String> allowedCountReads = Set.of("/alpha", "/beta");
+    Category delta = childCategory("/delta", "delta", 4, 8, allowedCountReads);
+    Category beta = childCategory("/beta", "beta", 2, 5, allowedCountReads);
+    Category alpha = childCategory("/alpha", "alpha", 1, 3, allowedCountReads);
+    Category gamma = childCategory("/gamma", "gamma", 7, 9, allowedCountReads);
+    Category root = parentCategory("/", new Category[] {delta, beta, alpha, gamma}, null);
+    DataTypeManager manager =
+        managerWithCategories(Map.of(CategoryPath.ROOT, root), List.of(), null);
+
+    Page<DataTypeCategoryResource> first = DataTypeQueries.listCategories(manager, "/", 2, null);
+    assertEquals(
+        List.of(
+            new DataTypeCategoryResource("/alpha", "alpha", 1, 3),
+            new DataTypeCategoryResource("/beta", "beta", 2, 5)),
+        first.items());
+    assertEquals("/beta", first.nextCursor());
+
+    Set<String> secondAllowed = Set.of("/delta", "/gamma");
+    Category rootSecond =
+        parentCategory(
+            "/",
+            new Category[] {
+              childCategory("/delta", "delta", 4, 8, secondAllowed),
+              childCategory("/beta", "beta", 2, 5, secondAllowed),
+              childCategory("/alpha", "alpha", 1, 3, secondAllowed),
+              childCategory("/gamma", "gamma", 7, 9, secondAllowed)
+            },
+            null);
+    DataTypeManager secondManager =
+        managerWithCategories(Map.of(CategoryPath.ROOT, rootSecond), List.of(), null);
+
+    Page<DataTypeCategoryResource> second =
+        DataTypeQueries.listCategories(secondManager, null, 2, first.nextCursor());
+    assertEquals(
+        List.of(
+            new DataTypeCategoryResource("/delta", "delta", 4, 8),
+            new DataTypeCategoryResource("/gamma", "gamma", 7, 9)),
+        second.items());
+    assertNull(second.nextCursor());
+
+    assertThrows(
+        NoSuchElementException.class,
+        () -> DataTypeQueries.listCategories(manager, "/missing", 10, null));
+  }
+
+  @Test
+  void searchDataTypesScopesToCategoryAndReturnsEmptyForInvalidOrMissingCategory() {
+    AtomicBoolean scannedAll = new AtomicBoolean(false);
+    AtomicInteger summarized = new AtomicInteger();
+
+    DataType structB = mockType(Structure.class, "/net/PacketB", "PacketB", 16, "b", summarized);
+    DataType enumSkip =
+        mockType(ghidra.program.model.data.Enum.class, "/net/State", "State", 4, "s", summarized);
+    DataType structA = mockType(Structure.class, "/net/PacketA", "PacketA", 8, "a", summarized);
+    DataType structC = mockType(Structure.class, "/net/PacketC", "PacketC", 32, "c", summarized);
+
+    Category netCategory =
+        parentCategory(
+            "/net", new Category[0], new DataType[] {structB, enumSkip, structC, structA});
+    Map<CategoryPath, Category> categories = new HashMap<>();
+    categories.put(new CategoryPath("/net"), netCategory);
+    DataTypeManager manager = managerWithCategories(categories, List.of(), scannedAll);
+
+    Page<DataTypeResource> page1 =
+        DataTypeQueries.searchDataTypes(manager, "packet", "/net", "struct", 2, null);
+    assertEquals(
+        List.of("/net/PacketA", "/net/PacketB"),
+        page1.items().stream().map(DataTypeResource::path).toList());
+    assertEquals("/net/PacketB", page1.nextCursor());
+    assertEquals(2, summarized.get());
+    assertTrue(!scannedAll.get());
+
+    Page<DataTypeResource> page2 =
+        DataTypeQueries.searchDataTypes(
+            manager, "packet", "/net", "struct", 2, page1.nextCursor());
+    assertEquals(
+        List.of("/net/PacketC"), page2.items().stream().map(DataTypeResource::path).toList());
+    assertNull(page2.nextCursor());
+    assertEquals(3, summarized.get());
+
+    for (String badOrMissing : List.of("", "net", "/net/", "/a//b", "/missing")) {
+      Page<DataTypeResource> empty =
+          DataTypeQueries.searchDataTypes(manager, "", badOrMissing, null, 10, null);
+      assertTrue(empty.items().isEmpty(), "expected empty page for " + badOrMissing);
+      assertNull(empty.nextCursor());
+    }
+    Page<DataTypeResource> unknownKind =
+        DataTypeQueries.searchDataTypes(manager, "", "/net", "unknown_kind", 10, null);
+    assertTrue(unknownKind.items().isEmpty());
+    assertEquals(3, summarized.get());
+    assertTrue(!scannedAll.get());
+  }
+
+  @Test
+  void searchDataTypesPaginatesAllCategoriesWithZeroDiscardedSummaries() {
+    AtomicInteger summarized = new AtomicInteger();
+    List<DataType> allTypes = new ArrayList<>();
+    for (int index = 25; index >= 1; index--) {
+      String name = String.format("Type_%02d", index);
+      allTypes.add(
+          mockType(Structure.class, "/types/" + name, name, index * 4, "doc", summarized));
+    }
+    DataTypeManager manager = managerWithCategories(Map.of(), allTypes, null);
+
+    List<String> collected = new ArrayList<>();
+    String cursor = null;
+    while (true) {
+      Page<DataTypeResource> page =
+          DataTypeQueries.searchDataTypes(manager, "", null, "STRUCT", 7, cursor);
+      collected.addAll(page.items().stream().map(DataTypeResource::name).toList());
+      cursor = page.nextCursor();
+      if (cursor == null) break;
+    }
+
+    assertEquals(25, collected.size());
+    assertEquals("Type_01", collected.getFirst());
+    assertEquals("Type_25", collected.getLast());
+    assertEquals(25, summarized.get());
+  }
+
   private enum SweepMode {
     EXPIRE_TTL_EACH_PAGE,
     CLEAR_CACHE_EACH_PAGE,
@@ -204,6 +384,92 @@ class DataTypeQueriesTest {
     } finally {
       fixture.analyzing.set(false);
     }
+  }
+
+  private static Category childCategory(
+      String path, String name, int subCount, int typeCount, Set<String> allowedCountReads) {
+    CategoryPath categoryPath = new CategoryPath(path);
+    return (Category)
+        Proxy.newProxyInstance(
+            Category.class.getClassLoader(),
+            new Class<?>[] {Category.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getCategoryPath" -> categoryPath;
+                  case "getName" -> name;
+                  case "getCategories" -> {
+                    if (!allowedCountReads.contains(path)) {
+                      throw new AssertionError("unexpected getCategories on " + path);
+                    }
+                    yield new Category[subCount];
+                  }
+                  case "getDataTypes" -> {
+                    if (!allowedCountReads.contains(path)) {
+                      throw new AssertionError("unexpected getDataTypes on " + path);
+                    }
+                    yield new DataType[typeCount];
+                  }
+                  default -> throw new AssertionError(method.getName());
+                });
+  }
+
+  private static Category parentCategory(String path, Category[] children, DataType[] types) {
+    CategoryPath categoryPath = new CategoryPath(path);
+    return (Category)
+        Proxy.newProxyInstance(
+            Category.class.getClassLoader(),
+            new Class<?>[] {Category.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getCategoryPath" -> categoryPath;
+                  case "getName" -> categoryPath.getName();
+                  case "getCategories" -> children;
+                  case "getDataTypes" -> types;
+                  default -> throw new AssertionError(method.getName());
+                });
+  }
+
+  private static DataType mockType(
+      Class<? extends DataType> typeInterface,
+      String path,
+      String name,
+      int length,
+      String description,
+      AtomicInteger summarized) {
+    return (DataType)
+        Proxy.newProxyInstance(
+            DataType.class.getClassLoader(),
+            new Class<?>[] {typeInterface},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getName" -> name;
+                  case "getPathName" -> path;
+                  case "getLength" -> length;
+                  case "getDescription" -> {
+                    summarized.incrementAndGet();
+                    yield description;
+                  }
+                  default -> throw new AssertionError(method.getName());
+                });
+  }
+
+  private static DataTypeManager managerWithCategories(
+      Map<CategoryPath, Category> categories,
+      List<DataType> allDataTypes,
+      AtomicBoolean scannedAll) {
+    return (DataTypeManager)
+        Proxy.newProxyInstance(
+            DataTypeManager.class.getClassLoader(),
+            new Class<?>[] {DataTypeManager.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getCategory" -> categories.get((CategoryPath) args[0]);
+                  case "getAllDataTypes" -> {
+                    if (scannedAll != null) scannedAll.set(true);
+                    yield allDataTypes.iterator();
+                  }
+                  default -> throw new AssertionError(method.getName());
+                });
   }
 
   private static final class Fixture {

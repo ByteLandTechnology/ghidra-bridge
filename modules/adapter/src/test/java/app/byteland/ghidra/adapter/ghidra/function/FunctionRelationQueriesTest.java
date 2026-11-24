@@ -1,6 +1,8 @@
 package app.byteland.ghidra.adapter.ghidra.function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
@@ -9,6 +11,7 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.GenericAddressSpace;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
@@ -30,11 +33,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 
 class FunctionRelationQueriesTest {
+  private static final GenericAddressSpace RAM =
+      new GenericAddressSpace("ram", 64, AddressSpace.TYPE_RAM, 0);
 
   @Test
   void defersMaterializationToPageSlicesAndCachesCallerSnapshots() {
     Fixture fixture = new Fixture(80);
-    FunctionRelationQueries queries = new FunctionRelationQueries(fixture.session, fixture::resolve);
+    FunctionRelationQueries queries =
+        new FunctionRelationQueries(fixture.session, fixture::resolve);
 
     // Page 1 (cursor == null): bounded selection, zero snapshot retained, only 8 items materialized.
     Page<FunctionCallResource> p1 = queries.getCallers("ram:00100000", 8, null);
@@ -85,8 +91,126 @@ class FunctionRelationQueriesTest {
     assertEquals("func_new_200008", refreshed.items().getFirst().name());
   }
 
+  @Test
+  void getCallersAndCalleesSelectEntryKeysBeforeNamespaceOrProgramLookup() {
+    AtomicInteger namespaceLookups = new AtomicInteger();
+    AtomicInteger programLookups = new AtomicInteger();
+
+    Function caller3 =
+        relatedFunction(0x00403000L, "fn_c", "Ns::C", namespaceLookups, programLookups);
+    Function caller1 =
+        relatedFunction(0x00401000L, "fn_a", "Ns::A", namespaceLookups, programLookups);
+    Function caller4 =
+        relatedFunction(0x00404000L, "fn_d", "Ns::D", namespaceLookups, programLookups);
+    Function caller2 =
+        relatedFunction(0x00402000L, "fn_b", "Ns::B", namespaceLookups, programLookups);
+
+    Set<Function> callers = new LinkedHashSet<>(List.of(caller3, caller1, caller4, caller2));
+    Set<Function> callees = new LinkedHashSet<>(List.of(caller2, caller1));
+    Function target = rootFunction(callers, callees);
+    FunctionRelationQueries queries = new FunctionRelationQueries(raw -> target);
+
+    Page<FunctionCallResource> page1 = queries.getCallers("ram:00400000", 2, null);
+    assertEquals(
+        List.of(
+            new FunctionCallResource(
+                "ram:00401000",
+                "fn_a",
+                null,
+                FunctionCallResource.Direction.CALLERS,
+                "Ns::A",
+                null),
+            new FunctionCallResource(
+                "ram:00402000",
+                "fn_b",
+                null,
+                FunctionCallResource.Direction.CALLERS,
+                "Ns::B",
+                null)),
+        page1.items());
+    assertEquals("ram:00402000", page1.nextCursor());
+    assertEquals(2, namespaceLookups.get());
+    assertEquals(2, programLookups.get());
+
+    Page<FunctionCallResource> page2 =
+        queries.getCallers("ram:00400000", 2, page1.nextCursor());
+    assertEquals(
+        List.of("ram:00403000", "ram:00404000"),
+        page2.items().stream().map(FunctionCallResource::entry).toList());
+    assertNull(page2.nextCursor());
+    assertEquals(4, namespaceLookups.get());
+    assertEquals(4, programLookups.get());
+
+    Page<FunctionCallResource> exactLimitCallees = queries.getCallees("ram:00400000", 2, null);
+    assertEquals(
+        List.of("ram:00401000", "ram:00402000"),
+        exactLimitCallees.items().stream().map(FunctionCallResource::entry).toList());
+    assertEquals(
+        FunctionCallResource.Direction.CALLEES,
+        exactLimitCallees.items().getFirst().direction());
+    assertNull(exactLimitCallees.nextCursor());
+
+    Function emptyTarget = rootFunction(Set.of(), Set.of());
+    Page<FunctionCallResource> empty =
+        new FunctionRelationQueries(raw -> emptyTarget).getCallers("ram:00400000", 5, null);
+    assertTrue(empty.items().isEmpty());
+    assertNull(empty.nextCursor());
+  }
+
+  private static Function rootFunction(Set<Function> callers, Set<Function> callees) {
+    return (Function)
+        Proxy.newProxyInstance(
+            Function.class.getClassLoader(),
+            new Class<?>[] {Function.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getCallingFunctions" -> callers;
+                  case "getCalledFunctions" -> callees;
+                  default -> throw new AssertionError(method.getName());
+                });
+  }
+
+  private static Function relatedFunction(
+      long offset,
+      String name,
+      String namespaceName,
+      AtomicInteger namespaceLookups,
+      AtomicInteger programLookups) {
+    Address entry = RAM.getAddress(offset);
+    Namespace namespace =
+        (Namespace)
+            Proxy.newProxyInstance(
+                Namespace.class.getClassLoader(),
+                new Class<?>[] {Namespace.class},
+                (proxy, method, args) -> {
+                  if ("getName".equals(method.getName())) return namespaceName;
+                  throw new AssertionError(method.getName());
+                });
+    return (Function)
+        Proxy.newProxyInstance(
+            Function.class.getClassLoader(),
+            new Class<?>[] {Function.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getEntryPoint" -> entry;
+                  case "getName" -> name;
+                  case "getParentNamespace" -> {
+                    namespaceLookups.incrementAndGet();
+                    yield namespace;
+                  }
+                  case "getProgram" -> {
+                    programLookups.incrementAndGet();
+                    yield null;
+                  }
+                  case "hashCode" -> System.identityHashCode(proxy);
+                  case "equals" -> proxy == args[0];
+                  default -> throw new AssertionError(method.getName());
+                });
+  }
+
   private static final class Fixture {
-    final GenericAddressSpace ram = new GenericAddressSpace("ram", 64, GenericAddressSpace.TYPE_RAM, 0);
+    final GenericAddressSpace ram =
+        new GenericAddressSpace("ram", 64, GenericAddressSpace.TYPE_RAM, 0);
     final AtomicLong clockNanos = new AtomicLong(1_000L);
     final AtomicLong modificationNumber = new AtomicLong(1L);
     final AtomicBoolean analyzing = new AtomicBoolean(false);
@@ -181,7 +305,8 @@ class FunctionRelationQueriesTest {
       Function fn = buildFunction(addr, "func_new_" + Long.toHexString(offset), renamedNs);
       String key = AddressUtil.canonicalAddress(addr);
       if (replace) {
-        callers.removeIf(existing -> AddressUtil.canonicalAddress(existing.getEntryPoint()).equals(key));
+        callers.removeIf(
+            existing -> AddressUtil.canonicalAddress(existing.getEntryPoint()).equals(key));
       }
       functionsByEntry.put(key, fn);
       callers.add(fn);

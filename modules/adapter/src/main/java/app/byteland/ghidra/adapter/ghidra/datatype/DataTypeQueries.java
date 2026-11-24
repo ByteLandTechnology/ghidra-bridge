@@ -11,6 +11,7 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeManager;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -23,6 +24,11 @@ final class DataTypeQueries {
   private DataTypeQueries() {}
 
   static Page<DataTypeCategoryResource> listCategories(
+      DataTypeManager manager, String categoryPath, int limit, String cursor) {
+    return listCategories(null, manager, categoryPath, limit, cursor);
+  }
+
+  static Page<DataTypeCategoryResource> listCategories(
       GhidraSession context,
       DataTypeManager manager,
       String categoryPath,
@@ -32,7 +38,7 @@ final class DataTypeQueries {
     Category category = manager.getCategory(new CategoryPath(normalizedPath));
     if (category == null) throw new NoSuchElementException("category not found: " + normalizedPath);
     boolean hasCursor = cursor != null && !cursor.isBlank();
-    if (!hasCursor || context.isAnalyzing()) {
+    if (!hasCursor || context == null || !context.canCacheSnapshots()) {
       return selectCategoriesBounded(category, limit, cursor);
     }
 
@@ -43,12 +49,16 @@ final class DataTypeQueries {
     String[] sortedKeys = context.querySnapshots().get(cacheKey);
     if (sortedKeys == null) {
       Category[] children = category.getCategories();
-      sortedKeys = new String[children.length];
-      for (int i = 0; i < children.length; i++) {
-        sortedKeys[i] = children[i].getCategoryPath().getPath();
+      if (children == null) {
+        sortedKeys = new String[0];
+      } else {
+        sortedKeys = new String[children.length];
+        for (int i = 0; i < children.length; i++) {
+          sortedKeys[i] = children[i].getCategoryPath().getPath();
+        }
+        Arrays.sort(sortedKeys);
       }
-      Arrays.sort(sortedKeys);
-      if (context.isAnalyzing()) {
+      if (!context.canCacheSnapshots()) {
         return selectCategoriesBounded(category, limit, cursor);
       }
       if (context.modificationNumber() == modNumber) {
@@ -64,6 +74,16 @@ final class DataTypeQueries {
   }
 
   static Page<DataTypeResource> searchDataTypes(
+      DataTypeManager manager,
+      String query,
+      String categoryPath,
+      String kind,
+      int limit,
+      String cursor) {
+    return searchDataTypes(null, manager, query, categoryPath, kind, limit, cursor);
+  }
+
+  static Page<DataTypeResource> searchDataTypes(
       GhidraSession context,
       DataTypeManager manager,
       String query,
@@ -71,21 +91,30 @@ final class DataTypeQueries {
       String kind,
       int limit,
       String cursor) {
-    String lowerQuery = query == null ? "" : query.toLowerCase(Locale.ROOT);
-    DataTypeResource.Kind expectedKind = null;
-    String normalizedKind = null;
-    if (kind != null) {
-      expectedKind = parseKindOrNull(kind);
-      if (expectedKind == null) {
-        return Page.of(List.of(), Page.clampLimit(limit), null);
-      }
-      normalizedKind = expectedKind.name();
+    int clamped = Page.clampLimit(limit);
+    DataTypeResource.Kind expectedKind = parseKindOrNull(kind);
+    if (kind != null && expectedKind == null) {
+      return Page.of(List.of(), clamped, null);
     }
+    Category scopedCategory = null;
+    if (categoryPath != null) {
+      scopedCategory = resolveCategoryOrNull(manager, categoryPath);
+      if (scopedCategory == null) {
+        return Page.of(List.of(), clamped, null);
+      }
+    }
+    String lowerQuery = query == null ? "" : query.toLowerCase(Locale.ROOT);
+    String normalizedKind = expectedKind == null ? null : expectedKind.name();
 
     boolean hasCursor = cursor != null && !cursor.isBlank();
-    if (!hasCursor || context.isAnalyzing()) {
+    if (!hasCursor || context == null || !context.canCacheSnapshots()) {
       return selectDataTypesBounded(
-          manager, lowerQuery, categoryPath, expectedKind, limit, cursor);
+          candidateIterator(manager, scopedCategory),
+          lowerQuery,
+          categoryPath,
+          expectedKind,
+          clamped,
+          cursor);
     }
 
     long modNumber = context.modificationNumber();
@@ -95,36 +124,72 @@ final class DataTypeQueries {
     String[] sortedKeys = context.querySnapshots().get(cacheKey);
     if (sortedKeys == null) {
       List<String> keys = new ArrayList<>();
-      Iterator<DataType> iterator = manager.getAllDataTypes();
+      Iterator<DataType> iterator = candidateIterator(manager, scopedCategory);
       while (iterator.hasNext()) {
         DataType dataType = iterator.next();
-        if (!matchesDataType(dataType, lowerQuery, categoryPath, expectedKind)) continue;
-        keys.add(dataType.getPathName());
+        String name = dataType.getName();
+        if (!lowerQuery.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+          continue;
+        }
+        String path = dataType.getPathName();
+        if (categoryPath != null
+            && !categoryPath.equals(DataTypeDescriptions.categoryFromPath(path, name))) {
+          continue;
+        }
+        if (expectedKind != null && DataTypeDescriptions.classifyKind(dataType) != expectedKind) {
+          continue;
+        }
+        keys.add(path);
       }
       sortedKeys = keys.toArray(String[]::new);
       Arrays.sort(sortedKeys);
-      if (context.isAnalyzing()) {
+      if (!context.canCacheSnapshots()) {
         return selectDataTypesBounded(
-            manager, lowerQuery, categoryPath, expectedKind, limit, cursor);
+            candidateIterator(manager, scopedCategory),
+            lowerQuery,
+            categoryPath,
+            expectedKind,
+            clamped,
+            cursor);
       }
       if (context.modificationNumber() == modNumber) {
         context.querySnapshots().put(cacheKey, sortedKeys);
       }
     }
     return QuerySnapshotCache.slice(
-        sortedKeys, limit, cursor, manager::getDataType, DataTypeDescriptions::summarize);
+        sortedKeys, clamped, cursor, manager::getDataType, DataTypeDescriptions::summarize);
+  }
+
+  private static Iterator<DataType> candidateIterator(
+      DataTypeManager manager, Category scopedCategory) {
+    if (scopedCategory == null) {
+      return manager.getAllDataTypes();
+    }
+    DataType[] categoryTypes = scopedCategory.getDataTypes();
+    return categoryTypes == null
+        ? Collections.emptyIterator()
+        : Arrays.asList(categoryTypes).iterator();
   }
 
   private static Page<DataTypeCategoryResource> selectCategoriesBounded(
       Category category, int limit, String cursor) {
     Page.Selector<Category> selector = Page.selector(limit, cursor);
-    for (Category child : category.getCategories()) {
-      String path = child.getCategoryPath().getPath();
-      if (selector.acceptsKey(path)) {
-        selector.offer(path, child);
+    Category[] children = category.getCategories();
+    if (children != null) {
+      for (Category child : children) {
+        String path = child.getCategoryPath().getPath();
+        if (selector.acceptsKey(path)) {
+          selector.offer(path, child);
+        }
       }
     }
-    return selector.finish(DataTypeQueries::describeCategory);
+    return selector.finish(
+        (child, path) ->
+            new DataTypeCategoryResource(
+                path,
+                child.getName(),
+                child.getCategories().length,
+                child.getDataTypes().length));
   }
 
   private static DataTypeCategoryResource describeCategory(Category child) {
@@ -136,18 +201,27 @@ final class DataTypeQueries {
   }
 
   private static Page<DataTypeResource> selectDataTypesBounded(
-      DataTypeManager manager,
+      Iterator<DataType> iterator,
       String lowerQuery,
       String categoryPath,
       DataTypeResource.Kind expectedKind,
-      int limit,
+      int clampedLimit,
       String cursor) {
-    Page.Selector<DataType> selector = Page.selector(limit, cursor);
-    Iterator<DataType> iterator = manager.getAllDataTypes();
+    Page.Selector<DataType> selector = Page.selector(clampedLimit, cursor);
     while (iterator.hasNext()) {
       DataType dataType = iterator.next();
-      if (!matchesDataType(dataType, lowerQuery, categoryPath, expectedKind)) continue;
+      String name = dataType.getName();
+      if (!lowerQuery.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+        continue;
+      }
       String path = dataType.getPathName();
+      if (categoryPath != null
+          && !categoryPath.equals(DataTypeDescriptions.categoryFromPath(path, name))) {
+        continue;
+      }
+      if (expectedKind != null && DataTypeDescriptions.classifyKind(dataType) != expectedKind) {
+        continue;
+      }
       if (selector.acceptsKey(path)) {
         selector.offer(path, dataType);
       }
@@ -155,29 +229,30 @@ final class DataTypeQueries {
     return selector.finish(DataTypeDescriptions::summarize);
   }
 
-  private static boolean matchesDataType(
-      DataType dataType,
-      String lowerQuery,
-      String categoryPath,
-      DataTypeResource.Kind expectedKind) {
-    String name = dataType.getName();
-    if (!lowerQuery.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(lowerQuery)) {
-      return false;
+  private static Category resolveCategoryOrNull(DataTypeManager manager, String categoryPath) {
+    if (categoryPath.isEmpty() || !categoryPath.startsWith("/")) {
+      return null;
     }
-    if (categoryPath != null
-        && !categoryPath.equals(
-            DataTypeDescriptions.categoryFromPath(dataType.getPathName(), name))) {
-      return false;
+    CategoryPath parsed;
+    try {
+      parsed = new CategoryPath(categoryPath);
+    } catch (IllegalArgumentException invalid) {
+      return null;
     }
-    return expectedKind == null || expectedKind == DataTypeDescriptions.classifyKind(dataType);
+    if (!categoryPath.equals(parsed.getPath())) {
+      return null;
+    }
+    return manager.getCategory(parsed);
   }
 
-  private static DataTypeResource.Kind parseKindOrNull(String rawKind) {
-    for (DataTypeResource.Kind candidate : DataTypeResource.Kind.values()) {
-      if (candidate.name().equalsIgnoreCase(rawKind)) {
-        return candidate;
-      }
+  private static DataTypeResource.Kind parseKindOrNull(String kind) {
+    if (kind == null) {
+      return null;
     }
-    return null;
+    try {
+      return DataTypeResource.Kind.valueOf(kind.toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException unknown) {
+      return null;
+    }
   }
 }

@@ -20,8 +20,12 @@ final class FunctionRelationQueries {
   private final GhidraSession context;
   private final FunctionResolver resolver;
 
+  FunctionRelationQueries(FunctionResolver resolver) {
+    this(null, resolver);
+  }
+
   FunctionRelationQueries(GhidraSession context, FunctionResolver resolver) {
-    this.context = Objects.requireNonNull(context, "context");
+    this.context = context;
     this.resolver = Objects.requireNonNull(resolver, "resolver");
   }
 
@@ -37,7 +41,7 @@ final class FunctionRelationQueries {
       String rawAddress, boolean callers, int limit, String cursor) {
     Function function = resolver.resolveFunction(rawAddress);
     boolean hasCursor = cursor != null && !cursor.isBlank();
-    if (!hasCursor || context.isAnalyzing()) {
+    if (!hasCursor || context == null || !context.canCacheSnapshots()) {
       return selectRelationsBounded(function, callers, limit, cursor);
     }
 
@@ -55,19 +59,25 @@ final class FunctionRelationQueries {
       }
       sortedKeys = keys.toArray(String[]::new);
       Arrays.sort(sortedKeys);
-      if (context.isAnalyzing()) {
+      if (!context.canCacheSnapshots()) {
         return selectRelationsBounded(function, callers, limit, cursor);
       }
       if (context.modificationNumber() == modNumber) {
         context.querySnapshots().put(cacheKey, sortedKeys);
       }
     }
+    FunctionCallResource.Direction direction =
+        callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;
     return QuerySnapshotCache.slice(
         sortedKeys,
         limit,
         cursor,
         this::resolveOrNull,
-        relatedFunction -> describeRelation(relatedFunction, callers));
+        relatedFunction ->
+            describeRelation(
+                relatedFunction,
+                AddressUtil.canonicalAddress(relatedFunction.getEntryPoint()),
+                direction));
   }
 
   private static Page<FunctionCallResource> selectRelationsBounded(
@@ -79,7 +89,10 @@ final class FunctionRelationQueries {
         selector.offer(entry, relatedFunction);
       }
     }
-    return selector.finish(relatedFunction -> describeRelation(relatedFunction, callers));
+    FunctionCallResource.Direction direction =
+        callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;
+    return selector.finish(
+        (relatedFunction, entry) -> describeRelation(relatedFunction, entry, direction));
   }
 
   private static Iterable<Function> relatedFunctions(Function function, boolean callers) {
@@ -96,18 +109,16 @@ final class FunctionRelationQueries {
     }
   }
 
-  private static FunctionCallResource describeRelation(Function relatedFunction, boolean callers) {
+  private static FunctionCallResource describeRelation(
+      Function relatedFunction, String entry, FunctionCallResource.Direction direction) {
+    String name = relatedFunction.getName();
     return new FunctionCallResource(
-        AddressUtil.canonicalAddress(relatedFunction.getEntryPoint()),
-        relatedFunction.getName(),
+        entry,
+        name,
         null,
-        callers
-            ? FunctionCallResource.Direction.CALLERS
-            : FunctionCallResource.Direction.CALLEES,
+        direction,
         relatedFunction.getParentNamespace().getName(true),
         CppSymbolNames.demangled(
-            relatedFunction.getProgram(),
-            relatedFunction.getName(),
-            relatedFunction.getEntryPoint()));
+            relatedFunction.getProgram(), name, relatedFunction.getEntryPoint()));
   }
 }

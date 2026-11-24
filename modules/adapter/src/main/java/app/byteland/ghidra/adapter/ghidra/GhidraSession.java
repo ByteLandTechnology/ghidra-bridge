@@ -1,15 +1,18 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.ReferenceManager;
+import java.lang.reflect.Proxy;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
@@ -20,6 +23,7 @@ public final class GhidraSession implements AutoCloseable {
   private final GhidraScript ghidraScript;
   private final QuerySnapshotCache querySnapshots;
   private final BooleanSupplier analyzingSupplier;
+  private final boolean allowProxySnapshots;
   private final Object executionLock = new Object();
   private int transactionDepth;
 
@@ -30,30 +34,35 @@ public final class GhidraSession implements AutoCloseable {
         () -> {
           Program program = script.getCurrentProgram();
           return program != null
+              && !Proxy.isProxyClass(program.getClass())
               && AutoAnalysisManager.hasAutoAnalysisManager(program)
               && AutoAnalysisManager.getAnalysisManager(program).isAnalyzing();
-        });
+        },
+        false);
   }
 
   public GhidraSession(
       GhidraScript script,
       QuerySnapshotCache querySnapshots,
       BooleanSupplier analyzingSupplier) {
+    this(script, querySnapshots, analyzingSupplier, true);
+  }
+
+  private GhidraSession(
+      GhidraScript script,
+      QuerySnapshotCache querySnapshots,
+      BooleanSupplier analyzingSupplier,
+      boolean allowProxySnapshots) {
     this.ghidraScript = Objects.requireNonNull(script, "script");
     this.querySnapshots = Objects.requireNonNull(querySnapshots, "querySnapshots");
     this.analyzingSupplier = Objects.requireNonNull(analyzingSupplier, "analyzingSupplier");
+    this.allowProxySnapshots = allowProxySnapshots;
   }
 
-  @SuppressFBWarnings(
-      value = "EI_EXPOSE_REP",
-      justification = "Adapter collaborators require the live GhidraScript execution context")
   public GhidraScript script() {
     return ghidraScript;
   }
 
-  @SuppressFBWarnings(
-      value = "EI_EXPOSE_REP",
-      justification = "Adapter query collaborators share the session-scoped snapshot cache")
   public QuerySnapshotCache querySnapshots() {
     return querySnapshots;
   }
@@ -65,6 +74,17 @@ public final class GhidraSession implements AutoCloseable {
 
   public boolean isAnalyzing() {
     return analyzingSupplier.getAsBoolean();
+  }
+
+  public boolean canCacheSnapshots() {
+    Program program = currentProgramOrNull();
+    if (program == null) {
+      return false;
+    }
+    if (!allowProxySnapshots && Proxy.isProxyClass(program.getClass())) {
+      return false;
+    }
+    return !isAnalyzing();
   }
 
   @Override
@@ -84,7 +104,6 @@ public final class GhidraSession implements AutoCloseable {
     return ghidraScript.getCurrentProgram();
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public void saveCurrentProgram() {
     synchronized (executionLock) {
       var monitor = ghidraScript.getMonitor();
@@ -118,21 +137,31 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public Iterable<Reference> references(Address address, boolean to) {
+    Program program = currentProgramOrNull();
+    ReferenceManager manager = program == null ? null : program.getReferenceManager();
     if (to) {
-      Program program = currentProgramOrNull();
-      if (program != null && program.getReferenceManager() != null) {
-        ReferenceManager referenceManager = program.getReferenceManager();
-        return () -> referenceManager.getReferencesTo(address);
+      if (manager != null) {
+        return () -> {
+          ReferenceIterator incoming = manager.getReferencesTo(address);
+          return incoming == null ? Collections.emptyIterator() : incoming;
+        };
       }
-      return Arrays.asList(ghidraScript.getReferencesTo(address));
+      Reference[] incoming = ghidraScript.getReferencesTo(address);
+      return incoming == null ? List.of() : Arrays.asList(incoming);
     }
-    return Arrays.asList(ghidraScript.getReferencesFrom(address));
+    if (manager != null) {
+      Reference[] outgoing = manager.getReferencesFrom(address);
+      return outgoing == null ? List.of() : Arrays.asList(outgoing);
+    }
+    Reference[] outgoing = ghidraScript.getReferencesFrom(address);
+    return outgoing == null ? List.of() : Arrays.asList(outgoing);
   }
 
   public Reference reference(Address fromAddress, Address toAddress, int operandIndex) {
     Program program = currentProgramOrNull();
-    if (program != null && program.getReferenceManager() != null) {
-      return program.getReferenceManager().getReference(fromAddress, toAddress, operandIndex);
+    ReferenceManager manager = program == null ? null : program.getReferenceManager();
+    if (manager != null) {
+      return manager.getReference(fromAddress, toAddress, operandIndex);
     }
     for (Reference candidate : references(fromAddress, false)) {
       if (toAddress.equals(candidate.getToAddress())
@@ -207,7 +236,6 @@ public final class GhidraSession implements AutoCloseable {
     T run() throws Exception;
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static <T> T runOperation(TransactionalOperation<T> operation) {
     try {
       return operation.run();

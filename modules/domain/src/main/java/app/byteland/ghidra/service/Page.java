@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.PriorityQueue;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
@@ -99,34 +100,36 @@ public record Page<T>(
   }
 
   /**
-   * Bounded {@code limit + 1} max-heap selector that skips full-collection sorting and defers item
-   * materialization until the final slice is chosen.
+   * Selects one page of smallest keys after a cursor in a bounded {@code limit + 1} priority queue,
+   * deferring item materialization until the final slice is chosen.
    *
-   * @param <T> unmaterialized candidate type
+   * @param <T> candidate item type
    */
   public static final class Selector<T> {
-    private static final Comparator<KeyedEntry<?>> ASCENDING =
-        Comparator.<KeyedEntry<?>, String>comparing(KeyedEntry::key)
-            .thenComparingLong(KeyedEntry::sequence);
-    private static final Comparator<KeyedEntry<?>> DESCENDING = ASCENDING.reversed();
+    private static final int INITIAL_CAPACITY = 32;
 
-    private final int clampedLimit;
+    private final int clamped;
     private final int maxRetained;
     private final String cursor;
     private final boolean resuming;
-    private final PriorityQueue<KeyedEntry<T>> heap;
+    private final PriorityQueue<Keyed<T>> heap;
     private long sequence;
 
     private Selector(int limit, String cursor) {
-      this.clampedLimit = clampLimit(limit);
-      this.maxRetained = clampedLimit + 1;
-      this.cursor = cursor;
+      this.clamped = clampLimit(limit);
+      this.maxRetained = this.clamped + 1;
       this.resuming = cursor != null && !cursor.isBlank();
-      this.heap = new PriorityQueue<>(Math.min(maxRetained, 64), DESCENDING);
+      this.cursor = this.resuming ? cursor : null;
+      this.heap =
+          new PriorityQueue<>(Math.min(this.maxRetained, INITIAL_CAPACITY), Keyed.maxOrder());
     }
 
     public int limit() {
-      return clampedLimit;
+      return clamped;
+    }
+
+    public int retainedCount() {
+      return heap.size();
     }
 
     public boolean acceptsKey(String candidateKey) {
@@ -135,7 +138,7 @@ public record Page<T>(
         return false;
       }
       if (heap.size() >= maxRetained) {
-        KeyedEntry<T> largest = heap.peek();
+        Keyed<T> largest = heap.peek();
         if (largest != null && candidateKey.compareTo(largest.key()) >= 0) {
           return false;
         }
@@ -143,37 +146,58 @@ public record Page<T>(
       return true;
     }
 
-    public void offer(String candidateKey, T item) {
-      if (!acceptsKey(candidateKey)) {
+    public void offer(String key, T item) {
+      Objects.requireNonNull(key, "key");
+      if (!acceptsKey(key)) {
         return;
       }
       if (heap.size() >= maxRetained) {
         heap.poll();
       }
-      heap.offer(new KeyedEntry<>(candidateKey, sequence++, item));
+      heap.offer(new Keyed<>(key, sequence++, item));
     }
 
     public Page<T> finish() {
-      return finish(Function.identity());
+      return finish((item, ignoredKey) -> item);
     }
 
     public <R> Page<R> finish(Function<T, R> mapper) {
       Objects.requireNonNull(mapper, "mapper");
+      return finish((item, ignoredKey) -> mapper.apply(item));
+    }
+
+    public <R> Page<R> finish(BiFunction<T, String, R> mapper) {
+      Objects.requireNonNull(mapper, "mapper");
       if (heap.isEmpty()) {
-        return Page.of(List.of(), clampedLimit, null);
+        return Page.of(List.of(), clamped, null);
       }
-      List<KeyedEntry<T>> ordered = new ArrayList<>(heap);
-      ordered.sort(ASCENDING);
-      boolean hasMore = ordered.size() > clampedLimit;
-      int count = hasMore ? clampedLimit : ordered.size();
-      String nextCursor = hasMore && count > 0 ? ordered.get(count - 1).key() : null;
-      List<R> items = new ArrayList<>(count);
-      for (int i = 0; i < count; i++) {
-        items.add(mapper.apply(ordered.get(i).item()));
+      List<Keyed<T>> winners = new ArrayList<>(heap);
+      winners.sort(Keyed.minOrder());
+      boolean hasMore = winners.size() > clamped;
+      int pageCount = hasMore ? clamped : winners.size();
+      String next = hasMore && pageCount > 0 ? winners.get(pageCount - 1).key() : null;
+      List<R> items = new ArrayList<>(pageCount);
+      for (int index = 0; index < pageCount; index++) {
+        Keyed<T> winner = winners.get(index);
+        items.add(mapper.apply(winner.item(), winner.key()));
       }
-      return Page.of(items, clampedLimit, nextCursor);
+      return Page.of(items, clamped, next);
     }
   }
 
-  private record KeyedEntry<T>(String key, long sequence, T item) {}
+  private record Keyed<T>(String key, long sequence, T item) {
+    private static <T> Comparator<Keyed<T>> minOrder() {
+      return (left, right) -> {
+        int byKey = left.key.compareTo(right.key);
+        return byKey != 0 ? byKey : Long.compare(left.sequence, right.sequence);
+      };
+    }
+
+    private static <T> Comparator<Keyed<T>> maxOrder() {
+      return (left, right) -> {
+        int byKey = right.key.compareTo(left.key);
+        return byKey != 0 ? byKey : Long.compare(right.sequence, left.sequence);
+      };
+    }
+  }
 }

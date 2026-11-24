@@ -36,7 +36,7 @@ final class ReferenceListQueries {
     Address anchor = parseAddress(target);
     String canonicalAnchor = AddressUtil.canonicalAddress(anchor);
     boolean hasCursor = cursor != null && !cursor.isBlank();
-    if (!hasCursor || context.isAnalyzing()) {
+    if (!hasCursor || !context.canCacheSnapshots()) {
       return selectReferencesBounded(
           anchor, canonicalAnchor, isTo, type, normalizedLimit, cursor);
     }
@@ -57,7 +57,7 @@ final class ReferenceListQueries {
       }
       sortedKeys = keys.toArray(String[]::new);
       Arrays.sort(sortedKeys);
-      if (context.isAnalyzing()) {
+      if (!context.canCacheSnapshots()) {
         return selectReferencesBounded(
             anchor, canonicalAnchor, isTo, type, normalizedLimit, cursor);
       }
@@ -70,7 +70,7 @@ final class ReferenceListQueries {
         normalizedLimit,
         cursor,
         encodedKey -> resolveReference(anchor, isTo, encodedKey),
-        ReferenceDescriptions::describe);
+        reference -> ReferenceDescriptions.describe(reference, anchor, canonicalAnchor));
   }
 
   private Page<ReferenceResource> selectReferencesBounded(
@@ -80,17 +80,18 @@ final class ReferenceListQueries {
       String type,
       int normalizedLimit,
       String cursor) {
-    Page.Selector<KeyedReference> selector = Page.selector(normalizedLimit, cursor);
+    Page.Selector<Reference> selector = Page.selector(normalizedLimit, cursor);
     for (Reference reference : context.references(anchor, isTo)) {
       if (!ReferenceQuerySupport.matchesType(type, reference)) {
         continue;
       }
       String encoded = encodedKey(reference, anchor, canonicalAnchor, isTo);
       if (selector.acceptsKey(encoded)) {
-        selector.offer(encoded, new KeyedReference(reference, encoded));
+        selector.offer(encoded, reference);
       }
     }
-    return selector.finish(keyed -> ReferenceDescriptions.describe(keyed.reference()));
+    return selector.finish(
+        reference -> ReferenceDescriptions.describe(reference, anchor, canonicalAnchor));
   }
 
   private static String encodedKey(
@@ -173,8 +174,6 @@ final class ReferenceListQueries {
       return null;
     }
   }
-
-  private record KeyedReference(Reference reference, String encodedKey) {}
 
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);
