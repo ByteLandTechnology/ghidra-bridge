@@ -152,7 +152,28 @@ INSTRUCTION_VERBS = frozenset(
 )
 
 IGNORED_DIRS = frozenset(
-    {".git", ".gradle", ".worktrees", "build", "node_modules", "target", "ja", "zh"}
+    {
+        ".agents",
+        ".claude",
+        ".fleet",
+        ".git",
+        ".gradle",
+        ".idea",
+        ".kotlin",
+        ".settings",
+        ".vscode",
+        ".worktrees",
+        ".zcode",
+        "__pycache__",
+        "bin",
+        "build",
+        "ghidra-dist",
+        "ja",
+        "node_modules",
+        "out",
+        "target",
+        "zh",
+    }
 )
 
 CHECKED_EXTENSIONS = frozenset(
