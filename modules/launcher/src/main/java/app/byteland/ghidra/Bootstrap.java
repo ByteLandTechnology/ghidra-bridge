@@ -81,25 +81,16 @@ public final class Bootstrap {
                 dispatcher,
                 new AgentClient.LifecycleListener() {
                   @Override
-                  public void onListening(String listenUri, int port) {
-                    if (config.port() != null && port != config.port()) {
-                      script.println(
-                          "[ghidra-bridge]   Port "
-                              + config.port()
-                              + " was busy; listening on "
-                              + listenUri);
-                    }
+                  public void onListening() {
                     script.println(
-                        "[ghidra-bridge] Embedded bridge is listening for WebSocket clients at "
-                            + listenUri);
+                        "[ghidra-bridge] Embedded bridge is listening for WebSocket clients.");
                   }
 
                   @Override
                   public void onConnected() {
                     script.println("[ghidra-bridge] Outbound bridge connected to remote endpoint.");
                   }
-                },
-                effectiveConfig.allowPortFallback());
+                });
 
         if (onShutdown != null) {
           gracefulExit.installShutdownHook(client::disconnect, onShutdown);
@@ -128,11 +119,8 @@ public final class Bootstrap {
 
     Program program = requireCurrentProgram(script);
     McpConfig mcpConfig;
-    boolean allowPortFallback;
     try {
-      ResolvedMcpConfig resolved = resolveMcpConfig(args, program);
-      mcpConfig = resolved.config();
-      allowPortFallback = resolved.allowPortFallback();
+      mcpConfig = resolveMcpConfig(args, program);
     } catch (IllegalArgumentException e) {
       printMcpUsage(script);
       throw e;
@@ -142,26 +130,17 @@ public final class Bootstrap {
 
     script.println("[ghidra-mcp] Starting MCP HTTP service");
     script.println("[ghidra-mcp]   Program: " + program.getName());
+    script.println("[ghidra-mcp]   Endpoint: " + mcpConfig.endpoint());
+    script.println(
+        "[ghidra-mcp]   Auth Token: " + (mcpConfig.token() == null ? "disabled" : "configured"));
+    script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
+    script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
 
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
         gracefulExit(services.programService(), script, "[ghidra-mcp]")) {
       try (AgentDispatcher dispatcher = new AgentDispatcher(services, mcpConfig.sessionId());
-          McpHttpServer server =
-              new McpHttpServer(mcpConfig, dispatcher, script::println, allowPortFallback)) {
-        if (server.port() != mcpConfig.port()) {
-          script.println(
-              "[ghidra-mcp]   Port "
-                  + mcpConfig.port()
-                  + " was busy; selected port "
-                  + server.port());
-        }
-        script.println("[ghidra-mcp]   Endpoint: " + server.endpoint());
-        script.println(
-            "[ghidra-mcp]   Auth Token: "
-                + (mcpConfig.token() == null ? "disabled" : "configured"));
-        script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
-        script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
+          McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher, script::println)) {
         if (onShutdown != null) {
           gracefulExit.installShutdownHook(server::close, onShutdown);
         }
@@ -257,12 +236,8 @@ public final class Bootstrap {
   private static EffectiveConfig resolveConfig(String[] args, Program program) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
     List<String> defaultMessages = new ArrayList<>();
-    String rawPort = parsedArgs.get("port");
-    boolean allowPortFallback =
-        isBlank(parsedArgs.get("ws_url"))
-            && (isBlank(rawPort) || "8765".equals(rawPort.trim()));
 
-    if (isBlank(parsedArgs.get("ws_url")) && isBlank(rawPort)) {
+    if (isBlank(parsedArgs.get("ws_url")) && isBlank(parsedArgs.get("port"))) {
       if (isBlank(parsedArgs.get("host"))) {
         parsedArgs.put("host", LOOPBACK_HOST);
         defaultMessages.add("host=" + LOOPBACK_HOST);
@@ -277,8 +252,7 @@ public final class Bootstrap {
       defaultMessages.add("session_id=" + defaultSessionId);
     }
 
-    return new EffectiveConfig(
-        AgentConfig.fromMap(parsedArgs), defaultMessages, allowPortFallback);
+    return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages);
   }
 
   private static String defaultSessionId(Program program) {
@@ -289,28 +263,21 @@ public final class Bootstrap {
     return isBlank(name) ? "ghidra-bridge" : name;
   }
 
-  private static ResolvedMcpConfig resolveMcpConfig(String[] args, Program program) {
+  private static McpConfig resolveMcpConfig(String[] args, Program program) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
-    String rawPort = parsedArgs.get("port");
-    boolean allowPortFallback =
-        isBlank(rawPort)
-            || Integer.toString(McpConfig.DEFAULT_PORT).equals(rawPort.trim());
     if (isBlank(parsedArgs.get(SESSION_ID_ARGUMENT))) {
       parsedArgs.put(SESSION_ID_ARGUMENT, defaultSessionId(program));
     }
-    return new ResolvedMcpConfig(McpConfig.fromMap(parsedArgs), allowPortFallback);
+    return McpConfig.fromMap(parsedArgs);
   }
 
   private static boolean isBlank(String value) {
     return value == null || value.isBlank();
   }
 
-  record EffectiveConfig(
-      AgentConfig config, List<String> defaultMessages, boolean allowPortFallback) {
+  record EffectiveConfig(AgentConfig config, List<String> defaultMessages) {
     EffectiveConfig {
       defaultMessages = List.copyOf(defaultMessages);
     }
   }
-
-  record ResolvedMcpConfig(McpConfig config, boolean allowPortFallback) {}
 }

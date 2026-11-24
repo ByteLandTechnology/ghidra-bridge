@@ -22,12 +22,12 @@ if [[ "$manifest_version" != "$version" ]]; then
 fi
 
 name="ghidra-bridge-${version}"
-extension_name="ghidra-bridge"
 release_dir="build/release"
-stage="$release_dir/$extension_name"
+stage="$release_dir/$name"
 rm -rf "$release_dir"
-mkdir -p "$release_dir"
-cp -R "build/ghidra-extension/$extension_name" "$stage"
+mkdir -p "$stage"
+cp build/ghidra-script/Bridge.java build/ghidra-script/GhidraMcp.java "$jar" "$stage/"
+cp LICENSE README.md "$stage/"
 
-(cd "$release_dir" && zip -q -r -X "$name.zip" "$extension_name" && sha256sum "$name.zip" > "$name.zip.sha256")
+(cd "$release_dir" && zip -q -r -X "$name.zip" "$name" && sha256sum "$name.zip" > "$name.zip.sha256")
 echo "package-release: created $release_dir/$name.zip"

@@ -34,20 +34,9 @@ public final class GhidraSession {
     this.host = Objects.requireNonNull(host, "host");
   }
 
-  public GhidraScript script() {
-    GhidraScript script = host.scriptOrNull();
-    if (script == null) {
-      throw new IllegalStateException("Session does not run inside a GhidraScript");
-    }
-    return script;
-  }
-
   public FlatProgramAPI flatApi() {
     synchronized (executionLock) {
-      if (pinnedProgram != null && host.scriptOrNull() == null) {
-        return new FlatProgramAPI(pinnedProgram, ghidra.util.task.TaskMonitor.DUMMY);
-      }
-      return host.flatApi();
+      return host.flatApi(pinnedProgram);
     }
   }
 
@@ -73,15 +62,11 @@ public final class GhidraSession {
     if (program == null) {
       return;
     }
+    synchronized (executionLock) {
+      host.releaseProgram(program);
+    }
     for (Consumer<Program> listener : programCloseListeners) {
       listener.accept(program);
-    }
-  }
-
-  public void withExclusiveAccess(Runnable action) {
-    Objects.requireNonNull(action, "action");
-    synchronized (executionLock) {
-      action.run();
     }
   }
 
@@ -135,13 +120,13 @@ public final class GhidraSession {
         if (!commitChanges) {
           throw new IllegalStateException("Temporary changes require an independent transaction");
         }
+        if (explicitProgram != null && pinnedProgram != null && explicitProgram != pinnedProgram) {
+          throw new IllegalStateException("Nested transaction targets a different program");
+        }
         return runOperation(operation);
       }
 
-      Program targetProgram =
-          explicitProgram != null
-              ? explicitProgram
-              : (host.scriptOrNull() == null ? currentProgram() : host.currentProgramOrNull());
+      Program targetProgram = host.resolveTransactionProgram(explicitProgram);
       int transactionId = host.beginTransaction(targetProgram);
       pinnedProgram = targetProgram;
       transactionDepth++;
@@ -161,13 +146,11 @@ public final class GhidraSession {
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
     synchronized (executionLock) {
-      if (transactionDepth == 0 && host.scriptOrNull() == null) {
-        boolean applied = withTransaction(() -> host.runCommand(currentProgram(), command));
-        if (applied) {
+      if (transactionDepth == 0 && host.requiresCommandTransaction()) {
+        if (withTransaction(() -> host.runCommand(currentProgram(), command))) {
           return;
         }
-      } else if (host.runCommand(
-          host.scriptOrNull() == null ? currentProgram() : host.currentProgramOrNull(), command)) {
+      } else if (host.runCommand(currentProgramOrNull(), command)) {
         return;
       }
     }

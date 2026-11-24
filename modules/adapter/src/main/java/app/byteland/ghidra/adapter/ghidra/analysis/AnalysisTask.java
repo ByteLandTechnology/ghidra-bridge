@@ -26,14 +26,6 @@ final class AnalysisTask {
   private final long startedAt = System.currentTimeMillis();
   private volatile Long completedAt;
 
-  AnalysisTask(GhidraSession context, AutoAnalysisManager manager, AnalyzerSelection selection) {
-    this(
-        Objects.requireNonNull(context, "context"),
-        context.currentProgram(),
-        manager,
-        selection);
-  }
-
   AnalysisTask(
       GhidraSession context,
       Program program,

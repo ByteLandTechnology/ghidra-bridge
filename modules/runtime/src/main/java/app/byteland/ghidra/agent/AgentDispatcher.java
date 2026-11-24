@@ -14,37 +14,24 @@ import java.util.Objects;
 public final class AgentDispatcher implements AutoCloseable {
   private final String sessionId;
   private final BridgeServices services;
-  private final boolean closeServicesOnClose;
   private final ApiRegistry apiRegistry;
   private final DispatchBarrier dispatchBarrier = new DispatchBarrier();
   private final Object sequenceLock = new Object();
   private volatile boolean shuttingDown;
 
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
-    this(services, config, true);
-  }
-
-  public AgentDispatcher(
-      BridgeServices services, AgentConfig config, boolean closeServicesOnClose) {
     this(
         Objects.requireNonNull(services, "services"),
-        Objects.requireNonNull(config, "config").sessionId(),
-        closeServicesOnClose);
+        Objects.requireNonNull(config, "config").sessionId());
   }
 
   public AgentDispatcher(BridgeServices services, String sessionId) {
-    this(services, sessionId, true);
-  }
-
-  public AgentDispatcher(
-      BridgeServices services, String sessionId, boolean closeServicesOnClose) {
     this.services = Objects.requireNonNull(services, "services");
     String normalizedSessionId = AgentConfig.optionalText(sessionId);
     if (normalizedSessionId == null) {
       throw new IllegalArgumentException("sessionId is required");
     }
     this.sessionId = normalizedSessionId;
-    this.closeServicesOnClose = closeServicesOnClose;
     this.apiRegistry =
         new ApiRegistry(services, this.sessionId, this::sessionInfo, this::markShuttingDown);
   }
@@ -52,9 +39,7 @@ public final class AgentDispatcher implements AutoCloseable {
   @Override
   public void close() {
     if (!dispatchBarrier.closeAndAwait()) return;
-    if (closeServicesOnClose) {
-      services.close();
-    }
+    services.close();
   }
 
   public Object dispatch(String method, Map<String, Object> params) throws Exception {

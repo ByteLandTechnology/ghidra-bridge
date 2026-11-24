@@ -10,22 +10,26 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * Supplies the active Ghidra program and manages transactions for script or GUI hosts.
+ * Provides active Ghidra program access and transaction control for script or GUI hosts.
  */
 public interface ProgramHost {
   Program currentProgramOrNull();
 
-  FlatProgramAPI flatApi();
+  FlatProgramAPI flatApi(Program pinnedProgram);
 
-  GhidraScript scriptOrNull();
+  Program resolveTransactionProgram(Program explicitProgram);
 
   int beginTransaction(Program program);
 
   void finishTransaction(Program program, int transactionId, boolean commit);
 
+  boolean requiresCommandTransaction();
+
   boolean runCommand(Program program, Command<Program> command);
 
   void saveProgram(Program program) throws Exception;
+
+  default void releaseProgram(Program program) {}
 
   static ProgramHost forScript(GhidraScript script) {
     return new ScriptProgramHost(script);
@@ -49,17 +53,23 @@ final class ScriptProgramHost implements ProgramHost {
   }
 
   @Override
-  public FlatProgramAPI flatApi() {
+  public FlatProgramAPI flatApi(Program pinnedProgram) {
+    if (pinnedProgram != null && pinnedProgram != script.getCurrentProgram()) {
+      return new FlatProgramAPI(pinnedProgram, TaskMonitor.DUMMY);
+    }
     return script;
   }
 
   @Override
-  public GhidraScript scriptOrNull() {
-    return script;
+  public Program resolveTransactionProgram(Program explicitProgram) {
+    return explicitProgram != null ? explicitProgram : script.getCurrentProgram();
   }
 
   @Override
   public int beginTransaction(Program program) {
+    if (program != null && program != script.getCurrentProgram()) {
+      return program.startTransaction("Ghidra Bridge");
+    }
     script.end(true);
     script.start();
     return 0;
@@ -67,6 +77,10 @@ final class ScriptProgramHost implements ProgramHost {
 
   @Override
   public void finishTransaction(Program program, int transactionId, boolean commit) {
+    if (program != null && program != script.getCurrentProgram()) {
+      program.endTransaction(transactionId, commit);
+      return;
+    }
     try {
       script.end(commit);
     } finally {
@@ -75,7 +89,15 @@ final class ScriptProgramHost implements ProgramHost {
   }
 
   @Override
+  public boolean requiresCommandTransaction() {
+    return false;
+  }
+
+  @Override
   public boolean runCommand(Program program, Command<Program> command) {
+    if (program != null && program != script.getCurrentProgram()) {
+      return command.applyTo(program);
+    }
     return script.runCommand(command);
   }
 
@@ -116,11 +138,8 @@ final class DynamicProgramHost implements ProgramHost {
   }
 
   @Override
-  public synchronized FlatProgramAPI flatApi() {
-    Program program = programSupplier.get();
-    if (program == null) {
-      throw new IllegalStateException("No current program is open in Ghidra");
-    }
+  public synchronized FlatProgramAPI flatApi(Program pinnedProgram) {
+    Program program = resolveTransactionProgram(pinnedProgram);
     if (program != cachedProgram || cachedApi == null) {
       cachedProgram = program;
       cachedApi = new FlatProgramAPI(program, TaskMonitor.DUMMY);
@@ -129,8 +148,15 @@ final class DynamicProgramHost implements ProgramHost {
   }
 
   @Override
-  public GhidraScript scriptOrNull() {
-    return null;
+  public Program resolveTransactionProgram(Program explicitProgram) {
+    if (explicitProgram != null) {
+      return explicitProgram;
+    }
+    Program program = programSupplier.get();
+    if (program == null) {
+      throw new IllegalStateException("No current program is open in Ghidra");
+    }
+    return program;
   }
 
   @Override
@@ -145,11 +171,13 @@ final class DynamicProgramHost implements ProgramHost {
   }
 
   @Override
+  public boolean requiresCommandTransaction() {
+    return true;
+  }
+
+  @Override
   public boolean runCommand(Program program, Command<Program> command) {
-    Program target = program != null ? program : currentProgramOrNull();
-    if (target == null) {
-      throw new IllegalStateException("No current program is open in Ghidra");
-    }
+    Program target = resolveTransactionProgram(program);
     return command.applyTo(target);
   }
 
@@ -161,6 +189,14 @@ final class DynamicProgramHost implements ProgramHost {
     DomainFile domainFile = program.getDomainFile();
     if (domainFile != null && domainFile.isInWritableProject() && program.canSave()) {
       program.save("Ghidra Bridge", TaskMonitor.DUMMY);
+    }
+  }
+
+  @Override
+  public synchronized void releaseProgram(Program program) {
+    if (program != null && cachedProgram == program) {
+      cachedProgram = null;
+      cachedApi = null;
     }
   }
 }
