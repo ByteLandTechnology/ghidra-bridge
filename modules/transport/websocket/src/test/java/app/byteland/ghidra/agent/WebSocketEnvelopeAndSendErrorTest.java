@@ -27,7 +27,9 @@ import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
+import java.net.BindException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
@@ -46,6 +48,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -58,7 +61,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-@Timeout(value = 15, unit = TimeUnit.SECONDS)
+@Timeout(value = 30, unit = TimeUnit.SECONDS)
 class WebSocketEnvelopeAndSendErrorTest {
 
   private static final String REQ_NULL_PARAM =
@@ -134,50 +137,32 @@ class WebSocketEnvelopeAndSendErrorTest {
   @Test
   @DisplayName("Inbound server mode keeps WebSocket open across malformed and null-value envelopes")
   void testInboundServerModeKeepsConnectionOpen() throws Exception {
-    int port = freeLoopbackPort();
-    AgentConfig config =
-        new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "inbound-session", null);
     AtomicBoolean cancel = new AtomicBoolean(false);
-    CountDownLatch listening = new CountDownLatch(1);
     ExecutorService executor = Executors.newSingleThreadExecutor();
+    StartedInboundAgent started = startInboundAgent(executor, cancel);
+    boolean serverStopped = false;
 
-    try (AgentDispatcher dispatcher = testDispatcher(config, null)) {
-      AgentClient agentClient =
-          new AgentClient(
-              config,
-              dispatcher,
-              new AgentClient.LifecycleListener() {
-                @Override
-                public void onListening() {
-                  listening.countDown();
-                }
-              },
-              Duration.ofSeconds(5));
-      Future<?> serverFuture =
-          executor.submit(
-              () -> {
-                agentClient.connect(cancel::get);
-                return null;
-              });
-      assertTrue(listening.await(5, TimeUnit.SECONDS));
-
+    try {
       BlockingQueue<String> incoming = new LinkedBlockingQueue<>();
       AtomicBoolean closed = new AtomicBoolean(false);
+      CountDownLatch closeLatch = new CountDownLatch(1);
       try (HttpClient httpClient =
           HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
         WebSocket clientSocket =
             httpClient
                 .newWebSocketBuilder()
                 .buildAsync(
-                    URI.create("ws://127.0.0.1:" + port + "/ws/agent"),
-                    new QueueWebSocketListener(incoming, closed))
+                    URI.create("ws://127.0.0.1:" + started.port() + "/ws/agent"),
+                    new QueueWebSocketListener(incoming, closed, closeLatch))
                 .get(5, TimeUnit.SECONDS);
+        boolean closeHandshakeComplete = false;
         try {
           assertReadyNotification(incoming.poll(5, TimeUnit.SECONDS), "inbound-session");
 
           sendClientText(clientSocket, REQ_NULL_PARAM);
           Map<String, Object> nullParamErr =
-              assertMethodError(incoming.poll(5, TimeUnit.SECONDS), "req-null-param", "invalid_type");
+              assertMethodError(
+                  incoming.poll(5, TimeUnit.SECONDS), "req-null-param", "invalid_type");
           assertEquals("/projection", nullParamErr.get("target"));
 
           sendClientText(clientSocket, NOTIF_NULL_PARAM);
@@ -208,15 +193,23 @@ class WebSocketEnvelopeAndSendErrorTest {
           assertNull(incoming.poll(100, TimeUnit.MILLISECONDS));
 
           clientSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+          assertTrue(closeLatch.await(5, TimeUnit.SECONDS));
+          closeHandshakeComplete = true;
         } finally {
-          clientSocket.abort();
+          if (!closeHandshakeComplete) {
+            clientSocket.abort();
+          }
         }
-      } finally {
-        cancel.set(true);
-        agentClient.disconnect();
-        serverFuture.get(5, TimeUnit.SECONDS);
       }
+      cancel.set(true);
+      started.serverFuture().get(5, TimeUnit.SECONDS);
+      serverStopped = true;
     } finally {
+      cancel.set(true);
+      if (!serverStopped) {
+        disconnectQuietly(started.agentClient());
+      }
+      closeQuietly(started.dispatcher());
       executor.shutdownNow();
     }
   }
@@ -224,109 +217,117 @@ class WebSocketEnvelopeAndSendErrorTest {
   @Test
   @DisplayName("Outbound ws_url mode keeps WebSocket open across malformed and null-value envelopes")
   void testOutboundWsUrlModeKeepsConnectionOpen() throws Exception {
-    int port = freeLoopbackPort();
-    AgentConfig hostServerConfig =
-        new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "host-listener", null);
     BlockingQueue<String> hostIncoming = new LinkedBlockingQueue<>();
     AtomicReference<AgentWebSocketServer.Connection> hostConnectionRef = new AtomicReference<>();
     CountDownLatch peerConnected = new CountDownLatch(1);
+    CountDownLatch peerCloseLatch = new CountDownLatch(1);
     AtomicBoolean peerClosed = new AtomicBoolean(false);
+    AgentWebSocketServer.Handler hostHandler =
+        new AgentWebSocketServer.Handler() {
+          @Override
+          public void onOpen(AgentWebSocketServer.Connection connection) {
+            hostConnectionRef.set(connection);
+            peerConnected.countDown();
+          }
 
-    AgentConfig outboundConfig =
-        new AgentConfig(
-            "ws://127.0.0.1:" + port + "/ws/agent",
-            null,
-            null,
-            null,
-            null,
-            "outbound-session",
-            null);
+          @Override
+          public void onText(AgentWebSocketServer.Connection connection, String message) {
+            hostIncoming.offer(message);
+          }
+
+          @Override
+          public void onClose(
+              AgentWebSocketServer.Connection connection, int statusCode, String reason) {
+            peerClosed.set(true);
+            peerCloseLatch.countDown();
+          }
+
+          @Override
+          public void onConnectionError(
+              AgentWebSocketServer.Connection connection, Throwable error) {
+            peerCloseLatch.countDown();
+          }
+
+          @Override
+          public void onServerError(Throwable error) {}
+        };
+
     AtomicBoolean cancel = new AtomicBoolean(false);
     ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    try (AgentWebSocketServer hostServer =
-            new AgentWebSocketServer(
-                hostServerConfig,
-                new AgentWebSocketServer.Handler() {
-                  @Override
-                  public void onOpen(AgentWebSocketServer.Connection connection) {
-                    hostConnectionRef.set(connection);
-                    peerConnected.countDown();
-                  }
-
-                  @Override
-                  public void onText(AgentWebSocketServer.Connection connection, String message) {
-                    hostIncoming.offer(message);
-                  }
-
-                  @Override
-                  public void onClose(
-                      AgentWebSocketServer.Connection connection, int statusCode, String reason) {
-                    peerClosed.set(true);
-                  }
-
-                  @Override
-                  public void onConnectionError(
-                      AgentWebSocketServer.Connection connection, Throwable error) {}
-
-                  @Override
-                  public void onServerError(Throwable error) {}
+    try (StartedHostServer startedHost = startHostServer(hostHandler)) {
+      AgentConfig outboundConfig =
+          new AgentConfig(
+              "ws://127.0.0.1:" + startedHost.port() + "/ws/agent",
+              null,
+              null,
+              null,
+              null,
+              "outbound-session",
+              null);
+      try (AgentDispatcher dispatcher = testDispatcher(outboundConfig, null)) {
+        AgentClient agentClient =
+            new AgentClient(
+                outboundConfig,
+                dispatcher,
+                new AgentClient.LifecycleListener() {},
+                Duration.ofSeconds(5));
+        Future<?> clientFuture =
+            executor.submit(
+                () -> {
+                  agentClient.connect(cancel::get);
+                  return null;
                 });
-        AgentDispatcher dispatcher = testDispatcher(outboundConfig, null)) {
-      hostServer.start();
-      AgentClient agentClient =
-          new AgentClient(
-              outboundConfig,
-              dispatcher,
-              new AgentClient.LifecycleListener() {},
-              Duration.ofSeconds(5));
-      Future<?> clientFuture =
-          executor.submit(
-              () -> {
-                agentClient.connect(cancel::get);
-                return null;
-              });
+        boolean clientStopped = false;
 
-      try {
-        assertTrue(peerConnected.await(5, TimeUnit.SECONDS));
-        assertReadyNotification(hostIncoming.poll(5, TimeUnit.SECONDS), "outbound-session");
-        AgentWebSocketServer.Connection hostConnection = hostConnectionRef.get();
-        assertNotNull(hostConnection);
+        try {
+          assertTrue(peerConnected.await(5, TimeUnit.SECONDS));
+          assertReadyNotification(hostIncoming.poll(5, TimeUnit.SECONDS), "outbound-session");
+          AgentWebSocketServer.Connection hostConnection = hostConnectionRef.get();
+          assertNotNull(hostConnection);
 
-        hostConnection.sendText(REQ_NULL_PARAM);
-        Map<String, Object> nullParamErr =
-            assertMethodError(hostIncoming.poll(5, TimeUnit.SECONDS), "req-null-param", "invalid_type");
-        assertEquals("/projection", nullParamErr.get("target"));
+          hostConnection.sendText(REQ_NULL_PARAM);
+          Map<String, Object> nullParamErr =
+              assertMethodError(
+                  hostIncoming.poll(5, TimeUnit.SECONDS), "req-null-param", "invalid_type");
+          assertEquals("/projection", nullParamErr.get("target"));
 
-        hostConnection.sendText(NOTIF_NULL_PARAM);
+          hostConnection.sendText(NOTIF_NULL_PARAM);
 
-        hostConnection.sendText(ERR_BLANK);
-        assertProtocolError(hostIncoming.poll(5, TimeUnit.SECONDS), -32600);
+          hostConnection.sendText(ERR_BLANK);
+          assertProtocolError(hostIncoming.poll(5, TimeUnit.SECONDS), -32600);
 
-        hostConnection.sendText(ERR_NULL_DATA);
-        assertProtocolError(hostIncoming.poll(5, TimeUnit.SECONDS), -32600);
+          hostConnection.sendText(ERR_NULL_DATA);
+          assertProtocolError(hostIncoming.poll(5, TimeUnit.SECONDS), -32600);
 
-        hostConnection.sendText(ERR_DATA_ENTRY);
+          hostConnection.sendText(ERR_DATA_ENTRY);
 
-        // Check nullable schema fields in outbound mode as well.
-        hostConnection.sendText(
-            "{\"jsonrpc\":\"2.0\",\"id\":\"req-nullable-comment\",\"method\":\"function.patch\",\"params\":{\"selector\":{\"entry\":\"ram:00100000\"},\"patch\":{\"comment\":null}}}");
-        Map<String, Object> patchReply =
-            JsonUtil.parseObject(hostIncoming.poll(5, TimeUnit.SECONDS));
-        assertEquals("req-nullable-comment", patchReply.get("id"));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> patchResult = (Map<String, Object>) patchReply.get("result");
-        assertNotNull(patchResult);
-        assertEquals("ram:00100000", patchResult.get("entry"));
+          // Check nullable schema fields in outbound mode as well.
+          hostConnection.sendText(
+              "{\"jsonrpc\":\"2.0\",\"id\":\"req-nullable-comment\",\"method\":\"function.patch\",\"params\":{\"selector\":{\"entry\":\"ram:00100000\"},\"patch\":{\"comment\":null}}}");
+          Map<String, Object> patchReply =
+              JsonUtil.parseObject(hostIncoming.poll(5, TimeUnit.SECONDS));
+          assertEquals("req-nullable-comment", patchReply.get("id"));
+          @SuppressWarnings("unchecked")
+          Map<String, Object> patchResult = (Map<String, Object>) patchReply.get("result");
+          assertNotNull(patchResult);
+          assertEquals("ram:00100000", patchResult.get("entry"));
 
-        hostConnection.sendText(FOLLOWUP_SESSION_GET);
-        assertSessionFollowup(hostIncoming.poll(5, TimeUnit.SECONDS), "outbound-session");
-        assertFalse(peerClosed.get());
-        assertNull(hostIncoming.poll(100, TimeUnit.MILLISECONDS));
-      } finally {
-        cancel.set(true);
-        agentClient.disconnect();
-        clientFuture.get(5, TimeUnit.SECONDS);
+          hostConnection.sendText(FOLLOWUP_SESSION_GET);
+          assertSessionFollowup(hostIncoming.poll(5, TimeUnit.SECONDS), "outbound-session");
+          assertFalse(peerClosed.get());
+          assertNull(hostIncoming.poll(100, TimeUnit.MILLISECONDS));
+
+          cancel.set(true);
+          clientFuture.get(5, TimeUnit.SECONDS);
+          clientStopped = true;
+          assertTrue(peerCloseLatch.await(5, TimeUnit.SECONDS));
+        } finally {
+          cancel.set(true);
+          if (!clientStopped) {
+            disconnectQuietly(agentClient);
+          }
+        }
       }
     } finally {
       executor.shutdownNow();
@@ -457,6 +458,7 @@ class WebSocketEnvelopeAndSendErrorTest {
     CountDownLatch releaseDispatch = new CountDownLatch(1);
 
     try (ServerSocket rawServer = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+      rawServer.setSoTimeout(5_000);
       int port = rawServer.getLocalPort();
       AgentConfig outboundConfig =
           new AgentConfig(
@@ -491,13 +493,18 @@ class WebSocketEnvelopeAndSendErrorTest {
                             peer, System.nanoTime() + TimeUnit.SECONDS.toNanos(5));
                     WebSocketHandshake.writeHandshakeResponse(
                         peer.getOutputStream(), handshake.acceptKey());
+                    peer.setSoTimeout(5_000);
                     // Read the masked ready frame from the outbound AgentClient.
                     WebSocketFrames.Frame readyFrame =
                         WebSocketFrames.readFrame(peer.getInputStream());
                     assertEquals(WebSocketFrames.TEXT_OPCODE, readyFrame.opcode());
-                    // Send an unmasked server request frame that triggers the save hook.
+                    // Use an ID larger than the 16 KiB JDK WebSocket buffer so the reply flushes
+                    // more than one buffer to the reset socket and fails immediately.
+                    String largeId = "req-rst-" + "x".repeat(20_000);
                     byte[] requestBytes =
-                        "{\"jsonrpc\":\"2.0\",\"id\":\"req-rst\",\"method\":\"program.save\",\"params\":{}}"
+                        ("{\"jsonrpc\":\"2.0\",\"id\":\""
+                                + largeId
+                                + "\",\"method\":\"program.save\",\"params\":{}}")
                             .getBytes(StandardCharsets.UTF_8);
                     WebSocketFrames.writeFrame(
                         peer.getOutputStream(), WebSocketFrames.TEXT_OPCODE, requestBytes);
@@ -524,7 +531,7 @@ class WebSocketEnvelopeAndSendErrorTest {
 
         peerFuture.get(5, TimeUnit.SECONDS);
         // Complete without a block in HttpClient.close().
-        connectFuture.get(5, TimeUnit.SECONDS);
+        connectFuture.get(10, TimeUnit.SECONDS);
       } finally {
         peerExecutor.shutdownNow();
         clientExecutor.shutdownNow();
@@ -628,8 +635,105 @@ class WebSocketEnvelopeAndSendErrorTest {
   }
 
   private static int freeLoopbackPort() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+    try (ServerSocket socket = new ServerSocket()) {
+      socket.setReuseAddress(true);
+      socket.bind(new InetSocketAddress("127.0.0.1", 0));
       return socket.getLocalPort();
+    }
+  }
+
+  private record StartedInboundAgent(
+      AgentClient agentClient, AgentDispatcher dispatcher, Future<?> serverFuture, int port) {}
+
+  private record StartedHostServer(AgentWebSocketServer server, int port) implements AutoCloseable {
+    @Override
+    public void close() {
+      server.close();
+    }
+  }
+
+  private static StartedInboundAgent startInboundAgent(
+      ExecutorService executor, AtomicBoolean cancel) throws Exception {
+    for (int attempt = 0; attempt < 5; attempt++) {
+      int port = freeLoopbackPort();
+      AgentConfig config =
+          new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "inbound-session", null);
+      AgentDispatcher dispatcher = testDispatcher(config, null);
+      CountDownLatch listening = new CountDownLatch(1);
+      AgentClient agentClient =
+          new AgentClient(
+              config,
+              dispatcher,
+              new AgentClient.LifecycleListener() {
+                @Override
+                public void onListening() {
+                  listening.countDown();
+                }
+              },
+              Duration.ofSeconds(5));
+      Future<?> serverFuture =
+          executor.submit(
+              () -> {
+                agentClient.connect(cancel::get);
+                return null;
+              });
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+      while (System.nanoTime() < deadline) {
+        if (listening.await(20, TimeUnit.MILLISECONDS)) {
+          return new StartedInboundAgent(agentClient, dispatcher, serverFuture, port);
+        }
+        if (serverFuture.isDone()) {
+          break;
+        }
+      }
+      disconnectQuietly(agentClient);
+      closeQuietly(dispatcher);
+      try {
+        serverFuture.get(1, TimeUnit.SECONDS);
+      } catch (ExecutionException failure) {
+        if (failure.getCause() instanceof BindException && attempt < 4) {
+          continue;
+        }
+        throw failure;
+      }
+      throw new AssertionError("Timed out before inbound AgentClient reached onListening");
+    }
+    throw new IllegalStateException("Failed to start inbound AgentClient");
+  }
+
+  private static StartedHostServer startHostServer(AgentWebSocketServer.Handler handler)
+      throws IOException {
+    for (int attempt = 0; attempt < 5; attempt++) {
+      int port = freeLoopbackPort();
+      AgentConfig hostServerConfig =
+          new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "host-listener", null);
+      AgentWebSocketServer hostServer = new AgentWebSocketServer(hostServerConfig, handler);
+      try {
+        hostServer.start();
+        return new StartedHostServer(hostServer, port);
+      } catch (BindException retry) {
+        hostServer.close();
+        if (attempt == 4) {
+          throw retry;
+        }
+      }
+    }
+    throw new IllegalStateException("Failed to start host server");
+  }
+
+  private static void disconnectQuietly(AgentClient agentClient) {
+    try {
+      agentClient.disconnect();
+    } catch (RuntimeException ignored) {
+      // Ignore secondary close errors after test failure.
+    }
+  }
+
+  private static void closeQuietly(AgentDispatcher dispatcher) {
+    try {
+      dispatcher.close();
+    } catch (RuntimeException ignored) {
+      // Ignore secondary dispatcher close errors after test failure.
     }
   }
 
@@ -695,11 +799,14 @@ class WebSocketEnvelopeAndSendErrorTest {
   private static final class QueueWebSocketListener implements WebSocket.Listener {
     private final BlockingQueue<String> messages;
     private final AtomicBoolean closed;
+    private final CountDownLatch closeLatch;
     private final StringBuilder partial = new StringBuilder();
 
-    private QueueWebSocketListener(BlockingQueue<String> messages, AtomicBoolean closed) {
+    private QueueWebSocketListener(
+        BlockingQueue<String> messages, AtomicBoolean closed, CountDownLatch closeLatch) {
       this.messages = messages;
       this.closed = closed;
+      this.closeLatch = closeLatch;
     }
 
     @Override
@@ -721,12 +828,14 @@ class WebSocketEnvelopeAndSendErrorTest {
     @Override
     public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
       closed.set(true);
+      closeLatch.countDown();
       return null;
     }
 
     @Override
     public void onError(WebSocket webSocket, Throwable error) {
       closed.set(true);
+      closeLatch.countDown();
     }
   }
 
