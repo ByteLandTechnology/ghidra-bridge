@@ -39,22 +39,24 @@ final class CompositeFieldMutations {
     Composite composite = access.composite();
     ordinals = ordinals.stream().distinct().sorted(Collections.reverseOrder()).toList();
     for (int ordinal : ordinals) {
-      if (ordinal >= 0 && ordinal < composite.getNumComponents()) composite.delete(ordinal);
+      if (ordinal >= 0 && ordinal < composite.getNumComponents()) {
+        access.removeComponent(ordinal);
+      }
     }
   }
 
   static void renameFields(
-      CompositeAccess access,
+      CompositeAccess composite,
       List<DataTypePatch.CompositeField> updates,
       Function<DataTypeReference, DataType> resolver) {
-    patch(access, updates, PatchMode.RENAME, resolver);
+    patch(composite, updates, PatchMode.RENAME, resolver);
   }
 
   static void updateFields(
-      CompositeAccess access,
+      CompositeAccess composite,
       List<DataTypePatch.CompositeField> updates,
       Function<DataTypeReference, DataType> resolver) {
-    patch(access, updates, PatchMode.UPDATE, resolver);
+    patch(composite, updates, PatchMode.UPDATE, resolver);
   }
 
   static void addFields(
@@ -62,39 +64,35 @@ final class CompositeFieldMutations {
       List<DataTypePatch.CompositeField> fields,
       Function<DataTypeReference, DataType> resolver) {
     if (fields == null) return;
-    for (DataTypePatch.CompositeField field : fields) {
-      access.validateAddOffset(field.offset());
+    for (int index = 0; index < fields.size(); index++) {
+      DataTypePatch.CompositeField field = fields.get(index);
+      access.validateBeforeAdd(field, index);
       String name = field.name() == null ? "field" : field.name();
       DataType dataType = DataTypeMutationSupport.resolveFieldDataType(field.dataType(), resolver);
       int length = DataTypeMutationSupport.fieldLength(dataType, field.length(), null);
-      if (field.offset() == null) {
-        access.composite().add(dataType, length, name, null);
-      } else {
-        access.insertAtOffset(field.offset(), dataType, length, name);
-      }
+      access.addField(index, field.offset(), new Replacement(dataType, length, name, null));
     }
   }
 
   static List<Integer> findOrdinalsByName(Composite composite, String name) {
     List<Integer> matches = new ArrayList<>();
-    for (int index = 0; index < composite.getNumComponents(); index++) {
-      DataTypeComponent component = composite.getComponent(index);
+    for (DataTypeComponent component : composite.getDefinedComponents()) {
       if (name.equals(component.getFieldName())) matches.add(component.getOrdinal());
     }
     return matches;
   }
 
   private static void patch(
-      CompositeAccess access,
+      CompositeAccess composite,
       List<DataTypePatch.CompositeField> updates,
       PatchMode mode,
       Function<DataTypeReference, DataType> resolver) {
     if (updates == null) return;
     for (DataTypePatch.CompositeField update : updates) {
-      DataTypeComponent component = resolveSingle(access, update);
+      DataTypeComponent component = resolveSingle(composite, update);
       String newName = update.newName() == null ? component.getFieldName() : update.newName();
       if (mode.replacesComponent(update)) {
-        replaceComponent(access, component, update, newName, resolver);
+        replaceComponent(composite, component, update, newName, resolver);
       } else if (update.newName() != null) {
         DataTypeMutationSupport.applyMetadataPatch(component, newName, component.getComment());
       }
@@ -102,7 +100,7 @@ final class CompositeFieldMutations {
   }
 
   private static void replaceComponent(
-      CompositeAccess access,
+      CompositeAccess composite,
       DataTypeComponent component,
       DataTypePatch.CompositeField update,
       String newName,
@@ -114,7 +112,7 @@ final class CompositeFieldMutations {
     int length =
         DataTypeMutationSupport.fieldLength(
             replacement, update.length(), update.dataType() == null ? component.getLength() : null);
-    access.replace(
+    composite.replace(
         component, new Replacement(replacement, length, newName, component.getComment()));
   }
 
@@ -142,11 +140,18 @@ final class CompositeFieldMutations {
 
     List<Integer> locate(DataTypePatch.CompositeField selector);
 
-    default void validateAddOffset(Integer offset) {}
+    default void removeComponent(int ordinal) {
+      composite().delete(ordinal);
+    }
 
-    default void insertAtOffset(int offset, DataType dataType, int length, String name) {
-      throw new IllegalArgumentException(
-          kind().displayName() + " add_fields does not support offset");
+    default void validateBeforeAdd(DataTypePatch.CompositeField field, int index) {}
+
+    default void addField(int index, Integer offset, Replacement field) {
+      if (offset != null) {
+        throw new IllegalArgumentException(
+            kind().displayName() + " add_fields does not support offset");
+      }
+      composite().add(field.dataType(), field.length(), field.name(), field.comment());
     }
 
     void replace(DataTypeComponent component, Replacement replacement);

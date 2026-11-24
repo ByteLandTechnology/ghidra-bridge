@@ -37,8 +37,8 @@ final class UnionMutations {
     }
 
     @Override
-    public void validateAddOffset(Integer offset) {
-      if (offset != null) {
+    public void validateBeforeAdd(DataTypePatch.CompositeField field, int index) {
+      if (field.offset() != null) {
         throw new IllegalArgumentException("union add_fields does not support offset");
       }
     }

@@ -47,8 +47,14 @@ final class StructMutations {
     }
 
     @Override
-    public void insertAtOffset(int offset, DataType dataType, int length, String name) {
-      composite.insertAtOffset(offset, dataType, length, name, null);
+    public void addField(
+        int index, Integer offset, CompositeFieldMutations.Replacement field) {
+      if (offset == null) {
+        composite.add(field.dataType(), field.length(), field.name(), field.comment());
+      } else {
+        composite.insertAtOffset(
+            offset, field.dataType(), field.length(), field.name(), field.comment());
+      }
     }
 
     @Override

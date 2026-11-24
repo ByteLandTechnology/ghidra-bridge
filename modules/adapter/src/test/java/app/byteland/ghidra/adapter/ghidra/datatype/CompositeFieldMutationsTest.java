@@ -16,14 +16,17 @@ import ghidra.program.model.data.DataTypeComponent;
 import ghidra.program.model.data.FunctionDefinitionDataType;
 import ghidra.program.model.data.IntegerDataType;
 import ghidra.program.model.data.ShortDataType;
+import ghidra.program.model.data.Structure;
 import ghidra.program.model.data.StructureDataType;
 import ghidra.program.model.data.UnionDataType;
 import ghidra.util.UniversalIdGenerator;
-import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
@@ -151,67 +154,44 @@ class CompositeFieldMutationsTest {
   }
 
   @Test
-  void findOrdinalsByNameScansAllComponentSlotsIncludingUndefinedAndDuplicates() {
-    StructureDataType struct = new StructureDataType("Padded", 6);
-    struct.replaceAtOffset(4, ShortDataType.dataType, 2, "tail", null);
-    assertTrue(struct.getComponent(0).isUndefined());
-    assertEquals(5, struct.getNumComponents());
-    assertEquals(1, struct.getNumDefinedComponents());
-    assertEquals(List.of(4), CompositeFieldMutations.findOrdinalsByName(struct, "tail"));
+  void findOrdinalsByNameIteratesDefinedComponentsWithoutPerByteLookupAndDetectsDuplicates() {
+    StructureDataType delegate = new StructureDataType("Padded", 25_000);
+    delegate.replaceAtOffset(24_998, ShortDataType.dataType, 2, "tail", null);
+    assertTrue(delegate.getComponent(0).isUndefined());
+    assertEquals(24_999, delegate.getNumComponents());
+    assertEquals(1, delegate.getNumDefinedComponents());
+
+    AtomicInteger getComponentCalls = new AtomicInteger();
+    Structure guarded =
+        (Structure)
+            Proxy.newProxyInstance(
+                Structure.class.getClassLoader(),
+                new Class<?>[] {Structure.class},
+                (proxy, method, args) -> {
+                  if ("getComponent".equals(method.getName())) {
+                    getComponentCalls.incrementAndGet();
+                  }
+                  try {
+                    return method.invoke(delegate, args);
+                  } catch (InvocationTargetException wrapped) {
+                    throw wrapped.getCause();
+                  }
+                });
+
+    assertEquals(List.of(24_998), CompositeFieldMutations.findOrdinalsByName(guarded, "tail"));
+    assertEquals(List.of(), CompositeFieldMutations.findOrdinalsByName(guarded, "missing"));
+    assertEquals(0, getComponentCalls.get());
 
     StructMutations.edit(
-        struct,
+        guarded,
         new DataTypePatch.Struct(
             null,
             List.of(new CompositeField("tail", "renamed_tail", null, null, null)),
             null,
-            null),
+            List.of(new CompositeField("missing", null, null, null, null))),
         RESOLVER);
-    assertEquals("renamed_tail", struct.getComponent(4).getFieldName());
-
-    DataTypeComponent unnamedSlot =
-        (DataTypeComponent)
-            Proxy.newProxyInstance(
-                DataTypeComponent.class.getClassLoader(),
-                new Class<?>[] {DataTypeComponent.class},
-                (proxy, method, args) ->
-                    switch (method.getName()) {
-                      case "getFieldName" -> null;
-                      case "getOrdinal" -> 0;
-                      default -> throw new AssertionError(method.getName());
-                    });
-    DataTypeComponent namedUndefinedSlot =
-        (DataTypeComponent)
-            Proxy.newProxyInstance(
-                DataTypeComponent.class.getClassLoader(),
-                new Class<?>[] {DataTypeComponent.class},
-                (proxy, method, args) ->
-                    switch (method.getName()) {
-                      case "getFieldName" -> "undef_slot";
-                      case "getOrdinal" -> 1;
-                      default -> throw new AssertionError(method.getName());
-                    });
-    Composite undefinedOnlyComposite =
-        (Composite)
-            Proxy.newProxyInstance(
-                Composite.class.getClassLoader(),
-                new Class<?>[] {Composite.class},
-                (proxy, method, args) -> {
-                  if (method.isDefault()) {
-                    return InvocationHandler.invokeDefault(proxy, method, args);
-                  }
-                  return switch (method.getName()) {
-                    case "getNumComponents" -> 2;
-                    case "getComponent" -> ((int) args[0]) == 0 ? unnamedSlot : namedUndefinedSlot;
-                    case "getNumDefinedComponents" -> 0;
-                    case "getDefinedComponents" -> new DataTypeComponent[0];
-                    default -> throw new AssertionError(method.getName());
-                  };
-                });
-    assertEquals(List.of(), undefinedOnlyComposite.findComponents("undef_slot"));
-    assertEquals(
-        List.of(1),
-        CompositeFieldMutations.findOrdinalsByName(undefinedOnlyComposite, "undef_slot"));
+    assertEquals(1, getComponentCalls.get());
+    assertEquals("renamed_tail", delegate.getComponent(24_998).getFieldName());
 
     StructureDataType duplicateStruct = new StructureDataType("DupStruct", 0);
     duplicateStruct.add(ByteDataType.dataType, 1, "dup", null);
@@ -583,5 +563,91 @@ class CompositeFieldMutationsTest {
     assertEquals("uc1", replacedUnionField.getComment());
     assertEquals("u2_only", union.getComponent(2).getFieldName());
     assertEquals("uc2", union.getComponent(2).getComment());
+  }
+
+  @Test
+  void compositeAccessHooksSupportCustomRemovalAndIndexedAdditionSemantics() {
+    StructureDataType unpacked = new StructureDataType("HookedUnpackedStruct", 8);
+    unpacked.replaceAtOffset(0, ShortDataType.dataType, 2, "first", null);
+    unpacked.replaceAtOffset(4, IntegerDataType.dataType, 4, "second", null);
+
+    List<Integer> removedOrdinals = new ArrayList<>();
+    List<String> hookEvents = new ArrayList<>();
+    CompositeFieldMutations.CompositeAccess hookedAccess =
+        new CompositeFieldMutations.CompositeAccess() {
+          @Override
+          public CompositeFieldMutations.CompositeKind kind() {
+            return CompositeFieldMutations.CompositeKind.STRUCT;
+          }
+
+          @Override
+          public Composite composite() {
+            return unpacked;
+          }
+
+          @Override
+          public List<Integer> locate(CompositeField selector) {
+            return CompositeFieldMutations.findOrdinalsByName(unpacked, selector.name());
+          }
+
+          @Override
+          public void removeComponent(int ordinal) {
+            removedOrdinals.add(ordinal);
+            unpacked.clearComponent(ordinal);
+          }
+
+          @Override
+          public void validateBeforeAdd(CompositeField field, int index) {
+            hookEvents.add("validate:" + index + ":" + field.name());
+          }
+
+          @Override
+          public void addField(
+              int index, Integer offset, CompositeFieldMutations.Replacement field) {
+            hookEvents.add("add:" + index + ":" + offset + ":" + field.name() + ":" + field.length());
+            if (offset == null) {
+              unpacked.add(field.dataType(), field.length(), field.name(), field.comment());
+            } else {
+              unpacked.replaceAtOffset(
+                  offset, field.dataType(), field.length(), field.name(), field.comment());
+            }
+          }
+
+          @Override
+          public void replace(
+              DataTypeComponent component, CompositeFieldMutations.Replacement replacement) {
+            unpacked.replace(
+                component.getOrdinal(),
+                replacement.dataType(),
+                replacement.length(),
+                replacement.name(),
+                replacement.comment());
+          }
+        };
+
+    CompositeFieldMutations.removeFields(
+        hookedAccess,
+        List.of(
+            new CompositeField("first", null, null, null, null),
+            new CompositeField("first", null, null, null, null)));
+    assertEquals(List.of(0), removedOrdinals);
+    assertEquals(4, unpacked.getDefinedComponentAtOrAfterOffset(0).getOffset());
+
+    CompositeFieldMutations.addFields(
+        hookedAccess,
+        List.of(
+            new CompositeField("repopulated", null, 0, null, DataTypeReference.named("short")),
+            new CompositeField(null, null, null, null, null)),
+        RESOLVER);
+    assertEquals(
+        List.of(
+            "validate:0:repopulated",
+            "add:0:0:repopulated:2",
+            "validate:1:null",
+            "add:1:null:field:1"),
+        hookEvents);
+    assertEquals("repopulated", unpacked.getComponent(0).getFieldName());
+    assertEquals(4, unpacked.getDefinedComponentAtOrAfterOffset(4).getOffset());
+    assertEquals("field", unpacked.getDefinedComponentAtOrAfterOffset(8).getFieldName());
   }
 }
