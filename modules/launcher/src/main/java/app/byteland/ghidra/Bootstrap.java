@@ -45,9 +45,12 @@ public final class Bootstrap {
     }
 
     Program program = requireCurrentProgram(script);
+    ConsoleService guiConsole = findConsoleService(script);
+    Console systemConsole = System.console();
     EffectiveConfig effectiveConfig;
     try {
-      effectiveConfig = resolveConfig(args, program);
+      effectiveConfig =
+          resolveConfig(args, program, guiConsole != null || systemConsole != null);
     } catch (IllegalArgumentException e) {
       printUsage(script);
       throw e;
@@ -74,7 +77,7 @@ public final class Bootstrap {
               + ":"
               + config.port()
               + config.path());
-      reportServerAuthToken(script, effectiveConfig.generatedToken());
+      reportServerAuthToken(script, guiConsole, systemConsole, effectiveConfig.generatedToken());
       script.println("[ghidra-bridge] Starting embedded bridge listener...");
     }
     script.println("[ghidra-bridge]   Session ID: " + config.sessionId());
@@ -212,7 +215,10 @@ public final class Bootstrap {
   private static void printUsage(GhidraScript script) {
     script.printerr("[ghidra-bridge] Invalid startup arguments.");
     script.printerr(
-        "[ghidra-bridge] Defaults are used when ws_url, port, token, and session_id are omitted.");
+        "[ghidra-bridge] Defaults are used when ws_url, port, token, and session_id are omitted"
+            + " in an interactive console.");
+    script.printerr(
+        "[ghidra-bridge] Non-interactive headless server mode requires token=<secret>.");
     script.printerr(
         "[ghidra-bridge] If you configure transport manually, use ws_url or host/port/path.");
     script.printerr(
@@ -242,6 +248,11 @@ public final class Bootstrap {
   }
 
   static EffectiveConfig resolveConfig(String[] args, Program program) {
+    return resolveConfig(args, program, true);
+  }
+
+  static EffectiveConfig resolveConfig(
+      String[] args, Program program, boolean interactiveConsoleAvailable) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
     List<String> defaultMessages = new ArrayList<>();
 
@@ -262,6 +273,11 @@ public final class Bootstrap {
 
     String generatedToken = null;
     if (isBlank(parsedArgs.get("ws_url")) && !parsedArgs.containsKey(TOKEN_ARGUMENT)) {
+      if (!interactiveConsoleAvailable) {
+        throw new IllegalArgumentException(
+            "token is required in headless server mode when no interactive console is available;"
+                + " pass token=<secret>");
+      }
       generatedToken = generateSessionToken();
       parsedArgs.put(TOKEN_ARGUMENT, generatedToken);
       defaultMessages.add("token=<generated>");
@@ -307,7 +323,12 @@ public final class Bootstrap {
   }
 
   private static ConsoleService findConsoleService(GhidraScript script) {
-    GhidraState state = script.getState();
+    final GhidraState state;
+    try {
+      state = script.getState();
+    } catch (NullPointerException uninitializedState) {
+      return null;
+    }
     if (state == null) {
       return null;
     }

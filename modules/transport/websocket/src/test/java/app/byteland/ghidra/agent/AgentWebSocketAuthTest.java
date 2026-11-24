@@ -132,8 +132,9 @@ class AgentWebSocketAuthTest {
               "/ws/agent",
               "Origin: https://untrusted-origin.example\r\n");
       assertEquals("HTTP/1.1 401 Unauthorized", unauthResponse.getFirst());
+      assertTrue(unauthResponse.contains("WWW-Authenticate: Bearer"));
 
-      // 2. Query-string token upgrade must receive HTTP/1.1 400 Bad Request.
+      // 2. Query token upgrade must receive HTTP/1.1 400 Bad Request.
       List<String> queryTokenResponse =
           sendRawHttpUpgrade(
               port,

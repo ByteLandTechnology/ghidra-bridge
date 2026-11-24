@@ -106,8 +106,10 @@ final class AgentWebSocketConnectionRunner {
 
   private void writeHandshakeFailure(Socket socket, WebSocketHandshake.HttpHandshakeException e) {
     try {
+      List<String> headers =
+          e.status() == 401 ? List.of("WWW-Authenticate: Bearer") : List.of();
       WebSocketHandshake.writeHttpResponse(
-          socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
+          socket.getOutputStream(), e.status(), e.reason(), headers, e.getMessage());
     } catch (IOException responseFailure) {
       e.addSuppressed(responseFailure);
       if (running.get()) {

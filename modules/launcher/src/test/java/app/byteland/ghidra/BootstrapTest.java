@@ -22,13 +22,39 @@ class BootstrapTest {
 
   static final class RecordingScript extends GhidraScript {
     final List<String> logLines = new ArrayList<>();
+    final List<String> errorLines = new ArrayList<>();
+    private final Program program;
+    boolean checkpointSaved;
+
+    RecordingScript() {
+      this(null);
+    }
+
+    RecordingScript(Program program) {
+      this.program = program;
+    }
 
     @Override
     protected void run() {}
 
     @Override
+    public Program getCurrentProgram() {
+      return program;
+    }
+
+    @Override
+    public void saveProgram(Program target) {
+      checkpointSaved = true;
+    }
+
+    @Override
     public void println(String message) {
       logLines.add(message);
+    }
+
+    @Override
+    public void printerr(String message) {
+      errorLines.add(message);
     }
   }
 
@@ -82,6 +108,42 @@ class BootstrapTest {
     assertNull(outbound.generatedToken());
     assertNull(outbound.config().token());
     assertTrue(outbound.config().isOutboundMode());
+  }
+
+  @Test
+  @DisplayName("Non-interactive headless server mode fails fast when token is omitted")
+  void testNonInteractiveHeadlessServerModeRequiresExplicitToken() {
+    Program program = stubProgram("target.bin");
+
+    IllegalArgumentException missingToken =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Bootstrap.resolveConfig(new String[0], program, false));
+    assertTrue(missingToken.getMessage().contains("pass token=<secret>"));
+
+    Bootstrap.EffectiveConfig headlessConfigured =
+        Bootstrap.resolveConfig(new String[] {"token=headless-secret"}, program, false);
+    assertNull(headlessConfigured.generatedToken());
+    assertEquals("headless-secret", headlessConfigured.config().token());
+
+    Bootstrap.EffectiveConfig headlessOutbound =
+        Bootstrap.resolveConfig(
+            new String[] {"ws_url=ws://127.0.0.1:8765/ws/agent"}, program, false);
+    assertNull(headlessOutbound.generatedToken());
+    assertTrue(headlessOutbound.config().isOutboundMode());
+
+    if (System.console() == null) {
+      RecordingScript headlessScript = new RecordingScript(program);
+      IllegalArgumentException startupError =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> Bootstrap.startFromScript(headlessScript, new String[0], null));
+      assertTrue(startupError.getMessage().contains("pass token=<secret>"));
+      assertFalse(headlessScript.checkpointSaved);
+      assertTrue(
+          headlessScript.errorLines.stream()
+              .anyMatch(line -> line.contains("Non-interactive headless server mode requires")));
+    }
   }
 
   @Test
