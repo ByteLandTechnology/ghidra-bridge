@@ -44,7 +44,6 @@ final class CommentMethods implements ApiMethodProvider {
         WireSchema.object(
             ApiSchemaCatalog.props(
                 ApiVocabulary.ADDRESS, WireSchema.string(),
-                ApiVocabulary.END, WireSchema.string(),
                 ApiVocabulary.TYPE, ApiSchemaCatalog.commentTypeSchema(),
                 ApiVocabulary.TEXT, WireSchema.string()));
     registry.scanList(
@@ -59,7 +58,7 @@ final class CommentMethods implements ApiMethodProvider {
               .commentService()
               .listComments(
                   new CommentService.CommentQuery(
-                      addressScan(request, ApiVocabulary.ADDRESS, ApiVocabulary.END),
+                      addressScan(request, ApiVocabulary.ADDRESS),
                       commentType(optionalText(filter, ApiVocabulary.TYPE)),
                       optionalText(filter, ApiVocabulary.TEXT),
                       page.limit(),

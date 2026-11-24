@@ -1,33 +1,45 @@
 package app.byteland.ghidra.adapter.ghidra.decompilation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
+import ghidra.app.decompiler.ClangBreak;
+import ghidra.app.decompiler.ClangSyntaxToken;
+import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileOptions;
 import ghidra.app.decompiler.DecompileProcess;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.app.decompiler.DecompiledFunction;
+import ghidra.app.decompiler.PrettyPrinter;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
+import ghidra.program.model.address.AddressIterator;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.DefaultAddressFactory;
 import ghidra.program.model.address.GenericAddressSpace;
+import ghidra.program.model.listing.CodeUnit;
+import ghidra.program.model.listing.CommentType;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
 import ghidra.util.task.TaskMonitor;
 import java.lang.reflect.Proxy;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.IntSupplier;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -38,12 +50,23 @@ class DecompilationServiceImplTest {
       new DefaultAddressFactory(new AddressSpace[] {RAM_SPACE}, RAM_SPACE);
 
   private static final class TestScript extends GhidraScript {
+    private boolean hideCurrentProgram;
+
     private TestScript(Program program) {
       switchProgram(program);
     }
 
     void switchProgram(Program program) {
       set(program, TaskMonitor.DUMMY);
+    }
+
+    void setHideCurrentProgram(boolean hideCurrentProgram) {
+      this.hideCurrentProgram = hideCurrentProgram;
+    }
+
+    @Override
+    public Program getCurrentProgram() {
+      return hideCurrentProgram ? null : super.getCurrentProgram();
     }
 
     @Override
@@ -57,6 +80,18 @@ class DecompilationServiceImplTest {
 
     private StubProgram(long initialModificationNumber) {
       this.modificationNumber = new AtomicLong(initialModificationNumber);
+      AddressIterator emptyComments =
+          (AddressIterator)
+              Proxy.newProxyInstance(
+                  AddressIterator.class.getClassLoader(),
+                  new Class<?>[] {AddressIterator.class},
+                  (instance, method, args) ->
+                      switch (method.getName()) {
+                        case "iterator" -> Collections.emptyIterator();
+                        case "hasNext" -> false;
+                        default ->
+                            throw new AssertionError("Unexpected AddressIterator call: " + method);
+                      });
       Listing listing =
           (Listing)
               Proxy.newProxyInstance(
@@ -65,6 +100,7 @@ class DecompilationServiceImplTest {
                   (instance, method, args) ->
                       switch (method.getName()) {
                         case "getFunctionAt" -> functions.get((Address) args[0]);
+                        case "getCommentAddressIterator" -> emptyComments;
                         case "equals" -> instance == args[0];
                         case "hashCode" -> System.identityHashCode(instance);
                         case "toString" -> "StubListing";
@@ -89,6 +125,15 @@ class DecompilationServiceImplTest {
     }
 
     Function addFunction(long offset, String initialName) {
+      return addFunctionWithProgram(offset, initialName, proxy);
+    }
+
+    Function addOrphanFunction(long offset, String initialName) {
+      return addFunctionWithProgram(offset, initialName, null);
+    }
+
+    private Function addFunctionWithProgram(
+        long offset, String initialName, Program owningProgram) {
       Address entry = RAM_SPACE.getAddress(offset);
       final String[] currentName = {initialName};
       Function fn =
@@ -98,9 +143,10 @@ class DecompilationServiceImplTest {
                   new Class<?>[] {Function.class},
                   (instance, method, args) ->
                       switch (method.getName()) {
-                        case "getProgram" -> proxy;
+                        case "getProgram" -> owningProgram;
                         case "getEntryPoint" -> entry;
                         case "getName" -> currentName[0];
+                        case "getBody" -> null;
                         case "setName" -> {
                           currentName[0] = (String) args[0];
                           modificationNumber.incrementAndGet();
@@ -164,6 +210,7 @@ class DecompilationServiceImplTest {
     private final AtomicInteger setOptionsCalls = new AtomicInteger();
     private int flushCallsSeenAtLastDecompile = -1;
     private RuntimeException nextFlushFailure;
+    private int nextFlushStatus;
 
     @Override
     public synchronized boolean setOptions(DecompileOptions xmlOptions) {
@@ -179,7 +226,9 @@ class DecompilationServiceImplTest {
         nextFlushFailure = null;
         throw failure;
       }
-      return 0;
+      int status = nextFlushStatus;
+      nextFlushStatus = 0;
+      return status;
     }
 
     @Override
@@ -187,13 +236,16 @@ class DecompilationServiceImplTest {
         Function func, int timeoutSecs, TaskMonitor monitor) {
       decompileCalls.incrementAndGet();
       flushCallsSeenAtLastDecompile = flushCalls.get();
-      String code =
-          "void " + func.getName() + "(void)\n{\n  return;\n}\n";
+      String code = "void " + func.getName() + "(void)\n{\n  return;\n}\n";
       return new StubDecompileResults(func, code);
     }
 
     void failNextFlush(RuntimeException failure) {
       this.nextFlushFailure = failure;
+    }
+
+    void returnNextFlushStatus(int status) {
+      this.nextFlushStatus = status;
     }
 
     int flushCount() {
@@ -279,6 +331,32 @@ class DecompilationServiceImplTest {
   }
 
   @Test
+  void flushesCacheOnlyWhenProgramModificationNumberChangesAcrossFormats() {
+    AtomicLong modificationNumber = new AtomicLong(10L);
+    Fixture fixture = createFixture(modificationNumber);
+    FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
+
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> decompiler))) {
+      service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
+      assertEquals(0, decompiler.flushCalls.get());
+
+      // Repeated reads at the same modification number skip cache flushes.
+      service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
+      service.decompileFunction("0x101000", DecompilationResource.Format.DOCUMENT, 1_200, true);
+      assertEquals(0, decompiler.flushCalls.get());
+
+      // Advancing the program modification number triggers a new flush once.
+      modificationNumber.set(11L);
+      service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, true);
+      assertEquals(1, decompiler.flushCalls.get());
+
+      service.decompileFunction("0x101000", DecompilationResource.Format.TOKENS, 1_200, true);
+      assertEquals(1, decompiler.flushCalls.get());
+    }
+  }
+
+  @Test
   @DisplayName("Transaction rollback or undo decrementing modificationNumber flushes cache")
   void rollbackOrUndoModificationNumberInequalityFlushesCache() {
     StubProgram stubProgram = new StubProgram(50L);
@@ -344,7 +422,8 @@ class DecompilationServiceImplTest {
   }
 
   @Test
-  @DisplayName("Failed flushCache keeps dirty state and retries even after rollback to prior modificationNumber")
+  @DisplayName(
+      "Failed flushCache keeps dirty state and retries even after rollback to prior modificationNumber")
   void flushFailureKeepsDirtyFlagUntilSubsequentFlushSucceeds() {
     StubProgram stubProgram = new StubProgram(20L);
     stubProgram.addFunction(0x1000L, "fn");
@@ -377,40 +456,94 @@ class DecompilationServiceImplTest {
       // Even if modificationNumber rolls back to 20 (matching the pre-failure number),
       // the dirty flag must force a retry flush on the next call.
       stubProgram.setModificationNumber(20L);
+      decompiler.returnNextFlushStatus(-1);
       service.decompileFunction("0x1000", DecompilationResource.Format.TEXT, null, false);
       assertEquals(2, decompiler.flushCount());
       assertEquals(2, decompiler.decompileCount());
 
+      // Negative flushCache return value keeps dirty flag set until a >= 0 flush succeeds.
+      service.decompileFunction("0x1000", DecompilationResource.Format.TEXT, null, false);
+      assertEquals(3, decompiler.flushCount());
+      assertEquals(3, decompiler.decompileCount());
+
       // Once the retry flush succeeds, subsequent reads at mod=20 do not flush.
       service.decompileFunction("0x1000", DecompilationResource.Format.TEXT, null, false);
-      assertEquals(2, decompiler.flushCount());
-      assertEquals(3, decompiler.decompileCount());
+      assertEquals(3, decompiler.flushCount());
+      assertEquals(4, decompiler.decompileCount());
     }
   }
 
   @Test
-  @DisplayName("Failed flushCache retries when modificationNumber stays at the mutated value")
-  void flushFailureDoesNotSaveNewModificationNumberPrematurely() {
-    StubProgram stubProgram = new StubProgram(1L);
-    stubProgram.addFunction(0x1000L, "fn");
+  void retriesCacheFlushOnNextLeaseWhenFlushThrowsOrFails() {
+    AtomicLong modificationNumber = new AtomicLong(1L);
+    Fixture fixture = createFixture(modificationNumber);
+    AtomicInteger mode = new AtomicInteger(0);
+    FakeDecompiler decompiler =
+        new FakeDecompiler(
+            fixture.markup,
+            true,
+            null,
+            () ->
+                switch (mode.get()) {
+                  case 1 -> throw new IllegalStateException("ipc broken");
+                  case 2 -> -1;
+                  default -> 0;
+                });
+
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> decompiler))) {
+      service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
+      assertEquals(0, decompiler.flushCalls.get());
+
+      // Modification changes to 2, and flushCache throws while state is marked dirty.
+      modificationNumber.set(2L);
+      mode.set(1);
+      assertThrows(
+          IllegalStateException.class,
+          () ->
+              service.decompileFunction(
+                  "0x101000", DecompilationResource.Format.TEXT, 1_000, false));
+      assertEquals(1, decompiler.flushCalls.get());
+
+      // Next lease at the same modification 2 retries flushCache; negative status keeps it dirty.
+      mode.set(2);
+      service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
+      assertEquals(2, decompiler.flushCalls.get());
+
+      // Once flushCache succeeds (>= 0), modification 2 is cached and subsequent reads skip flush.
+      mode.set(0);
+      service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
+      assertEquals(3, decompiler.flushCalls.get());
+
+      service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
+      assertEquals(3, decompiler.flushCalls.get());
+    }
+  }
+
+  @Test
+  @DisplayName("Missing Program flushes defensively and marks decompiler dirty for next Program")
+  void flushesWhenProgramIsAbsentAndMarksDecompilerDirtyForNextProgram() {
+    StubProgram stubProgram = new StubProgram(15L);
+    stubProgram.addFunction(0x1000L, "attached");
+    stubProgram.addOrphanFunction(0x2000L, "orphan");
 
     RecordingDecompiler decompiler = new RecordingDecompiler();
     LeasePool<DecompInterface> pool = new LeasePool<>(1, () -> decompiler);
-    GhidraSession session = new GhidraSession(new TestScript(stubProgram.program()));
+    TestScript script = new TestScript(stubProgram.program());
+    GhidraSession session = new GhidraSession(script);
 
     try (DecompilationServiceImpl service = new DecompilationServiceImpl(session, pool)) {
       service.decompileFunction("0x1000", DecompilationResource.Format.TEXT, null, false);
       assertEquals(0, decompiler.flushCount());
 
-      stubProgram.setModificationNumber(2L);
-      decompiler.failNextFlush(new RuntimeException("transient ipc error"));
-      assertThrows(
-          RuntimeException.class,
-          () ->
-              service.decompileFunction("0x1000", DecompilationResource.Format.TEXT, null, false));
+      script.setHideCurrentProgram(true);
+      DecompilationResource orphanRes =
+          service.decompileFunction("0x2000", DecompilationResource.Format.TEXT, null, false);
+      assertEquals("orphan", orphanRes.name());
       assertEquals(1, decompiler.flushCount());
 
-      // Retry at the same mod=2 must flush again, then mark mod=2 clean.
+      // Restoring the same Program at the same modificationNumber=15L must still flush once.
+      script.setHideCurrentProgram(false);
       service.decompileFunction("0x1000", DecompilationResource.Format.TEXT, null, false);
       assertEquals(2, decompiler.flushCount());
 
@@ -430,8 +563,7 @@ class DecompilationServiceImplTest {
     AtomicInteger created = new AtomicInteger();
     LeasePool<DecompInterface> pool =
         new LeasePool<>(
-            2,
-            () -> created.getAndIncrement() == 0 ? firstDecompiler : secondDecompiler);
+            2, () -> created.getAndIncrement() == 0 ? firstDecompiler : secondDecompiler);
     GhidraSession session = new GhidraSession(new TestScript(stubProgram.program()));
 
     try (DecompilationServiceImpl service = new DecompilationServiceImpl(session, pool)) {
@@ -468,5 +600,188 @@ class DecompilationServiceImplTest {
     assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(null));
     assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(null, pool));
     assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(session, null));
+  }
+
+  @Test
+  void unifiesTextAndDocumentOutputViaPrettyPrinterAndHandlesTimedOutFallback() {
+    AtomicLong modificationNumber = new AtomicLong(42L);
+    Fixture fixture = createFixture(modificationNumber);
+    FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
+
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> decompiler))) {
+      DecompilationResource textRes =
+          service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, true);
+      DecompilationResource docRes =
+          service.decompileFunction("0x101000", DecompilationResource.Format.DOCUMENT, 1_200, true);
+
+      assertTrue(textRes.completed());
+      assertEquals(docRes.c(), textRes.c());
+      assertTrue(
+          textRes
+              .c()
+              .contains(PrettyPrinter.INDENT_STRING + "return \"semi; {brace} /*comment*/\";\n"));
+      assertNull(textRes.lines());
+      assertEquals(Boolean.TRUE, textRes.commentsComplete());
+      assertEquals(List.of(), textRes.warnings());
+    }
+
+    FakeDecompiler timedOut = new FakeDecompiler(null, false, "Decompile timed out", () -> 0);
+    timedOut.fallbackFunction =
+        new DecompiledFunction("const char *f(void);", "/* raw fallback */");
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> timedOut))) {
+      DecompilationResource res =
+          service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
+      assertFalse(res.completed());
+      assertEquals("/* raw fallback */", res.c());
+      assertEquals(List.of("Decompile timed out"), res.warnings());
+    }
+  }
+
+  private static Fixture createFixture(AtomicLong modificationNumber) {
+    GenericAddressSpace ram = new GenericAddressSpace("ram", 64, AddressSpace.TYPE_RAM, 0);
+    AddressFactory addressFactory = new DefaultAddressFactory(new AddressSpace[] {ram});
+    Address entry = ram.getAddress(0x101000L);
+    CodeUnit unit =
+        (CodeUnit)
+            Proxy.newProxyInstance(
+                CodeUnit.class.getClassLoader(),
+                new Class<?>[] {CodeUnit.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getMinAddress" -> entry;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    AddressIterator emptyComments =
+        (AddressIterator)
+            Proxy.newProxyInstance(
+                AddressIterator.class.getClassLoader(),
+                new Class<?>[] {AddressIterator.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "iterator" -> Collections.emptyIterator();
+                      case "hasNext" -> false;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    Function[] functionHolder = new Function[1];
+    Listing listing =
+        (Listing)
+            Proxy.newProxyInstance(
+                Listing.class.getClassLoader(),
+                new Class<?>[] {Listing.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getFunctionAt" -> entry.equals(args[0]) ? functionHolder[0] : null;
+                      case "getCodeUnitContaining" -> unit;
+                      case "getCommentAddressIterator" -> {
+                        assertEquals(CommentType.REPEATABLE, args[0]);
+                        yield emptyComments;
+                      }
+                      default -> throw new AssertionError(method.getName());
+                    });
+    Program program =
+        (Program)
+            Proxy.newProxyInstance(
+                Program.class.getClassLoader(),
+                new Class<?>[] {Program.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getModificationNumber" -> modificationNumber.get();
+                      case "getAddressFactory" -> addressFactory;
+                      case "getListing" -> listing;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    Function function =
+        (Function)
+            Proxy.newProxyInstance(
+                Function.class.getClassLoader(),
+                new Class<?>[] {Function.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getProgram" -> program;
+                      case "getEntryPoint" -> entry;
+                      case "getName" -> "literal_demo";
+                      case "getBody" -> null;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    functionHolder[0] = function;
+    GhidraScript script =
+        new GhidraScript() {
+          {
+            set(program, TaskMonitor.DUMMY);
+          }
+
+          @Override
+          protected void run() {}
+        };
+
+    ClangTokenGroup markup = new ClangTokenGroup(null);
+    markup.AddTokenGroup(new ClangToken(markup, "const char *", ClangToken.TYPE_COLOR));
+    markup.AddTokenGroup(new ClangToken(markup, "literal_demo", ClangToken.FUNCTION_COLOR));
+    markup.AddTokenGroup(new ClangSyntaxToken(markup, "(void)"));
+    markup.AddTokenGroup(new ClangBreak(markup, 0));
+    markup.AddTokenGroup(new ClangSyntaxToken(markup, "{"));
+    markup.AddTokenGroup(new ClangBreak(markup, 1));
+    markup.AddTokenGroup(new ClangToken(markup, "return", ClangToken.KEYWORD_COLOR));
+    markup.AddTokenGroup(new ClangSyntaxToken(markup, " "));
+    markup.AddTokenGroup(
+        new ClangToken(markup, "\"semi; {brace} /*comment*/\"", ClangToken.CONST_COLOR));
+    markup.AddTokenGroup(new ClangSyntaxToken(markup, ";"));
+    markup.AddTokenGroup(new ClangBreak(markup, 0));
+    markup.AddTokenGroup(new ClangSyntaxToken(markup, "}"));
+
+    return new Fixture(new GhidraSession(script), markup);
+  }
+
+  private record Fixture(GhidraSession session, ClangTokenGroup markup) {}
+
+  private static final class FakeDecompiler extends DecompInterface {
+    private final ClangTokenGroup markup;
+    private final boolean completed;
+    private final String errorMessage;
+    private final IntSupplier flushAction;
+    private final AtomicInteger flushCalls = new AtomicInteger();
+    private DecompiledFunction fallbackFunction;
+
+    private FakeDecompiler(
+        ClangTokenGroup markup, boolean completed, String errorMessage, IntSupplier flushAction) {
+      this.markup = markup;
+      this.completed = completed;
+      this.errorMessage = errorMessage;
+      this.flushAction = flushAction;
+    }
+
+    @Override
+    public synchronized boolean setOptions(DecompileOptions xmlOptions) {
+      return true;
+    }
+
+    @Override
+    public synchronized int flushCache() {
+      flushCalls.incrementAndGet();
+      return flushAction.getAsInt();
+    }
+
+    @Override
+    public synchronized DecompileResults decompileFunction(
+        Function func, int timeoutSecs, TaskMonitor monitor) {
+      return new DecompileResults(func, null, null, null, errorMessage, null, null) {
+        @Override
+        public boolean decompileCompleted() {
+          return completed;
+        }
+
+        @Override
+        public ClangTokenGroup getCCodeMarkup() {
+          return markup;
+        }
+
+        @Override
+        public DecompiledFunction getDecompiledFunction() {
+          return fallbackFunction;
+        }
+      };
+    }
   }
 }

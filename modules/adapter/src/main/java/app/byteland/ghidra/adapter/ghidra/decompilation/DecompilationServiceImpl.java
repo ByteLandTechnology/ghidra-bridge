@@ -69,7 +69,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
       DecompInterface decompiler = lease.value();
       applyCommentMode(decompiler, includeComments);
-      flushCacheIfNeeded(decompiler, programOf(function));
+      // The native process keeps program data. Clear it when program modifications occur.
+      flushCacheIfNeeded(decompiler, function.getProgram());
       DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
       boolean completed = results.decompileCompleted();
       List<String> warnings = new ArrayList<>();
@@ -79,8 +80,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
       DecompilationResource.Format effectiveFormat =
           format == null ? DecompilationResource.Format.TEXT : format;
       ClangTokenGroup markup = results.getCCodeMarkup();
-      String code =
-          effectiveFormat == DecompilationResource.Format.TEXT ? renderCode(results) : null;
+      String code = effectiveFormat == DecompilationResource.Format.TEXT
+          ? GuiDocument.renderText(function, results)
+          : null;
       List<DecompilationResource.Token> tokens =
           effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
       List<DecompilationResource.Line> lines = null;
@@ -90,7 +92,8 @@ public final class DecompilationServiceImpl implements DecompilationService {
         lines = document.lines();
       }
       FunctionComments comments = includeComments
-          ? FunctionComments.read(function, startedAt, timeoutMs, warnings) : null;
+          ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
+          : null;
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
           function.getName(), effectiveFormat, completed,
@@ -99,13 +102,6 @@ public final class DecompilationServiceImpl implements DecompilationService {
           comments == null ? null : comments.items(),
           comments == null ? null : comments.complete(), warnings);
     }
-  }
-
-  private String renderCode(DecompileResults results) {
-    if (results.getDecompiledFunction() == null || results.getDecompiledFunction().getC() == null) {
-      return "";
-    }
-    return DecompilationFormatter.formatCCode(results.getDecompiledFunction().getC());
   }
 
   private List<DecompilationResource.Token> renderTokens(ClangTokenGroup markup) {
@@ -135,36 +131,43 @@ public final class DecompilationServiceImpl implements DecompilationService {
     commentModes.put(decompiler, includeComments);
   }
 
-  private Program programOf(Function function) {
-    Program program = function.getProgram();
-    return program != null ? program : context.currentProgram();
-  }
-
   /** Flushes cached native symbols and types only when the program state changed. */
   private void flushCacheIfNeeded(DecompInterface decompiler, Program program) {
-    Objects.requireNonNull(program, "program");
-    long modificationNumber = program.getModificationNumber();
-    CacheState state = cacheStates.get(decompiler);
-    if (state == null) {
-      cacheStates.put(decompiler, CacheState.clean(program, modificationNumber));
+    Program target = program != null ? program : context.currentProgramOrNull();
+    if (target == null) {
+      cacheStates.put(decompiler, CacheState.dirtyWithoutProgram());
+      decompiler.flushCache();
       return;
     }
-    if (state.isCleanFor(program, modificationNumber)) {
+    long modificationNumber = target.getModificationNumber();
+    CacheState state = cacheStates.get(decompiler);
+    if (state == null) {
+      cacheStates.put(decompiler, CacheState.clean(target, modificationNumber));
+      return;
+    }
+    if (state.isCleanFor(target, modificationNumber)) {
       return;
     }
     cacheStates.put(decompiler, state.markDirty());
-    decompiler.flushCache();
-    cacheStates.put(decompiler, CacheState.clean(program, modificationNumber));
+    if (decompiler.flushCache() >= 0) {
+      cacheStates.put(decompiler, CacheState.clean(target, modificationNumber));
+    }
   }
 
   private record CacheState(
       WeakReference<Program> program, long modificationNumber, boolean dirty) {
+    private static final WeakReference<Program> NO_PROGRAM = new WeakReference<>(null);
+
     static CacheState clean(Program program, long modificationNumber) {
       return new CacheState(new WeakReference<>(program), modificationNumber, false);
     }
 
+    static CacheState dirtyWithoutProgram() {
+      return new CacheState(NO_PROGRAM, 0L, true);
+    }
+
     CacheState markDirty() {
-      return new CacheState(program, modificationNumber, true);
+      return dirty ? this : new CacheState(program, modificationNumber, true);
     }
 
     boolean isCleanFor(Program candidate, long candidateModificationNumber) {

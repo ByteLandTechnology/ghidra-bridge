@@ -171,23 +171,204 @@ def run_test(headless, root):
             })["result"]
             assert label["name"] == "label_only"
 
-            decomp_initial = tool(18, "ghidra_decompilation", {
+            first_param = function(21, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert first_param == {
+                "ordinal": 0,
+                "name": "first_param",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "register:00000038:4"},
+            }
+
+            zero_param = function(22, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "zero_param",
+                    "data_type": {"kind": "pointer", "target": {"kind": "named", "name": "/char"}},
+                },
+            })["result"]
+            assert zero_param == {
+                "ordinal": 0,
+                "name": "zero_param",
+                "data_type": {"kind": "pointer", "target": {"kind": "named", "name": "/char"}},
+                "storage": {"kind": "serialization", "serialization": "register:00000038:8"},
+            }
+
+            func_a_with_params = function(23, "get", selector("func_a"))["result"]
+            assert func_a_with_params["has_custom_variable_storage"] is False
+            assert func_a_with_params["parameter_count"] == 2
+            assert func_a_with_params["parameters"] == [
+                zero_param,
+                {
+                    "ordinal": 1,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                    "storage": {"kind": "serialization", "serialization": "register:00000030:4"},
+                },
+            ]
+
+            function(24, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 2,
+                    "name": "first_param",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+            function(25, "parameter.create", {
+                "selector": {"entry": symbols["func_a"]},
+                "resource": {
+                    "ordinal": 5,
+                    "name": "out_of_range",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+            assert function(26, "get", selector("func_a"))["result"]["parameter_count"] == 2
+
+            patched_recreated = function(27, "patch", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "patch": {
+                    "return_type": {"kind": "named", "name": "/int"},
+                    "return_storage": {"kind": "register", "register": "EAX"},
+                },
+            })["result"]
+            assert patched_recreated["has_custom_variable_storage"] is True
+
+            custom_reg = function(28, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "custom_reg",
+                    "data_type": {"kind": "named", "name": "/longlong"},
+                    "storage": {"kind": "register", "register": "R12"},
+                },
+            })["result"]
+            assert custom_reg == {
+                "ordinal": 0,
+                "name": "custom_reg",
+                "data_type": {"kind": "named", "name": "/longlong"},
+                "storage": {"kind": "serialization", "serialization": "register:000000a0:8"},
+            }
+
+            unassigned_tail = function(29, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 1,
+                    "name": "unassigned_tail",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert unassigned_tail == {
+                "ordinal": 1,
+                "name": "unassigned_tail",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+            }
+
+            unassigned_head = function(30, "parameter.create", {
+                "selector": {"entry": symbols["jump_entry"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "unassigned_head",
+                    "data_type": {"kind": "named", "name": "/short"},
+                },
+            })["result"]
+            assert unassigned_head == {
+                "ordinal": 0,
+                "name": "unassigned_head",
+                "data_type": {"kind": "named", "name": "/short"},
+                "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+            }
+
+            custom_with_params = function(31, "get", selector("jump_entry"))["result"]
+            assert custom_with_params["has_custom_variable_storage"] is True
+            assert custom_with_params["return_storage"] == {
+                "kind": "serialization",
+                "serialization": "register:00000000:4",
+            }
+            assert custom_with_params["parameter_count"] == 3
+            assert custom_with_params["parameters"] == [
+                unassigned_head,
+                {
+                    "ordinal": 1,
+                    "name": "custom_reg",
+                    "data_type": {"kind": "named", "name": "/longlong"},
+                    "storage": {"kind": "serialization", "serialization": "register:000000a0:8"},
+                },
+                {
+                    "ordinal": 2,
+                    "name": "unassigned_tail",
+                    "data_type": {"kind": "named", "name": "/int"},
+                    "storage": {"kind": "serialization", "serialization": "<UNASSIGNED>"},
+                },
+            ]
+
+            tool(32, "ghidra_data_type", {
+                "operation": "create",
+                "params": {"resource": {"kind": "struct", "name": "big_ret", "size": 24}},
+            })
+            auto_patched = function(33, "patch", {
+                "selector": {"entry": symbols["label_only"]},
+                "patch": {"return_type": {"kind": "named", "name": "/big_ret"}},
+            })["result"]
+            assert auto_patched["parameter_count"] == 1
+            assert auto_patched["parameters"][0]["name"] == "__return_storage_ptr__"
+
+            function(34, "parameter.create", {
+                "selector": {"entry": symbols["label_only"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "before_auto",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            }, success=False)
+
+            after_auto = function(35, "parameter.create", {
+                "selector": {"entry": symbols["label_only"]},
+                "resource": {
+                    "ordinal": 1,
+                    "name": "after_auto",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert after_auto == {
+                "ordinal": 1,
+                "name": "after_auto",
+                "data_type": {"kind": "named", "name": "/int"},
+                "storage": {"kind": "serialization", "serialization": "register:00000030:4"},
+            }
+            auto_with_params = function(36, "get", selector("label_only"))["result"]
+            assert auto_with_params["has_custom_variable_storage"] is False
+            assert auto_with_params["parameter_count"] == 2
+            assert [p["name"] for p in auto_with_params["parameters"]] == [
+                "__return_storage_ptr__",
+                "after_auto",
+            ]
+
+            decomp_initial = tool(37, "ghidra_decompilation", {
                 "operation": "get",
                 "params": {"selector": {"entry": symbols["func_a"]}},
             })["result"]
             assert "func_a" in decomp_initial["c"]
-            decomp_repeat = tool(19, "ghidra_decompilation", {
+            decomp_repeat = tool(38, "ghidra_decompilation", {
                 "operation": "get",
                 "params": {"selector": {"entry": symbols["func_a"]}},
             })["result"]
             assert decomp_repeat["c"] == decomp_initial["c"]
 
-            sym_items = tool(21, "ghidra_symbol", {
+            sym_items = tool(39, "ghidra_symbol", {
                 "operation": "list",
                 "params": {"filter": {"name": "func_a", "address": symbols["func_a"]}},
             })["result"]["items"]
             assert len(sym_items) == 1
-            renamed_sym = tool(22, "ghidra_symbol", {
+            renamed_sym = tool(40, "ghidra_symbol", {
                 "operation": "patch",
                 "params": {
                     "selector": {"id": sym_items[0]["id"]},
@@ -195,41 +376,41 @@ def run_test(headless, root):
                 },
             })["result"]
             assert renamed_sym["name"] == "func_a_renamed"
-            decomp_after_rename = tool(23, "ghidra_decompilation", {
+            decomp_after_rename = tool(41, "ghidra_decompilation", {
                 "operation": "get",
                 "params": {"selector": {"entry": symbols["func_a"]}},
             })["result"]
             assert "func_a_renamed" in decomp_after_rename["c"]
 
-            caller = function(24, "create", {
+            caller = function(42, "create", {
                 "resource": {"entry": symbols["caller_entry"], "name": "caller_entry"},
                 "disassemble": True,
             })["result"]
             assert caller["name"] == "caller_entry"
-            caller_before = tool(25, "ghidra_decompilation", {
+            caller_before = tool(43, "ghidra_decompilation", {
                 "operation": "get",
                 "params": {"selector": {"entry": symbols["caller_entry"]}},
             })["result"]
             assert "label_only(" in caller_before["c"]
-            caller_repeat = tool(26, "ghidra_decompilation", {
+            caller_repeat = tool(44, "ghidra_decompilation", {
                 "operation": "get",
                 "params": {"selector": {"entry": symbols["caller_entry"]}},
             })["result"]
             assert caller_repeat["c"] == caller_before["c"]
 
-            callee_syms = tool(27, "ghidra_symbol", {
+            callee_syms = tool(45, "ghidra_symbol", {
                 "operation": "list",
                 "params": {"filter": {"name": "label_only", "address": symbols["label_only"]}},
             })["result"]["items"]
             assert len(callee_syms) == 1
-            tool(28, "ghidra_symbol", {
+            tool(46, "ghidra_symbol", {
                 "operation": "patch",
                 "params": {
                     "selector": {"id": callee_syms[0]["id"]},
                     "patch": {"name": "label_renamed"},
                 },
             })
-            caller_after = tool(29, "ghidra_decompilation", {
+            caller_after = tool(47, "ghidra_decompilation", {
                 "operation": "get",
                 "params": {"selector": {"entry": symbols["caller_entry"]}},
             })["result"]
