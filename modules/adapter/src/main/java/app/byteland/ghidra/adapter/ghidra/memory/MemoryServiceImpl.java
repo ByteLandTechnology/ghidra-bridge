@@ -36,7 +36,8 @@ public final class MemoryServiceImpl implements MemoryService {
   }
 
   @Override
-  public void patchMemory(String startRaw, ByteSequence bytes) {
-    memoryMutations.patchMemory(startRaw, bytes);
+  public void patchMemory(
+      String startRaw, ByteSequence bytes, boolean clearExisting, boolean disassemble) {
+    memoryMutations.patchMemory(startRaw, bytes, clearExisting, disassemble);
   }
 }

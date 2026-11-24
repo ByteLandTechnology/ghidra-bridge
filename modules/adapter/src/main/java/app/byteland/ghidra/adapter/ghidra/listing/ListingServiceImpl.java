@@ -3,11 +3,13 @@ package app.byteland.ghidra.adapter.ghidra.listing;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
+import app.byteland.ghidra.service.listing.ClearedCodeUnitsResource;
 import app.byteland.ghidra.service.listing.CodeUnitResource;
 import app.byteland.ghidra.service.listing.DataUnitResource;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import app.byteland.ghidra.service.listing.InstructionResource;
+import app.byteland.ghidra.service.listing.ListingScope;
 import app.byteland.ghidra.service.listing.ListingService;
 import java.util.List;
 
@@ -17,6 +19,7 @@ public final class ListingServiceImpl implements ListingService {
   private final ListingDataQueries dataQueries;
   private final ListingFlowOverrideQueries flowOverrideQueries;
   private final ListingFlowOverrideMutations flowOverrideMutations;
+  private final ListingMutations listingMutations;
 
   public ListingServiceImpl(GhidraSession context) {
     this.codeUnitQueries = new ListingCodeUnitQueries(context);
@@ -25,6 +28,7 @@ public final class ListingServiceImpl implements ListingService {
     ListingFlowOverrideScopes flowOverrideScopes = new ListingFlowOverrideScopes(context);
     this.flowOverrideQueries = new ListingFlowOverrideQueries(context, flowOverrideScopes);
     this.flowOverrideMutations = new ListingFlowOverrideMutations(context, flowOverrideScopes);
+    this.listingMutations = new ListingMutations(context);
   }
 
   @Override
@@ -66,5 +70,21 @@ public final class ListingServiceImpl implements ListingService {
       List<FlowOverrideValue> expectedFlowOverrides,
       FlowOverrideValue flowOverride) {
     flowOverrideMutations.setFlowOverrides(scope, expectedFlowOverrides, flowOverride);
+  }
+
+  @Override
+  public List<InstructionResource> assembleInstructions(
+      String rawAddress, List<String> instructions, boolean padNop) {
+    return listingMutations.assembleInstructions(rawAddress, instructions, padNop);
+  }
+
+  @Override
+  public List<InstructionResource> disassemble(ListingScope scope, Boolean followFlow) {
+    return listingMutations.disassemble(scope, followFlow);
+  }
+
+  @Override
+  public ClearedCodeUnitsResource clearCodeUnits(ListingScope scope, boolean clearContext) {
+    return listingMutations.clearCodeUnits(scope, clearContext);
   }
 }

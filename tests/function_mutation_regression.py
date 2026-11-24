@@ -39,6 +39,18 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global patch_target
+patch_target: mov $0x12345678, %eax
+ ret
+.global rogue_fn
+rogue_fn: jmp 1f
+ .byte 0xe8
+1:
+ xor %eax, %eax
+ ret
+.section .data
+.global global_val
+global_val: .long 0x11223344
 """
 
 
@@ -66,7 +78,7 @@ def run_test(headless, root):
 
     def call(message):
         request = urllib.request.Request(url, json.dumps(message).encode(), headers, method="POST")
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=90) as response:
             body = response.read().decode()
         if not body:
             return {}
@@ -167,6 +179,206 @@ def run_test(headless, root):
                 "resource": {"entry": symbols["label_only"]}, "disassemble": True,
             })["result"]
             assert label["name"] == "label_only"
+
+            # Standalone instruction.disassemble decodes func_b (shared tail with func_a).
+            dis_func_b = tool(30, "ghidra_listing", {
+                "operation": "instruction.disassemble",
+                "params": {"selector": {"kind": "address", "address": symbols["func_b"]}},
+            })["result"]
+            assert len(dis_func_b["items"]) >= 2
+            assert tool(31, "ghidra_listing", {
+                "operation": "instruction.get",
+                "params": {"selector": {"address": symbols["func_b"]}},
+            })["result"]["mnemonic"] == "PUSH"
+
+            # Rogue-byte cleanup with code_unit.clear + instruction.disassemble.
+            rogue_base = int(symbols["rogue_fn"], 16)
+            rogue_byte = hex(rogue_base + 2)
+            rogue_real = hex(rogue_base + 3)
+            tool(32, "ghidra_listing", {
+                "operation": "instruction.disassemble",
+                "params": {
+                    "selector": {"kind": "address", "address": symbols["rogue_fn"]},
+                    "follow_flow": False,
+                },
+            })
+            tool(33, "ghidra_listing", {
+                "operation": "instruction.disassemble",
+                "params": {"selector": {"kind": "address", "address": rogue_byte}},
+            })
+            cleared_rogue = tool(34, "ghidra_listing", {
+                "operation": "code_unit.clear",
+                "params": {"selector": {"kind": "address", "address": rogue_byte}},
+            })["result"]
+            assert cleared_rogue["length"] >= 1
+            redecoded = tool(35, "ghidra_listing", {
+                "operation": "instruction.disassemble",
+                "params": {"selector": {"kind": "address", "address": rogue_real}},
+            })["result"]["items"]
+            assert [item["mnemonic"] for item in redecoded[:2]] == ["XOR", "RET"]
+
+            # instruction.assemble with pad_nop and non-fallthrough RET padding.
+            tool(36, "ghidra_listing", {
+                "operation": "instruction.disassemble",
+                "params": {"selector": {"kind": "address", "address": symbols["patch_target"]}},
+            })
+            assembled_xor = tool(37, "ghidra_listing", {
+                "operation": "instruction.assemble",
+                "params": {
+                    "selector": {"address": symbols["patch_target"]},
+                    "instructions": ["xor EAX, EAX"],
+                    "pad_nop": True,
+                },
+            })["result"]["items"]
+            assert [item["mnemonic"] for item in assembled_xor] == ["XOR", "NOP", "NOP", "NOP"]
+            cached_start = time.monotonic()
+            tool(38, "ghidra_listing", {
+                "operation": "instruction.assemble",
+                "params": {
+                    "selector": {"address": symbols["patch_target"]},
+                    "instructions": ["MOV EAX, 0x12345678"],
+                },
+            })
+            assert time.monotonic() - cached_start < 2.0, "Assembler cache did not reuse Sleigh grammar"
+            assembled_ret = tool(39, "ghidra_listing", {
+                "operation": "instruction.assemble",
+                "params": {
+                    "selector": {"address": symbols["patch_target"]},
+                    "instructions": ["RET"],
+                    "pad_nop": True,
+                },
+            })["result"]["items"]
+            assert [item["mnemonic"] for item in assembled_ret] == ["RET", "NOP", "NOP", "NOP", "NOP"]
+
+            # Invalid Sleigh mnemonic and unmapped address fail cleanly.
+            tool(40, "ghidra_listing", {
+                "operation": "instruction.assemble",
+                "params": {
+                    "selector": {"address": symbols["patch_target"]},
+                    "instructions": ["not_a_real_mnemonic 1, 2"],
+                },
+            }, success=False)
+            tool(41, "ghidra_listing", {
+                "operation": "instruction.assemble",
+                "params": {
+                    "selector": {"address": "0xdeadbeef"},
+                    "instructions": ["NOP"],
+                },
+            }, success=False)
+
+            # code_unit.clear clears defined global data without global_variable.delete restrictions.
+            tool(42, "ghidra_global_variable", {
+                "operation": "create",
+                "params": {
+                    "resource": {
+                        "address": symbols["global_val"],
+                        "name": "g_val",
+                        "data_type": {"kind": "named", "name": "uint"},
+                    },
+                },
+            })
+            cleared_data = tool(43, "ghidra_listing", {
+                "operation": "code_unit.clear",
+                "params": {"selector": {"kind": "address", "address": symbols["global_val"]}},
+            })["result"]
+            assert cleared_data["length"] == 4
+
+            # memory.write fails over defined instructions unless clear_existing=True, and disassembles.
+            tool(44, "ghidra_memory", {
+                "operation": "write",
+                "params": {
+                    "selector": {"address": symbols["patch_target"]},
+                    "patch": {
+                        "bytes": {"encoding": "hex", "data": "31c0c3", "length": 3},
+                    },
+                },
+            }, success=False)
+            tool(45, "ghidra_memory", {
+                "operation": "write",
+                "params": {
+                    "selector": {"address": symbols["patch_target"]},
+                    "patch": {
+                        "bytes": {"encoding": "hex", "data": "31c0c3", "length": 3},
+                        "clear_existing": True,
+                        "disassemble": True,
+                    },
+                },
+            })
+            assert tool(46, "ghidra_listing", {
+                "operation": "instruction.get",
+                "params": {"selector": {"address": symbols["patch_target"]}},
+            })["result"]["mnemonic"] == "XOR"
+
+            # Atomic batch.execute all_or_none rolls back listing and memory mutations on failure.
+            batch_err = tool(47, "ghidra_batch", {
+                "operation": "execute",
+                "params": {
+                    "transaction_mode": "all_or_none",
+                    "items": [
+                        {
+                            "id": "clear-1",
+                            "method": "code_unit.clear",
+                            "arguments": {
+                                "selector": {"kind": "address", "address": symbols["patch_target"]},
+                            },
+                        },
+                        {
+                            "id": "write-2",
+                            "method": "memory.write",
+                            "arguments": {
+                                "selector": {"address": symbols["patch_target"]},
+                                "patch": {
+                                    "bytes": {"encoding": "hex", "data": "9090", "length": 2},
+                                    "clear_existing": True,
+                                },
+                            },
+                        },
+                        {
+                            "id": "asm-3",
+                            "method": "instruction.assemble",
+                            "arguments": {
+                                "selector": {"address": symbols["patch_target"]},
+                                "instructions": ["bad_sleigh_op"],
+                            },
+                        },
+                    ],
+                },
+            }, success=False)
+            assert batch_err["code"] == "batch_rolled_back"
+            assert tool(48, "ghidra_listing", {
+                "operation": "instruction.get",
+                "params": {"selector": {"address": symbols["patch_target"]}},
+            })["result"]["mnemonic"] == "XOR"
+
+            batch_ok = tool(49, "ghidra_batch", {
+                "operation": "execute",
+                "params": {
+                    "transaction_mode": "all_or_none",
+                    "items": [
+                        {
+                            "id": "clear-ok",
+                            "method": "code_unit.clear",
+                            "arguments": {
+                                "selector": {"kind": "address", "address": symbols["patch_target"]},
+                            },
+                        },
+                        {
+                            "id": "asm-ok",
+                            "method": "instruction.assemble",
+                            "arguments": {
+                                "selector": {"address": symbols["patch_target"]},
+                                "instructions": ["NOP", "NOP"],
+                            },
+                        },
+                    ],
+                },
+            })["result"]
+            assert len(batch_ok["items"]) == 2 and "result" in batch_ok["items"][1]
+            assert tool(50, "ghidra_listing", {
+                "operation": "instruction.get",
+                "params": {"selector": {"address": symbols["patch_target"]}},
+            })["result"]["mnemonic"] == "NOP"
+
             print("Function mutation regression checks passed")
         finally:
             if ready:

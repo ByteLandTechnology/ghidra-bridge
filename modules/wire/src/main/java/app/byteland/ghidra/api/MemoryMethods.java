@@ -124,12 +124,21 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 addressSelector,
                 ApiVocabulary.PATCH,
-                WireSchema.object(Map.of(ApiVocabulary.BYTES, byteSequence), ApiVocabulary.BYTES)),
+                WireSchema.object(
+                    ApiSchemaCatalog.props(
+                        ApiVocabulary.BYTES,
+                        byteSequence,
+                        "clear_existing",
+                        WireSchema.bool(),
+                        "disassemble",
+                        WireSchema.bool()),
+                    ApiVocabulary.BYTES)),
             ApiVocabulary.SELECTOR,
             ApiVocabulary.PATCH),
         ApiSchemaCatalog.MEMORY_WRITE_RECEIPT_SCHEMA,
         request -> {
-          Map<String, Object> bytes = object(patch(request), ApiVocabulary.BYTES);
+          Map<String, Object> change = patch(request);
+          Map<String, Object> bytes = object(change, ApiVocabulary.BYTES);
           validateByteLength(bytes, "/patch/bytes");
           String start = text(selector(request), ApiVocabulary.ADDRESS);
           registry
@@ -140,7 +149,9 @@ final class MemoryMethods implements ApiMethodProvider {
                   new ByteSequence(
                       byteEncoding(text(bytes, ApiVocabulary.ENCODING)),
                       text(bytes, ApiVocabulary.DATA),
-                      integer(bytes, ApiVocabulary.LENGTH, -1)));
+                      integer(bytes, ApiVocabulary.LENGTH, -1)),
+                  bool(change, "clear_existing").orElse(false),
+                  bool(change, "disassemble").orElse(false));
           return Map.of(
               ApiVocabulary.START,
               registry.services().addressService().resolveAddress(start).address(),

@@ -59,6 +59,15 @@ final class ApiSchemaCatalog {
       WireSchema.object(Map.of("shutdown", WireSchema.bool()), "shutdown");
   static final Map<String, Object> DELETED_RECEIPT_SCHEMA =
       WireSchema.object(Map.of("deleted", WireSchema.bool()), "deleted");
+  static final Map<String, Object> CLEARED_RECEIPT_SCHEMA =
+      WireSchema.object(
+          props(
+              START, WireSchema.nonBlankString(),
+              END, WireSchema.nonBlankString(),
+              LENGTH, WireSchema.integer(1, Long.MAX_VALUE)),
+          START,
+          END,
+          LENGTH);
   static final Map<String, Object> MEMORY_WRITE_RECEIPT_SCHEMA =
       WireSchema.object(
           Map.of(
@@ -197,6 +206,22 @@ final class ApiSchemaCatalog {
       properties.put((String) pairs[index], (Map<String, Object>) pairs[index + 1]);
     }
     return properties;
+  }
+
+  static Map<String, Object> addressOrRangeSelector() {
+    return WireSchema.oneOf(
+        WireSchema.object(
+            props(KIND, WireSchema.stringEnum(ADDRESS), ADDRESS, WireSchema.nonBlankString()),
+            KIND,
+            ADDRESS),
+        WireSchema.object(
+            props(
+                KIND, WireSchema.stringEnum("range"),
+                START, WireSchema.nonBlankString(),
+                END, WireSchema.nonBlankString()),
+            KIND,
+            START,
+            END));
   }
 
   static Map<String, Object> flowSelector() {

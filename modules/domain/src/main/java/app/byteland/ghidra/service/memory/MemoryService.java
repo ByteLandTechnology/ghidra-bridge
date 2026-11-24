@@ -37,5 +37,13 @@ public interface MemoryService {
   /**
    * Patches program memory with the specified byte sequence.
    */
-  void patchMemory(String startRaw, ByteSequence bytes);
+  default void patchMemory(String startRaw, ByteSequence bytes) {
+    patchMemory(startRaw, bytes, false, false);
+  }
+
+  /**
+   * Patches program memory with optional code-unit clearing and disassembly.
+   */
+  void patchMemory(
+      String startRaw, ByteSequence bytes, boolean clearExisting, boolean disassemble);
 }
