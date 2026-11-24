@@ -2,9 +2,9 @@
 
 Ghidra Bridge は、実行中の Ghidra プログラムへのネットワークアクセスを提供します。
 本ブリッジは WebSocket JSON-RPC 2.0 と MCP Streamable HTTP `2026-07-28` の 2 つのネットワークトランスポートをサポートします。
-レジストリは `interface.get` から `batch.execute` まで 56 個の公開ドット記法メソッドを定義します。
-WebSocket は 56 個すべてを提供します。
-MCP は 55 個を提供し、`interface.get` は提供しません。
+レジストリは `interface.get` から `batch.execute` まで 59 個の公開ドット記法メソッドを定義します。
+WebSocket は 59 個すべてを提供します。
+MCP は 58 個を提供し、`interface.get` は提供しません。
 ランタイム JAR はサードパーティ製ライブラリへの依存が一切ありません。
 
 ## 設計目標
@@ -77,6 +77,14 @@ Ghidra のバックグラウンド解析は独立したスレッドで実行さ�
 一致する項目が 0 件であっても、未完了のスキャンは `next_cursor` を返します。
 呼び出し元はこの値を `page.cursor` として渡し、前回中断した位置からスキャンを再開できます。
 
+## リスティングとメモリの変更
+
+`instruction.assemble` は `selector.address` に Sleigh 命令をアセンブルし、対象範囲のコードユニットを消去します。
+`pad_nop` を設定すると、上書きされた命令の残りバイトを `NOP` 命令で埋めます。
+`instruction.disassemble` は単一アドレスまたはアドレス範囲の命令を逆アセンブルします。
+`code_unit.clear` はプライマリラベルを保持したまま命令と定義済みデータを消去します。
+`memory.write` は `clear_existing` でコードユニットを先に消去し、`disassemble` で書き込みバイトを逆アセンブルします。
+
 ## 関数の変更
 
 新しい関数本体が既存の関数と重なる場合、`function.create` は失敗します。
@@ -119,4 +127,4 @@ format を `document` にした `decompilation.get` は、1 回の逆コンパ�
 - モジュール構造の詳細は[アーキテクチャガイド](architecture.md)を参照してください。
 - エンベロープ形式とエラー定義は[プロトコル仕様](protocol.md)を参照してください。
 - アトミック処理の詳細は[バッチとトランザクション](batch-and-transactions.md)を参照してください。
-- 全 56 メソッドの一覧は[メソッドリファレンス](../api.md)を参照してください。
+- 全 59 メソッドの一覧は[メソッドリファレンス](../api.md)を参照してください。

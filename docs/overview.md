@@ -2,9 +2,9 @@
 
 Ghidra Bridge gives network access to one active Ghidra program.
 The bridge supports two network transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
-The registry defines 56 public dotted methods, from `interface.get` to `batch.execute`.
-WebSocket publishes all 56 methods.
-MCP publishes 55 methods, and does not publish `interface.get`.
+The registry defines 59 public dotted methods, from `interface.get` to `batch.execute`.
+WebSocket publishes all 59 methods.
+MCP publishes 58 methods, and does not publish `interface.get`.
 The runtime JAR has zero third-party dependencies.
 
 ## Design Goals
@@ -77,6 +77,14 @@ The `stop_reason` property reports `completed`, `limit`, or `timeout`.
 An incomplete scan returns a `next_cursor` value even when zero items match.
 The caller passes this value as `page.cursor` to continue the scan from the last location examined.
 
+## Listing and Memory Mutations
+
+`instruction.assemble` assembles Sleigh statements at `selector.address` and clears code units across the target bytes.
+Set `pad_nop` to fill leftover bytes of an overwritten instruction with `NOP` instructions.
+`instruction.disassemble` decodes instructions at one address or across a range.
+`code_unit.clear` clears instructions and defined data and keeps primary labels.
+`memory.write` accepts `clear_existing` to clear code units first and `disassemble` to decode the written bytes.
+
 ## Function Mutations
 
 `function.create` fails if the new body overlaps a function.
@@ -119,4 +127,4 @@ The bridge preserves the label unless the client requests its deletion.
 - Read the [Architecture Guide](architecture.md) for the module structure.
 - Read the [Protocol Specification](protocol.md) for envelope details and error formats.
 - Read [Batch and Transactions](batch-and-transactions.md) for atomic execution behavior.
-- Read the [Method Reference](api.md) for the complete list of 56 methods.
+- Read the [Method Reference](api.md) for the complete list of 59 methods.

@@ -48,4 +48,20 @@ public interface ListingService {
       FlowOverrideScope scope,
       List<FlowOverrideValue> expectedFlowOverrides,
       FlowOverrideValue flowOverride);
+
+  /**
+   * Assembles Sleigh instructions at one address.
+   */
+  List<InstructionResource> assembleInstructions(
+      String rawAddress, List<String> instructions, boolean padNop);
+
+  /**
+   * Disassembles undefined bytes at an address or in a range.
+   */
+  List<InstructionResource> disassembleInstructions(AddressOrRangeScope scope, boolean followFlow);
+
+  /**
+   * Clears defined instructions and data at an address or in a range.
+   */
+  CodeUnitClearReceipt clearCodeUnits(AddressOrRangeScope scope, boolean clearContext);
 }

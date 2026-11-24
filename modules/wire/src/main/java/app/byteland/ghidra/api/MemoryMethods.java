@@ -124,7 +124,11 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 addressSelector,
                 ApiVocabulary.PATCH,
-                WireSchema.object(Map.of(ApiVocabulary.BYTES, byteSequence), ApiVocabulary.BYTES)),
+                WireSchema.object(Map.of(ApiVocabulary.BYTES, byteSequence), ApiVocabulary.BYTES),
+                "clear_existing",
+                WireSchema.bool(),
+                "disassemble",
+                WireSchema.bool()),
             ApiVocabulary.SELECTOR,
             ApiVocabulary.PATCH),
         ApiSchemaCatalog.MEMORY_WRITE_RECEIPT_SCHEMA,
@@ -140,7 +144,9 @@ final class MemoryMethods implements ApiMethodProvider {
                   new ByteSequence(
                       byteEncoding(text(bytes, ApiVocabulary.ENCODING)),
                       text(bytes, ApiVocabulary.DATA),
-                      integer(bytes, ApiVocabulary.LENGTH, -1)));
+                      integer(bytes, ApiVocabulary.LENGTH, -1)),
+                  bool(request, "clear_existing").orElse(false),
+                  bool(request, "disassemble").orElse(false));
           return Map.of(
               ApiVocabulary.START,
               registry.services().addressService().resolveAddress(start).address(),

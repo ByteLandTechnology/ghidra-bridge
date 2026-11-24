@@ -581,7 +581,9 @@ public final class ApiRegistry {
             + " The default length is 256 and the default encoding is hex.";
       }
       case "memory.write" -> {
-        return "Write hex or base64 bytes at an address.";
+        return "Write hex or base64 bytes at an address."
+            + " Set `clear_existing` to clear code or data first."
+            + " Set `disassemble` to decode the new bytes.";
       }
       case "address.resolve" -> {
         return "Resolve an address and report its memory block, the function that contains it,"
@@ -830,6 +832,19 @@ public final class ApiRegistry {
       translated.initCause(error);
       throw translated;
     }
+  }
+
+  static app.byteland.ghidra.service.listing.AddressOrRangeScope addressOrRangeScope(
+      Map<String, Object> selector) {
+    return switch (text(selector, ApiVocabulary.KIND)) {
+      case ApiVocabulary.ADDRESS ->
+          new app.byteland.ghidra.service.listing.AddressOrRangeScope.AddressScope(
+              text(selector, ApiVocabulary.ADDRESS));
+      case "range" ->
+          new app.byteland.ghidra.service.listing.AddressOrRangeScope.RangeScope(
+              text(selector, ApiVocabulary.START), text(selector, ApiVocabulary.END));
+      default -> throw new AssertionError(selector.get(ApiVocabulary.KIND));
+    };
   }
 
   static app.byteland.ghidra.service.listing.FlowOverrideScope flowScope(
