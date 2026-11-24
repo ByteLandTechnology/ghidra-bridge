@@ -43,9 +43,7 @@ jobs:
         run: ./gradlew --no-daemon clean verify
 
       - name: Test function mutations
-        run: |
-          ./gradlew --no-daemon :wire:test :contracts:test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
       - name: Test release archive reproducibility
         run: python3 tests/release_archive_reproducibility.py

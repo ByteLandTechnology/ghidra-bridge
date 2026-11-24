@@ -72,7 +72,7 @@ final class FunctionMethods implements ApiMethodProvider {
               .functionService()
               .listFunctions(
                   new FunctionQuery(
-                      addressScan(request, null, null),
+                      addressScan(request),
                       page.limit(),
                       page.cursor(),
                       optionalText(filter, ApiVocabulary.NAME),
