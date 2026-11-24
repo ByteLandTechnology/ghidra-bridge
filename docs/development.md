@@ -130,9 +130,10 @@ bash .github/scripts/package-release.sh
 ```
 
 In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests".
-The workflow uses the default `GITHUB_TOKEN` and does not need extra secrets.
-Pull requests created with `GITHUB_TOKEN` do not trigger automatic `pull_request` checks.
-If branch protection requires the `verify` check before merge, close and reopen the release pull request to start CI.
+The workflow uses `GITHUB_TOKEN` by default.
+Pull requests created with this token do not start CI without a new event.
+For CI on release pull requests, close and reopen the pull request, or set the `RELEASE_PLEASE_TOKEN` secret to a personal access token.
+Give that token Contents and Pull requests write access to this repository.
 See the [release-please Action documentation](https://github.com/googleapis/release-please-action).
 
 If the `publish` job fails, use "Re-run failed jobs" in GitHub Actions.

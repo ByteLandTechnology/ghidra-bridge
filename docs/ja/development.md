@@ -119,9 +119,10 @@ bash .github/scripts/package-release.sh
 
 Settings > Actions > General で
 「Allow GitHub Actions to create and approve pull requests」を有効にします。
-ワークフローはデフォルトの `GITHUB_TOKEN` を使用し、追加のシークレットは不要です。
-`GITHUB_TOKEN` で作成したプルリクエストは、`pull_request` チェックを自動では開始しません。
-ブランチ保護でマージ前に `verify` チェックが必要な場合は、リリースプルリクエストを閉じて再度開くことで CI を実行できます。
+ワークフローは既定で `GITHUB_TOKEN` を使用します。このトークンで作成したプルリクエストは、新しいイベントなしでは CI を実行しません。
+リリースプルリクエストで CI を実行するには、プルリクエストを閉じて再度開くか、個人アクセストークンをリポジトリの secret
+`RELEASE_PLEASE_TOKEN` に設定します。
+トークンに、このリポジトリの Contents と Pull requests の書き込み権限を付与します。
 詳細は [release-please Action のドキュメント](https://github.com/googleapis/release-please-action) を参照してください。
 
 `publish` ジョブが失敗した場合は、GitHub Actions で「Re-run failed jobs」を選択します。

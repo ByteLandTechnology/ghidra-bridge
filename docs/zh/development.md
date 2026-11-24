@@ -119,9 +119,9 @@ bash .github/scripts/package-release.sh
 
 在 Settings > Actions > General 中启用
 “Allow GitHub Actions to create and approve pull requests”。
-工作流使用默认的 `GITHUB_TOKEN`，无需配置额外的密钥。
-使用 `GITHUB_TOKEN` 创建的拉取请求不会自动触发 `pull_request` 检查。
-如果分支保护要求在合并前通过 `verify` 检查，请关闭并重新打开发布拉取请求以启动 CI。
+工作流默认使用 `GITHUB_TOKEN`，该令牌创建的拉取请求不会在没有新事件时启动 CI。
+如需在发布拉取请求上运行 CI，请关闭并重新打开该拉取请求，或将仓库 secret `RELEASE_PLEASE_TOKEN` 设置为个人访问令牌。
+为该令牌授予此仓库的 Contents 和 Pull requests 写权限。
 详见 [release-please Action 文档](https://github.com/googleapis/release-please-action)。
 
 如果 `publish` 任务失败，可在 GitHub Actions 中选择 “Re-run failed jobs”。
