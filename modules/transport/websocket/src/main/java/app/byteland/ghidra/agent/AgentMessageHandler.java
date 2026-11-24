@@ -67,7 +67,6 @@ final class AgentMessageHandler {
     channel.sendText(JsonUtil.toJson(ready.toMap()));
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void handleRequest(
       AgentClientChannels.MessageChannel channel, MessageEnvelope.Request request) {
     String payload;
@@ -96,7 +95,6 @@ final class AgentMessageHandler {
     }
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void handleNotification(MessageEnvelope.Notification notification) {
     try {
       dispatcher.dispatch(notification.method(), notification.params());

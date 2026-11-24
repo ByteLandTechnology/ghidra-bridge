@@ -89,7 +89,6 @@ final class AgentClientChannels {
       await(webSocket.sendClose(code, reason), "sendClose", operationTimeout);
     }
 
-    @SuppressWarnings("PMD.PreserveStackTrace")
     private void await(
         CompletableFuture<WebSocket> operation, String operationName, Duration limit) {
       Objects.requireNonNull(operation, operationName + " future");
@@ -122,7 +121,6 @@ final class AgentClientChannels {
       }
     }
 
-    @SuppressWarnings({"PMD.AvoidCatchingGenericException", "PMD.CompareObjectsWithEquals"})
     private void abortAfter(RuntimeException failure) {
       try {
         webSocket.abort();
