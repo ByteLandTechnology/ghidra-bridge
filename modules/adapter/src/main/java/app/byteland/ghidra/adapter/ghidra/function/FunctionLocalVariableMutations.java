@@ -15,8 +15,6 @@ import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighFunctionDBUtil;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.symbol.SourceType;
-import ghidra.util.exception.DuplicateNameException;
-import ghidra.util.exception.InvalidInputException;
 
 final class FunctionLocalVariableMutations {
   private FunctionLocalVariableMutations() {}
@@ -52,13 +50,11 @@ final class FunctionLocalVariableMutations {
         newDataType == null
             ? null
             : FunctionMutationSupport.requireDataType(dataTypeResolver, newDataType);
-    try {
-      HighFunctionDBUtil.updateDBVariable(
-          highSymbol, targetName, targetDataType, SourceType.USER_DEFINED);
-    } catch (DuplicateNameException | InvalidInputException ex) {
-      throw new IllegalArgumentException(
-          "unable to update local variable: " + ex.getMessage(), ex);
-    }
+    FunctionVariableMutationSupport.runHighSymbolMutation(
+        "unable to update local variable",
+        () ->
+            HighFunctionDBUtil.updateDBVariable(
+                highSymbol, targetName, targetDataType, SourceType.USER_DEFINED));
     Variable committed = FunctionVariableMutationSupport.requireLocalVariable(function, targetName);
     if (targetDataType != null) {
       DataTypeReference currentType = GhidraDataTypeReferences.toReference(committed.getDataType());

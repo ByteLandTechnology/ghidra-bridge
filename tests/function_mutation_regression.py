@@ -542,6 +542,64 @@ def run_test(headless, root):
             })["result"]
             assert patched_hash["name"] == "branch_val"
             assert patched_hash["storage"]["serialization"].startswith("HASH:"), patched_hash
+
+            helper_before = function(71, "get", selector("helper_calc"))["result"]
+            assert helper_before["parameter_count"] == 0, helper_before
+            assert helper_before["parameters"] == [], helper_before
+
+            helper_decomp_before = tool(72, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {
+                    "selector": {"entry": symbols["helper_calc"]},
+                    "format": "document",
+                },
+            })["result"]
+            helper_param_tokens = [
+                tok["symbol"]
+                for line in helper_decomp_before["lines"]
+                for tok in line["tokens"]
+                if tok.get("symbol", {}).get("id") == "parameter:0"
+            ]
+            assert helper_param_tokens, helper_decomp_before["lines"]
+
+            function(73, "parameter.patch", {
+                "selector": {"entry": symbols["helper_calc"], "ordinal": 4},
+                "patch": {"name": "out_of_range_param"},
+            }, success=False)
+            assert function(74, "get", selector("helper_calc"))["result"]["parameter_count"] == 0
+
+            patched_inferred = function(75, "parameter.patch", {
+                "selector": {"entry": symbols["helper_calc"], "ordinal": 0},
+                "patch": {
+                    "name": "factor_ptr",
+                    "data_type": {
+                        "kind": "pointer",
+                        "target": {"kind": "named", "name": "/CatA/Packet"},
+                    },
+                },
+            })["result"]
+            assert patched_inferred == {
+                "ordinal": 0,
+                "name": "factor_ptr",
+                "data_type": {
+                    "kind": "pointer",
+                    "target": {"kind": "named", "name": "/CatA/Packet"},
+                },
+                "storage": {"kind": "serialization", "serialization": "register:00000038:8"},
+            }, patched_inferred
+
+            helper_after = function(76, "get", selector("helper_calc"))["result"]
+            assert helper_after["parameter_count"] == 1, helper_after
+            assert helper_after["parameters"] == [patched_inferred], helper_after
+
+            helper_decomp_after = tool(77, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {
+                    "selector": {"entry": symbols["helper_calc"]},
+                    "format": "text",
+                },
+            })["result"]
+            assert "factor_ptr" in helper_decomp_after["c"], helper_decomp_after["c"]
             print("Function mutation regression checks passed")
         finally:
             if ready:

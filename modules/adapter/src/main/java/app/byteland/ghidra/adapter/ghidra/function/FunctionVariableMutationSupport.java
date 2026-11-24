@@ -7,7 +7,11 @@ import ghidra.program.model.listing.Variable;
 import ghidra.program.model.listing.VariableStorage;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighFunctionDBUtil;
+import ghidra.program.model.pcode.HighFunctionDBUtil.ReturnCommitOption;
 import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.symbol.SourceType;
+import ghidra.util.exception.DuplicateNameException;
+import ghidra.util.exception.InvalidInputException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -15,6 +19,36 @@ import java.util.NoSuchElementException;
 
 final class FunctionVariableMutationSupport {
   private FunctionVariableMutationSupport() {}
+
+  @FunctionalInterface
+  interface HighSymbolMutation {
+    void run() throws DuplicateNameException, InvalidInputException;
+  }
+
+  static void commitParameters(Function function, HighFunction highFunction) {
+    SourceType signatureSource = function.getSignatureSource();
+    if (signatureSource == null || signatureSource == SourceType.DEFAULT) {
+      signatureSource = SourceType.USER_DEFINED;
+    }
+    SourceType effectiveSource = signatureSource;
+    runHighSymbolMutation(
+        "unable to commit inferred parameters",
+        () ->
+            HighFunctionDBUtil.commitParamsToDatabase(
+                highFunction, true, ReturnCommitOption.NO_COMMIT, effectiveSource));
+  }
+
+  static void runHighSymbolMutation(String prefix, HighSymbolMutation mutation) {
+    try {
+      mutation.run();
+    } catch (DuplicateNameException | InvalidInputException ex) {
+      String detail = ex.getMessage();
+      if (detail == null || detail.isBlank()) {
+        detail = ex.getClass().getSimpleName();
+      }
+      throw new IllegalArgumentException(prefix + ": " + detail, ex);
+    }
+  }
 
   static Parameter requireParameter(Function function, int ordinal) {
     Parameter[] params = function.getParameters();

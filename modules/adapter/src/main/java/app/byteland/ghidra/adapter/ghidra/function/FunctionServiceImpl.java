@@ -171,6 +171,7 @@ public final class FunctionServiceImpl implements FunctionService {
       VariableStorageReference storage) {
     FunctionParameterMutations.patchParameter(
         context,
+        decompilerPool,
         lookupQueries.resolveFunction(rawAddress),
         ordinal,
         newName,

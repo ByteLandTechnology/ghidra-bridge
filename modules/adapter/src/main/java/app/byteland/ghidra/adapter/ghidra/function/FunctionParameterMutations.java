@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.function;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.decompilation.DecompilerPool;
 import app.byteland.ghidra.service.TransactionExecutionException;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.VariableStorageReference;
@@ -17,6 +18,8 @@ import ghidra.program.model.listing.ParameterImpl;
 import ghidra.program.model.listing.ReturnParameterImpl;
 import ghidra.program.model.listing.Variable;
 import ghidra.program.model.listing.VariableStorage;
+import ghidra.program.model.pcode.HighFunction;
+import ghidra.program.model.pcode.LocalSymbolMap;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.util.exception.InvalidInputException;
 import java.util.ArrayList;
@@ -27,6 +30,16 @@ final class FunctionParameterMutations {
 
   private FunctionParameterMutations() {}
 
+  @FunctionalInterface
+  interface HighFunctionLookup {
+    HighFunction decompile(Function function);
+  }
+
+  @FunctionalInterface
+  interface ParameterCommitter {
+    void commit(Function function, HighFunction highFunction);
+  }
+
   static void patchParameter(
       GhidraSession context,
       Function function,
@@ -35,12 +48,64 @@ final class FunctionParameterMutations {
       DataTypeReference newDataType,
       VariableStorageReference storage,
       FunctionMutations.ParameterDataTypeResolver dataTypeResolver) {
+    patchParameter(
+        context,
+        fn -> null,
+        FunctionVariableMutationSupport::commitParameters,
+        function,
+        ordinal,
+        newName,
+        newDataType,
+        storage,
+        dataTypeResolver);
+  }
+
+  static void patchParameter(
+      GhidraSession context,
+      DecompilerPool decompilerPool,
+      Function function,
+      int ordinal,
+      String newName,
+      DataTypeReference newDataType,
+      VariableStorageReference storage,
+      FunctionMutations.ParameterDataTypeResolver dataTypeResolver) {
+    patchParameter(
+        context,
+        decompilerPool::decompileHighFunction,
+        FunctionVariableMutationSupport::commitParameters,
+        function,
+        ordinal,
+        newName,
+        newDataType,
+        storage,
+        dataTypeResolver);
+  }
+
+  static void patchParameter(
+      GhidraSession context,
+      HighFunctionLookup highFunctionLookup,
+      ParameterCommitter parameterCommitter,
+      Function function,
+      int ordinal,
+      String newName,
+      DataTypeReference newDataType,
+      VariableStorageReference storage,
+      FunctionMutations.ParameterDataTypeResolver dataTypeResolver) {
+    Function currentFunction =
+        commitInferredParametersIfNeeded(
+            context,
+            highFunctionLookup,
+            parameterCommitter,
+            function,
+            ordinal,
+            newDataType,
+            storage,
+            dataTypeResolver);
     if (storage != null) {
       patchParameterWithStorage(
-          context, function, ordinal, newName, newDataType, storage, dataTypeResolver);
+          context, currentFunction, ordinal, newName, newDataType, storage, dataTypeResolver);
       return;
     }
-    Function currentFunction = function;
     Parameter parameter =
         FunctionVariableMutationSupport.requireParameter(currentFunction, ordinal);
     if (newName != null && !newName.isBlank()) {
@@ -70,6 +135,46 @@ final class FunctionParameterMutations {
         FunctionVariableMutationSupport.requireParameter(refreshed, ordinal);
       }
     }
+  }
+
+  private static Function commitInferredParametersIfNeeded(
+      GhidraSession context,
+      HighFunctionLookup highFunctionLookup,
+      ParameterCommitter parameterCommitter,
+      Function function,
+      int ordinal,
+      DataTypeReference newDataType,
+      VariableStorageReference storage,
+      FunctionMutations.ParameterDataTypeResolver dataTypeResolver) {
+    if (function == null
+        || ordinal < 0
+        || ordinal < function.getParameterCount()
+        || function.isExternal()
+        || function.isThunk()
+        || function.hasCustomVariableStorage()) {
+      return function;
+    }
+    HighFunction highFunction = highFunctionLookup.decompile(function);
+    LocalSymbolMap symbolMap = highFunction == null ? null : highFunction.getLocalSymbolMap();
+    if (symbolMap == null
+        || ordinal >= symbolMap.getNumParams()
+        || symbolMap.getParamSymbol(ordinal) == null) {
+      return function;
+    }
+    DataType resolved = null;
+    if (newDataType != null) {
+      resolved = FunctionMutationSupport.requireParameterDataType(dataTypeResolver, newDataType);
+      if (FunctionStorageSupport.isVoid(resolved)) {
+        throw new IllegalArgumentException("void data type is not valid for a parameter");
+      }
+    }
+    FunctionStorageSupport.ParsedStorage parsedStorage =
+        FunctionStorageSupport.parseExplicit(context.currentProgram(), storage, STORAGE_FIELD);
+    if (resolved != null && parsedStorage != null) {
+      FunctionStorageSupport.requireCompatible(resolved, parsedStorage.storage(), STORAGE_FIELD);
+    }
+    parameterCommitter.commit(function, highFunction);
+    return FunctionMutationSupport.refreshFunction(context, function, "parameter commit");
   }
 
   static void addParameter(
