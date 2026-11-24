@@ -590,7 +590,6 @@ public final class GhidraDataTypeReferences {
     }
   }
 
-  @SuppressWarnings("PMD.CompareObjectsWithEquals")
   private static boolean sameIdentity(Object left, Object right) {
     return left == right;
   }

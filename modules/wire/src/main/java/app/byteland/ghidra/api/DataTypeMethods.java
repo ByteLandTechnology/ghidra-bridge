@@ -1,5 +1,6 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.MAX_LIMIT;
 import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.dataTypePath;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
@@ -14,6 +15,7 @@ import static app.byteland.ghidra.api.ApiRegistry.selector;
 import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
+import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
@@ -167,7 +169,7 @@ final class DataTypeMethods implements ApiMethodProvider {
         });
   }
 
-  private List<DataTypeResource> parseCDeclarations(Map<String, Object> request) {
+  private Page<DataTypeResource> parseCDeclarations(Map<String, Object> request) {
     String declarations = text(request, ApiVocabulary.DECLARATIONS);
     if (declarations.isBlank()) {
       throw ApiException.badRequest(
@@ -186,10 +188,13 @@ final class DataTypeMethods implements ApiMethodProvider {
     String rawConflictMode = optionalText(request, ApiVocabulary.CONFLICT_MODE, "replace");
     DataTypeService.ConflictMode conflictMode =
         DataTypeService.ConflictMode.valueOf(rawConflictMode.toUpperCase(Locale.ROOT));
-    return registry
-        .services()
-        .dataTypeService()
-        .parseCDeclarations(declarations, categoryPath, conflictMode);
+    return Page.of(
+        registry
+            .services()
+            .dataTypeService()
+            .parseCDeclarations(declarations, categoryPath, conflictMode),
+        MAX_LIMIT,
+        null);
   }
 
   private void createDataType(Map<String, Object> request) {
@@ -254,7 +259,6 @@ final class DataTypeMethods implements ApiMethodProvider {
     registry.services().dataTypeService().patchDataType(path, typedPatch);
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   private List<DataTypePatch.CompositeField> convertedDataTypeFields(Object raw, String target) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.CompositeField> result = new ArrayList<>();
@@ -271,7 +275,6 @@ final class DataTypeMethods implements ApiMethodProvider {
     return List.copyOf(result);
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   private List<DataTypePatch.EnumValue> convertedEnumValues(Object raw) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.EnumValue> result = new ArrayList<>();
