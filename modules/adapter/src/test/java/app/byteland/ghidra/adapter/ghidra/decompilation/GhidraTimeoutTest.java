@@ -27,7 +27,7 @@ class GhidraTimeoutTest {
     assertEquals(TimeUnit.SECONDS.toNanos(2), GhidraTimeout.budgetNanos(1_200));
     assertEquals(startedAt + TimeUnit.SECONDS.toNanos(2), deadline);
 
-    // At 1,500 ms (inside the 800 ms rounding window above 1,200 ms), deadline has not elapsed.
+    // At 1,500 ms (inside the 800 ms round-up window above 1,200 ms), deadline has not elapsed.
     long at1500Ms = startedAt + TimeUnit.MILLISECONDS.toNanos(1_500);
     assertFalse(at1500Ms - deadline >= 0L);
 
