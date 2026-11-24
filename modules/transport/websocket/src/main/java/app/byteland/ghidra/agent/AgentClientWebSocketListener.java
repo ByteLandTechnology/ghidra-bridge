@@ -35,7 +35,7 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
         // The reply did not transmit, so the connection is lost.
         // Abort the WebSocket so HttpClient.close does not block.
         AgentClient.logTransportError("WebSocket client message failed", failure);
-        abortWebSocket(webSocket);
+        abortQuietly(webSocket);
         disconnected();
         return null;
       }
@@ -55,16 +55,16 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
   @Override
   public void onError(WebSocket webSocket, Throwable error) {
     AgentClient.logTransportError("WebSocket client connection error", error);
-    abortWebSocket(webSocket);
+    abortQuietly(webSocket);
     disconnected();
   }
 
-  private static void abortWebSocket(WebSocket webSocket) {
+  private static void abortQuietly(WebSocket webSocket) {
     if (webSocket == null) return;
     try {
       webSocket.abort();
     } catch (RuntimeException ignored) {
-      // Ignore abort errors after transport failure.
+      // Ignore abort errors on an already closed or broken connection.
     }
   }
 
