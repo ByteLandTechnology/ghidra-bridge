@@ -31678,8 +31678,8 @@
           "type": "object"
       "type": "object"
   "memory.write":
-    "description": "Write bytes at an address. Set clear_existing or disassemble\
-      \ if needed."
+    "description": "Write bytes at an address. Clear prior code units or\
+      \ disassemble bytes if necessary."
     "effects":
       "allowed_during_analysis": !!bool "false"
       "destructive": !!bool "true"

@@ -1,7 +1,7 @@
 package app.byteland.ghidra.service.listing;
 
 /**
- * Selects one address or an inclusive address range in the program listing.
+ * Selects one address or an address range for a `ListingScope` operation.
  */
 public sealed interface ListingScope
     permits ListingScope.AddressScope, ListingScope.RangeScope {

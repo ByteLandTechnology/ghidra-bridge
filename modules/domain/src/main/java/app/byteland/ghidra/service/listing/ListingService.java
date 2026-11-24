@@ -50,7 +50,7 @@ public interface ListingService {
       FlowOverrideValue flowOverride);
 
   /**
-   * Assembles Sleigh instructions starting at one address, clearing conflicting code units.
+   * Assembles Sleigh instructions at one address and clears prior code units.
    */
   List<InstructionResource> assembleInstructions(
       String rawAddress, List<String> instructions, boolean padNop);

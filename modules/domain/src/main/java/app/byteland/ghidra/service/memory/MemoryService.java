@@ -42,7 +42,7 @@ public interface MemoryService {
   }
 
   /**
-   * Patches program memory with optional code-unit clearing and disassembly.
+   * Patches program memory and optionally clears code units or disassembles bytes.
    */
   void patchMemory(
       String startRaw, ByteSequence bytes, boolean clearExisting, boolean disassemble);

@@ -15,7 +15,7 @@
 | `memory_block.get` | `read-only` | Get memory block data from the active program. |
 | `memory_block.list` | `read-only` | List memory block data in the active program. |
 | `memory.read` | `read-only` | Read up to 65536 bytes at an address as hex or base64. The default length is 256 and the default encoding is hex. |
-| `memory.write` | `destructive mutation` | Write bytes at an address. Set clear_existing or disassemble if needed. |
+| `memory.write` | `destructive mutation` | Write bytes at an address. Clear prior code units or disassemble bytes if necessary. |
 | `code_unit.list` | `read-only` | List each code unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `code_unit.clear` | `destructive mutation` | Clear instructions and defined data at an address or in an address range. |
 | `data_unit.list` | `read-only` | List each data unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |

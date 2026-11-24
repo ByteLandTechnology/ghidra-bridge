@@ -226,7 +226,7 @@ class ListingAndMemoryMutationTest {
     assertEquals(Map.of("start", "ram:00401000", "length", 2), written);
     assertEquals(4, transactions.get());
 
-    // Domain validation errors map to HTTP 400 via ApiFailures.
+    // Domain validation errors map to HTTP 400 through ApiFailures.
     IllegalArgumentException badAddr =
         assertThrows(
             IllegalArgumentException.class,
@@ -246,7 +246,7 @@ class ListingAndMemoryMutationTest {
                 "instruction.assemble",
                 Map.of("selector", Map.of("address", "0x401000"), "instructions", List.of())));
 
-    // Analysis guard rejects all listing and memory writes with 409 analysis_in_progress.
+    // Analysis guard rejects all code-unit and memory writes with 409 analysis_in_progress.
     analysisRunning.set(true);
     assertAnalysisConflict(
         registry,

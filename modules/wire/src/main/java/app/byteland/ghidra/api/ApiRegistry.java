@@ -581,7 +581,7 @@ public final class ApiRegistry {
             + " The default length is 256 and the default encoding is hex.";
       }
       case "memory.write" -> {
-        return "Write bytes at an address. Set clear_existing or disassemble if needed.";
+        return "Write bytes at an address. Clear prior code units or disassemble bytes if necessary.";
       }
       case "address.resolve" -> {
         return "Resolve an address and report its memory block, the function that contains it,"
