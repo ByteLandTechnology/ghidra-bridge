@@ -374,8 +374,7 @@ class WireSchemaPaginationAndFilterTest {
             new JsonValueCodec(outputSchema),
             Set.of("id", "name"),
             List.of("id"),
-            request -> Map.of("id", "1", "name", "alpha"),
-            ApiMethod.McpAnnotations.forMethod("test.get", ApiMethod.MethodEffects.readOnlyMethod()));
+            request -> Map.of("id", "1", "name", "alpha"));
 
     ApiException error =
         assertThrows(

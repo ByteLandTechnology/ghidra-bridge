@@ -99,7 +99,7 @@ final class MemoryMethods implements ApiMethodProvider {
             "bytes.length"),
         List.of(ApiVocabulary.ADDRESS),
         request ->
-            WireValues.memory(
+            WireValues.resource(
                 registry
                     .services()
                     .memoryService()
