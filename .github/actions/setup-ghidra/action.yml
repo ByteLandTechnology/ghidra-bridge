@@ -7,13 +7,16 @@ description: >-
 inputs:
   ghidra-version:
     description: Ghidra release version.
-    required: true
+    required: false
+    default: "12.1.4"
   ghidra-build-date:
     description: Build date in the Ghidra release file name.
-    required: true
+    required: false
+    default: ""
   ghidra-zip-sha256:
     description: SHA-256 checksum of the Ghidra release archive.
-    required: true
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -24,38 +27,151 @@ runs:
         distribution: temurin
         java-version: "21"
 
+    - name: Resolve Ghidra release metadata
+      id: release
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.ghidra-version }}
+        INPUT_BUILD_DATE: ${{ inputs.ghidra-build-date }}
+        INPUT_SHA256: ${{ inputs.ghidra-zip-sha256 }}
+      run: |
+        ${{ runner.os == 'Windows' && 'python' || 'python3' }} - <<'PY'
+        import os
+
+        RELEASES = {
+            "12.1.2": (
+                "20260605",
+                "b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d",
+            ),
+            "12.1.4": (
+                "20260921",
+                "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db",
+            ),
+        }
+
+        version = os.environ["INPUT_VERSION"].strip() or "12.1.4"
+        default_date, default_sha = RELEASES.get(version, ("", ""))
+        build_date = os.environ["INPUT_BUILD_DATE"].strip() or default_date
+        sha256 = (os.environ["INPUT_SHA256"].strip() or default_sha).lower()
+        if not build_date or not sha256:
+            raise SystemExit(
+                f"Unsupported Ghidra version {version!r} without explicit build date and SHA-256"
+            )
+
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write(f"version={version}\n")
+            output.write(f"build-date={build_date}\n")
+            output.write(f"sha256={sha256}\n")
+        PY
+
     - name: Cache Ghidra distribution
       id: cache-ghidra
       uses: actions/cache@v4
       with:
-        path: ghidra-dist
-        key: ghidra-${{ inputs.ghidra-version }}-${{ inputs.ghidra-build-date }}
+        path: ${{ runner.temp }}/ghidra-${{ steps.release.outputs.version }}-${{ steps.release.outputs.build-date }}
+        key: ghidra-${{ runner.os }}-${{ runner.arch }}-${{ steps.release.outputs.version }}-${{ steps.release.outputs.build-date }}-${{ steps.release.outputs.sha256 }}
 
     - name: Download Ghidra
       if: steps.cache-ghidra.outputs.cache-hit != 'true'
       shell: bash
       env:
-        GHIDRA_VERSION: ${{ inputs.ghidra-version }}
-        GHIDRA_BUILD_DATE: ${{ inputs.ghidra-build-date }}
-        GHIDRA_ZIP_SHA256: ${{ inputs.ghidra-zip-sha256 }}
+        GHIDRA_VERSION: ${{ steps.release.outputs.version }}
+        GHIDRA_BUILD_DATE: ${{ steps.release.outputs.build-date }}
+        GHIDRA_ZIP_SHA256: ${{ steps.release.outputs.sha256 }}
       run: |
-        set -euo pipefail
-        zip_name="ghidra_${GHIDRA_VERSION}_PUBLIC_${GHIDRA_BUILD_DATE}.zip"
-        tag="Ghidra_${GHIDRA_VERSION}_build"
-        url="https://github.com/NationalSecurityAgency/ghidra/releases/download/${tag}/${zip_name}"
-        curl -sL --fail -o "$zip_name" "$url"
-        echo "${GHIDRA_ZIP_SHA256}  ${zip_name}" | sha256sum -c -
-        mkdir -p ghidra-dist
-        unzip -q "$zip_name" -d ghidra-dist
-        rm "$zip_name"
+        ${{ runner.os == 'Windows' && 'python' || 'python3' }} - <<'PY'
+        import hashlib
+        import os
+        from pathlib import Path
+        import shutil
+        import stat
+        import time
+        import urllib.request
+        import zipfile
+
+        version = os.environ["GHIDRA_VERSION"]
+        build_date = os.environ["GHIDRA_BUILD_DATE"]
+        expected_sha = os.environ["GHIDRA_ZIP_SHA256"].lower()
+        runner_temp = Path(os.path.abspath(os.environ["RUNNER_TEMP"]))
+        dist_dir = runner_temp / f"ghidra-{version}-{build_date}"
+        zip_name = f"ghidra_{version}_PUBLIC_{build_date}.zip"
+        archive = runner_temp / zip_name
+        url = (
+            f"https://github.com/NationalSecurityAgency/ghidra/releases/download/"
+            f"Ghidra_{version}_build/{zip_name}"
+        )
+
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                urllib.request.urlretrieve(url, archive)
+                last_error = None
+                break
+            except OSError as error:
+                last_error = error
+                if attempt < 3:
+                    time.sleep(attempt * 2)
+        if last_error is not None:
+            raise RuntimeError(f"Failed to download {url}: {last_error}") from last_error
+
+        with archive.open("rb") as handle:
+            actual_sha = hashlib.file_digest(handle, "sha256").hexdigest().lower()
+        if actual_sha != expected_sha:
+            archive.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"Ghidra archive checksum mismatch: expected {expected_sha}, got {actual_sha}"
+            )
+
+        if dist_dir.exists():
+            shutil.rmtree(dist_dir)
+        dist_dir.mkdir(parents=True, exist_ok=True)
+
+        with zipfile.ZipFile(archive) as distribution:
+            for info in distribution.infolist():
+                unix_attr = info.external_attr >> 16
+                if os.name != "nt" and stat.S_ISLNK(unix_attr):
+                    target = distribution.read(info).decode("utf-8")
+                    link_path = dist_dir / info.filename
+                    link_path.parent.mkdir(parents=True, exist_ok=True)
+                    if link_path.exists() or link_path.is_symlink():
+                        link_path.unlink()
+                    link_path.symlink_to(target)
+                    continue
+                extracted = Path(distribution.extract(info, dist_dir))
+                mode = unix_attr & 0o777
+                if os.name != "nt" and mode and not info.is_dir():
+                    os.chmod(extracted, mode)
+
+        archive.unlink()
+        PY
 
     - name: Resolve GHIDRA_INSTALL_DIR
       shell: bash
+      env:
+        GHIDRA_VERSION: ${{ steps.release.outputs.version }}
+        GHIDRA_BUILD_DATE: ${{ steps.release.outputs.build-date }}
       run: |
-        set -euo pipefail
-        install_dir="$(find ghidra-dist -maxdepth 1 -mindepth 1 -type d | head -n 1)"
-        if [ -z "$install_dir" ]; then
-          echo "Cannot find an extracted Ghidra directory under ghidra-dist/" >&2
-          exit 1
-        fi
-        echo "GHIDRA_INSTALL_DIR=$(cd "$install_dir" && pwd)" >> "$GITHUB_ENV"
+        ${{ runner.os == 'Windows' && 'python' || 'python3' }} - <<'PY'
+        import os
+        from pathlib import Path
+
+        version = os.environ["GHIDRA_VERSION"]
+        build_date = os.environ["GHIDRA_BUILD_DATE"]
+        dist_dir = Path(os.path.abspath(os.environ["RUNNER_TEMP"])) / f"ghidra-{version}-{build_date}"
+        launcher = "analyzeHeadless.bat" if os.name == "nt" else "analyzeHeadless"
+
+        candidates = sorted(
+            (entry for entry in dist_dir.iterdir() if entry.is_dir()),
+            key=lambda item: item.name,
+        ) if dist_dir.is_dir() else []
+        install_dir = next(
+            (entry for entry in candidates if (entry / "support" / launcher).is_file()),
+            None,
+        )
+        if install_dir is None:
+            raise SystemExit(f"Cannot find an extracted Ghidra directory under {dist_dir}")
+
+        native_install_dir = os.path.abspath(str(install_dir))
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+            env_file.write(f"GHIDRA_INSTALL_DIR={native_install_dir}\n")
+        PY

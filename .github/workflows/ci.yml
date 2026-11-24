@@ -1,37 +1,79 @@
 name: CI
 
 on:
-  push: {}
+  push:
+    branches: [main]
   pull_request: {}
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_call:
+    inputs:
+      ref:
+        description: Git reference of ghidra-bridge to verify.
+        required: false
+        type: string
+        default: ""
+      ghidra-version:
+        description: Primary Ghidra release version for the six-target matrix.
+        required: false
+        type: string
+        default: "12.1.4"
+      ghidra-build-date:
+        description: Build date in the primary Ghidra release file name.
+        required: false
+        type: string
+        default: ""
+      ghidra-zip-sha256:
+        description: SHA-256 checksum of the primary Ghidra release archive.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ inputs.ref || github.ref }}
   # Never cancel a run on main. It can publish a release.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # Use one Ghidra release and one Java version for each run.
-  GHIDRA_VERSION: "12.1.2"
-  GHIDRA_BUILD_DATE: "20260605"
-  GHIDRA_ZIP_SHA256: "b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d"
+  # Use Ghidra 12.1.4 by default for release archives and matrix legs.
+  GHIDRA_VERSION: "12.1.4"
+  GHIDRA_BUILD_DATE: "20260921"
+  GHIDRA_ZIP_SHA256: "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db"
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
+  verify-pr:
+    name: verify (${{ matrix.os }}, Ghidra ${{ matrix.ghidra }})
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            ghidra: "12.1.4"
+          - os: macos-15
+            ghidra: "12.1.4"
+          - os: windows-2025
+            ghidra: "12.1.4"
+    defaults:
+      run:
+        shell: bash
     steps:
+      - name: Configure Git line endings on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Java and Ghidra
         uses: ./.github/actions/setup-ghidra
         with:
-          ghidra-version: ${{ env.GHIDRA_VERSION }}
-          ghidra-build-date: ${{ env.GHIDRA_BUILD_DATE }}
-          ghidra-zip-sha256: ${{ env.GHIDRA_ZIP_SHA256 }}
+          ghidra-version: ${{ matrix.ghidra }}
 
       - name: Verify Gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
@@ -40,12 +82,113 @@ jobs:
         run: bash .github/scripts/verify-repository-hygiene.sh
 
       - name: Run clean repository verification
-        run: ./gradlew --no-daemon clean verify
+        run: |
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            ./gradlew.bat --no-daemon clean verify
+          else
+            ./gradlew --no-daemon clean verify
+          fi
 
       - name: Test function mutations
         run: |
-          ./gradlew --no-daemon :wire:test :contracts:test
-          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            ./gradlew.bat --no-daemon :wire:test :contracts:test
+            python tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless.bat"
+          else
+            ./gradlew --no-daemon :wire:test :contracts:test
+            python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+          fi
+
+  verify-main:
+    name: verify (${{ matrix.os }}, Ghidra ${{ matrix.ghidra }})
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            ghidra: "12.1.4"
+          - os: macos-15
+            ghidra: "12.1.4"
+          - os: ubuntu-24.04
+            ghidra: "12.1.4"
+          - os: ubuntu-24.04-arm
+            ghidra: "12.1.4"
+          - os: windows-2025
+            ghidra: "12.1.4"
+          - os: windows-11-arm
+            ghidra: "12.1.4"
+          - os: ubuntu-24.04
+            ghidra: "12.1.2"
+            ghidra_build_date: "20260605"
+            ghidra_zip_sha256: "b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Configure Git line endings on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install Java and Ghidra
+        uses: ./.github/actions/setup-ghidra
+        with:
+          ghidra-version: ${{ matrix.ghidra == '12.1.2' && matrix.ghidra || inputs.ghidra-version || matrix.ghidra }}
+          ghidra-build-date: ${{ matrix.ghidra == '12.1.2' && matrix.ghidra_build_date || inputs.ghidra-build-date || '' }}
+          ghidra-zip-sha256: ${{ matrix.ghidra == '12.1.2' && matrix.ghidra_zip_sha256 || inputs.ghidra-zip-sha256 || '' }}
+
+      - name: Verify Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Verify repository hygiene
+        run: bash .github/scripts/verify-repository-hygiene.sh
+
+      - name: Run clean repository verification
+        run: |
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            ./gradlew.bat --no-daemon clean verify
+          else
+            ./gradlew --no-daemon clean verify
+          fi
+
+      - name: Test function mutations
+        run: |
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            ./gradlew.bat --no-daemon :wire:test :contracts:test
+            python tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless.bat"
+          else
+            ./gradlew --no-daemon :wire:test :contracts:test
+            python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+          fi
+
+  verify:
+    name: verify
+    needs: [verify-pr, verify-main]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check verification status
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_RESULT: ${{ needs.verify-pr.result }}
+          MAIN_RESULT: ${{ needs.verify-main.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            test "$PR_RESULT" = "success"
+            test "$MAIN_RESULT" = "skipped"
+          else
+            test "$PR_RESULT" = "skipped"
+            test "$MAIN_RESULT" = "success"
+          fi
 
   release:
     # Update the release PR or create a release after main passes verification.

@@ -79,8 +79,14 @@ project(':launcher') {
 tasks.register('verifyGhidraInstallDir') {
     doLast {
         if (ghidraInstallDir == null) {
-            throw new GradleException('Ghidra installation not found. Set GHIDRA_INSTALL_DIR or -PghidraInstallDir.')
+            throw new GradleException('Ghidra installation not found. Set GHIDRA_INSTALL_DIR, GHIDRA_HOME, or -PghidraInstallDir.')
         }
+    }
+}
+tasks.register('verifyGhidraDetection') {
+    group = 'verification'
+    doLast {
+        verifySyntheticGhidraDetection(layout.buildDirectory.dir('tmp/verifyGhidraDetection').get().asFile)
     }
 }
 project(':adapter').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
@@ -215,5 +221,5 @@ tasks.register('verifyArchitecture') {
 
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture', 'verifyGhidraDetection'
 }

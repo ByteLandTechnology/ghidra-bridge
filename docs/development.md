@@ -6,26 +6,44 @@ This guide describes how to build, extend, and verify the Ghidra Bridge codebase
 
 - **Java Development Kit**: Use JDK 21.
 - **Ghidra**: Use Ghidra 12.1 or newer to compile adapters.
-- **Environment**: Set `GHIDRA_INSTALL_DIR` to the Ghidra installation path.
+- **Environment**: Set `GHIDRA_INSTALL_DIR` or `GHIDRA_HOME` to the Ghidra installation path.
+- **Windows Git Configuration**: Run `git config --global core.autocrlf false` before checkout so generated LF contracts do not drift.
 
 Gradle resolves Ghidra from:
-1. The `-PghidraInstallDir` command line property.
+1. The `-PghidraInstallDir` command-line property.
 2. The `GHIDRA_INSTALL_DIR` environment variable.
-3. The `ghidraRun` executable on your system `PATH`.
-4. Homebrew installations of Ghidra.
-5. The `analyzeHeadless` executable on your system `PATH`.
-6. Standard installation directories on your machine.
+3. The `GHIDRA_HOME` environment variable.
+4. The `analyzeHeadless` (`analyzeHeadless.bat` on Windows) executable on `PATH`.
+5. The `ghidraRun` (`ghidraRun.bat` on Windows) executable on `PATH`.
+6. Homebrew installations of Ghidra (newest version first).
+7. Standard installation directories on Linux, macOS (`Ghidra.app` bundles and `/Applications`), and Windows (`Program Files`, `LOCALAPPDATA`, Scoop, Chocolatey, and system drive), newest version first.
 
 ## Use Gradle
 
-Always use the Gradle Wrapper in this repository:
+Always use the Gradle Wrapper in this repository (`./gradlew` on Linux and macOS, `.\gradlew.bat` on Windows):
 
 ```bash
+# Run fast checks without a local Ghidra installation
+./gradlew --no-daemon verifyArchitecture verifyGhidraDetection
+./gradlew --no-daemon :wire:test :contracts:test
+
+# Verify synthetic Ghidra path detection across Linux, macOS, and Windows layouts
+./gradlew --no-daemon verifyGhidraDetection
+
 # Build the user distribution
 ./gradlew buildGhidraScript
 
-# Run all verification checks
-./gradlew --no-daemon clean verify
+# Run full verification against Ghidra 12.1.4 and the Ghidra 12.1.2 floor release
+GHIDRA_INSTALL_DIR=/path/to/ghidra_12.1.4_PUBLIC ./gradlew --no-daemon clean verify
+GHIDRA_INSTALL_DIR=/path/to/ghidra_12.1.2_PUBLIC ./gradlew --no-daemon clean verify
+```
+
+On Windows PowerShell or Command Prompt:
+
+```powershell
+.\gradlew.bat --no-daemon verifyGhidraDetection
+.\gradlew.bat -PghidraInstallDir=C:\ghidra_12.1.4_PUBLIC --no-daemon clean verify
+.\gradlew.bat --no-daemon :wire:test :contracts:test
 ```
 
 The `buildGhidraScript` task creates three files in `build/ghidra-script/`:
@@ -71,14 +89,22 @@ This task regenerates:
 Do not edit these files by hand.
 The build fails if repository files differ from the generator output.
 
-To test function mutations in an isolated Ghidra project on Linux x86-64, run:
+To test function mutations in an isolated headless Ghidra project on Linux, macOS, or Windows, run:
 
 ```bash
 ./gradlew buildGhidraScript
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+python3 tests/function_mutation_regression.py --arch aarch64 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
-The test requires `gcc` and `nm`.
+On Windows:
+
+```powershell
+.\gradlew.bat buildGhidraScript
+python tests/function_mutation_regression.py "%GHIDRA_INSTALL_DIR%\support\analyzeHeadless.bat"
+```
+
+The script writes x86-64 and AArch64 ELF test binaries in Python and needs no external compiler.
 
 ## Quality Checks
 
@@ -91,6 +117,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 
 The verification tasks check:
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
+- **Ghidra Detection**: `verifyGhidraDetection` verifies synthetic `GHIDRA_INSTALL_DIR`, `GHIDRA_HOME`, `Ghidra.app`, version order, and Windows folder layouts.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
