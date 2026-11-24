@@ -4,13 +4,27 @@ import app.byteland.ghidra.api.ApiException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.RandomAccess;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 final class JsonWriter {
   static final int DEFAULT_MAX_UTF8_BYTES = 16 * 1024 * 1024;
 
   private static final int MAX_NESTING_DEPTH = 500;
+  private static final int MAX_ESTIMATE_DEPTH = 6;
+  private static final int MAX_COLLECTION_SAMPLE = 16;
+  private static final int MIN_INITIAL_CAPACITY = 16;
+  private static final int MAX_INITIAL_CAPACITY = DEFAULT_MAX_UTF8_BYTES;
   private static final int STREAM_BUFFER_SIZE = 8192;
   private static final char FIRST_NON_CONTROL_CHARACTER = 0x20;
   private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
@@ -50,7 +64,12 @@ final class JsonWriter {
 
   static String toJson(Object value, int maxUtf8Bytes) {
     requireNonNegativeLimit(maxUtf8Bytes);
-    StringSink sink = new StringSink(maxUtf8Bytes);
+    if (value instanceof RawJson raw) {
+      utf8ByteLength(raw, maxUtf8Bytes);
+      return raw.json();
+    }
+    int initialCapacity = Math.min(estimateInitialCapacity(value), maxUtf8Bytes);
+    StringSink sink = new StringSink(maxUtf8Bytes, initialCapacity);
     try {
       writeJson(sink, value, 0);
     } catch (IOException impossible) {
@@ -76,6 +95,156 @@ final class JsonWriter {
     Utf8StreamSink sink = new Utf8StreamSink(output, maxUtf8Bytes);
     writeJson(sink, value, 0);
     sink.flush();
+  }
+
+  static int estimateInitialCapacity(Object value) {
+    if (value == null || value instanceof Boolean || value instanceof Number) {
+      return MIN_INITIAL_CAPACITY;
+    }
+    long estimated = estimateCapacity(value, 0);
+    long withHeadroom = estimated + (estimated >>> 4) + 16;
+    return Math.clamp(withHeadroom, MIN_INITIAL_CAPACITY, MAX_INITIAL_CAPACITY);
+  }
+
+  private static long estimateCapacity(Object value, int depth) {
+    if (value == null) {
+      return 4;
+    }
+    if (value instanceof RawJson raw) {
+      return Math.min(MAX_INITIAL_CAPACITY, raw.json().length());
+    }
+    if (value instanceof String string) {
+      return Math.min(MAX_INITIAL_CAPACITY, (long) string.length() + 2);
+    }
+    if (value instanceof Boolean bool) {
+      return bool ? 4 : 5;
+    }
+    if (value instanceof Number) {
+      return 12;
+    }
+    if (value instanceof Map<?, ?> map) {
+      if (!isEstimableMap(map)) {
+        return 64;
+      }
+      int size = map.size();
+      if (size == 0) {
+        return 2;
+      }
+      if (depth >= MAX_ESTIMATE_DEPTH) {
+        return Math.min(MAX_INITIAL_CAPACITY, 2 + (long) size * 28);
+      }
+      int nextDepth = depth + 1;
+      long sampleTotal = 0;
+      int sampled = 0;
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        long keyLength = entry.getKey() instanceof String key ? (long) key.length() + 3 : 8;
+        sampleTotal += keyLength + estimateCapacity(entry.getValue(), nextDepth);
+        sampled++;
+        if (sampled >= MAX_COLLECTION_SAMPLE) {
+          break;
+        }
+      }
+      long entriesEstimate =
+          sampled < size ? (sampleTotal * size + sampled - 1) / sampled : sampleTotal;
+      return Math.min(MAX_INITIAL_CAPACITY, 2 + entriesEstimate + (size - 1));
+    }
+    if (value instanceof Collection<?> collection) {
+      if (!isEstimableCollection(collection)) {
+        return 64;
+      }
+      int size = collection.size();
+      if (size == 0) {
+        return 2;
+      }
+      if (depth >= MAX_ESTIMATE_DEPTH) {
+        return Math.min(MAX_INITIAL_CAPACITY, 2 + (long) size * 24);
+      }
+      int nextDepth = depth + 1;
+      if (collection instanceof List<?> list && list instanceof RandomAccess) {
+        if (size <= MAX_COLLECTION_SAMPLE) {
+          long total = 0;
+          for (int i = 0; i < size; i++) {
+            total += estimateCapacity(list.get(i), nextDepth);
+          }
+          return Math.min(MAX_INITIAL_CAPACITY, 2 + total + (size - 1));
+        }
+        long sampleTotal = 0;
+        for (int i = 0; i < MAX_COLLECTION_SAMPLE; i++) {
+          int index = (int) ((long) i * (size - 1) / (MAX_COLLECTION_SAMPLE - 1));
+          sampleTotal += estimateCapacity(list.get(index), nextDepth);
+        }
+        long itemsEstimate =
+            (sampleTotal * size + MAX_COLLECTION_SAMPLE - 1) / MAX_COLLECTION_SAMPLE;
+        return Math.min(MAX_INITIAL_CAPACITY, 2 + itemsEstimate + (size - 1));
+      }
+      long sampleTotal = 0;
+      int sampled = 0;
+      for (Object item : collection) {
+        sampleTotal += estimateCapacity(item, nextDepth);
+        sampled++;
+        if (sampled >= MAX_COLLECTION_SAMPLE) {
+          break;
+        }
+      }
+      long itemsEstimate =
+          sampled < size ? (sampleTotal * size + sampled - 1) / sampled : sampleTotal;
+      return Math.min(MAX_INITIAL_CAPACITY, 2 + itemsEstimate + (size - 1));
+    }
+    if (value instanceof Object[] array) {
+      int length = array.length;
+      if (length == 0) {
+        return 2;
+      }
+      if (depth >= MAX_ESTIMATE_DEPTH) {
+        return Math.min(MAX_INITIAL_CAPACITY, 2 + (long) length * 24);
+      }
+      int nextDepth = depth + 1;
+      int sampleCount = Math.min(length, MAX_COLLECTION_SAMPLE);
+      long sampleTotal = 0;
+      for (int i = 0; i < sampleCount; i++) {
+        int index =
+            sampleCount == length ? i : (int) ((long) i * (length - 1) / (sampleCount - 1));
+        sampleTotal += estimateCapacity(array[index], nextDepth);
+      }
+      long itemsEstimate =
+          sampleCount < length
+              ? (sampleTotal * length + sampleCount - 1) / sampleCount
+              : sampleTotal;
+      return Math.min(MAX_INITIAL_CAPACITY, 2 + itemsEstimate + (length - 1));
+    }
+    if (value.getClass().isArray()) {
+      int length = Array.getLength(value);
+      return length == 0 ? 2 : Math.min(MAX_INITIAL_CAPACITY, 2 + (long) length * 8);
+    }
+    return MIN_INITIAL_CAPACITY;
+  }
+
+  private static boolean isEstimableMap(Map<?, ?> map) {
+    if (map instanceof HashMap<?, ?>
+        || map instanceof TreeMap<?, ?>
+        || map instanceof ConcurrentHashMap<?, ?>) {
+      return true;
+    }
+    String className = map.getClass().getName();
+    return className.startsWith("java.util.ImmutableCollections$")
+        || className.equals("java.util.Collections$SingletonMap")
+        || className.equals("java.util.Collections$EmptyMap");
+  }
+
+  private static boolean isEstimableCollection(Collection<?> collection) {
+    if (collection instanceof ArrayList<?>
+        || collection instanceof HashSet<?>
+        || collection instanceof TreeSet<?>
+        || collection instanceof ArrayDeque<?>) {
+      return true;
+    }
+    String className = collection.getClass().getName();
+    return className.startsWith("java.util.ImmutableCollections$")
+        || className.equals("java.util.Arrays$ArrayList")
+        || className.equals("java.util.Collections$SingletonList")
+        || className.equals("java.util.Collections$EmptyList")
+        || className.equals("java.util.Collections$SingletonSet")
+        || className.equals("java.util.Collections$EmptySet");
   }
 
   private static void requireNonNegativeLimit(int maxUtf8Bytes) {
@@ -140,13 +309,22 @@ final class JsonWriter {
     if (value instanceof Iterable<?> iterable) {
       int nextDepth = enterNesting(depth);
       sink.writeAsciiChar('[');
-      boolean first = true;
-      for (Object item : iterable) {
-        if (!first) {
-          sink.writeAsciiChar(',');
+      if (iterable instanceof List<?> list && list instanceof RandomAccess) {
+        for (int i = 0, size = list.size(); i < size; i++) {
+          if (i > 0) {
+            sink.writeAsciiChar(',');
+          }
+          writeJson(sink, list.get(i), nextDepth);
         }
-        first = false;
-        writeJson(sink, item, nextDepth);
+      } else {
+        boolean first = true;
+        for (Object item : iterable) {
+          if (!first) {
+            sink.writeAsciiChar(',');
+          }
+          first = false;
+          writeJson(sink, item, nextDepth);
+        }
       }
       sink.writeAsciiChar(']');
       return;
@@ -177,12 +355,18 @@ final class JsonWriter {
   }
 
   private static void writeRawJson(JsonSink sink, String value) throws IOException {
-    for (int i = 0; i < value.length(); i++) {
+    int length = value.length();
+    int asciiStart = 0;
+    for (int i = 0; i < length; i++) {
       char ch = value.charAt(i);
       if (ch < 0x80) {
-        sink.writeAsciiChar(ch);
-      } else if (Character.isHighSurrogate(ch)
-          && i + 1 < value.length()
+        continue;
+      }
+      if (i > asciiStart) {
+        sink.writeAsciiSlice(value, asciiStart, i);
+      }
+      if (Character.isHighSurrogate(ch)
+          && i + 1 < length
           && Character.isLowSurrogate(value.charAt(i + 1))) {
         sink.writeSurrogatePair(ch, value.charAt(++i));
       } else if (Character.isSurrogate(ch)) {
@@ -190,13 +374,25 @@ final class JsonWriter {
       } else {
         sink.writeBmpNonAscii(ch);
       }
+      asciiStart = i + 1;
+    }
+    if (asciiStart < length) {
+      sink.writeAsciiSlice(value, asciiStart, length);
     }
   }
 
   private static void writeQuotedString(JsonSink sink, String value) throws IOException {
     sink.writeAsciiChar('"');
-    for (int i = 0; i < value.length(); i++) {
+    int length = value.length();
+    int asciiStart = 0;
+    for (int i = 0; i < length; i++) {
       char ch = value.charAt(i);
+      if (ch >= FIRST_NON_CONTROL_CHARACTER && ch < 0x80 && ch != '"' && ch != '\\') {
+        continue;
+      }
+      if (i > asciiStart) {
+        sink.writeAsciiSlice(value, asciiStart, i);
+      }
       switch (ch) {
         case '"' -> sink.writeAscii("\\\"");
         case '\\' -> sink.writeAscii("\\\\");
@@ -208,10 +404,8 @@ final class JsonWriter {
         default -> {
           if (ch < FIRST_NON_CONTROL_CHARACTER) {
             sink.writeControlEscape(ch);
-          } else if (ch < 0x80) {
-            sink.writeAsciiChar(ch);
           } else if (Character.isHighSurrogate(ch)
-              && i + 1 < value.length()
+              && i + 1 < length
               && Character.isLowSurrogate(value.charAt(i + 1))) {
             sink.writeSurrogatePair(ch, value.charAt(++i));
           } else if (Character.isSurrogate(ch)) {
@@ -221,6 +415,10 @@ final class JsonWriter {
           }
         }
       }
+      asciiStart = i + 1;
+    }
+    if (asciiStart < length) {
+      sink.writeAsciiSlice(value, asciiStart, length);
     }
     sink.writeAsciiChar('"');
   }
@@ -229,6 +427,8 @@ final class JsonWriter {
     void writeAsciiChar(char ch) throws IOException;
 
     void writeAscii(String ascii) throws IOException;
+
+    void writeAsciiSlice(String value, int start, int end) throws IOException;
 
     void writeControlEscape(char ch) throws IOException;
 
@@ -275,6 +475,11 @@ final class JsonWriter {
     }
 
     @Override
+    public void writeAsciiSlice(String value, int start, int end) {
+      charge(end - start);
+    }
+
+    @Override
     public void writeControlEscape(char ch) {
       charge(6);
     }
@@ -296,10 +501,11 @@ final class JsonWriter {
   }
 
   private static final class StringSink extends BoundedSink {
-    private final StringBuilder builder = new StringBuilder();
+    private final StringBuilder builder;
 
-    StringSink(int maxUtf8Bytes) {
+    StringSink(int maxUtf8Bytes, int initialCapacity) {
       super(maxUtf8Bytes);
+      this.builder = new StringBuilder(initialCapacity);
     }
 
     @Override
@@ -312,6 +518,12 @@ final class JsonWriter {
     public void writeAscii(String ascii) {
       charge(ascii.length());
       builder.append(ascii);
+    }
+
+    @Override
+    public void writeAsciiSlice(String value, int start, int end) {
+      charge(end - start);
+      builder.append(value, start, end);
     }
 
     @Override
@@ -368,11 +580,21 @@ final class JsonWriter {
 
     @Override
     public void writeAscii(String ascii) throws IOException {
-      int length = ascii.length();
-      charge(length);
-      for (int i = 0; i < length; i++) {
-        ensureRoom(1);
-        buffer[position++] = (byte) ascii.charAt(i);
+      writeAsciiSlice(ascii, 0, ascii.length());
+    }
+
+    @Override
+    public void writeAsciiSlice(String value, int start, int end) throws IOException {
+      charge(end - start);
+      int index = start;
+      while (index < end) {
+        if (position == buffer.length) {
+          flush();
+        }
+        int chunk = Math.min(end - index, buffer.length - position);
+        for (int i = 0; i < chunk; i++) {
+          buffer[position++] = (byte) value.charAt(index++);
+        }
       }
     }
 

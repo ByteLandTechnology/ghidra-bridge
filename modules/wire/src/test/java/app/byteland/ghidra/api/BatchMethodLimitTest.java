@@ -12,6 +12,7 @@ import app.byteland.ghidra.service.ByteSequence;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.ScanProgress;
 import app.byteland.ghidra.service.TransactionRunner;
+import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.address.AddressService;
 import app.byteland.ghidra.service.analysis.AnalysisResource;
 import app.byteland.ghidra.service.analysis.AnalysisService;
@@ -20,17 +21,24 @@ import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
+import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
 import app.byteland.ghidra.service.listing.CodeUnitResource;
 import app.byteland.ghidra.service.listing.ListingService;
+import app.byteland.ghidra.service.memory.MemoryBlockResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
+import app.byteland.ghidra.service.program.AddressSpaceResource;
+import app.byteland.ghidra.service.program.ProgramLanguageResource;
+import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
+import app.byteland.ghidra.service.reference.ReferenceResource;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -418,6 +426,325 @@ class BatchMethodLimitTest {
     } finally {
       Thread.interrupted();
     }
+  }
+
+  @Test
+  void supportsLargeGhidraLspAndMcpBatchWorkloadsWithinDefaultLimits() throws Exception {
+    AtomicLong fakeNanos = new AtomicLong(10_000_000_000L);
+    List<Integer> observedFunctionTimeouts = new ArrayList<>();
+
+    ProgramService programService =
+        proxy(
+            ProgramService.class,
+            (method, args) -> {
+              fakeNanos.addAndGet(5L * NANOS_PER_MS);
+              return switch (method) {
+                case "getProgram" ->
+                    new ProgramResource(
+                        "firmware.elf",
+                        "/opt/firmware.elf",
+                        "Executable and Linking Format (ELF)",
+                        "ram:00100000",
+                        "ram:00100000",
+                        "ram:01ffffff",
+                        "x86:LE:64:default",
+                        "gcc",
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        Instant.parse("2026-01-02T00:00:00Z"),
+                        25_000L,
+                        60_000L);
+                case "getLanguageInfo" ->
+                    new ProgramLanguageResource(
+                        "x86:LE:64:default",
+                        "gcc",
+                        "x86",
+                        ProgramLanguageResource.Endian.LITTLE,
+                        64);
+                case "getAddressSpaces" ->
+                    Page.of(
+                        List.of(
+                            new AddressSpaceResource(
+                                "ram",
+                                AddressSpaceResource.Kind.RAM,
+                                64,
+                                "ram:0000000000000000",
+                                "ram:ffffffffffffffff",
+                                true),
+                            new AddressSpaceResource(
+                                "EXTERNAL",
+                                AddressSpaceResource.Kind.EXTERNAL,
+                                64,
+                                "EXTERNAL:0000000000000000",
+                                "EXTERNAL:ffffffffffffffff",
+                                false)),
+                        1_000,
+                        null);
+                default -> throw new AssertionError("Unexpected method: " + method);
+              };
+            });
+
+    MemoryService memoryService =
+        proxy(
+            MemoryService.class,
+            (method, args) -> {
+              assertEquals("listMemoryBlocks", method);
+              fakeNanos.addAndGet(10L * NANOS_PER_MS);
+              List<MemoryBlockResource> blocks = new ArrayList<>(32);
+              for (int i = 0; i < 32; i++) {
+                String start = String.format("ram:%08x", 0x0010_0000 + i * 0x10_000);
+                String end = String.format("ram:%08x", 0x0010_ffff + i * 0x10_000);
+                blocks.add(
+                    new MemoryBlockResource(
+                        ".section_" + i,
+                        start,
+                        end,
+                        65_536L,
+                        true,
+                        i % 2 == 0,
+                        i < 8,
+                        true,
+                        false,
+                        false,
+                        MemoryBlockResource.Kind.DEFAULT,
+                        null));
+              }
+              return Page.of(blocks, 1_000, null);
+            });
+
+    FunctionService functionService =
+        proxy(
+            FunctionService.class,
+            (method, args) -> {
+              assertEquals("listFunctions", method);
+              FunctionService.FunctionQuery query = (FunctionService.FunctionQuery) args[0];
+              observedFunctionTimeouts.add(query.scan().timeoutMs());
+              fakeNanos.addAndGet(query.scan().timeoutMs() * NANOS_PER_MS);
+              List<FunctionResource> functions = new ArrayList<>(1_000);
+              for (int i = 0; i < 1_000; i++) {
+                String entry = String.format("ram:%08x", 0x0010_0000 + i * 0x40);
+                functions.add(
+                    new FunctionResource(
+                        entry,
+                        "_ZN6engine9subsystem12process_node_" + i + "ERKNS_7ContextE",
+                        "engine::subsystem",
+                        new FunctionResource.Body(entry, entry, 64L),
+                        "void process_node(void)",
+                        null,
+                        null,
+                        1,
+                        "__stdcall",
+                        null,
+                        null,
+                        null,
+                        false,
+                        false,
+                        false,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        List.of(),
+                        "engine::subsystem::process_node_" + i + "(engine::Context const&)"));
+              }
+              ScanProgress progress =
+                  new ScanProgress(
+                      ScanProgress.Kind.ADDRESS,
+                      "ram:00100000",
+                      "ram:01ffffff",
+                      "ram:0010f9c0",
+                      "ram:0010fa00",
+                      false,
+                      ScanProgress.StopReason.TIMEOUT,
+                      query.scan().timeoutMs());
+              return Page.scanned(functions, query.limit(), "ram:0010fa00", progress);
+            });
+
+    AddressService addressService =
+        proxy(
+            AddressService.class,
+            (method, args) -> {
+              assertEquals("resolveAddress", method);
+              String addr = (String) args[0];
+              return new AddressResource(
+                  addr,
+                  true,
+                  true,
+                  new AddressResource.MemoryBlockSummary(
+                      ".text", "ram:00100000", "ram:009fffff", 0x900000L, true, false, true),
+                  new AddressResource.FunctionSummary("ram:00100000", "dispatch_table"),
+                  new AddressResource.SymbolSummary("sym-1", "loc_" + addr.substring(4), "Label"),
+                  new AddressResource.CodeUnitSummary(addr, addr));
+            });
+
+    ReferenceService referenceService =
+        proxy(
+            ReferenceService.class,
+            (method, args) -> {
+              assertEquals("listReferences", method);
+              String from = (String) args[0];
+              String to = (String) args[1];
+              String direction = (String) args[3];
+              int limit = (Integer) args[4];
+              int count = limit == 100 ? 4 : limit;
+              List<ReferenceResource> refs = new ArrayList<>(count);
+              for (int i = 0; i < count; i++) {
+                String peer = String.format("ram:%08x", 0x0020_0000 + i * 4);
+                refs.add(
+                    new ReferenceResource(
+                        "from".equals(direction) ? from : peer,
+                        "to".equals(direction) ? to : peer,
+                        "UNCONDITIONAL_JUMP",
+                        0,
+                        i == 0,
+                        "ANALYSIS"));
+              }
+              return Page.of(refs, limit, null);
+            });
+
+    AnalysisService analysis =
+        proxy(
+            AnalysisService.class,
+            (method, args) ->
+                new AnalysisResource(
+                    AnalysisResource.Kind.GHIDRA,
+                    AnalysisResource.Status.IDLE,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null));
+    BridgeServices services =
+        new BridgeServices(
+            programService,
+            addressService,
+            unused(CommentService.class),
+            referenceService,
+            memoryService,
+            unused(ListingService.class),
+            functionService,
+            unused(GlobalVariableService.class),
+            analysis,
+            unused(DecompilationService.class),
+            unused(SymbolService.class),
+            unused(DataTypeService.class),
+            passthroughTransactions(new AtomicBoolean(), new AtomicBoolean()),
+            "firmware-program");
+    ApiRegistry registry =
+        new ApiRegistry(services, "lsp-session", Map::of, () -> {}, fakeNanos::get);
+
+    // 1. ghidra-lsp meta.rs batch: 4 metadata calls + 1,000 projected functions with 60s timeout.
+    List<Map<String, Object>> metaItems =
+        List.of(
+            Map.of("id", "program", "method", "program.get", "arguments", Map.of()),
+            Map.of("id", "language", "method", "program_language.get", "arguments", Map.of()),
+            Map.of(
+                "id",
+                "blocks",
+                "method",
+                "memory_block.list",
+                "arguments",
+                Map.of("page", Map.of("limit", 1_000))),
+            Map.of(
+                "id",
+                "spaces",
+                "method",
+                "address_space.list",
+                "arguments",
+                Map.of("page", Map.of("limit", 1_000))),
+            Map.of(
+                "id",
+                "functions",
+                "method",
+                "function.list",
+                "arguments",
+                Map.of(
+                    "page",
+                    Map.of("limit", 1_000),
+                    "scan",
+                    Map.of("timeout_ms", 60_000),
+                    "projection",
+                    Map.of(
+                        "fields",
+                        List.of("entry", "name", "namespace", "demangled_name")))));
+    Object metaResult =
+        registry.dispatch(
+            "batch.execute", Map.of("transaction_mode", "per_item", "items", metaItems));
+    int metaBytes = JsonUtil.toJson(metaResult).getBytes(StandardCharsets.UTF_8).length;
+    assertEquals(List.of(59_975), observedFunctionTimeouts);
+    assertTrue(metaBytes < 512 * 1024, "Expected meta batch < 512 KiB, got " + metaBytes);
+
+    // 2. ghidra-lsp listing_fetch.rs xref wave: 64 incoming (limit 25) + 64 outgoing (limit 10).
+    List<Map<String, Object>> xrefWaveItems = new ArrayList<>(128);
+    for (int i = 0; i < 64; i++) {
+      String addr = String.format("ram:%08x", 0x0010_0000 + i * 4);
+      xrefWaveItems.add(
+          Map.of(
+              "id",
+              "in_" + i,
+              "method",
+              "reference.list",
+              "arguments",
+              Map.of(
+                  "filter",
+                  Map.of("to", addr, "direction", "to"),
+                  "page",
+                  Map.of("limit", 25))));
+      xrefWaveItems.add(
+          Map.of(
+              "id",
+              "out_" + i,
+              "method",
+              "reference.list",
+              "arguments",
+              Map.of(
+                  "filter",
+                  Map.of("from", addr, "direction", "from"),
+                  "page",
+                  Map.of("limit", 10))));
+    }
+    Object xrefResult =
+        registry.dispatch(
+            "batch.execute", Map.of("transaction_mode", "per_item", "items", xrefWaveItems));
+    int xrefBytes = JsonUtil.toJson(xrefResult).getBytes(StandardCharsets.UTF_8).length;
+    assertTrue(xrefBytes < 512 * 1024, "Expected xref wave < 512 KiB, got " + xrefBytes);
+
+    // 3. ghidra-lsp cfg.rs 1,000-item chunks: address.resolve x 1,000 and reference.list x 1,000.
+    List<Map<String, Object>> resolveChunk = new ArrayList<>(BatchMethod.MAX_ITEMS);
+    List<Map<String, Object>> cfgRefChunk = new ArrayList<>(BatchMethod.MAX_ITEMS);
+    for (int i = 0; i < BatchMethod.MAX_ITEMS; i++) {
+      String addr = String.format("ram:%08x", 0x0010_0000 + i * 4);
+      resolveChunk.add(
+          Map.of(
+              "id",
+              "r" + i,
+              "method",
+              "address.resolve",
+              "arguments",
+              Map.of("selector", Map.of("address", addr))));
+      cfgRefChunk.add(
+          Map.of(
+              "id",
+              "q" + i,
+              "method",
+              "reference.list",
+              "arguments",
+              Map.of("filter", Map.of("from", addr, "direction", "from"))));
+    }
+    Object resolveResult =
+        registry.dispatch(
+            "batch.execute", Map.of("transaction_mode", "per_item", "items", resolveChunk));
+    int resolveBytes = JsonUtil.toJson(resolveResult).getBytes(StandardCharsets.UTF_8).length;
+    assertTrue(
+        resolveBytes < 1024 * 1024, "Expected 1,000 address.resolve < 1 MiB, got " + resolveBytes);
+
+    Object cfgRefResult =
+        registry.dispatch(
+            "batch.execute", Map.of("transaction_mode", "per_item", "items", cfgRefChunk));
+    int cfgRefBytes = JsonUtil.toJson(cfgRefResult).getBytes(StandardCharsets.UTF_8).length;
+    assertTrue(
+        cfgRefBytes < 2 * 1024 * 1024,
+        "Expected 1,000 CFG reference.list < 2 MiB, got " + cfgRefBytes);
   }
 
   private static List<Map<String, Object>> memoryReadItems(int count) {

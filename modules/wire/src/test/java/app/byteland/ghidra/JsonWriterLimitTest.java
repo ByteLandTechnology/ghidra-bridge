@@ -2,15 +2,18 @@ package app.byteland.ghidra;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import app.byteland.ghidra.api.ApiException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 class JsonWriterLimitTest {
@@ -91,5 +94,41 @@ class JsonWriterLimitTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> JsonUtil.writeUtf8("x", new ByteArrayOutputStream(), -1));
+  }
+
+  @Test
+  void preservesRawJsonIdentityWithinLimitAndConsumesSinglePassIterableOnce() throws IOException {
+    String rawText = "{\"hex\":\"" + "ab".repeat(32_768) + "\",\"note\":\"漢字\"}";
+    Object raw = JsonUtil.rawJson(rawText);
+    int rawUtf8Bytes = rawText.getBytes(StandardCharsets.UTF_8).length;
+
+    assertSame(rawText, JsonUtil.toJson(raw, rawUtf8Bytes));
+    ApiException rawOverflow =
+        assertThrows(ApiException.class, () -> JsonUtil.toJson(raw, rawUtf8Bytes - 1));
+    assertEquals(413, rawOverflow.status());
+    assertEquals("response_too_large", rawOverflow.error().code());
+
+    ByteArrayOutputStream partialStream = new ByteArrayOutputStream();
+    assertThrows(
+        ApiException.class, () -> JsonUtil.writeUtf8(raw, partialStream, rawUtf8Bytes - 1));
+    assertEquals(true, partialStream.size() <= rawUtf8Bytes - 1);
+
+    String pureAsciiRaw = "{\"hex\":\"" + "ab".repeat(32_768) + "\"}";
+    ByteArrayOutputStream zeroByteStream = new ByteArrayOutputStream();
+    assertThrows(
+        ApiException.class,
+        () -> JsonUtil.writeUtf8(JsonUtil.rawJson(pureAsciiRaw), zeroByteStream, pureAsciiRaw.length() - 1));
+    assertEquals(0, zeroByteStream.size());
+
+    AtomicBoolean consumed = new AtomicBoolean(false);
+    Iterable<String> singlePass =
+        () -> {
+          if (!consumed.compareAndSet(false, true)) {
+            throw new IllegalStateException("single-pass iterable consumed more than once");
+          }
+          Iterator<String> delegate = List.of("alpha", "beta", "gamma").iterator();
+          return delegate;
+        };
+    assertEquals("{\"items\":[\"alpha\",\"beta\",\"gamma\"]}", JsonUtil.toJson(Map.of("items", singlePass)));
   }
 }

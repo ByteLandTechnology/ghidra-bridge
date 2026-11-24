@@ -84,9 +84,9 @@ The caller selects one of two transaction modes.
 
 ## Execution Limits
 
-Each `batch.execute` call enforces response size and runtime bounds:
-- **Response size limit (`8 MiB`)**: The serialized batch envelope cannot exceed `8,388,608` UTF-8 bytes. Exceeding the limit aborts remaining items with HTTP status `413` (`code=response_too_large`) in `per_item` mode, or rolls back the transaction (`409`, `code=batch_rolled_back`) in `all_or_none` mode.
-- **Execution deadline (`60,000 ms`)**: Total batch execution is capped at 60 seconds, and each scan or `decompilation.get` item clamps its `timeout_ms` to the remaining batch time. When no time remains or the thread is interrupted, execution stops with HTTP status `408` (`code=operation_timed_out`), rolling back earlier mutations in `all_or_none` mode.
+Each `batch.execute` call enforces response size and runtime limits:
+- **Response size limit (`8 MiB`)**: The serialized batch envelope cannot exceed `8,388,608` UTF-8 bytes. If a batch exceeds this limit in `per_item` mode, the server stops the rest of the items and returns HTTP status `413` with `code=response_too_large`. In `all_or_none` mode, Ghidra reverts the transaction and returns HTTP status `409` with `code=batch_rolled_back`.
+- **Execution deadline (`60,000 ms`)**: Total batch runtime cannot exceed 60 seconds. Each scan or `decompilation.get` item clamps its `timeout_ms` to the rest of the batch time. If no time remains or a thread interrupt occurs, the server stops execution and returns HTTP status `408` with `code=operation_timed_out`. In `all_or_none` mode, Ghidra reverts earlier mutations.
 
 ## Analysis Concurrency
 
