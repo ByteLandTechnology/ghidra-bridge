@@ -73,18 +73,31 @@ Gradle 按以下优先级解析 Ghidra 安装路径：
 
 ## 质量检查
 
-在提交代码更改之前，必须运行全量验证套件：
+仅使用 JDK 21 和 Git 在本地运行仓库规则与静态检查（无需 `GHIDRA_INSTALL_DIR`）：
 
 ```bash
-./gradlew --no-daemon clean verify
+./gradlew --no-daemon verifyRepositoryRules
+./gradlew --no-daemon :wire:test :contracts:test
+actionlint .github/workflows/ci.yml
+shellcheck -o check-extra-masked-returns .github/scripts/*.sh
+```
+
+在提交代码更改之前，配置 `GHIDRA_INSTALL_DIR` 并运行与 CI `verify` 任务一致的全量验证套件：
+
+```bash
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
+./gradlew --no-daemon :wire:test :contracts:test
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
 验证套件执行以下检查：
+- **仓库规则**：`verifyRepositoryRules` 检查 Git 卫生规则、架构导入边界、MCP 工具名、GitHub YAML 文件与 Simplified English。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。
 - **生成脚本编译**：`compileGeneratedScripts` 确保生成的启动脚本编译通过。
 - **分发产物**：`verifyDistribution` 校验 `build/ghidra-script/` 的内容。
+- **工作流与脚本检查**：`actionlint` 与 `shellcheck` 检查 `.github/workflows/ci.yml`、`.github/actions/setup-ghidra/action.yml` 与 `.github/scripts/*.sh`。
 
 ## 版本发布
 

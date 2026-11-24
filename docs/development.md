@@ -82,18 +82,31 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
-Before you submit a change, run the verification suite:
+Run repository and linter checks locally with JDK 21 and Git (no `GHIDRA_INSTALL_DIR` required):
 
 ```bash
-./gradlew --no-daemon clean verify
+./gradlew --no-daemon verifyRepositoryRules
+./gradlew --no-daemon :wire:test :contracts:test
+actionlint .github/workflows/ci.yml
+shellcheck -o check-extra-masked-returns .github/scripts/*.sh
+```
+
+Before you submit a change, run the full verification suite with `GHIDRA_INSTALL_DIR` to match the `verify` job in CI:
+
+```bash
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
+./gradlew --no-daemon :wire:test :contracts:test
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
 The verification tasks check:
+- **Repository Rules**: `verifyRepositoryRules` checks Git hygiene, architecture imports, MCP tool names, GitHub YAML files, and Simplified English.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+- **Workflow and Shell Linters**: `actionlint` and `shellcheck` check `.github/workflows/ci.yml`, `.github/actions/setup-ghidra/action.yml`, and `.github/scripts/*.sh`.
 
 ## Releases
 

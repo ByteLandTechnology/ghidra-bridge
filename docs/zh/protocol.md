@@ -198,31 +198,31 @@ MCP HTTP 服务端按以下规则处理请求：
 ### 工具调用规范
 
 MCP 将操作组织为 15 个工具：
-- `ghidra.help`：查找领域、列出可用操作及查看操作 Schema。
-- 14 个领域工具：`ghidra.bridge`、`ghidra.program`、`ghidra.address`、`ghidra.memory`、`ghidra.listing`、`ghidra.global_variable`、`ghidra.function`、`ghidra.analysis`、`ghidra.decompilation`、`ghidra.symbol`、`ghidra.reference`、`ghidra.comment`、`ghidra.data_type`、`ghidra.batch`。
+- `ghidra_help`：查找领域、列出可用操作及查看操作 Schema。
+- 14 个领域工具：`ghidra_bridge`、`ghidra_program`、`ghidra_address`、`ghidra_memory`、`ghidra_listing`、`ghidra_global_variable`、`ghidra_function`、`ghidra_analysis`、`ghidra_decompilation`、`ghidra_symbol`、`ghidra_reference`、`ghidra_comment`、`ghidra_data_type`、`ghidra_batch`。
 
 领域工具共公开 55 个方法。`interface.get` 仅通过 WebSocket 提供。
 
 ### 工具名前缀
 
-所有工具名都以前缀和一个点开头，默认前缀为 `ghidra`。
+所有工具名都以前缀和一个下划线开头，默认前缀为 `ghidra`。
 通过 `tool_prefix` 启动参数可以修改前缀，例如 `tool_prefix=sample`。
-此时工具名包括 `sample.help` 和 `sample.program`。
+此时工具名包括 `sample_help` 和 `sample_program`。
 当一个 MCP 客户端接入多个桥接服务时，为每个桥接服务设置不同的前缀。
 
 前缀以字母开头，由 1 至 64 个字母、数字、`_` 或 `-` 组成。
 服务端拒绝使用其他前缀的工具名。
-在 `ghidra.help` 中，`domain` 参数既接受完整工具名，也接受不带前缀的领域名，例如 `memory`。
+在 `ghidra_help` 中，`domain` 参数既接受完整工具名，也接受不带前缀的领域名，例如 `memory`。
 本文档中的示例均使用默认前缀。
 
-`ghidra.help` 接受可选的 `domain` 与 `operation` 参数：
+`ghidra_help` 接受可选的 `domain` 与 `operation` 参数：
 - 不带参数：返回领域工具列表。
 - 仅 `domain`：返回该领域工具的操作名列表。
 - `domain` 与 `operation`：返回该操作的方法名、描述、副作用、`inputSchema` 与 `outputSchema`。
 
 调用具体操作时，向领域工具传递 `operation` 与 `params` 参数。
 `operation` 的值是领域工具内的操作名，而不是点分方法名。
-例如，`memory.read` 方法对应 `ghidra.memory` 的 `read` 操作：
+例如，`memory.read` 方法对应 `ghidra_memory` 的 `read` 操作：
 
 ```json
 {
@@ -235,7 +235,7 @@ MCP 将操作组织为 15 个工具：
       "io.modelcontextprotocol/clientInfo": {"name": "example-client", "version": "1.0.0"},
       "io.modelcontextprotocol/clientCapabilities": {}
     },
-    "name": "ghidra.memory",
+    "name": "ghidra_memory",
     "arguments": {
       "operation": "read",
       "params": {

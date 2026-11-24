@@ -31,6 +31,10 @@ subprojects {
     }
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
+        jvmArgs '-Dfile.encoding=UTF-8'
+        if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('linux')) {
+            environment 'LC_ALL', 'C.UTF-8'
+        }
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
@@ -199,21 +203,30 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     options.encoding = 'UTF-8'
 }
 
-tasks.register('verifyArchitecture') {
-    group = 'verification'
-    doLast {
-        ['domain', 'wire', 'contracts', 'runtime', 'transport/websocket', 'transport/mcp']
-            .each { module ->
-            fileTree("modules/${module}/src/main/java") { include '**/*.java' }.each { source ->
-                if (source.readLines().any { it ==~ /^import ghidra\..*/ }) {
-                    throw new GradleException("Ghidra API import outside adapter/launcher: ${source}")
-                }
-            }
-        }
+tasks.withType(JavaExec).configureEach {
+    jvmArgs '-Dfile.encoding=UTF-8'
+    if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('linux')) {
+        environment 'LC_ALL', 'C.UTF-8'
     }
+}
+
+tasks.register('verifyArchitecture', JavaExec) {
+    group = 'verification'
+    dependsOn project(':contracts').tasks.named('classes')
+    classpath = project(':contracts').sourceSets.main.runtimeClasspath
+    mainClass = 'app.byteland.ghidra.api.RepositoryRulesVerifier'
+    args '--architecture-only', rootDir.absolutePath
+}
+
+tasks.register('verifyRepositoryRules', JavaExec) {
+    group = 'verification'
+    dependsOn project(':contracts').tasks.named('classes')
+    classpath = project(':contracts').sourceSets.main.runtimeClasspath
+    mainClass = 'app.byteland.ghidra.api.RepositoryRulesVerifier'
+    args rootDir.absolutePath
 }
 
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture', 'verifyRepositoryRules'
 }

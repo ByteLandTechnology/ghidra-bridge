@@ -73,18 +73,31 @@ Ghidra の内部データ構造を型付けされたドメインレコードに�
 
 ## 品質チェック
 
-変更をコミットする前に、必ず検証スイートを実行してください:
+JDK 21 と Git のみでローカルのリポジトリ規則とリンター検査を実行できます（`GHIDRA_INSTALL_DIR` 不要）:
 
 ```bash
-./gradlew --no-daemon clean verify
+./gradlew --no-daemon verifyRepositoryRules
+./gradlew --no-daemon :wire:test :contracts:test
+actionlint .github/workflows/ci.yml
+shellcheck -o check-extra-masked-returns .github/scripts/*.sh
+```
+
+変更をコミットする前に、`GHIDRA_INSTALL_DIR` を設定して CI の `verify` ジョブと一致する検証スイートを実行してください:
+
+```bash
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
+./gradlew --no-daemon :wire:test :contracts:test
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
 検証タスクは以下を厳格に検査します:
+- **リポジトリ規則**: `verifyRepositoryRules` が Git 衛生規則、インポート境界、MCP ツール名、GitHub YAML ファイル、Simplified English を検査します。
 - **アーキテクチャ境界**: `verifyArchitecture` により、adapter と launcher 以外での Ghidra クラスのインポートが禁止されます。
 - **規約ドリフト検出**: `verifyApiContracts` により、ドキュメント規約とコードの一致が確認されます。
 - **スクリプトコンパイル**: `compileGeneratedScripts` により、生成された起動スクリプトが正常にコンパイルできることを確認します。
 - **配布物**: `verifyDistribution` が `build/ghidra-script/` の内容を検証します。
+- **ワークフローとスクリプトの検査**: `actionlint` と `shellcheck` が `.github/workflows/ci.yml`、`.github/actions/setup-ghidra/action.yml`、`.github/scripts/*.sh` を検査します。
 
 ## リリース
 
