@@ -358,7 +358,7 @@ class CTypeAdapterIntegrationTest {
           false,
           null,
           null,
-          null,
+          "unknown",
           FunctionAttributePatch.empty(),
           List.of(
               new ParameterPatch(

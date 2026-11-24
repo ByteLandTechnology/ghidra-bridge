@@ -294,7 +294,10 @@ final class FunctionMutations {
         FunctionStorageSupport.requireCompatible(
             param.dataType(), paramStorage, field + ".storage");
         expectedExactSerialization = paramStorage.getSerializationString();
-      } else if (oldCustomStorage && index < existingNonAuto.size()) {
+      } else if (oldCustomStorage
+          && !anyParamHasStorage
+          && index < existingNonAuto.size()
+          && !intersectsAny(existingNonAuto.get(index).getVariableStorage(), customParameters)) {
         paramStorage = existingNonAuto.get(index).getVariableStorage();
         if (paramStorage.size() != param.dataType().getLength()
             && !FunctionStorageSupport.isFloat(param.dataType())) {
@@ -389,7 +392,8 @@ final class FunctionMutations {
       Program program, String callingConvention, Function function) {
     CompilerSpec spec = program.getCompilerSpec();
     if (callingConvention != null && !callingConvention.isBlank()) {
-      if (CompilerSpec.CALLING_CONVENTION_default.equals(callingConvention)) {
+      if (CompilerSpec.CALLING_CONVENTION_default.equals(callingConvention)
+          || CompilerSpec.CALLING_CONVENTION_unknown.equalsIgnoreCase(callingConvention)) {
         return spec.getDefaultCallingConvention();
       }
       PrototypeModel model = spec.getCallingConvention(callingConvention);
