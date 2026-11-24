@@ -77,11 +77,10 @@ class ApiContractGeneratorTest {
 
     for (ApiCatalog.MethodDescriptor descriptor : catalog.methods()) {
       if ("analysis.get".equals(descriptor.name()) || "analysis.start".equals(descriptor.name())) {
-        Map<String, Object> mcpOutput =
-            (Map<String, Object>) descriptor.mcpTool().get("outputSchema");
-        Map<String, Object> mcpProps = (Map<String, Object>) mcpOutput.get("properties");
-        assertEquals(Map.of("type", "string"), mcpProps.get("message"));
-        assertEquals(Map.of("type", "string"), mcpProps.get("error"));
+        Map<String, Object> descriptorProps =
+            (Map<String, Object>) descriptor.outputSchema().get("properties");
+        assertEquals(Map.of("type", "string"), descriptorProps.get("message"));
+        assertEquals(Map.of("type", "string"), descriptorProps.get("error"));
       }
     }
   }

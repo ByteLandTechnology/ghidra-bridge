@@ -196,6 +196,8 @@ class CodeUnitMethodsTest {
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     null));
     TransactionRunner transaction =
         new TransactionRunner() {

@@ -69,7 +69,9 @@ class WireValuesTest {
             "task-1",
             startedAt,
             null,
-            50.0);
+            50.0,
+            null,
+            null);
 
     Map<String, Object> analysisWire = WireValues.resource(analysis);
     assertEquals("bridge", analysisWire.get("kind"));
@@ -234,6 +236,8 @@ class WireValuesTest {
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     null));
     BridgeServices services =
         new BridgeServices(
@@ -315,6 +319,8 @@ class WireValuesTest {
                     AnalysisResource.Kind.GHIDRA,
                     AnalysisResource.Status.IDLE,
                     true,
+                    null,
+                    null,
                     null,
                     null,
                     null,

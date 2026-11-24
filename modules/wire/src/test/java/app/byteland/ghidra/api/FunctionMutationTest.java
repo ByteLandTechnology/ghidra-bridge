@@ -129,7 +129,7 @@ class FunctionMutationTest {
     });
     AnalysisService analysis = proxy(AnalysisService.class, (method, args) ->
         new AnalysisResource(AnalysisResource.Kind.GHIDRA, AnalysisResource.Status.IDLE,
-            false, null, null, null, null));
+            false, null, null, null, null, null, null));
     TransactionRunner transaction = new TransactionRunner() {
       @Override
       public <T> T run(Operation<T> operation) {

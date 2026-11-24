@@ -283,7 +283,6 @@ final class AnalysisTask {
         });
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   void runAnalysis(PluginTool tool, Program program, Consumer<TaskMonitor> execution) {
     Objects.requireNonNull(execution, "execution");
     if (tool == null || tool.threadIsBackgroundTaskThread()) {
