@@ -1,11 +1,13 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import app.byteland.ghidra.JsonUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
 import app.byteland.ghidra.api.ApiFailures;
 import app.byteland.ghidra.api.ApiRegistry;
 import app.byteland.ghidra.service.BridgeServices;
@@ -27,9 +29,6 @@ import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
-import ghidra.app.script.GhidraScript;
-import ghidra.framework.Application;
-import ghidra.framework.ApplicationConfiguration;
 import ghidra.program.model.data.ByteDataType;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
@@ -41,9 +40,8 @@ import ghidra.program.model.data.QWordDataType;
 import ghidra.program.model.data.StandAloneDataTypeManager;
 import ghidra.program.model.data.Structure;
 import ghidra.program.model.data.StructureDataType;
+import ghidra.program.model.data.Undefined1DataType;
 import ghidra.program.model.listing.Program;
-import ghidra.util.task.TaskMonitor;
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.util.List;
@@ -51,16 +49,11 @@ import java.util.Map;
 import java.util.function.Function;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import utility.application.DummyApplicationLayout;
 
 class StructBoundsAdapterTest {
   @BeforeAll
-  static void initializeGhidra() throws IOException {
-    if (!Application.isInitialized()) {
-      ApplicationConfiguration configuration = new ApplicationConfiguration();
-      configuration.setInitializeLogging(false);
-      Application.initializeApplication(new DummyApplicationLayout("GhidraTest"), configuration);
-    }
+  static void initializeGhidra() {
+    GhidraTestSupport.x64Language();
   }
 
   @Test
@@ -199,6 +192,22 @@ class StructBoundsAdapterTest {
             List.of(new DataTypePatch.CompositeField("missing_field_0", null, null, null, null))),
         resolver);
     assertEquals(1, DataTypeDescriptions.detail(guarded).fields().size());
+  }
+
+  @Test
+  void preservesExplicitUndefined1FieldAndOmitsDefaultFillerSlots() {
+    StructureDataType sparse = new StructureDataType(CategoryPath.ROOT, "sparse_undef", 25_000);
+    sparse.replaceAtOffset(100, Undefined1DataType.dataType, 1, "explicit_undef", null);
+
+    DataTypeResource described = DataTypeDescriptions.detail(sparse);
+    assertEquals(25_000, described.size());
+    assertEquals(1, described.fields().size());
+    DataTypeResource.Field field = described.fields().getFirst();
+    assertEquals("explicit_undef", field.name());
+    assertEquals(100, field.ordinal());
+    assertEquals(100, field.offset());
+    assertEquals(1, field.length());
+    assertFalse(field.isUndefined());
   }
 
   @Test
@@ -393,16 +402,7 @@ class StructBoundsAdapterTest {
                   if ("getDataTypeManager".equals(method.getName())) return programManager;
                   throw new AssertionError(method.getName());
                 });
-    GhidraScript script =
-        new GhidraScript() {
-          {
-            set(program, TaskMonitor.DUMMY);
-          }
-
-          @Override
-          protected void run() {}
-        };
-    GhidraSession session = new GhidraSession(script);
+    GhidraSession session = GhidraTestSupport.sessionFor(program);
     DataTypeService dataTypeService = new DataTypeServiceImpl(session);
     AnalysisService analysis =
         unusedWithIdleAnalysis();
