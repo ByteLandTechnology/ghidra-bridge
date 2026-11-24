@@ -26,7 +26,6 @@ import java.util.function.Supplier;
  */
 @SuppressWarnings("try")
 public final class Bootstrap {
-  @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
   private static final String LOOPBACK_HOST = "127.0.0.1";
 
   private static final String BRIDGE_PREFIX = "[ghidra-bridge]";
@@ -229,7 +228,6 @@ public final class Bootstrap {
             script.printerr(prefix + " Program save on exit failed: " + errorMessage(failure)));
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static void saveCheckpoint(GhidraScript script, Program program, String prefix) {
     try {
       script.saveProgram(program);

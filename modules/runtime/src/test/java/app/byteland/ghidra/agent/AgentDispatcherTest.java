@@ -37,7 +37,11 @@ class AgentDispatcherTest {
             .getMessage());
     assertEquals(
         "session_id is required",
-        assertThrows(IllegalArgumentException.class, () -> new AgentDispatcher(services, "   "))
+        assertThrows(IllegalArgumentException.class, () -> new AgentDispatcher(services, ""))
+            .getMessage());
+    assertEquals(
+        "session_id is required",
+        assertThrows(IllegalArgumentException.class, () -> new AgentDispatcher(services, "   \t\n "))
             .getMessage());
   }
 
