@@ -16,11 +16,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.BindException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -65,6 +69,8 @@ public final class McpHttpServer implements AutoCloseable {
   private static final long DEFAULT_SSE_KEEPALIVE_MILLIS = TimeUnit.SECONDS.toMillis(15);
 
   private final McpConfig config;
+  private final String normalizedConfiguredHost;
+  private final InetAddress configuredHostLiteral;
   private final AgentDispatcher dispatcher;
   private final Consumer<String> requestLogSink;
   private final long sseKeepaliveMillis;
@@ -96,6 +102,8 @@ public final class McpHttpServer implements AutoCloseable {
       throw new IllegalArgumentException("sseKeepaliveMillis must be positive");
     }
     this.config = Objects.requireNonNull(config, "config");
+    this.normalizedConfiguredHost = normalizeHost(config.host());
+    this.configuredHostLiteral = parseIpLiteral(this.normalizedConfiguredHost);
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
     this.sseKeepaliveMillis = sseKeepaliveMillis;
@@ -184,12 +192,13 @@ public final class McpHttpServer implements AutoCloseable {
       RequestLog log = new RequestLog(requestLogSink);
       try (exchange) {
         try {
-          addCommonHeaders(exchange);
-          if (!isAllowedOrigin(exchange)) {
+          OriginValidation originValidation = validateOrigin(exchange);
+          if (!originValidation.allowed()) {
             log.method(exchange.getRequestMethod()).error().status(403);
             writePlain(exchange, 403, "Forbidden origin");
             return;
           }
+          addCommonHeaders(exchange, originValidation.origin());
 
           String requestMethod = exchange.getRequestMethod();
           if (HTTP_OPTIONS_METHOD.equalsIgnoreCase(requestMethod)) {
@@ -868,6 +877,10 @@ public final class McpHttpServer implements AutoCloseable {
       throws IOException {
     byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
     exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+    if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+      exchange.sendResponseHeaders(statusCode, -1);
+      return;
+    }
     exchange.sendResponseHeaders(statusCode, bytes.length);
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
@@ -878,13 +891,10 @@ public final class McpHttpServer implements AutoCloseable {
     exchange.sendResponseHeaders(statusCode, -1);
   }
 
-  private void addCommonHeaders(HttpExchange exchange) {
-    String origin = firstHeader(exchange, "Origin");
-    if (origin != null && !origin.isBlank()) {
-      exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
+  private void addCommonHeaders(HttpExchange exchange, String validatedOrigin) {
+    if (validatedOrigin != null) {
+      exchange.getResponseHeaders().set("Access-Control-Allow-Origin", validatedOrigin);
       exchange.getResponseHeaders().set("Vary", "Origin");
-    } else {
-      exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
     }
     exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS");
     exchange
@@ -895,18 +905,251 @@ public final class McpHttpServer implements AutoCloseable {
         .set("Access-Control-Expose-Headers", "MCP-Protocol-Version");
   }
 
-  private boolean isAllowedOrigin(HttpExchange exchange) {
-    String origin = firstHeader(exchange, "Origin");
-    if (origin == null || origin.isBlank()) {
-      return true;
+  private record OriginValidation(boolean allowed, String origin) {
+    static final OriginValidation ABSENT_ALLOWED = new OriginValidation(true, null);
+    static final OriginValidation REJECTED = new OriginValidation(false, null);
+  }
+
+  private OriginValidation validateOrigin(HttpExchange exchange) {
+    return validateOriginHeaders(
+        exchange.getRequestHeaders().get("Origin"),
+        normalizedConfiguredHost,
+        configuredHostLiteral);
+  }
+
+  boolean isAllowedOrigin(HttpExchange exchange) {
+    return validateOrigin(exchange).allowed();
+  }
+
+  static boolean isAllowedOrigin(List<String> originHeaders, String configuredHost) {
+    String normalizedConfigHost = normalizeHost(Objects.requireNonNull(configuredHost, "configuredHost"));
+    return validateOriginHeaders(
+            originHeaders, normalizedConfigHost, parseIpLiteral(normalizedConfigHost))
+        .allowed();
+  }
+
+  private static OriginValidation validateOriginHeaders(
+      List<String> values, String normalizedConfigHost, InetAddress configHostLiteral) {
+    if (values == null || values.isEmpty()) {
+      return OriginValidation.ABSENT_ALLOWED;
+    }
+    if (values.size() != 1) {
+      return OriginValidation.REJECTED;
+    }
+    String rawOrigin = values.get(0);
+    if (rawOrigin == null) {
+      return OriginValidation.REJECTED;
+    }
+    String origin = rawOrigin.trim();
+    if (origin.isEmpty()
+        || "null".equalsIgnoreCase(origin)
+        || origin.indexOf(',') >= 0
+        || origin.indexOf('?') >= 0
+        || origin.indexOf('#') >= 0) {
+      return OriginValidation.REJECTED;
+    }
+
+    final URI uri;
+    try {
+      uri = URI.create(origin);
+    } catch (IllegalArgumentException invalidOrigin) {
+      return OriginValidation.REJECTED;
+    }
+
+    String scheme = uri.getScheme();
+    if (scheme == null
+        || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))
+        || uri.isOpaque()) {
+      return OriginValidation.REJECTED;
+    }
+
+    String rawAuthority = uri.getRawAuthority();
+    if (rawAuthority == null
+        || rawAuthority.isEmpty()
+        || uri.getRawUserInfo() != null
+        || uri.getUserInfo() != null
+        || rawAuthority.indexOf('@') >= 0
+        || rawAuthority.endsWith(":")) {
+      return OriginValidation.REJECTED;
+    }
+
+    int port = uri.getPort();
+    if (port != -1 && (port < 1 || port > 65535)) {
+      return OriginValidation.REJECTED;
+    }
+
+    String rawPath = uri.getRawPath();
+    if ((rawPath != null && !rawPath.isEmpty())
+        || uri.getRawQuery() != null
+        || uri.getRawFragment() != null) {
+      return OriginValidation.REJECTED;
+    }
+
+    String rawHost = uri.getHost();
+    if (rawHost == null || rawHost.isBlank()) {
+      return OriginValidation.REJECTED;
+    }
+
+    String normalizedOriginHost = normalizeHost(rawHost);
+    if (normalizedOriginHost.isEmpty()) {
+      return OriginValidation.REJECTED;
+    }
+
+    if ("localhost".equals(normalizedOriginHost)
+        || normalizedOriginHost.equals(normalizedConfigHost)) {
+      return new OriginValidation(true, origin);
+    }
+
+    InetAddress originLiteral = parseIpLiteral(normalizedOriginHost);
+    if (originLiteral != null
+        && (originLiteral.isLoopbackAddress() || originLiteral.equals(configHostLiteral))) {
+      return new OriginValidation(true, origin);
+    }
+
+    return OriginValidation.REJECTED;
+  }
+
+  static String normalizeHost(String host) {
+    String trimmed = host.trim();
+    if (trimmed.length() > 2
+        && trimmed.charAt(0) == '['
+        && trimmed.charAt(trimmed.length() - 1) == ']'
+        && trimmed.indexOf(':') >= 0) {
+      trimmed = trimmed.substring(1, trimmed.length() - 1);
+    }
+    return trimmed.toLowerCase(Locale.ROOT);
+  }
+
+  static InetAddress parseIpLiteral(String literal) {
+    if (literal == null || literal.isEmpty()) {
+      return null;
+    }
+    byte[] bytes = literal.indexOf(':') >= 0 ? parseIpv6Bytes(literal) : parseIpv4Bytes(literal);
+    if (bytes == null) {
+      return null;
     }
     try {
-      URI uri = URI.create(origin);
-      String host = uri.getHost();
-      return host != null;
-    } catch (IllegalArgumentException invalidOrigin) {
-      return false;
+      return InetAddress.getByAddress(bytes);
+    } catch (UnknownHostException impossible) {
+      return null;
     }
+  }
+
+  private static byte[] parseIpv4Bytes(String literal) {
+    byte[] bytes = new byte[4];
+    int octetIndex = 0;
+    int value = 0;
+    int digits = 0;
+    for (int i = 0; i < literal.length(); i++) {
+      char ch = literal.charAt(i);
+      if (ch == '.') {
+        if (digits == 0 || octetIndex == 3) {
+          return null;
+        }
+        bytes[octetIndex++] = (byte) value;
+        value = 0;
+        digits = 0;
+      } else if (ch >= '0' && ch <= '9') {
+        if (digits == 1 && value == 0) {
+          return null;
+        }
+        value = value * 10 + (ch - '0');
+        digits++;
+        if (digits > 3 || value > 255) {
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+    if (digits == 0 || octetIndex != 3) {
+      return null;
+    }
+    bytes[3] = (byte) value;
+    return bytes;
+  }
+
+  private static byte[] parseIpv6Bytes(String literal) {
+    if (literal.length() < 2 || literal.indexOf('%') >= 0) {
+      return null;
+    }
+    int doubleColon = literal.indexOf("::");
+    if (doubleColon >= 0 && literal.indexOf("::", doubleColon + 1) >= 0) {
+      return null;
+    }
+    String headPart = doubleColon >= 0 ? literal.substring(0, doubleColon) : literal;
+    String tailPart = doubleColon >= 0 ? literal.substring(doubleColon + 2) : null;
+
+    byte[] headBytes =
+        headPart.isEmpty() ? new byte[0] : parseIpv6Groups(headPart, tailPart == null);
+    if (headBytes == null || (doubleColon < 0 && headPart.isEmpty())) {
+      return null;
+    }
+    if (tailPart == null) {
+      return headBytes.length == 16 ? headBytes : null;
+    }
+    byte[] tailBytes = tailPart.isEmpty() ? new byte[0] : parseIpv6Groups(tailPart, true);
+    if (tailBytes == null || headBytes.length + tailBytes.length >= 16) {
+      return null;
+    }
+    byte[] result = new byte[16];
+    System.arraycopy(headBytes, 0, result, 0, headBytes.length);
+    System.arraycopy(tailBytes, 0, result, 16 - tailBytes.length, tailBytes.length);
+    return result;
+  }
+
+  private static byte[] parseIpv6Groups(String part, boolean allowTrailingIpv4) {
+    if (part.charAt(0) == ':' || part.charAt(part.length() - 1) == ':') {
+      return null;
+    }
+    String[] groups = part.split(":", -1);
+    byte[] buffer = new byte[16];
+    int offset = 0;
+    for (int i = 0; i < groups.length; i++) {
+      String group = groups[i];
+      if (group.isEmpty()) {
+        return null;
+      }
+      if (group.indexOf('.') >= 0) {
+        if (!allowTrailingIpv4 || i != groups.length - 1 || offset > 12) {
+          return null;
+        }
+        byte[] ipv4 = parseIpv4Bytes(group);
+        if (ipv4 == null) {
+          return null;
+        }
+        System.arraycopy(ipv4, 0, buffer, offset, 4);
+        offset += 4;
+      } else {
+        if (group.length() > 4 || offset > 14) {
+          return null;
+        }
+        int word = 0;
+        for (int j = 0; j < group.length(); j++) {
+          int digit = asciiHexDigit(group.charAt(j));
+          if (digit < 0) {
+            return null;
+          }
+          word = (word << 4) | digit;
+        }
+        buffer[offset++] = (byte) (word >>> 8);
+        buffer[offset++] = (byte) word;
+      }
+    }
+    return Arrays.copyOf(buffer, offset);
+  }
+
+  private static int asciiHexDigit(char ch) {
+    if (ch >= '0' && ch <= '9') {
+      return ch - '0';
+    }
+    if (ch >= 'a' && ch <= 'f') {
+      return ch - 'a' + 10;
+    }
+    if (ch >= 'A' && ch <= 'F') {
+      return ch - 'A' + 10;
+    }
+    return -1;
   }
 
   private static String firstHeader(HttpExchange exchange, String name) {
