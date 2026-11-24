@@ -94,7 +94,7 @@ final class MemoryMethods implements ApiMethodProvider {
         memoryFields,
         List.of(ApiVocabulary.ADDRESS),
         request ->
-            WireValues.memory(
+            WireValues.resource(
                 registry
                     .services()
                     .memoryService()

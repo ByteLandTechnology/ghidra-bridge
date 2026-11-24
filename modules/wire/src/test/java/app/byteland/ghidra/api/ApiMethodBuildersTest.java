@@ -71,7 +71,7 @@ class ApiMethodBuildersTest {
     assertFalse(scanListInput.containsKey("required"));
     Map<String, Object> canonicalScanInput = StrictObjectCodec.canonicalSchema(scanListInput);
     assertEquals(List.of("filter", "page", "scan", "projection"), propertyKeys(canonicalScanInput));
-    assertEquals(List.of("name"), nestedPropertyKeys(canonicalScanInput, "filter"));
+    assertEquals(List.of("start", "end", "name"), nestedPropertyKeys(canonicalScanInput, "filter"));
     assertEquals(List.of("range", "timeout_ms"), nestedPropertyKeys(canonicalScanInput, "scan"));
 
     Map<String, Object> requiredListInput = ApiSchemaCatalog.requiredListInput(filter);
