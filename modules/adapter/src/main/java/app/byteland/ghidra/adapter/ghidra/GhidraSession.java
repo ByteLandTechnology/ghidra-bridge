@@ -7,12 +7,7 @@ import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Reference;
-import ghidra.program.model.symbol.ReferenceIterator;
-import ghidra.program.model.symbol.ReferenceManager;
 import java.lang.reflect.Proxy;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
@@ -136,40 +131,20 @@ public final class GhidraSession implements AutoCloseable {
     return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
-  public Iterable<Reference> references(Address address, boolean to) {
-    Program program = currentProgramOrNull();
-    ReferenceManager manager = program == null ? null : program.getReferenceManager();
+  public Iterable<ghidra.program.model.symbol.Reference> references(Address address, boolean to) {
+    ghidra.program.model.symbol.ReferenceManager manager = currentProgram().getReferenceManager();
     if (to) {
-      if (manager != null) {
-        return () -> {
-          ReferenceIterator incoming = manager.getReferencesTo(address);
-          return incoming == null ? Collections.emptyIterator() : incoming;
-        };
-      }
-      Reference[] incoming = ghidraScript.getReferencesTo(address);
-      return incoming == null ? List.of() : Arrays.asList(incoming);
+      return () -> {
+        ghidra.program.model.symbol.ReferenceIterator incoming = manager.getReferencesTo(address);
+        return incoming == null ? java.util.Collections.emptyIterator() : incoming;
+      };
     }
-    if (manager != null) {
-      Reference[] outgoing = manager.getReferencesFrom(address);
-      return outgoing == null ? List.of() : Arrays.asList(outgoing);
-    }
-    Reference[] outgoing = ghidraScript.getReferencesFrom(address);
-    return outgoing == null ? List.of() : Arrays.asList(outgoing);
+    ghidra.program.model.symbol.Reference[] outgoing = manager.getReferencesFrom(address);
+    return outgoing == null ? java.util.List.of() : java.util.Arrays.asList(outgoing);
   }
 
   public Reference reference(Address fromAddress, Address toAddress, int operandIndex) {
-    Program program = currentProgramOrNull();
-    ReferenceManager manager = program == null ? null : program.getReferenceManager();
-    if (manager != null) {
-      return manager.getReference(fromAddress, toAddress, operandIndex);
-    }
-    for (Reference candidate : references(fromAddress, false)) {
-      if (toAddress.equals(candidate.getToAddress())
-          && candidate.getOperandIndex() == operandIndex) {
-        return candidate;
-      }
-    }
-    return null;
+    return currentProgram().getReferenceManager().getReference(fromAddress, toAddress, operandIndex);
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {

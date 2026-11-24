@@ -56,7 +56,7 @@ class DataTypeQueriesTest {
     assertEquals(10, fixture.summarizeCalls.get(), "zero discarded DataTypeResource summaries");
 
     // Second page (first cursor call) populates 1 snapshot; pages 3..12 hit the cached snapshot
-    // without calling getAllDataTypes() again.
+    // and do not call getAllDataTypes() again.
     List<String> warmSweepPaths = new ArrayList<>();
     warmSweepPaths.addAll(firstPage.items().stream().map(DataTypeResource::path).toList());
     String cursor = firstPage.nextCursor();
@@ -170,7 +170,7 @@ class DataTypeQueriesTest {
     assertEquals("/cat_12", third.items().getFirst().path());
     assertEquals(scansAfterSecond, fixture.categoryListScans.get(), "third page hits snapshot");
 
-    // Non-matching kind filter short-circuits cleanly.
+    // Non-matched kind filter returns an empty page immediately.
     Page<DataTypeResource> unknownKind =
         DataTypeQueries.searchDataTypes(
             fixture.session, fixture.manager, "", null, "not_a_kind", 10, null);

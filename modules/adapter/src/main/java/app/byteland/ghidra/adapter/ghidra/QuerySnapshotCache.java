@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.LongSupplier;
 
@@ -124,6 +125,21 @@ public final class QuerySnapshotCache {
       String cursor,
       Function<String, L> resolver,
       Function<L, R> mapper) {
+    Objects.requireNonNull(mapper, "mapper");
+    return slice(sortedKeys, limit, cursor, resolver, (live, ignoredKey) -> mapper.apply(live));
+  }
+
+  /**
+   * Binary-searches {@code sortedKeys} for the first key strictly after {@code cursor}, resolves at
+   * most {@code limit + 1} live objects, and materializes at most {@code limit} page items with
+   * their snapshot keys.
+   */
+  public static <L, R> Page<R> slice(
+      String[] sortedKeys,
+      int limit,
+      String cursor,
+      Function<String, L> resolver,
+      BiFunction<L, String, R> mapper) {
     Objects.requireNonNull(sortedKeys, "sortedKeys");
     Objects.requireNonNull(resolver, "resolver");
     Objects.requireNonNull(mapper, "mapper");
@@ -134,8 +150,9 @@ public final class QuerySnapshotCache {
       return Page.of(List.of(), clamped, null);
     }
 
-    List<L> selectedLive = new ArrayList<>(Math.min(clamped, sortedKeys.length - startIndex));
-    String lastKey = null;
+    int capacity = Math.min(clamped, sortedKeys.length - startIndex);
+    List<L> selectedLive = new ArrayList<>(capacity);
+    List<String> selectedKeys = new ArrayList<>(capacity);
     String nextCursor = null;
     for (int i = startIndex; i < sortedKeys.length; i++) {
       String candidateKey = sortedKeys[i];
@@ -145,16 +162,16 @@ public final class QuerySnapshotCache {
       }
       if (selectedLive.size() < clamped) {
         selectedLive.add(live);
-        lastKey = candidateKey;
+        selectedKeys.add(candidateKey);
       } else {
-        nextCursor = lastKey;
+        nextCursor = selectedKeys.getLast();
         break;
       }
     }
 
     List<R> items = new ArrayList<>(selectedLive.size());
-    for (L live : selectedLive) {
-      items.add(mapper.apply(live));
+    for (int i = 0; i < selectedLive.size(); i++) {
+      items.add(mapper.apply(selectedLive.get(i), selectedKeys.get(i)));
     }
     return Page.of(items, clamped, nextCursor);
   }
@@ -198,7 +215,7 @@ public final class QuerySnapshotCache {
   }
 
   /**
-   * Composite cache key capturing resource name, normalized filters, and program modification
+   * Composite cache key that records resource name, normalized filters, and program modification
    * number.
    */
   public record Key(String resource, List<String> filters, long modificationNumber) {

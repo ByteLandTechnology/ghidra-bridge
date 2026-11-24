@@ -7,10 +7,15 @@ import app.byteland.ghidra.service.program.AddressSpaceResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
+import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.lang.CompilerSpec;
 import ghidra.program.model.lang.Language;
+import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.symbol.Symbol;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public final class ProgramServiceImpl implements ProgramService {
@@ -43,22 +48,19 @@ public final class ProgramServiceImpl implements ProgramService {
   public Page<AddressSpaceResource> getAddressSpaces(int limit, String cursor) {
     var addressFactory = context.script().getAddressFactory();
     var defaultSpace = addressFactory.getDefaultAddressSpace();
-    Page.Selector<AddressSpace> selector = Page.selector(limit, cursor);
+    List<AddressSpaceResource> list = new ArrayList<>();
     for (AddressSpace space : addressFactory.getAddressSpaces()) {
-      String spaceName = space.getName();
-      if (selector.acceptsKey(spaceName)) {
-        selector.offer(spaceName, space);
-      }
+      list.add(
+          new AddressSpaceResource(
+              space.getName(),
+              describeAddressSpaceType(space),
+              space.getPointerSize() * 8,
+              AddressUtil.canonicalAddress(space.getMinAddress()),
+              AddressUtil.canonicalAddress(space.getMaxAddress()),
+              defaultSpace != null && defaultSpace.equals(space)));
     }
-    return selector.finish(
-        space ->
-            new AddressSpaceResource(
-                space.getName(),
-                describeAddressSpaceType(space),
-                space.getPointerSize() * 8,
-                AddressUtil.canonicalAddress(space.getMinAddress()),
-                AddressUtil.canonicalAddress(space.getMaxAddress()),
-                defaultSpace != null && defaultSpace.equals(space)));
+    list.sort(java.util.Comparator.comparing(AddressSpaceResource::name));
+    return Page.paginate(list, limit, cursor, AddressSpaceResource::name);
   }
 
   @Override

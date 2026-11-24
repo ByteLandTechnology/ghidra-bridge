@@ -126,20 +126,10 @@ final class DataTypeQueries {
       List<String> keys = new ArrayList<>();
       Iterator<DataType> iterator = candidateIterator(manager, scopedCategory);
       while (iterator.hasNext()) {
-        DataType dataType = iterator.next();
-        String name = dataType.getName();
-        if (!lowerQuery.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(lowerQuery)) {
-          continue;
+        String path = matchingDataTypePath(iterator.next(), lowerQuery, categoryPath, expectedKind);
+        if (path != null) {
+          keys.add(path);
         }
-        String path = dataType.getPathName();
-        if (categoryPath != null
-            && !categoryPath.equals(DataTypeDescriptions.categoryFromPath(path, name))) {
-          continue;
-        }
-        if (expectedKind != null && DataTypeDescriptions.classifyKind(dataType) != expectedKind) {
-          continue;
-        }
-        keys.add(path);
       }
       sortedKeys = keys.toArray(String[]::new);
       Arrays.sort(sortedKeys);
@@ -177,24 +167,15 @@ final class DataTypeQueries {
     Category[] children = category.getCategories();
     if (children != null) {
       for (Category child : children) {
-        String path = child.getCategoryPath().getPath();
-        if (selector.acceptsKey(path)) {
-          selector.offer(path, child);
-        }
+        selector.offer(child.getCategoryPath().getPath(), child);
       }
     }
-    return selector.finish(
-        (child, path) ->
-            new DataTypeCategoryResource(
-                path,
-                child.getName(),
-                child.getCategories().length,
-                child.getDataTypes().length));
+    return selector.finish(DataTypeQueries::describeCategory);
   }
 
-  private static DataTypeCategoryResource describeCategory(Category child) {
+  private static DataTypeCategoryResource describeCategory(Category child, String path) {
     return new DataTypeCategoryResource(
-        child.getCategoryPath().getPath(),
+        path,
         child.getName(),
         child.getCategories().length,
         child.getDataTypes().length);
@@ -210,23 +191,32 @@ final class DataTypeQueries {
     Page.Selector<DataType> selector = Page.selector(clampedLimit, cursor);
     while (iterator.hasNext()) {
       DataType dataType = iterator.next();
-      String name = dataType.getName();
-      if (!lowerQuery.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(lowerQuery)) {
-        continue;
-      }
-      String path = dataType.getPathName();
-      if (categoryPath != null
-          && !categoryPath.equals(DataTypeDescriptions.categoryFromPath(path, name))) {
-        continue;
-      }
-      if (expectedKind != null && DataTypeDescriptions.classifyKind(dataType) != expectedKind) {
-        continue;
-      }
-      if (selector.acceptsKey(path)) {
+      String path = matchingDataTypePath(dataType, lowerQuery, categoryPath, expectedKind);
+      if (path != null) {
         selector.offer(path, dataType);
       }
     }
     return selector.finish(DataTypeDescriptions::summarize);
+  }
+
+  private static String matchingDataTypePath(
+      DataType dataType,
+      String lowerQuery,
+      String categoryPath,
+      DataTypeResource.Kind expectedKind) {
+    String name = dataType.getName();
+    if (!lowerQuery.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(lowerQuery)) {
+      return null;
+    }
+    String path = dataType.getPathName();
+    if (categoryPath != null
+        && !categoryPath.equals(DataTypeDescriptions.categoryFromPath(path, name))) {
+      return null;
+    }
+    if (expectedKind != null && DataTypeDescriptions.classifyKind(dataType) != expectedKind) {
+      return null;
+    }
+    return path;
   }
 
   private static Category resolveCategoryOrNull(DataTypeManager manager, String categoryPath) {

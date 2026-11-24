@@ -73,21 +73,15 @@ final class FunctionRelationQueries {
         limit,
         cursor,
         this::resolveOrNull,
-        relatedFunction ->
-            describeRelation(
-                relatedFunction,
-                AddressUtil.canonicalAddress(relatedFunction.getEntryPoint()),
-                direction));
+        (relatedFunction, entry) -> describeRelation(relatedFunction, entry, direction));
   }
 
   private static Page<FunctionCallResource> selectRelationsBounded(
       Function function, boolean callers, int limit, String cursor) {
     Page.Selector<Function> selector = Page.selector(limit, cursor);
     for (Function relatedFunction : relatedFunctions(function, callers)) {
-      String entry = AddressUtil.canonicalAddress(relatedFunction.getEntryPoint());
-      if (selector.acceptsKey(entry)) {
-        selector.offer(entry, relatedFunction);
-      }
+      selector.offer(
+          AddressUtil.canonicalAddress(relatedFunction.getEntryPoint()), relatedFunction);
     }
     FunctionCallResource.Direction direction =
         callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;

@@ -33,7 +33,7 @@ class QuerySnapshotCacheTest {
     // Touch k1 so k2 becomes least-recently-used.
     assertArrayEquals(new String[] {"a", "b", "c"}, cache.get(k1));
 
-    // Adding k3 (2 keys) exceeds maxEntries=2 (and totalKeys 5+2=7 > 6), evicting k2 first.
+    // Add k3 (2 keys) to exceed maxEntries=2 and totalKeys=6, which evicts k2 first.
     cache.put(k3, new String[] {"x", "y"});
     assertNull(cache.get(k2));
     assertArrayEquals(new String[] {"a", "b", "c"}, cache.get(k1));
@@ -41,7 +41,7 @@ class QuerySnapshotCacheTest {
     assertEquals(2, cache.entryCount());
     assertEquals(5, cache.totalKeyCount());
 
-    // Adding a 5-key snapshot forces eviction by maxTotalKeys=6 even though maxEntries=2.
+    // Add a 5-key snapshot to trigger eviction by maxTotalKeys=6 when maxEntries=2.
     QuerySnapshotCache.Key k4 = QuerySnapshotCache.Key.of("function_call", 1L, "ram:0020", "callers");
     cache.put(k4, new String[] {"1", "2", "3", "4", "5"});
     assertNull(cache.get(k1));
@@ -67,11 +67,11 @@ class QuerySnapshotCacheTest {
     cache.put(mod1, new String[] {"/a", "/b"});
     assertArrayEquals(new String[] {"/a", "/b"}, cache.get(mod1));
 
-    // Advancing below TTL retains entry.
+    // Advance clock below TTL to retain entry.
     clock.addAndGet(Duration.ofSeconds(9).toNanos());
     assertArrayEquals(new String[] {"/a", "/b"}, cache.get(mod1));
 
-    // Reaching TTL expires entry and resets key count.
+    // Advance clock to TTL to expire entry and reset key count.
     clock.addAndGet(Duration.ofSeconds(1).toNanos());
     assertNull(cache.get(mod1));
     assertEquals(0, cache.entryCount());
@@ -98,7 +98,7 @@ class QuerySnapshotCacheTest {
 
     String[] sortedKeys = {"k01", "k02", "k03", "k04", "k05", "k06"};
     Map<String, Integer> liveObjects =
-        Map.of("k01", 1, "k02", 2, "k04", 4, "k05", 5, "k06", 6); // k03 missing
+        Map.of("k01", 1, "k02", 2, "k04", 4, "k05", 5, "k06", 6); // k03 is absent
     AtomicInteger resolvedCount = new AtomicInteger();
     AtomicInteger mappedCount = new AtomicInteger();
 
@@ -116,7 +116,7 @@ class QuerySnapshotCacheTest {
               return "item-" + val;
             });
 
-    // Starts at k02, skips missing k03, selects k02 & k04, checks k05 to set nextCursor="k04".
+    // Starts at k02, skips absent k03, selects k02 and k04, and checks k05 to set nextCursor="k04".
     assertEquals(List.of("item-2", "item-4"), page.items());
     assertEquals("k04", page.nextCursor());
     assertEquals(4, resolvedCount.get());

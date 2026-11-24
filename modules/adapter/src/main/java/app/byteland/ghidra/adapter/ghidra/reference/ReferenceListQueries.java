@@ -6,7 +6,6 @@ import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import ghidra.program.model.address.Address;
-import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Reference;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,14 +30,14 @@ final class ReferenceListQueries {
         ReferenceQuerySupport.normalizeDirection(direction, fromRaw, toRaw);
     ReferenceQuerySupport.requireTarget(normalizedDirection, fromRaw, toRaw);
 
-    boolean isTo = "to".equals(normalizedDirection);
-    String target = isTo ? toRaw : fromRaw;
+    boolean incoming = "to".equals(normalizedDirection);
+    String target = incoming ? toRaw : fromRaw;
     Address anchor = parseAddress(target);
     String canonicalAnchor = AddressUtil.canonicalAddress(anchor);
     boolean hasCursor = cursor != null && !cursor.isBlank();
     if (!hasCursor || !context.canCacheSnapshots()) {
       return selectReferencesBounded(
-          anchor, canonicalAnchor, isTo, type, normalizedLimit, cursor);
+          anchor, canonicalAnchor, incoming, type, normalizedLimit, cursor);
     }
 
     long modNumber = context.modificationNumber();
@@ -49,17 +48,17 @@ final class ReferenceListQueries {
     String[] sortedKeys = context.querySnapshots().get(cacheKey);
     if (sortedKeys == null) {
       List<String> keys = new ArrayList<>();
-      for (Reference reference : context.references(anchor, isTo)) {
+      for (Reference reference : context.references(anchor, incoming)) {
         if (!ReferenceQuerySupport.matchesType(type, reference)) {
           continue;
         }
-        keys.add(encodedKey(reference, anchor, canonicalAnchor, isTo));
+        keys.add(ReferenceDescriptions.referenceKey(reference, anchor, canonicalAnchor).encoded());
       }
       sortedKeys = keys.toArray(String[]::new);
       Arrays.sort(sortedKeys);
       if (!context.canCacheSnapshots()) {
         return selectReferencesBounded(
-            anchor, canonicalAnchor, isTo, type, normalizedLimit, cursor);
+            anchor, canonicalAnchor, incoming, type, normalizedLimit, cursor);
       }
       if (context.modificationNumber() == modNumber) {
         context.querySnapshots().put(cacheKey, sortedKeys);
@@ -69,50 +68,34 @@ final class ReferenceListQueries {
         sortedKeys,
         normalizedLimit,
         cursor,
-        encodedKey -> resolveReference(anchor, isTo, encodedKey),
+        encodedKey -> resolveReference(anchor, incoming, encodedKey),
         reference -> ReferenceDescriptions.describe(reference, anchor, canonicalAnchor));
   }
 
   private Page<ReferenceResource> selectReferencesBounded(
       Address anchor,
       String canonicalAnchor,
-      boolean isTo,
+      boolean incoming,
       String type,
       int normalizedLimit,
       String cursor) {
     Page.Selector<Reference> selector = Page.selector(normalizedLimit, cursor);
-    for (Reference reference : context.references(anchor, isTo)) {
+    Iterable<Reference> refs = context.references(anchor, incoming);
+    for (Reference reference : refs) {
       if (!ReferenceQuerySupport.matchesType(type, reference)) {
         continue;
       }
-      String encoded = encodedKey(reference, anchor, canonicalAnchor, isTo);
-      if (selector.acceptsKey(encoded)) {
-        selector.offer(encoded, reference);
-      }
+      String encoded =
+          ReferenceDescriptions.referenceKey(reference, anchor, canonicalAnchor).encoded();
+      selector.offer(encoded, reference);
     }
     return selector.finish(
         reference -> ReferenceDescriptions.describe(reference, anchor, canonicalAnchor));
   }
 
-  private static String encodedKey(
-      Reference reference, Address anchor, String canonicalAnchor, boolean isTo) {
-    Address fromAddress = reference.getFromAddress();
-    Address toAddress = reference.getToAddress();
-    String from =
-        !isTo && anchor.equals(fromAddress)
-            ? canonicalAnchor
-            : AddressUtil.canonicalAddress(fromAddress);
-    String to =
-        isTo && anchor.equals(toAddress)
-            ? canonicalAnchor
-            : AddressUtil.canonicalAddress(toAddress);
-    return ReferenceCursorKey.encode(
-        from, to, reference.getReferenceType().getName(), reference.getOperandIndex());
-  }
-
-  private Reference resolveReference(Address anchor, boolean isTo, String encodedKey) {
+  private Reference resolveReference(Address anchor, boolean incoming, String encodedKey) {
     ReferenceCursorKey key = ReferenceCursorKey.decode(encodedKey);
-    if (isTo) {
+    if (incoming) {
       Address fromAddress =
           EXT_FROM_CANONICAL.equals(key.from())
               ? Address.EXT_FROM_ADDRESS
@@ -124,34 +107,14 @@ final class ReferenceListQueries {
       if (exact != null && matchesDecodedKey(exact, key)) {
         return exact;
       }
-      Program program = context.currentProgramOrNull();
-      if (program != null && program.getReferenceManager() != null) {
-        for (Reference candidate :
-            program.getReferenceManager().getReferencesFrom(fromAddress, key.operandIndex())) {
-          if (matchesDecodedKey(candidate, key)) {
-            return candidate;
-          }
-        }
-      } else {
-        for (Reference candidate : context.references(fromAddress, false)) {
-          if (matchesDecodedKey(candidate, key)) {
-            return candidate;
-          }
-        }
-      }
-      return null;
-    }
-
-    Program program = context.currentProgramOrNull();
-    if (program != null && program.getReferenceManager() != null) {
-      for (Reference candidate :
-          program.getReferenceManager().getReferencesFrom(anchor, key.operandIndex())) {
+      for (Reference candidate : context.references(fromAddress, false)) {
         if (matchesDecodedKey(candidate, key)) {
           return candidate;
         }
       }
       return null;
     }
+
     for (Reference candidate : context.references(anchor, false)) {
       if (matchesDecodedKey(candidate, key)) {
         return candidate;

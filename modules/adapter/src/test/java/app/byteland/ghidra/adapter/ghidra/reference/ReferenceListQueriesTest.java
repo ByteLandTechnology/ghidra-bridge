@@ -52,7 +52,7 @@ class ReferenceListQueriesTest {
 
   @Test
   void streamsOverFourThousandIncomingReferencesPreservesEncodedOrderAndCachesSnapshots() {
-    // 5,005 incoming references (> 4,096 FlatProgramAPI cap), including negative operandIndex (-1),
+    // 5,005 incoming references (> 4,096 FlatProgramAPI cap) with negative operandIndex (-1),
     // multi-digit operandIndex (10), and Address.EXT_FROM_ADDRESS.
     Fixture fixture = new Fixture(5_000);
     ReferenceListQueries queries = new ReferenceListQueries(fixture.session);
@@ -92,7 +92,7 @@ class ReferenceListQueriesTest {
     Collections.sort(sortedKeys);
     assertEquals(sortedKeys, actualKeys, "must preserve exact ReferenceCursorKey.encoded order");
 
-    // Verify identical sweep when background analysis is running (stateless bounded selection).
+    // Verify identical sweep when background analysis is active (stateless bounded selection).
     fixture.cache.clear();
     fixture.analyzing.set(true);
     List<ReferenceResource> analyzingSweep = new ArrayList<>();
@@ -322,7 +322,7 @@ class ReferenceListQueriesTest {
       for (int i = 0; i < regularCount; i++) {
         addIncoming(ram.getAddress(0x00100000L + (i * 4L)), RefType.UNCONDITIONAL_CALL, i % 3);
       }
-      // Special operand indices and EXT_FROM_ADDRESS to verify exact encoded sort order & lookup.
+      // Special operand indices and EXT_FROM_ADDRESS to verify exact encoded sort order and lookup.
       addIncoming(ram.getAddress(0x00090000L), RefType.DATA, -1);
       addIncoming(ram.getAddress(0x00090000L), RefType.DATA, 0);
       addIncoming(ram.getAddress(0x00090000L), RefType.DATA, 2);

@@ -51,40 +51,6 @@ public record Page<T>(
     return Page.of(items, clamped, next);
   }
 
-  /**
-   * Selects one page from unordered candidates using bounded {@code limit + 1} selection.
-   */
-  public static <T> Page<T> select(
-      Iterable<T> candidates, int limit, String cursor, Function<T, String> key) {
-    return select(candidates, limit, cursor, key, Function.identity());
-  }
-
-  /**
-   * Selects one page from unordered candidates using bounded {@code limit + 1} selection and maps
-   * only the items in the returned page slice.
-   */
-  public static <T, R> Page<R> select(
-      Iterable<T> candidates,
-      int limit,
-      String cursor,
-      Function<T, String> key,
-      Function<T, R> mapper) {
-    Objects.requireNonNull(candidates, "candidates");
-    Objects.requireNonNull(key, "key");
-    Objects.requireNonNull(mapper, "mapper");
-    Selector<T> selector = selector(limit, cursor);
-    for (T candidate : candidates) {
-      String candidateKey = key.apply(candidate);
-      if (selector.acceptsKey(candidateKey)) {
-        selector.offer(candidateKey, candidate);
-      }
-    }
-    return selector.finish(mapper);
-  }
-
-  /**
-   * Creates a bounded {@code limit + 1} selector for streaming unordered items.
-   */
   public static <T> Selector<T> selector(int limit, String cursor) {
     return new Selector<>(limit, cursor);
   }
@@ -100,8 +66,7 @@ public record Page<T>(
   }
 
   /**
-   * Selects one page of smallest keys after a cursor in a bounded {@code limit + 1} priority queue,
-   * deferring item materialization until the final slice is chosen.
+   * Selects one page of smallest keys after a cursor in a bounded priority queue.
    *
    * @param <T> candidate item type
    */
@@ -121,40 +86,24 @@ public record Page<T>(
       this.resuming = cursor != null && !cursor.isBlank();
       this.cursor = this.resuming ? cursor : null;
       this.heap =
-          new PriorityQueue<>(Math.min(this.maxRetained, INITIAL_CAPACITY), Keyed.maxOrder());
-    }
-
-    public int limit() {
-      return clamped;
-    }
-
-    public int retainedCount() {
-      return heap.size();
-    }
-
-    public boolean acceptsKey(String candidateKey) {
-      Objects.requireNonNull(candidateKey, "candidateKey");
-      if (resuming && candidateKey.compareTo(cursor) <= 0) {
-        return false;
-      }
-      if (heap.size() >= maxRetained) {
-        Keyed<T> largest = heap.peek();
-        if (largest != null && candidateKey.compareTo(largest.key()) >= 0) {
-          return false;
-        }
-      }
-      return true;
+          new PriorityQueue<>(
+              Math.min(this.maxRetained, INITIAL_CAPACITY), Keyed.maxOrder());
     }
 
     public void offer(String key, T item) {
       Objects.requireNonNull(key, "key");
-      if (!acceptsKey(key)) {
-        return;
-      }
-      if (heap.size() >= maxRetained) {
+      if (resuming && key.compareTo(cursor) <= 0) return;
+      long order = sequence++;
+      if (heap.size() == maxRetained) {
+        Keyed<T> largest = heap.peek();
+        if (largest != null && key.compareTo(largest.key()) >= 0) return;
         heap.poll();
       }
-      heap.offer(new Keyed<>(key, sequence++, item));
+      heap.offer(new Keyed<>(key, order, item));
+    }
+
+    public int retainedCount() {
+      return heap.size();
     }
 
     public Page<T> finish() {
@@ -168,14 +117,11 @@ public record Page<T>(
 
     public <R> Page<R> finish(BiFunction<T, String, R> mapper) {
       Objects.requireNonNull(mapper, "mapper");
-      if (heap.isEmpty()) {
-        return Page.of(List.of(), clamped, null);
-      }
       List<Keyed<T>> winners = new ArrayList<>(heap);
       winners.sort(Keyed.minOrder());
       boolean hasMore = winners.size() > clamped;
       int pageCount = hasMore ? clamped : winners.size();
-      String next = hasMore && pageCount > 0 ? winners.get(pageCount - 1).key() : null;
+      String next = hasMore ? winners.get(pageCount - 1).key() : null;
       List<R> items = new ArrayList<>(pageCount);
       for (int index = 0; index < pageCount; index++) {
         Keyed<T> winner = winners.get(index);
