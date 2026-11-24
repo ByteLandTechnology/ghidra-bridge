@@ -220,10 +220,20 @@ public final class WireSchema {
     throw ApiException.badRequest(failure.code(), failure.message(), failure.target());
   }
 
+  private static final Set<String> LIST_ENVELOPE_KEYS =
+      Set.of(ApiVocabulary.ITEMS, ApiVocabulary.NEXT_CURSOR, ApiVocabulary.SCAN);
+
   private static boolean isListEnvelopeSchema(Map<String, Object> schema, ProjectionNode rootNode) {
     if (!ApiVocabulary.OBJECT.equals(schema.get(ApiVocabulary.TYPE))) return false;
     if (rootNode.children().containsKey(ApiVocabulary.ITEMS)) return false;
-    if (!(schema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties)) return false;
+    if (!(schema.get(ApiVocabulary.REQUIRED) instanceof List<?> required)
+        || !required.contains(ApiVocabulary.ITEMS)) {
+      return false;
+    }
+    if (!(schema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties)
+        || !LIST_ENVELOPE_KEYS.containsAll(properties.keySet())) {
+      return false;
+    }
     if (!(properties.get(ApiVocabulary.ITEMS) instanceof Map<?, ?> itemsSchema)) return false;
     return ApiVocabulary.ARRAY.equals(itemsSchema.get(ApiVocabulary.TYPE));
   }
@@ -365,12 +375,25 @@ public final class WireSchema {
     }
     Object type = schema.get(ApiVocabulary.TYPE);
     if (type == null) {
-      return true;
+      if (value instanceof Map<?, ?>) {
+        return matchesProjectedObject(value, openObject(), activeDefinitions, node);
+      }
+      if (value instanceof List<?>) {
+        return matchesProjectedArray(
+            value, Map.of(ApiVocabulary.TYPE, ApiVocabulary.ARRAY), activeDefinitions, node);
+      }
+      return false;
     }
     return switch (String.valueOf(type)) {
       case ApiVocabulary.OBJECT -> matchesProjectedObject(value, schema, activeDefinitions, node);
       case ApiVocabulary.ARRAY -> matchesProjectedArray(value, schema, activeDefinitions, node);
-      default -> matches(value, schema, activeDefinitions);
+      case ApiVocabulary.NULL,
+          ApiVocabulary.STRING,
+          ApiVocabulary.INTEGER,
+          ApiVocabulary.NUMBER,
+          ApiVocabulary.BOOLEAN ->
+          false;
+      default -> throw new IllegalStateException("unsupported schema type: " + type);
     };
   }
 
@@ -421,14 +444,31 @@ public final class WireSchema {
     }
     Object type = schema.get(ApiVocabulary.TYPE);
     if (type == null) {
-      return null;
+      if (value instanceof Map<?, ?>) {
+        return findProjectedObjectFailure(value, openObject(), cursor, activeDefinitions, node);
+      }
+      if (value instanceof List<?>) {
+        return findProjectedArrayFailure(
+            value,
+            Map.of(ApiVocabulary.TYPE, ApiVocabulary.ARRAY),
+            cursor,
+            activeDefinitions,
+            node);
+      }
+      return failure(ApiVocabulary.INVALID_TYPE, cursor, " must be an object");
     }
     return switch (String.valueOf(type)) {
       case ApiVocabulary.OBJECT ->
           findProjectedObjectFailure(value, schema, cursor, activeDefinitions, node);
       case ApiVocabulary.ARRAY ->
           findProjectedArrayFailure(value, schema, cursor, activeDefinitions, node);
-      default -> findFailure(value, schema, cursor, activeDefinitions);
+      case ApiVocabulary.NULL,
+          ApiVocabulary.STRING,
+          ApiVocabulary.INTEGER,
+          ApiVocabulary.NUMBER,
+          ApiVocabulary.BOOLEAN ->
+          failure(ApiVocabulary.INVALID_TYPE, cursor, " must be an object");
+      default -> throw new IllegalStateException("unsupported schema type: " + type);
     };
   }
 
@@ -468,7 +508,9 @@ public final class WireSchema {
       }
       Object propertySchema = properties.get(key);
       if (propertySchema == null) {
-        if (!additional) {
+        if (!additional
+            || (!childNode.includeAll()
+                && !matchesProjectedNode(entry.getValue(), Map.of(), definitions, childNode))) {
           return false;
         }
       } else if (!matchesProjectedNode(
@@ -525,6 +567,18 @@ public final class WireSchema {
           String fieldTarget = cursor.format() + "/" + key;
           return new ValidationFailure(
               "unknown_field", fieldTarget + " is not allowed", fieldTarget);
+        }
+        if (!childNode.includeAll()) {
+          cursor.pushKey(key);
+          try {
+            ValidationFailure failure =
+                findProjectedNodeFailure(entry.getValue(), Map.of(), cursor, definitions, childNode);
+            if (failure != null) {
+              return failure;
+            }
+          } finally {
+            cursor.pop();
+          }
         }
       } else {
         cursor.pushKey(key);

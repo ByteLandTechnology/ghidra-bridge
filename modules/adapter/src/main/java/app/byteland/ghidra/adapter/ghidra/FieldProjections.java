@@ -3,8 +3,7 @@ package app.byteland.ghidra.adapter.ghidra;
 import java.util.Set;
 
 /**
- * Projection helpers for skipping unrequested Ghidra attributes when {@code projection.fields} is
- * pushed down from the wire layer.
+ * Checks whether {@code projection.fields} selects root or nested Ghidra attributes.
  */
 public final class FieldProjections {
   private FieldProjections() {}

@@ -489,7 +489,7 @@ class ProjectionAdapterTest {
     assertNull(projectedCu.items().getFirst().dataType());
     assertNull(projectedCu.items().getFirst().bytes());
 
-    // GlobalVariableQueries evaluates name/namespace filters while skipping value/representation.
+    // GlobalVariableQueries evaluates name/namespace filters and skips value/representation.
     GlobalVariableServiceImpl gvService = new GlobalVariableServiceImpl(session);
     Page<GlobalVariableResource> gvPage =
         gvService.listGlobalVariables(
@@ -507,7 +507,7 @@ class ProjectionAdapterTest {
     assertNull(gvPage.items().getFirst().value());
     assertNull(gvPage.items().getFirst().representation());
 
-    // DataUnitResource still returns value/representation when requested while skipping bytes.
+    // DataUnitResource still returns value/representation when requested and skips bytes.
     allowValueReads.set(true);
     Page<DataUnitResource> dataPage =
         listingService.listDataUnits(

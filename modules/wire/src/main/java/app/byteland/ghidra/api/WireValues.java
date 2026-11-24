@@ -35,7 +35,8 @@ final class WireValues {
 
   static Map<String, Object> resourceAllowed(Object value, Set<String> knownFields) {
     @SuppressWarnings("unchecked")
-    Map<String, Object> normalized = (Map<String, Object>) normalize(value, allowedNode(knownFields));
+    Map<String, Object> normalized =
+        (Map<String, Object>) normalizeAllowed(value, rootFields(knownFields));
     return normalized;
   }
 
@@ -48,10 +49,12 @@ final class WireValues {
     if (page == null) {
       throw new IllegalArgumentException("list results must be a Page: null");
     }
-    ProjectionNode itemNode =
-        selectedFields != null ? ProjectionNode.fromFields(selectedFields) : allowedNode(knownFields);
+    Object items =
+        selectedFields != null
+            ? normalize(page.items(), ProjectionNode.fromFields(selectedFields))
+            : normalizeAllowedList(page.items(), rootFields(knownFields));
     Map<String, Object> result = new LinkedHashMap<>();
-    result.put(ApiVocabulary.ITEMS, normalize(page.items(), itemNode));
+    result.put(ApiVocabulary.ITEMS, items);
     if (page.nextCursor() != null) {
       result.put(ApiVocabulary.NEXT_CURSOR, page.nextCursor());
     }
@@ -181,17 +184,63 @@ final class WireValues {
     return result;
   }
 
-  private static ProjectionNode allowedNode(Set<String> knownFields) {
-    if (knownFields == null || knownFields.isEmpty()) {
-      return ProjectionNode.ALL;
+  private static List<Object> normalizeAllowedList(Iterable<?> iterable, Set<String> allowedRoots) {
+    List<Object> result = new ArrayList<>();
+    for (Object item : iterable) {
+      result.add(normalizeAllowed(item, allowedRoots));
     }
-    Map<String, ProjectionNode> children = new LinkedHashMap<>();
+    return result;
+  }
+
+  private static Object normalizeAllowed(Object value, Set<String> allowedRoots) {
+    if (allowedRoots == null) {
+      return normalize(value, ProjectionNode.ALL);
+    }
+    if (value != null && value.getClass().isRecord()) {
+      RecordMeta meta = RECORD_COMPONENTS.get(value.getClass());
+      Map<String, Object> result = new LinkedHashMap<>();
+      for (ComponentMeta component : meta.ordered()) {
+        if (!allowedRoots.contains(component.wireKey())) continue;
+        Object componentValue = invokeAccessor(component, value);
+        if (componentValue == null) continue;
+        result.put(component.wireKey(), normalize(componentValue, ProjectionNode.ALL));
+      }
+      return result;
+    }
+    if (value instanceof Map<?, ?> map) {
+      Map<String, Object> result = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        if (entry.getValue() == null) continue;
+        String key = String.valueOf(entry.getKey());
+        if (allowedRoots.contains(key)) {
+          result.put(key, normalize(entry.getValue(), ProjectionNode.ALL));
+        }
+      }
+      return result;
+    }
+    return normalize(value, ProjectionNode.ALL);
+  }
+
+  private static Set<String> rootFields(Set<String> knownFields) {
+    if (knownFields == null || knownFields.isEmpty()) {
+      return null;
+    }
+    boolean hasDot = false;
+    for (String field : knownFields) {
+      if (field.indexOf('.') >= 0) {
+        hasDot = true;
+        break;
+      }
+    }
+    if (!hasDot) {
+      return knownFields;
+    }
+    Set<String> roots = new LinkedHashSet<>(knownFields.size());
     for (String field : knownFields) {
       int separator = field.indexOf('.');
-      String root = separator < 0 ? field : field.substring(0, separator);
-      children.putIfAbsent(root, ProjectionNode.ALL);
+      roots.add(separator < 0 ? field : field.substring(0, separator));
     }
-    return new ProjectionNode(false, children);
+    return roots;
   }
 
   static Map<String, Object> restrict(Map<String, Object> value, Set<String> fields) {

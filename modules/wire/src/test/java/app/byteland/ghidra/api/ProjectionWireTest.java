@@ -186,8 +186,34 @@ class ProjectionWireTest {
         normalized);
 
     Map<String, Object> allowedOnly =
-        WireValues.resourceAllowed(resource, Set.of("id", "selected"));
+        WireValues.resourceAllowed(resource, new LinkedHashSet<>(List.of("selected", "id")));
+    assertEquals(
+        List.of("id", "selected"),
+        List.copyOf(allowedOnly.keySet()),
+        "resourceAllowed must preserve RecordComponent declaration order");
     assertEquals(Map.of("id", "42", "selected", "kept"), allowedOnly);
+
+    GuardedResource listSafeResource =
+        new GuardedResource("42", "kept", "boom", null, List.of());
+    Map<String, Object> allowedWithDotRoot =
+        WireValues.resourceAllowed(
+            listSafeResource, new LinkedHashSet<>(List.of("list.safe", "selected", "id")));
+    assertEquals(
+        List.of("id", "selected", "list"),
+        List.copyOf(allowedWithDotRoot.keySet()),
+        "resourceAllowed with dot-path knownFields must preserve RecordComponent declaration order");
+    Map<String, Object> unprojectedList =
+        WireValues.list(
+            new Page<>(List.of(listSafeResource), 1, 10, null, null),
+            null,
+            new LinkedHashSet<>(List.of("list.safe", "selected", "id")));
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> normalizedItems =
+        (List<Map<String, Object>>) unprojectedList.get("items");
+    assertEquals(
+        List.of("id", "selected", "list"),
+        List.copyOf(normalizedItems.getFirst().keySet()),
+        "unprojected list must preserve RecordComponent declaration order");
   }
 
   @Test
@@ -239,7 +265,7 @@ class ProjectionWireTest {
     assertEquals("invalid_response", wrongNestedType.error().code());
     assertEquals("invalid_type", ((ApiException) wrongNestedType.getCause()).error().code());
 
-    // Missing projected required child property inside present parent object is rejected.
+    // Absent projected required child property inside present parent object is rejected.
     ApiException missingProjectedSubfield =
         assertThrows(
             ApiException.class,
@@ -250,6 +276,68 @@ class ProjectionWireTest {
     assertEquals("invalid_response", missingProjectedSubfield.error().code());
     assertEquals(
         "missing_field", ((ApiException) missingProjectedSubfield.getCause()).error().code());
+
+    // Scalar union branch is rejected when only a nested subfield is projected.
+    Map<String, Object> dataTypeSchema =
+        ApiSchemaCatalog.resourceSchema(ApiSchemaCatalog.dataTypeFields(), List.of("path"));
+    ApiException scalarUnionForSubfield =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validateProjected(
+                    Map.of("path", "/Callback", "signature", "int Callback(void)"),
+                    dataTypeSchema,
+                    "/result",
+                    new LinkedHashSet<>(List.of("path", "signature.return_type"))));
+    assertEquals("invalid_union", scalarUnionForSubfield.error().code());
+    assertEquals("/result/signature", scalarUnionForSubfield.error().target());
+
+    // Open and untyped schemas enforce projected child keys and reject scalars on subfield paths.
+    Map<String, Object> openSchema =
+        WireSchema.object(
+            Map.of("id", WireSchema.string(), "meta", WireSchema.any(), "bag", WireSchema.openObject()),
+            "id");
+    WireSchema.validateProjected(
+        Map.of("id", "1", "meta", Map.of("tag", "v1"), "bag", Map.of("nested", 7)),
+        openSchema,
+        "/result",
+        new LinkedHashSet<>(List.of("id", "meta.tag", "bag.nested")));
+    ApiException unprojectedOpenChild =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validateProjected(
+                    Map.of("id", "1", "bag", Map.of("nested", 7, "extra", 8)),
+                    openSchema,
+                    "/result",
+                    new LinkedHashSet<>(List.of("id", "bag.nested"))));
+    assertEquals("unknown_field", unprojectedOpenChild.error().code());
+    assertEquals("/result/bag/extra", unprojectedOpenChild.error().target());
+    ApiException scalarOnAnySubfield =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validateProjected(
+                    Map.of("id", "1", "meta", "raw-string"),
+                    openSchema,
+                    "/result",
+                    new LinkedHashSet<>(List.of("id", "meta.tag"))));
+    assertEquals("invalid_type", scalarOnAnySubfield.error().code());
+    assertEquals("/result/meta", scalarOnAnySubfield.error().target());
+
+    // Resource schema with an items property alongside resource fields is not treated as a list envelope.
+    Map<String, Object> resourceWithItems =
+        WireSchema.object(
+            Map.of(
+                "id", WireSchema.string(),
+                "items", WireSchema.array(WireSchema.string(), 0, 10)),
+            "id",
+            "items");
+    WireSchema.validateProjected(
+        Map.of("id", "bundle-1"),
+        resourceWithItems,
+        "/result",
+        new LinkedHashSet<>(List.of("id")));
   }
 
   @Test
