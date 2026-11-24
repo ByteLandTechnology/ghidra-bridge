@@ -29,8 +29,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Proxy;
 import java.net.BindException;
+import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -64,7 +67,11 @@ class McpHttpServerOriginTest {
     dispatcher = createTestDispatcher(programGetCalls);
     server = startServerOnLoopback(dispatcher, requestLogs);
     endpoint = URI.create(server.endpoint());
-    client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    client =
+        HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .proxy(HttpClient.Builder.NO_PROXY)
+            .build();
     programGetBody =
         JsonUtil.toJson(
             Map.of(
@@ -429,17 +436,31 @@ class McpHttpServerOriginTest {
   }
 
   private static String findLocalNonLoopbackIpv4() throws IOException {
-    var interfaces = java.net.NetworkInterface.getNetworkInterfaces();
+    var interfaces = NetworkInterface.getNetworkInterfaces();
+    if (interfaces == null) {
+      return null;
+    }
     while (interfaces.hasMoreElements()) {
-      java.net.NetworkInterface iface = interfaces.nextElement();
-      if (!iface.isUp() || iface.isLoopback()) {
+      NetworkInterface iface = interfaces.nextElement();
+      if (!iface.isUp() || iface.isLoopback() || iface.isPointToPoint() || iface.isVirtual()) {
         continue;
       }
       var addresses = iface.getInetAddresses();
       while (addresses.hasMoreElements()) {
         InetAddress addr = addresses.nextElement();
-        if (addr instanceof java.net.Inet4Address && !addr.isLoopbackAddress()) {
+        if (!(addr instanceof Inet4Address)
+            || addr.isLoopbackAddress()
+            || addr.isLinkLocalAddress()
+            || addr.isAnyLocalAddress()
+            || addr.isMulticastAddress()) {
+          continue;
+        }
+        try (ServerSocket probe = new ServerSocket(0, 1, addr);
+            Socket check = new Socket()) {
+          check.connect(probe.getLocalSocketAddress(), 500);
           return addr.getHostAddress();
+        } catch (IOException ignored) {
+          // Try the next local interface address.
         }
       }
     }

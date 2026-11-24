@@ -34,6 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -834,7 +835,7 @@ public final class McpHttpServer implements AutoCloseable {
     return new String(bytes, StandardCharsets.UTF_8);
   }
 
-  private static void writeJsonRpcError(
+  private void writeJsonRpcError(
       HttpExchange exchange, int httpStatus, Object id, int code, String message)
       throws IOException {
     writeJson(exchange, httpStatus, mcpErrorResponse(exchange, id, code, message, null));
@@ -861,13 +862,17 @@ public final class McpHttpServer implements AutoCloseable {
     return JsonRpc.success(id, result);
   }
 
-  private static void writeJson(HttpExchange exchange, int statusCode, Object payload)
+  private void writeJson(HttpExchange exchange, int statusCode, Object payload)
       throws IOException {
     byte[] bytes = JsonUtil.toJson(payload).getBytes(StandardCharsets.UTF_8);
     exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
     exchange.sendResponseHeaders(statusCode, bytes.length);
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
+      output.flush();
+      if (statusCode == HTTP_PAYLOAD_TOO_LARGE && !closed.get()) {
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(50));
+      }
     }
   }
 

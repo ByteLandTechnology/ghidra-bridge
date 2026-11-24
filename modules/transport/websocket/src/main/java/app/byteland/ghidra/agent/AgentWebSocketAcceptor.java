@@ -74,8 +74,9 @@ final class AgentWebSocketAcceptor implements Runnable {
             socket.getOutputStream(),
             503,
             "Service Unavailable",
-            List.of(),
+            List.of("Connection: close"),
             "Too many pending handshakes");
+        WebSocketHandshake.closeAfterHttpError(socket, 25, 16 * 1024);
       }
     } catch (IOException failure) {
       if (running.get()) {

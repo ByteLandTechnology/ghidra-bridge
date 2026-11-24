@@ -28,6 +28,7 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpPrincipal;
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -53,6 +54,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -335,6 +337,8 @@ class McpHttpServerBodyLimitTest {
       // 3. Mismatched Content-Length over wire where client streams extra bytes past declared length.
       try (Socket socket = new Socket(LOOPBACK, running.port)) {
         socket.setSoTimeout(10_000);
+        CompletableFuture<RawHttpResponse> responseFuture =
+            startResponseReader(socket.getInputStream());
         String headers =
             "POST /mcp HTTP/1.1\r\n"
                 + "Host: 127.0.0.1:"
@@ -343,12 +347,17 @@ class McpHttpServerBodyLimitTest {
                 + "Content-Type: application/json\r\n"
                 + "MCP-Protocol-Version: 2025-11-25\r\n"
                 + "Content-Length: 16\r\n\r\n";
-        OutputStream out = socket.getOutputStream();
-        out.write(headers.getBytes(StandardCharsets.US_ASCII));
-        out.write("{\"incomplete\":12".getBytes(StandardCharsets.US_ASCII));
-        out.write(new byte[128 * 1024]);
-        out.flush();
-        RawHttpResponse response = readHttpResponse(socket.getInputStream());
+        try {
+          OutputStream out = socket.getOutputStream();
+          out.write(headers.getBytes(StandardCharsets.US_ASCII));
+          out.write("{\"incomplete\":12".getBytes(StandardCharsets.US_ASCII));
+          out.flush();
+          out.write(new byte[128 * 1024]);
+          out.flush();
+        } catch (IOException ignored) {
+          // Ignore write errors after the server closes the socket.
+        }
+        RawHttpResponse response = responseFuture.get(10, TimeUnit.SECONDS);
         assertEquals(400, response.statusCode);
       }
 
@@ -467,8 +476,7 @@ class McpHttpServerBodyLimitTest {
 
   @Test
   void boundedHeap96mServerRejects64MiBFixedAndChunkedStreamsWithoutOom() throws Exception {
-    String javaBin =
-        Path.of(System.getProperty("java.home"), "bin", "java").toAbsolutePath().toString();
+    String javaBin = resolveJavaExecutable();
     String classpath = System.getProperty("java.class.path");
 
     Process process =
@@ -593,24 +601,55 @@ class McpHttpServerBodyLimitTest {
     }
   }
 
+  private static String resolveJavaExecutable() {
+    return ProcessHandle.current()
+        .info()
+        .command()
+        .orElseGet(
+            () ->
+                Path.of(
+                        System.getProperty("java.home"),
+                        "bin",
+                        System.getProperty("os.name", "")
+                                .toLowerCase(Locale.ROOT)
+                                .contains("win")
+                            ? "java.exe"
+                            : "java")
+                    .toAbsolutePath()
+                    .toString());
+  }
+
+  private static CompletableFuture<RawHttpResponse> startResponseReader(InputStream input)
+      throws InterruptedException {
+    CountDownLatch readerStarted = new CountDownLatch(1);
+    CompletableFuture<RawHttpResponse> responseFuture = new CompletableFuture<>();
+    Thread.ofPlatform()
+        .daemon()
+        .name("mcp-body-limit-response-reader")
+        .start(
+            () -> {
+              readerStarted.countDown();
+              try {
+                responseFuture.complete(readHttpResponse(input));
+              } catch (Throwable error) {
+                responseFuture.completeExceptionally(error);
+              }
+            });
+    assertTrue(readerStarted.await(5, TimeUnit.SECONDS));
+    return responseFuture;
+  }
+
   private static RawHttpResponse streamOversizedBody(
       int port, String rawHeaders, int totalBytes, boolean chunked) throws Exception {
     try (Socket socket = new Socket(LOOPBACK, port)) {
       socket.setSoTimeout(20_000);
-      InputStream in = socket.getInputStream();
       CompletableFuture<RawHttpResponse> responseFuture =
-          CompletableFuture.supplyAsync(
-              () -> {
-                try {
-                  return readHttpResponse(in);
-                } catch (IOException e) {
-                  throw new RuntimeException(e);
-                }
-              });
+          startResponseReader(socket.getInputStream());
 
       try {
         OutputStream out = socket.getOutputStream();
         out.write(rawHeaders.getBytes(StandardCharsets.US_ASCII));
+        out.flush();
         byte[] payload = new byte[CHUNK_SIZE];
         Arrays.fill(payload, (byte) 'a');
         byte[] crlf = "\r\n".getBytes(StandardCharsets.US_ASCII);
@@ -639,7 +678,8 @@ class McpHttpServerBodyLimitTest {
     }
   }
 
-  private static RawHttpResponse readHttpResponse(InputStream input) throws IOException {
+  private static RawHttpResponse readHttpResponse(InputStream rawInput) throws IOException {
+    InputStream input = new BufferedInputStream(rawInput, 8192);
     String statusLine = readAsciiLine(input);
     if (statusLine == null || !statusLine.startsWith("HTTP/1.1 ")) {
       throw new IOException("Invalid HTTP status line: " + statusLine);

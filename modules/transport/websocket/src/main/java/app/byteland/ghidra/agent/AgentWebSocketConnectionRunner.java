@@ -50,6 +50,7 @@ final class AgentWebSocketConnectionRunner {
           WebSocketHandshakeValidator.validate(config, request);
         } catch (WebSocketHandshake.HttpHandshakeException e) {
           closeState.reason = e.getMessage();
+          pendingSockets.remove(socket);
           writeHandshakeFailure(socket, e);
           return;
         }
@@ -60,13 +61,15 @@ final class AgentWebSocketConnectionRunner {
         AgentServerConnection candidate = new AgentServerConnection(socket);
         if (!activeConnection.compareAndSet(null, candidate)) {
           candidate.markClosed();
+          pendingSockets.remove(socket);
           if (running.get()) {
             WebSocketHandshake.writeHttpResponse(
                 socket.getOutputStream(),
                 409,
                 "Conflict",
-                List.of(),
+                List.of("Connection: close"),
                 "Bridge already has an active client");
+            WebSocketHandshake.closeAfterHttpError(socket, 100, 16 * 1024);
           }
           return;
         }
@@ -107,7 +110,12 @@ final class AgentWebSocketConnectionRunner {
   private void writeHandshakeFailure(Socket socket, WebSocketHandshake.HttpHandshakeException e) {
     try {
       WebSocketHandshake.writeHttpResponse(
-          socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
+          socket.getOutputStream(),
+          e.status(),
+          e.reason(),
+          List.of("Connection: close"),
+          e.getMessage());
+      WebSocketHandshake.closeAfterHttpError(socket, 250, 128 * 1024);
     } catch (IOException responseFailure) {
       e.addSuppressed(responseFailure);
       if (running.get()) {
