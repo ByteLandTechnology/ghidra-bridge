@@ -72,10 +72,16 @@ public final class GhidraSession {
     return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
-  public java.util.List<ghidra.program.model.symbol.Reference> references(
-      Address address, boolean to) {
-    return java.util.Arrays.asList(
-        to ? ghidraScript.getReferencesTo(address) : ghidraScript.getReferencesFrom(address));
+  public Iterable<ghidra.program.model.symbol.Reference> references(Address address, boolean to) {
+    ghidra.program.model.symbol.ReferenceManager manager = currentProgram().getReferenceManager();
+    if (to) {
+      return () -> {
+        ghidra.program.model.symbol.ReferenceIterator incoming = manager.getReferencesTo(address);
+        return incoming == null ? java.util.Collections.emptyIterator() : incoming;
+      };
+    }
+    ghidra.program.model.symbol.Reference[] outgoing = manager.getReferencesFrom(address);
+    return outgoing == null ? java.util.List.of() : java.util.Arrays.asList(outgoing);
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
