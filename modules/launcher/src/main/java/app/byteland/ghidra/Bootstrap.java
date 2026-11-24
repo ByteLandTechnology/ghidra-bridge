@@ -23,7 +23,6 @@ import java.util.function.BooleanSupplier;
  */
 @SuppressWarnings("try")
 public final class Bootstrap {
-  @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
   private static final String LOOPBACK_HOST = "127.0.0.1";
 
   private static final String SESSION_ID_ARGUMENT = "session_id";
@@ -127,16 +126,6 @@ public final class Bootstrap {
       throw e;
     }
 
-    AgentConfig dispatcherConfig =
-        new AgentConfig(
-            null,
-            mcpConfig.host(),
-            mcpConfig.port(),
-            mcpConfig.path(),
-            mcpConfig.token(),
-            mcpConfig.sessionId(),
-            null);
-
     saveCheckpoint(script, program, "[ghidra-mcp]");
 
     script.println("[ghidra-mcp] Starting MCP HTTP service");
@@ -155,7 +144,7 @@ public final class Bootstrap {
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
         gracefulExit(services.programService(), script, "[ghidra-mcp]")) {
-      try (AgentDispatcher dispatcher = new AgentDispatcher(services, dispatcherConfig);
+      try (AgentDispatcher dispatcher = new AgentDispatcher(services, mcpConfig.sessionId());
           McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher, script::println)) {
         if (onShutdown != null) {
           gracefulExit.installShutdownHook(server::close, onShutdown);
@@ -191,7 +180,6 @@ public final class Bootstrap {
             script.printerr(prefix + " Program save on exit failed: " + errorMessage(failure)));
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static void saveCheckpoint(GhidraScript script, Program program, String prefix) {
     try {
       script.saveProgram(program);
