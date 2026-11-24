@@ -5,6 +5,7 @@ import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
@@ -41,6 +42,19 @@ final class DataTypeMutations {
       DataTypeReference baseType,
       int size,
       FunctionSignature signature,
+      Function<DataTypeReference, DataType> resolver) {
+    createDataType(
+        manager, categoryPath, kind, name, baseType, size, signature, null, null, resolver);
+  }
+
+  static void createDataType(
+      DataTypeManager manager,
+      String categoryPath,
+      DataTypeResource.Kind kind,
+      String name,
+      DataTypeReference baseType,
+      int size,
+      FunctionSignature signature,
       List<DataTypePatch.CompositeField> fields,
       List<DataTypePatch.EnumValue> values,
       Function<DataTypeReference, DataType> resolver) {
@@ -49,7 +63,14 @@ final class DataTypeMutations {
     CategoryPath path = new CategoryPath(normalizedCategoryPath);
     DataType candidate;
     switch (kind) {
-      case STRUCT -> candidate = new StructureDataType(path, name, Math.max(size, 0), manager);
+      case STRUCT -> {
+        if (size > DataTypeService.MAX_STRUCT_SIZE) {
+          throw new DataTypeMutationValidationException(
+              "/resource/size",
+              "struct size must not exceed " + DataTypeService.MAX_STRUCT_SIZE);
+        }
+        candidate = new StructureDataType(path, name, Math.max(size, 0), manager);
+      }
       case ENUM -> candidate = new EnumDataType(path, name, size > 0 ? size : 4, manager);
       case UNION -> candidate = new UnionDataType(path, name, manager);
       case TYPEDEF -> {
@@ -149,8 +170,7 @@ final class DataTypeMutations {
       Function<DataTypeReference, DataType> resolver) {
     if (fields != null && !fields.isEmpty()) {
       if (created instanceof Structure structure) {
-        StructMutations.edit(
-            structure, new DataTypePatch.Struct(fields, null, null, null), resolver);
+        StructMutations.addInitialFields(structure, fields, resolver);
       } else if (created instanceof Union union) {
         UnionMutations.edit(union, new DataTypePatch.Union(fields, null, null, null), resolver);
       } else {

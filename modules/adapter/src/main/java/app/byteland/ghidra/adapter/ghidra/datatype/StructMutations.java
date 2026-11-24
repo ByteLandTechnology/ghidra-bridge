@@ -1,88 +1,42 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
+import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
 import ghidra.program.model.data.DataTypeComponentImpl;
 import ghidra.program.model.data.Structure;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
 
 final class StructMutations {
+  private static final String PATCH_ADD_FIELDS_TARGET = "/patch/add_fields";
+  private static final String RESOURCE_FIELDS_TARGET = "/resource/fields";
+  private static final String PATCH_UPDATE_FIELDS_TARGET = "/patch/update_fields";
+
   private StructMutations() {}
 
   static void edit(
       Structure structure,
       DataTypePatch.Struct patch,
       Function<DataTypeReference, DataType> resolver) {
-    StructureAccess access = new StructureAccess(structure);
-    remove(structure, patch.removeFields());
-    CompositeFieldMutations.renameFields(access, patch.renameFields(), resolver);
-    CompositeFieldMutations.updateFields(access, patch.updateFields(), resolver);
-    if (patch.addFields() != null) {
-      for (DataTypePatch.CompositeField field : patch.addFields()) add(structure, field, resolver);
-    }
+    CompositeFieldMutations.edit(
+        new StructureAccess(structure, PATCH_ADD_FIELDS_TARGET),
+        patch.removeFields(),
+        patch.renameFields(),
+        patch.updateFields(),
+        patch.addFields(),
+        resolver);
   }
 
-  private static void add(
+  static void addInitialFields(
       Structure structure,
-      DataTypePatch.CompositeField field,
+      List<DataTypePatch.CompositeField> fields,
       Function<DataTypeReference, DataType> resolver) {
-    String name = field.name() == null ? "field" : field.name();
-    DataType dataType = DataTypeMutationSupport.resolveFieldDataType(field.dataType(), resolver);
-    int length = DataTypeMutationSupport.fieldLength(dataType, field.length(), null);
-    String comment = DataTypeMutationSupport.normalizeComment(field.comment());
-    if (field.offset() == null) {
-      structure.add(dataType, length, name, comment);
-      return;
-    }
-    int offset = field.offset();
-    if (structure.isPackingEnabled()) {
-      structure.insertAtOffset(offset, dataType, length, name, comment);
-      return;
-    }
-    int effectiveLength = effectiveComponentLength(structure, dataType, length);
-    ensureUnpackedRangeAvailable(structure, offset, effectiveLength, -1);
-    if (effectiveLength == 0 && offset == unpackedLength(structure)) {
-      structure.insertAtOffset(offset, dataType, 0, name, comment);
-      return;
-    }
-    ensureUnpackedCapacity(structure, offset, Math.max(effectiveLength, 1));
-    structure.replaceAtOffset(offset, dataType, effectiveLength, name, comment);
-  }
-
-  private static void remove(Structure structure, List<DataTypePatch.CompositeField> selectors) {
-    if (selectors == null) return;
-    List<Integer> ordinals = new ArrayList<>();
-    for (DataTypePatch.CompositeField selector : selectors) {
-      ordinals.addAll(resolveOrdinals(structure, selector));
-    }
-    ordinals = ordinals.stream().distinct().sorted(Collections.reverseOrder()).toList();
-    for (int ordinal : ordinals) {
-      if (ordinal >= 0 && ordinal < structure.getNumComponents()) {
-        if (structure.isPackingEnabled()) structure.delete(ordinal);
-        else structure.clearComponent(ordinal);
-      }
-    }
-  }
-
-  private static List<Integer> resolveOrdinals(
-      Structure structure, DataTypePatch.CompositeField selector) {
-    if (selector.offset() != null) {
-      DataTypeComponent component = structure.getComponentAt(selector.offset());
-      return component != null ? List.of(component.getOrdinal()) : List.of();
-    }
-    if (selector.name() == null) {
-      throw new IllegalArgumentException("struct field selector requires name or offset");
-    }
-    List<Integer> matches = new ArrayList<>();
-    for (DataTypeComponent component : structure.getDefinedComponents()) {
-      if (selector.name().equals(component.getFieldName())) matches.add(component.getOrdinal());
-    }
-    return matches;
+    CompositeFieldMutations.addFields(
+        new StructureAccess(structure, RESOURCE_FIELDS_TARGET), fields, resolver);
   }
 
   private static int effectiveComponentLength(
@@ -94,17 +48,37 @@ final class StructMutations {
     return DataTypeComponentImpl.getPreferredComponentLength(cloned, requestedLength);
   }
 
-  private static int unpackedLength(Structure structure) {
-    return structure.isZeroLength() ? 0 : structure.getLength();
+  private static int currentByteLength(Structure structure) {
+    if (structure.isZeroLength()) return 0;
+    return Math.max(structure.getLength(), 0);
+  }
+
+  private static void validateEndOffset(int offset, int length, String target) {
+    final int endOffset;
+    try {
+      endOffset = Math.addExact(offset, length);
+    } catch (ArithmeticException overflow) {
+      throw new DataTypeMutationValidationException(
+          target, "struct size must not exceed " + DataTypeService.MAX_STRUCT_SIZE, overflow);
+    }
+    if (endOffset > DataTypeService.MAX_STRUCT_SIZE) {
+      throw new DataTypeMutationValidationException(
+          target, "struct size must not exceed " + DataTypeService.MAX_STRUCT_SIZE);
+    }
+  }
+
+  private static void ensureDefinedComponentCapacity(Structure structure, String target) {
+    if (structure.getNumDefinedComponents() >= DataTypeService.MAX_DEFINED_COMPONENTS) {
+      throw new DataTypeMutationValidationException(
+          target,
+          "struct cannot exceed " + DataTypeService.MAX_DEFINED_COMPONENTS + " defined fields");
+    }
   }
 
   private static void ensureUnpackedRangeAvailable(
-      Structure structure, int offset, int length, int ignoredOrdinal) {
-    if (offset < 0) throw new IllegalArgumentException("offset must not be negative");
+      Structure structure, int offset, int length, int ignoredOrdinal, String target) {
+    validateEndOffset(offset, length, target);
     long end = (long) offset + length;
-    if (end > Integer.MAX_VALUE) {
-      throw new IllegalArgumentException("struct field exceeds maximum structure size");
-    }
     for (DataTypeComponent defined : structure.getDefinedComponents()) {
       if (defined.getOrdinal() == ignoredOrdinal) continue;
       int definedOffset = defined.getOffset();
@@ -118,7 +92,8 @@ final class StructMutations {
                   ? (definedOffset <= offset && offset < definedEnd)
                   : (offset < definedEnd && definedOffset < end));
       if (overlaps) {
-        throw new IllegalArgumentException(
+        throw new DataTypeMutationValidationException(
+            target,
             "struct field at offset "
                 + offset
                 + " overlaps defined component at offset "
@@ -127,18 +102,17 @@ final class StructMutations {
     }
   }
 
-  private static void ensureUnpackedCapacity(Structure structure, int offset, int length) {
-    long end = (long) offset + length;
-    if (end > Integer.MAX_VALUE) {
-      throw new IllegalArgumentException("struct field exceeds maximum structure size");
-    }
-    int currentLength = unpackedLength(structure);
-    if (end > currentLength) {
-      structure.growStructure((int) end - currentLength);
+  private static void ensureUnpackedCapacity(
+      Structure structure, int offset, int length, String target) {
+    validateEndOffset(offset, length, target);
+    int requiredLength = offset + length;
+    int currentLength = currentByteLength(structure);
+    if (requiredLength > currentLength) {
+      structure.growStructure(requiredLength - currentLength);
     }
   }
 
-  private record StructureAccess(Structure structure)
+  private record StructureAccess(Structure composite, String addTargetPrefix)
       implements CompositeFieldMutations.CompositeAccess {
     @Override
     public CompositeFieldMutations.CompositeKind kind() {
@@ -147,31 +121,111 @@ final class StructMutations {
 
     @Override
     public List<Integer> locate(DataTypePatch.CompositeField selector) {
-      return resolveOrdinals(structure, selector);
+      if (selector.offset() != null) {
+        if (selector.offset() < 0) return List.of();
+        DataTypeComponent component = composite.getComponentAt(selector.offset());
+        if (component == null) {
+          DataTypeComponent defined =
+              composite.getDefinedComponentAtOrAfterOffset(selector.offset());
+          if (defined != null && defined.getOffset() == selector.offset()) {
+            component = defined;
+          }
+        }
+        return component != null ? List.of(component.getOrdinal()) : List.of();
+      }
+      if (selector.name() == null) {
+        throw new IllegalArgumentException("struct field selector requires name or offset");
+      }
+      return CompositeFieldMutations.findOrdinalsByName(composite, selector.name());
     }
 
     @Override
-    public int componentCount() {
-      return structure.getNumComponents();
+    public void removeComponent(int ordinal) {
+      if (composite.isPackingEnabled()) composite.delete(ordinal);
+      else composite.clearComponent(ordinal);
     }
 
     @Override
-    public DataTypeComponent component(int ordinal) {
-      return structure.getComponent(ordinal);
+    public void validateBeforeAdd(DataTypePatch.CompositeField field, int index) {
+      ensureDefinedComponentCapacity(composite, addTargetPrefix + "/" + index);
+    }
+
+    @Override
+    public void append(DataType dataType, int length, String name, String comment, int index) {
+      String target = addTargetPrefix + "/" + index;
+      int checkLength =
+          composite.isPackingEnabled()
+              ? length
+              : effectiveComponentLength(composite, dataType, length);
+      validateEndOffset(currentByteLength(composite), checkLength, target);
+      composite.add(dataType, length, name, comment);
+      if (composite.isPackingEnabled()
+          && currentByteLength(composite) > DataTypeService.MAX_STRUCT_SIZE) {
+        composite.delete(composite.getNumComponents() - 1);
+        throw new DataTypeMutationValidationException(
+            target, "struct size must not exceed " + DataTypeService.MAX_STRUCT_SIZE);
+      }
+    }
+
+    @Override
+    public void insertAtOffset(
+        int offset, DataType dataType, int length, String name, String comment, int index) {
+      String target = addTargetPrefix + "/" + index + "/offset";
+      if (offset < 0) {
+        throw new DataTypeMutationValidationException(
+            target, "struct field offset must not be negative");
+      }
+      if (composite.isPackingEnabled()) {
+        validateEndOffset(offset, length, target);
+        validateEndOffset(Math.max(offset, currentByteLength(composite)), length, target);
+        composite.insertAtOffset(offset, dataType, length, name, comment);
+        if (currentByteLength(composite) > DataTypeService.MAX_STRUCT_SIZE) {
+          throw new DataTypeMutationValidationException(
+              target, "struct size must not exceed " + DataTypeService.MAX_STRUCT_SIZE);
+        }
+        return;
+      }
+      int effectiveLength = effectiveComponentLength(composite, dataType, length);
+      validateEndOffset(offset, effectiveLength, target);
+      ensureUnpackedRangeAvailable(composite, offset, effectiveLength, -1, target);
+      if (effectiveLength == 0 && offset == currentByteLength(composite)) {
+        composite.insertAtOffset(offset, dataType, 0, name, comment);
+        return;
+      }
+      ensureUnpackedCapacity(composite, offset, Math.max(effectiveLength, 1), target);
+      composite.replaceAtOffset(offset, dataType, effectiveLength, name, comment);
     }
 
     @Override
     public void replace(
         DataTypeComponent component, CompositeFieldMutations.Replacement replacement) {
+      if (component.isUndefined()) {
+        ensureDefinedComponentCapacity(composite, PATCH_UPDATE_FIELDS_TARGET);
+      }
       int ordinal = component.getOrdinal();
       int offset = component.getOffset();
       int length = replacement.length();
-      if (!structure.isPackingEnabled()) {
-        length = effectiveComponentLength(structure, replacement.dataType(), replacement.length());
-        ensureUnpackedRangeAvailable(structure, offset, length, ordinal);
-        ensureUnpackedCapacity(structure, offset, Math.max(length, 1));
+      if (composite.isPackingEnabled()) {
+        validateEndOffset(offset, length, PATCH_UPDATE_FIELDS_TARGET);
+        composite.replace(
+            ordinal,
+            replacement.dataType(),
+            length,
+            replacement.name(),
+            replacement.comment());
+        if (currentByteLength(composite) > DataTypeService.MAX_STRUCT_SIZE) {
+          throw new DataTypeMutationValidationException(
+              PATCH_UPDATE_FIELDS_TARGET,
+              "struct size must not exceed " + DataTypeService.MAX_STRUCT_SIZE);
+        }
+        return;
       }
-      structure.replace(
+      length = effectiveComponentLength(composite, replacement.dataType(), replacement.length());
+      validateEndOffset(offset, length, PATCH_UPDATE_FIELDS_TARGET);
+      ensureUnpackedRangeAvailable(composite, offset, length, ordinal, PATCH_UPDATE_FIELDS_TARGET);
+      ensureUnpackedCapacity(
+          composite, offset, Math.max(length, 1), PATCH_UPDATE_FIELDS_TARGET);
+      composite.replace(
           ordinal,
           replacement.dataType(),
           length,

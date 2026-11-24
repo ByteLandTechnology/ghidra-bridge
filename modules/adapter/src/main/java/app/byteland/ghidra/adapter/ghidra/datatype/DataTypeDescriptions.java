@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.datatype;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.Array;
 import ghidra.program.model.data.BuiltInDataType;
@@ -100,9 +101,23 @@ final class DataTypeDescriptions {
   }
 
   private static List<DataTypeResource.Field> compositeFields(Composite composite) {
-    List<DataTypeResource.Field> fields = new ArrayList<>();
-    for (int index = 0; index < composite.getNumComponents(); index++) {
-      DataTypeComponent component = composite.getComponent(index);
+    if (composite.getNumDefinedComponents() > DataTypeService.MAX_DEFINED_COMPONENTS) {
+      throw new IllegalArgumentException(
+          "composite has more than "
+              + DataTypeService.MAX_DEFINED_COMPONENTS
+              + " defined fields: "
+              + composite.getPathName());
+    }
+    DataTypeComponent[] defined = composite.getDefinedComponents();
+    if (defined.length > DataTypeService.MAX_DEFINED_COMPONENTS) {
+      throw new IllegalArgumentException(
+          "composite has more than "
+              + DataTypeService.MAX_DEFINED_COMPONENTS
+              + " defined fields: "
+              + composite.getPathName());
+    }
+    List<DataTypeResource.Field> fields = new ArrayList<>(defined.length);
+    for (DataTypeComponent component : defined) {
       DataType componentType = component.getDataType();
       fields.add(
           new DataTypeResource.Field(

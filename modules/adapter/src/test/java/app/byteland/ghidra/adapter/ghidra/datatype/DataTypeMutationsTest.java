@@ -18,9 +18,11 @@ import app.byteland.ghidra.service.address.AddressService;
 import app.byteland.ghidra.service.analysis.AnalysisResource;
 import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
+import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
@@ -32,17 +34,22 @@ import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.program.model.data.ByteDataType;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.DataTypeComponent;
 import ghidra.program.model.data.DataTypeConflictHandler;
 import ghidra.program.model.data.DataTypeDependencyException;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.IntegerDataType;
 import ghidra.program.model.data.StandAloneDataTypeManager;
 import ghidra.program.model.data.Structure;
+import ghidra.program.model.data.StructureDataType;
 import ghidra.program.model.data.TypeDef;
 import ghidra.program.model.data.TypedefDataType;
+import ghidra.program.model.data.Undefined1DataType;
+import ghidra.program.model.data.UnionDataType;
 import ghidra.program.model.data.UnsignedIntegerDataType;
 import ghidra.program.model.data.UnsignedLongLongDataType;
 import ghidra.program.model.data.UnsignedShortDataType;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -172,11 +179,14 @@ class DataTypeMutationsTest {
 
     DataTypeResource afterSparseAdd = service.getDataType("/Test/Packet");
     assertEquals(10, afterSparseAdd.size());
-    assertEquals(6, afterSparseAdd.fields().size());
+    assertEquals(2, afterSparseAdd.fields().size());
     assertField(afterSparseAdd.fields().get(0), "magic", 0, 4, false, "header magic");
-    assertTrue(afterSparseAdd.fields().get(1).isUndefined());
-    assertEquals(4, afterSparseAdd.fields().get(1).offset());
-    assertField(afterSparseAdd.fields().get(5), "payload_len", 8, 2, false, "payload bytes");
+    assertField(afterSparseAdd.fields().get(1), "payload_len", 8, 2, false, "payload bytes");
+    assertEquals(5, afterSparseAdd.fields().get(1).ordinal());
+    Structure rawPacket = (Structure) manager.getDataType("/Test/Packet");
+    for (int offset = 4; offset < 8; offset++) {
+      assertTrue(rawPacket.getComponentAt(offset).isUndefined());
+    }
 
     // Populate an interior gap via add_fields without shifting payload_len from offset 8.
     registry.dispatch(
@@ -202,10 +212,11 @@ class DataTypeMutationsTest {
 
     DataTypeResource afterGapFill = service.getDataType("/Test/Packet");
     assertEquals(10, afterGapFill.size());
+    assertEquals(3, afterGapFill.fields().size());
     assertField(findFieldByOffset(afterGapFill, 0), "magic", 0, 4, false, "header magic");
     assertField(findFieldByOffset(afterGapFill, 4), "flags", 4, 2, false, "packet flags");
-    assertTrue(findFieldByOffset(afterGapFill, 6).isUndefined());
-    assertTrue(findFieldByOffset(afterGapFill, 7).isUndefined());
+    assertTrue(rawPacket.getComponentAt(6).isUndefined());
+    assertTrue(rawPacket.getComponentAt(7).isUndefined());
     assertField(findFieldByOffset(afterGapFill, 8), "payload_len", 8, 2, false, "payload bytes");
 
     // Removing a field in an unpacked struct clears its bytes to undefined without shifting later
@@ -220,8 +231,9 @@ class DataTypeMutationsTest {
 
     DataTypeResource afterRemove = service.getDataType("/Test/Packet");
     assertEquals(10, afterRemove.size());
+    assertEquals(2, afterRemove.fields().size());
     for (int offset = 0; offset < 4; offset++) {
-      assertTrue(findFieldByOffset(afterRemove, offset).isUndefined());
+      assertTrue(rawPacket.getComponentAt(offset).isUndefined());
     }
     assertField(findFieldByOffset(afterRemove, 4), "flags", 4, 2, false, "packet flags");
     assertField(findFieldByOffset(afterRemove, 8), "payload_len", 8, 2, false, "payload bytes");
@@ -800,6 +812,185 @@ class DataTypeMutationsTest {
                     DataTypeReference.named("ulonglong"),
                     ref -> GhidraDataTypeReferences.resolve(manager, ref)));
     assertEquals(400, ApiFailures.normalize(dependencyError).status());
+  }
+
+  @Test
+  void sparseStructsOmitFillerBytesAvoidPerByteScansAndEnforceBounds() throws Exception {
+    // Sparse create + initial field at offset 25_000 succeeds without overflowing maxItems: 1000.
+    registry.dispatch(
+        "data_type.create",
+        Map.of(
+            "resource",
+            Map.of(
+                "kind",
+                "struct",
+                "category_path",
+                "/Test",
+                "name",
+                "Sparse",
+                "size",
+                25_000,
+                "fields",
+                List.of(Map.of("name", "tail_word", "offset", 25_000, "data_type", named("uint"))))));
+    DataTypeResource sparse = service.getDataType("/Test/Sparse");
+    assertEquals(25_004, sparse.size());
+    assertEquals(1, sparse.fields().size());
+    assertEquals(25_000, sparse.fields().getFirst().ordinal());
+    assertField(sparse.fields().getFirst(), "tail_word", 25_000, 4, false, null);
+
+    // Explicit Undefined1DataType component stays visible while virtual filler slots are omitted.
+    StructureDataType delegate = new StructureDataType(CategoryPath.ROOT, "GuardedSparse", 25_000);
+    delegate.replaceAtOffset(100, Undefined1DataType.dataType, 1, "explicit_undef", "marker");
+    Structure guarded = forbidPerByteGetComponent(delegate);
+    DataTypeResource describedGuarded = DataTypeDescriptions.detail(guarded);
+    assertEquals(25_000, describedGuarded.size());
+    assertEquals(1, describedGuarded.fields().size());
+    assertField(describedGuarded.fields().getFirst(), "explicit_undef", 100, 1, false, "marker");
+
+    StructMutations.edit(
+        guarded,
+        new DataTypePatch.Struct(
+            List.of(
+                new DataTypePatch.CompositeField(
+                    "far_tail", null, 25_000, null, DataTypeReference.named("byte"))),
+            null,
+            null,
+            List.of(new DataTypePatch.CompositeField("missing_name", null, null, null, null))),
+        ref -> ByteDataType.dataType);
+    assertEquals(2, DataTypeDescriptions.detail(guarded).fields().size());
+
+    // Enforce MAX_STRUCT_SIZE across create, initial fields, add_fields, update_fields, and overflow.
+    DataTypeMutationValidationException createTooLarge =
+        assertThrows(
+            DataTypeMutationValidationException.class,
+            () ->
+                DataTypeMutations.createDataType(
+                    manager,
+                    "/Test",
+                    DataTypeResource.Kind.STRUCT,
+                    "TooLarge",
+                    null,
+                    DataTypeService.MAX_STRUCT_SIZE + 1,
+                    null,
+                    ref -> GhidraDataTypeReferences.resolve(manager, ref)));
+    assertEquals("/resource/size", createTooLarge.target());
+    assertEquals(400, ApiFailures.normalize(createTooLarge).status());
+
+    DataTypeMutationValidationException initialFieldTooLarge =
+        assertThrows(
+            DataTypeMutationValidationException.class,
+            () ->
+                service.createDataType(
+                    "/Test",
+                    DataTypeResource.Kind.STRUCT,
+                    "InitialOverflow",
+                    null,
+                    0,
+                    null,
+                    List.of(
+                        new DataTypePatch.CompositeField(
+                            "spill",
+                            null,
+                            DataTypeService.MAX_STRUCT_SIZE - 2,
+                            null,
+                            DataTypeReference.named("uint"))),
+                    null));
+    assertEquals("/resource/fields/0/offset", initialFieldTooLarge.target());
+    assertNull(manager.getDataType("/Test/InitialOverflow"));
+
+    StructureDataType overflowStruct = new StructureDataType(CategoryPath.ROOT, "Overflow", 0);
+    DataTypeMutationValidationException overflowError =
+        assertThrows(
+            DataTypeMutationValidationException.class,
+            () ->
+                StructMutations.edit(
+                    overflowStruct,
+                    new DataTypePatch.Struct(
+                        List.of(
+                            new DataTypePatch.CompositeField(
+                                "overflow",
+                                null,
+                                Integer.MAX_VALUE,
+                                4,
+                                DataTypeReference.named("byte"))),
+                        null,
+                        null,
+                        null),
+                    ref -> ByteDataType.dataType));
+    assertEquals("/patch/add_fields/0/offset", overflowError.target());
+
+    // Enforce MAX_DEFINED_COMPONENTS across add_fields, undefined-slot promotion, and detail().
+    StructureDataType dense = new StructureDataType(CategoryPath.ROOT, "Dense", 1_005);
+    for (int index = 0; index < DataTypeService.MAX_DEFINED_COMPONENTS; index++) {
+      dense.replaceAtOffset(index, ByteDataType.dataType, 1, "f_" + index, null);
+    }
+    assertEquals(
+        DataTypeService.MAX_DEFINED_COMPONENTS, DataTypeDescriptions.detail(dense).fields().size());
+    assertThrows(
+        DataTypeMutationValidationException.class,
+        () ->
+            StructMutations.edit(
+                dense,
+                new DataTypePatch.Struct(
+                    List.of(
+                        new DataTypePatch.CompositeField(
+                            "extra", null, null, 1, DataTypeReference.named("byte"))),
+                    null,
+                    null,
+                    null),
+                ref -> ByteDataType.dataType));
+    assertThrows(
+        DataTypeMutationValidationException.class,
+        () ->
+            StructMutations.edit(
+                dense,
+                new DataTypePatch.Struct(
+                    null,
+                    List.of(
+                        new DataTypePatch.CompositeField(
+                            null, "promoted_undef", 1_001, null, null, "note", true)),
+                    null,
+                    null),
+                ref -> ByteDataType.dataType));
+    dense.replaceAtOffset(1_000, ByteDataType.dataType, 1, "f_1000", null);
+    assertThrows(IllegalArgumentException.class, () -> DataTypeDescriptions.detail(dense));
+
+    // Consolidated CompositeFieldMutations preserves union pre-resolution offset check.
+    UnionDataType union = new UnionDataType("OffsetOrderUnion");
+    IllegalArgumentException unionOffsetError =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                UnionMutations.edit(
+                    union,
+                    new DataTypePatch.Union(
+                        List.of(
+                            new DataTypePatch.CompositeField(
+                                "bad", null, 0, -1, DataTypeReference.named("missing"))),
+                        null,
+                        null,
+                        null),
+                    ignored -> {
+                      throw new AssertionError("resolver must not run before union offset check");
+                    }));
+    assertEquals("union add_fields does not support offset", unionOffsetError.getMessage());
+  }
+
+  private static Structure forbidPerByteGetComponent(Structure delegate) {
+    return (Structure)
+        Proxy.newProxyInstance(
+            Structure.class.getClassLoader(),
+            new Class<?>[] {Structure.class},
+            (proxy, method, args) -> {
+              if ("getComponent".equals(method.getName())) {
+                throw new AssertionError("unexpected per-byte getComponent call");
+              }
+              try {
+                return method.invoke(delegate, args);
+              } catch (InvocationTargetException ex) {
+                throw ex.getTargetException();
+              }
+            });
   }
 
   private static Map<String, Object> named(String name) {

@@ -266,6 +266,129 @@ class DataTypeMutationTest {
     assertEquals(400, rejectedStructUpsert.status());
   }
 
+  @Test
+  void rejectsOversizedStructSizeAndFieldBoundsAtSchemaBoundary() {
+    ApiRegistry registry = registryFor(unused(DataTypeService.class));
+
+    ApiException oversizedCreateSize =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "data_type.create",
+                    Map.of(
+                        "resource",
+                        Map.of(
+                            "kind",
+                            "struct",
+                            "name",
+                            "TooLarge",
+                            "size",
+                            ApiSchemaCatalog.MAX_STRUCT_SIZE + 1))));
+    assertEquals(400, oversizedCreateSize.status());
+    assertEquals("/resource/size", oversizedCreateSize.error().target());
+
+    ApiException oversizedInitialOffset =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "data_type.create",
+                    Map.of(
+                        "resource",
+                        Map.of(
+                            "kind",
+                            "struct",
+                            "name",
+                            "TooFar",
+                            "fields",
+                            List.of(
+                                Map.of(
+                                    "name",
+                                    "tail",
+                                    "offset",
+                                    ApiSchemaCatalog.MAX_STRUCT_SIZE + 1,
+                                    "data_type",
+                                    Map.of("kind", "named", "name", "byte")))))));
+    assertEquals(400, oversizedInitialOffset.status());
+    assertEquals("/resource/fields/0/offset", oversizedInitialOffset.error().target());
+
+    ApiException oversizedInitialLength =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "data_type.create",
+                    Map.of(
+                        "resource",
+                        Map.of(
+                            "kind",
+                            "struct",
+                            "name",
+                            "TooLongField",
+                            "fields",
+                            List.of(
+                                Map.of(
+                                    "name",
+                                    "slice",
+                                    "offset",
+                                    0,
+                                    "length",
+                                    ApiSchemaCatalog.MAX_STRUCT_SIZE + 1,
+                                    "data_type",
+                                    Map.of("kind", "named", "name", "byte")))))));
+    assertEquals(400, oversizedInitialLength.status());
+    assertEquals("/resource/fields/0/length", oversizedInitialLength.error().target());
+
+    ApiException oversizedPatchOffset =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "data_type.patch",
+                    Map.of(
+                        "selector",
+                        Map.of("path", "/Types/Record"),
+                        "patch",
+                        Map.of(
+                            "kind",
+                            "struct",
+                            "add_fields",
+                            List.of(
+                                Map.of(
+                                    "name",
+                                    "tail",
+                                    "offset",
+                                    ApiSchemaCatalog.MAX_STRUCT_SIZE + 1,
+                                    "data_type",
+                                    Map.of("kind", "named", "name", "byte")))))));
+    assertEquals(400, oversizedPatchOffset.status());
+    assertEquals("/patch/add_fields/0/offset", oversizedPatchOffset.error().target());
+
+    ApiException oversizedPatchLength =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "data_type.patch",
+                    Map.of(
+                        "selector",
+                        Map.of("path", "/Types/Record"),
+                        "patch",
+                        Map.of(
+                            "kind",
+                            "struct",
+                            "update_fields",
+                            List.of(
+                                Map.of(
+                                    "name",
+                                    "slice",
+                                    "length",
+                                    ApiSchemaCatalog.MAX_STRUCT_SIZE + 1))))));
+    assertEquals(400, oversizedPatchLength.status());
+    assertEquals("/patch/update_fields/0/length", oversizedPatchLength.error().target());
+  }
+
   private static ApiRegistry registryFor(DataTypeService dataTypes) {
     AnalysisService analysis =
         proxy(

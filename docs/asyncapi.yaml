@@ -12456,13 +12456,13 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12477,7 +12477,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "size":
-                          "maximum": !!int "2147483647"
+                          "maximum": !!int "1048576"
                           "minimum": !!int "0"
                           "type": "integer"
                       "required":
@@ -12499,13 +12499,13 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12721,7 +12721,7 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12729,7 +12729,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12751,7 +12751,7 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12759,7 +12759,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12777,7 +12777,7 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12785,7 +12785,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12803,7 +12803,7 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12811,7 +12811,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12834,7 +12834,7 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12842,7 +12842,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12864,7 +12864,7 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12872,7 +12872,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12890,7 +12890,7 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12898,7 +12898,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12916,7 +12916,7 @@
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12924,7 +12924,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -16013,13 +16013,13 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16034,7 +16034,7 @@
                                       "minLength": !!int "1"
                                       "type": "string"
                                     "size":
-                                      "maximum": !!int "2147483647"
+                                      "maximum": !!int "1048576"
                                       "minimum": !!int "0"
                                       "type": "integer"
                                   "required":
@@ -16056,13 +16056,13 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16219,7 +16219,7 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16227,7 +16227,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16249,7 +16249,7 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16257,7 +16257,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16275,7 +16275,7 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16283,7 +16283,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16301,7 +16301,7 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16309,7 +16309,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16332,7 +16332,7 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16340,7 +16340,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16362,7 +16362,7 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16370,7 +16370,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16388,7 +16388,7 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16396,7 +16396,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16414,7 +16414,7 @@
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16422,7 +16422,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -20198,13 +20198,13 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20219,7 +20219,7 @@
                             "minLength": !!int "1"
                             "type": "string"
                           "size":
-                            "maximum": !!int "2147483647"
+                            "maximum": !!int "1048576"
                             "minimum": !!int "0"
                             "type": "integer"
                         "required":
@@ -20241,13 +20241,13 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20404,7 +20404,7 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20412,7 +20412,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20434,7 +20434,7 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20442,7 +20442,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20460,7 +20460,7 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20468,7 +20468,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20486,7 +20486,7 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20494,7 +20494,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20517,7 +20517,7 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20525,7 +20525,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20547,7 +20547,7 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20555,7 +20555,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20573,7 +20573,7 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20581,7 +20581,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20599,7 +20599,7 @@
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20607,7 +20607,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -22426,13 +22426,13 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -22447,7 +22447,7 @@
                 "minLength": !!int "1"
                 "type": "string"
               "size":
-                "maximum": !!int "2147483647"
+                "maximum": !!int "1048576"
                 "minimum": !!int "0"
                 "type": "integer"
             "required":
@@ -22469,13 +22469,13 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23554,7 +23554,7 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23562,7 +23562,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23584,7 +23584,7 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23592,7 +23592,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23610,7 +23610,7 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23618,7 +23618,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23636,7 +23636,7 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23644,7 +23644,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23667,7 +23667,7 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23675,7 +23675,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23697,7 +23697,7 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23705,7 +23705,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23723,7 +23723,7 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23731,7 +23731,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23749,7 +23749,7 @@
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23757,7 +23757,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
