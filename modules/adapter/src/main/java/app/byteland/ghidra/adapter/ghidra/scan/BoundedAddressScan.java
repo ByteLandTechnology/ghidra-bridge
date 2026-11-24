@@ -65,6 +65,20 @@ public final class BoundedAddressScan<T> {
     }
   }
 
+  public void anchorStart(String address) {
+    if (stopped()) throw new IllegalStateException("scan is already stopped");
+    if (address == null) throw new IllegalArgumentException("address is required");
+    if (scannedStart == null) scannedStart = address;
+    if (scannedEnd == null) scannedEnd = address;
+  }
+
+  public void anchorCompletedEnd(String address) {
+    if (stopped()) throw new IllegalStateException("scan is already stopped");
+    if (address == null) throw new IllegalArgumentException("address is required");
+    if (scannedStart == null) scannedStart = address;
+    scannedEnd = address;
+  }
+
   public boolean stopped() {
     return stopReason != null;
   }

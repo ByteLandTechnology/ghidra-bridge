@@ -99,7 +99,7 @@ final class MemoryMethods implements ApiMethodProvider {
             "bytes.length"),
         List.of(ApiVocabulary.ADDRESS),
         request ->
-            WireValues.memory(
+            WireValues.resource(
                 registry
                     .services()
                     .memoryService()
@@ -125,7 +125,7 @@ final class MemoryMethods implements ApiMethodProvider {
               .memoryService()
               .findMemory(
                   new MemoryService.MemoryFindQuery(
-                      addressScan(request, null, null),
+                      addressScan(request),
                       text(filter, "pattern"),
                       page.limit(),
                       page.cursor()));
