@@ -16,7 +16,7 @@ final class AgentMessageHandler {
     this.disconnectAction = disconnectAction;
   }
 
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   void handleMessage(AgentClientChannels.MessageChannel channel, String message) {
     if (channel == null) return;
     Object parsed;
@@ -25,7 +25,16 @@ final class AgentMessageHandler {
     } catch (IllegalArgumentException invalidJson) {
       sendProtocolError(channel, -32700, "parse_error", "Invalid JSON");
       return;
+    } catch (RuntimeException invalidMessage) {
+      sendProtocolError(channel, -32600, "invalid_request", "Invalid JSON-RPC message");
+      return;
     }
+    handleParsed(channel, parsed);
+  }
+
+  @SuppressWarnings({"unchecked", "PMD.AvoidCatchingGenericException"})
+  void handleParsed(AgentClientChannels.MessageChannel channel, Object parsed) {
+    if (channel == null) return;
     if (!(parsed instanceof Map<?, ?> raw)) {
       sendProtocolError(channel, -32600, "invalid_request", "Message must be an object");
       return;
@@ -36,6 +45,9 @@ final class AgentMessageHandler {
     } catch (ApiException invalidEnvelope) {
       sendProtocolError(
           channel, -32600, invalidEnvelope.error().code(), invalidEnvelope.error().message());
+      return;
+    } catch (RuntimeException invalidEnvelope) {
+      sendProtocolError(channel, -32600, "invalid_request", "Invalid JSON-RPC message");
       return;
     }
     if (envelope instanceof MessageEnvelope.Request request) {
@@ -58,16 +70,29 @@ final class AgentMessageHandler {
   @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void handleRequest(
       AgentClientChannels.MessageChannel channel, MessageEnvelope.Request request) {
-    MessageEnvelope.Response response;
+    String payload;
     try {
       Object result = dispatcher.dispatch(request.method(), request.params());
-      response = new MessageEnvelope.Response(request.id(), result, null);
+      MessageEnvelope.Response response = new MessageEnvelope.Response(request.id(), result, null);
+      payload = JsonUtil.toJson(response.toMap());
     } catch (Exception error) {
-      response = AgentErrorMapper.errorResponse(request.id(), error);
+      payload = serializeErrorResponse(request.id(), error);
     }
-    channel.sendText(JsonUtil.toJson(response.toMap()));
+    channel.sendText(payload);
     if (dispatcher.isShuttingDown()) {
-      disconnectAction.run();
+      disconnectOnShutdown();
+    }
+  }
+
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
+  private static String serializeErrorResponse(Object requestId, Exception error) {
+    try {
+      return JsonUtil.toJson(AgentErrorMapper.errorResponse(requestId, error).toMap());
+    } catch (RuntimeException serializationFailure) {
+      return JsonUtil.toJson(
+          AgentErrorMapper.errorResponse(
+                  requestId, new IllegalStateException("Internal error", serializationFailure))
+              .toMap());
     }
   }
 
@@ -79,7 +104,16 @@ final class AgentMessageHandler {
       return;
     }
     if (dispatcher.isShuttingDown()) {
+      disconnectOnShutdown();
+    }
+  }
+
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
+  private void disconnectOnShutdown() {
+    try {
       disconnectAction.run();
+    } catch (RuntimeException failure) {
+      AgentClient.logTransportError("WebSocket shutdown disconnect failed", failure);
     }
   }
 

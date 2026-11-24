@@ -25,17 +25,17 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
   }
 
   @Override
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
     if (last) {
       String message = pendingText + data;
       pendingText = "";
       try {
         messageHandler.handleMessage(channelRef.get(), message);
-      } catch (RuntimeException failure) {
+      } catch (AgentClientChannels.ChannelSendException failure) {
         // The reply did not transmit, so the connection is lost.
-        // An aborted WebSocket calls neither onClose nor onError. Thus, end the session here.
+        // Abort the WebSocket so HttpClient.close does not block.
         AgentClient.logTransportError("WebSocket client message failed", failure);
+        abortWebSocket(webSocket);
         disconnected();
         return null;
       }
@@ -55,7 +55,18 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
   @Override
   public void onError(WebSocket webSocket, Throwable error) {
     AgentClient.logTransportError("WebSocket client connection error", error);
+    abortWebSocket(webSocket);
     disconnected();
+  }
+
+  @SuppressWarnings("PMD.AvoidCatchingGenericException")
+  private static void abortWebSocket(WebSocket webSocket) {
+    if (webSocket == null) return;
+    try {
+      webSocket.abort();
+    } catch (RuntimeException ignored) {
+      // Ignore abort errors after transport failure.
+    }
   }
 
   private void disconnected() {
