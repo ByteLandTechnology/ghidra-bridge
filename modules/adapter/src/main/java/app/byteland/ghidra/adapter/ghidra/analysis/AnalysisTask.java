@@ -64,7 +64,6 @@ final class AnalysisTask {
         };
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   void run() {
     TaskOutcome outcome;
     try {
@@ -75,7 +74,6 @@ final class AnalysisTask {
     publish(outcome);
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private TaskOutcome performAnalysis(
       GhidraSession context,
       AutoAnalysisManager manager,
@@ -258,7 +256,6 @@ final class AnalysisTask {
     }
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static String restoreScriptAnalyzerSelection(
       GhidraSession context,
       AutoAnalysisManager manager,

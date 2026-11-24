@@ -78,7 +78,6 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     }
   }
 
-  @SuppressWarnings("InlineMeSuggester")
   @Deprecated(since = "10.3")
   @Override
   public void checkCanceled() throws CancelledException {
@@ -133,7 +132,6 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     cancelled = false;
   }
 
-  @SuppressWarnings("InlineMeSuggester")
   @Deprecated(since = "10.3")
   @Override
   public void clearCanceled() {
