@@ -85,12 +85,7 @@ public final class AgentClient {
 
     String wsUrl = config.wsUrl();
     String displayUrl = config.redactedWsUrl();
-    URI uri;
-    try {
-      uri = URI.create(wsUrl);
-    } catch (IllegalArgumentException invalidUrl) {
-      throw new IllegalArgumentException("ws_url is invalid", invalidUrl);
-    }
+    URI uri = parseOutboundUri(wsUrl);
     AgentMessageHandler messageHandler =
         new AgentMessageHandler(config, dispatcher, this::disconnect);
     try (HttpClient client = HttpClient.newBuilder().connectTimeout(connectTimeout).build()) {
@@ -112,6 +107,10 @@ public final class AgentClient {
 
       awaitDisconnect(cancellationRequested, channel);
     }
+  }
+
+  static URI parseOutboundUri(String wsUrl) {
+    return AgentConfig.parseWsUri(wsUrl);
   }
 
   static AgentClientChannels.OutboundMessageChannel activateOutbound(
