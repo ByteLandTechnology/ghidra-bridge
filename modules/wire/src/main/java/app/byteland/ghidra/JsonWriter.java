@@ -17,6 +17,33 @@ final class JsonWriter {
 
   private JsonWriter() {}
 
+  static final class RawJson {
+    private final String json;
+
+    RawJson(String json) {
+      this.json = Objects.requireNonNull(json, "json");
+    }
+
+    String json() {
+      return json;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this == other || (other instanceof RawJson that && json.equals(that.json));
+    }
+
+    @Override
+    public int hashCode() {
+      return json.hashCode();
+    }
+
+    @Override
+    public String toString() {
+      return json;
+    }
+  }
+
   static String toJson(Object value) {
     return toJson(value, DEFAULT_MAX_UTF8_BYTES);
   }
@@ -68,6 +95,10 @@ final class JsonWriter {
   private static void writeJson(JsonSink sink, Object value, int depth) throws IOException {
     if (value == null) {
       sink.writeAscii("null");
+      return;
+    }
+    if (value instanceof RawJson raw) {
+      writeRawJson(sink, raw.json());
       return;
     }
     if (value instanceof String string) {
@@ -143,6 +174,23 @@ final class JsonWriter {
           "JSON nesting exceeds maximum depth of " + MAX_NESTING_DEPTH);
     }
     return nextDepth;
+  }
+
+  private static void writeRawJson(JsonSink sink, String value) throws IOException {
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      if (ch < 0x80) {
+        sink.writeAsciiChar(ch);
+      } else if (Character.isHighSurrogate(ch)
+          && i + 1 < value.length()
+          && Character.isLowSurrogate(value.charAt(i + 1))) {
+        sink.writeSurrogatePair(ch, value.charAt(++i));
+      } else if (Character.isSurrogate(ch)) {
+        sink.writeUnpairedSurrogate(ch);
+      } else {
+        sink.writeBmpNonAscii(ch);
+      }
+    }
   }
 
   private static void writeQuotedString(JsonSink sink, String value) throws IOException {

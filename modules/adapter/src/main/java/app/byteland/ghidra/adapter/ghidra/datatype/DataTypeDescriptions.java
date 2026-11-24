@@ -50,13 +50,15 @@ final class DataTypeDescriptions {
     } else if (detail && dataType instanceof TypeDef typeDef) {
       baseType = GhidraDataTypeReferences.toReference(typeDef.getBaseDataType());
     }
+    String name = dataType.getName();
+    String description = dataType.getDescription();
     return new DataTypeResource(
         path,
-        dataType.getName(),
-        categoryFromPath(path, dataType.getName()),
+        name,
+        categoryFromPath(path, name),
         classifyKind(dataType),
         knownLength(dataType.getLength()),
-        dataType.getDescription() == null ? "" : dataType.getDescription(),
+        description == null ? "" : description,
         size,
         fields,
         values,
@@ -128,7 +130,7 @@ final class DataTypeDescriptions {
     return List.copyOf(values);
   }
 
-  private static DataTypeResource.Kind classifyKind(DataType dataType) {
+  static DataTypeResource.Kind classifyKind(DataType dataType) {
     if (dataType instanceof Structure) return DataTypeResource.Kind.STRUCT;
     if (dataType instanceof ghidra.program.model.data.Enum) return DataTypeResource.Kind.ENUM;
     if (dataType instanceof TypeDef) return DataTypeResource.Kind.TYPEDEF;
@@ -140,7 +142,7 @@ final class DataTypeDescriptions {
     return DataTypeResource.Kind.OTHER;
   }
 
-  private static String categoryFromPath(String path, String name) {
+  static String categoryFromPath(String path, String name) {
     if (path == null || path.isBlank() || name == null || name.isBlank()) return "/";
     String suffix = "/" + name;
     if (path.endsWith(suffix)) {

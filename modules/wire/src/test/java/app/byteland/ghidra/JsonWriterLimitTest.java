@@ -31,6 +31,17 @@ class JsonWriterLimitTest {
         List.of(0, -42, Long.MAX_VALUE, 3.5, Double.NaN, Double.POSITIVE_INFINITY, true, false));
     payload.put("array", new int[] {1, 2, 3});
     payload.put("null_value", null);
+    payload.put(
+        "raw_nested",
+        JsonUtil.rawJson(
+            JsonUtil.toJson(
+                Map.of(
+                    "unicode",
+                    "処理/\u00e9/\ud83d\ude80",
+                    "unpaired",
+                    "pre\ud800post",
+                    "escaped",
+                    "\"\\\n\u0001"))));
     // Span multiple 8 KiB stream buffer flushes with multi-byte characters across boundaries.
     payload.put("large_mixed", ("ab\"\\\n\u00e9漢\ud83d\ude80").repeat(2000));
 

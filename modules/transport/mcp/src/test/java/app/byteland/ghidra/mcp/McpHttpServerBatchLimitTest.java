@@ -153,8 +153,6 @@ class McpHttpServerBatchLimitTest {
                       "NOP",
                       "NOP",
                       List.of(),
-                      null,
-                      null,
                       null);
               ScanProgress progress =
                   new ScanProgress(

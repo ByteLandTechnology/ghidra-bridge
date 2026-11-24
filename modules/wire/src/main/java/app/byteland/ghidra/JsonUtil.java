@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Serializes objects to compact JSON and parses JSON text.
@@ -28,6 +29,10 @@ public final class JsonUtil {
   public static void writeUtf8(Object value, OutputStream output, int maxUtf8Bytes)
       throws IOException {
     JsonWriter.writeUtf8(value, output, maxUtf8Bytes);
+  }
+
+  public static Object rawJson(String json) {
+    return new JsonWriter.RawJson(Objects.requireNonNull(json, "json"));
   }
 
   public static Object parse(String json) {
