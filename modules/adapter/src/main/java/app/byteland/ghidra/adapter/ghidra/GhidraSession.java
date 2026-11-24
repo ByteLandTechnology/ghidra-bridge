@@ -1,7 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
@@ -12,8 +11,8 @@ import ghidra.program.model.mem.MemoryAccessException;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.ReferenceManager;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -29,9 +28,6 @@ public final class GhidraSession {
     this.ghidraScript = Objects.requireNonNull(script, "script");
   }
 
-  @SuppressFBWarnings(
-      value = "EI_EXPOSE_REP",
-      justification = "Adapter collaborators require the live GhidraScript execution context")
   public GhidraScript script() {
     return ghidraScript;
   }
@@ -48,7 +44,6 @@ public final class GhidraSession {
     return ghidraScript.getCurrentProgram();
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   public void saveCurrentProgram() {
     synchronized (executionLock) {
       var monitor = ghidraScript.getMonitor();
@@ -81,18 +76,17 @@ public final class GhidraSession {
     return AddressUtil.parseAddress(currentProgram(), rawAddress);
   }
 
-  public List<Reference> references(Address address, boolean to) {
+  public Iterable<Reference> references(Address address, boolean to) {
     Objects.requireNonNull(address, "address");
-    ReferenceManager referenceManager = currentProgram().getReferenceManager();
-    if (!to) {
-      return Arrays.asList(referenceManager.getReferencesFrom(address));
+    ReferenceManager manager = currentProgram().getReferenceManager();
+    if (to) {
+      return () -> {
+        ReferenceIterator incoming = manager.getReferencesTo(address);
+        return incoming == null ? Collections.emptyIterator() : incoming;
+      };
     }
-    List<Reference> result = new ArrayList<>();
-    ReferenceIterator iterator = referenceManager.getReferencesTo(address);
-    while (iterator.hasNext()) {
-      result.add(iterator.next());
-    }
-    return result;
+    Reference[] outgoing = manager.getReferencesFrom(address);
+    return outgoing == null ? List.of() : Arrays.asList(outgoing);
   }
 
   public byte[] readBytes(Address start, int length) throws MemoryAccessException {
@@ -175,7 +169,6 @@ public final class GhidraSession {
     T run() throws Exception;
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private static <T> T runOperation(TransactionalOperation<T> operation) {
     try {
       return operation.run();

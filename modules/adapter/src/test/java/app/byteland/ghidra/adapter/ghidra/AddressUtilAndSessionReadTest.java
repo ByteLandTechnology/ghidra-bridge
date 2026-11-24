@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -185,8 +186,8 @@ class AddressUtilAndSessionReadTest {
                         },
                         bytes);
 
-                    assertEquals(List.of(sampleRef), session.references(parsed, true));
-                    assertEquals(List.of(sampleRef), session.references(parsed, false));
+                    assertIterableEquals(List.of(sampleRef), session.references(parsed, true));
+                    assertIterableEquals(List.of(sampleRef), session.references(parsed, false));
 
                     assertSame(fn2, session.functionAfter(fn1));
                     assertSame(fn2, session.functionAfter(fn1Entry));

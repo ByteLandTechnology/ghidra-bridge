@@ -1122,8 +1122,6 @@ class AgentDispatcherConcurrencyTest {
                       "NOP",
                       "NOP",
                       List.of(),
-                      null,
-                      null,
                       null)),
               limit,
               null,

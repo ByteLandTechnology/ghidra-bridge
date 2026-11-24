@@ -9,6 +9,7 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.listing.DataUnitResource;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Data;
+import ghidra.program.model.listing.DataIterator;
 
 final class ListingDataQueries {
   private final GhidraSession context;
@@ -23,17 +24,24 @@ final class ListingDataQueries {
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
     boolean forward = !"backward".equalsIgnoreCase(direction);
+    Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor, forward);
 
     BoundedAddressScan<DataUnitResource> scan =
         BoundedAddressScan.start(
             normalizedLimit, options.timeoutMs(), range.startText(), range.endText());
-    Data data = cursor == null ? firstData(range.start(), forward) : nextData(cursor, forward);
-    while (data != null) {
-      if (forward ? range.afterEnd(data.getAddress()) : !range.includes(data.getAddress())) break;
-      String address = AddressUtil.canonicalAddress(data.getAddress());
-      scan.visit(address, address, ListingDescriptions.toDataItem(data, context));
+    if (ListingInstructionQueries.outOfRange(iterationStart, range, forward)) {
+      return scan.finish();
+    }
+    DataIterator dataUnits =
+        context.currentProgram().getListing().getDefinedData(iterationStart, forward);
+    while (dataUnits.hasNext()) {
+      Data data = dataUnits.next();
+      Address address = data.getAddress();
+      if (ListingInstructionQueries.atOrBeforeCursor(address, cursor, forward)) continue;
+      if (ListingInstructionQueries.outOfRange(address, range, forward)) break;
+      String canonical = AddressUtil.canonicalAddress(address);
+      scan.visit(canonical, canonical, ListingDescriptions.toDataItem(data, context));
       if (scan.stopped()) break;
-      data = nextData(data, forward);
     }
 
     return scan.finish();
@@ -41,26 +49,5 @@ final class ListingDataQueries {
 
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);
-  }
-
-  private Data firstData(Address start, boolean forward) {
-    var listing = context.currentProgram().getListing();
-    Data data = listing.getDefinedDataAt(start);
-    if (data != null) {
-      return data;
-    }
-    return forward ? listing.getDefinedDataAfter(start) : listing.getDefinedDataBefore(start);
-  }
-
-  private Data nextData(Data data, boolean forward) {
-    var listing = context.currentProgram().getListing();
-    return forward
-        ? listing.getDefinedDataAfter(data.getMaxAddress())
-        : listing.getDefinedDataBefore(data.getMinAddress());
-  }
-
-  private Data nextData(Address address, boolean forward) {
-    var listing = context.currentProgram().getListing();
-    return forward ? listing.getDefinedDataAfter(address) : listing.getDefinedDataBefore(address);
   }
 }

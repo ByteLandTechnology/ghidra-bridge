@@ -9,6 +9,8 @@ import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.FunctionIterator;
+import ghidra.program.model.listing.FunctionManager;
 import java.util.Locale;
 
 final class FunctionListQueries {
@@ -49,43 +51,56 @@ final class FunctionListQueries {
         cursorAddress != null && cursorAddress.compareTo(range.start()) > 0
             ? cursorAddress
             : range.start();
-    for (Function function = firstFunction(firstAddress, cursorAddress != null);
-        function != null;
-        function = nextFunction(function)) {
-      if (range.afterEnd(function.getEntryPoint())) break;
-      FunctionResource match = null;
-      if (normalizedName != null
-          && !function.getName().toLowerCase(Locale.ROOT).contains(normalizedName)) {
-      } else if (entryFunction != null
-          && !function.equals(entryFunction)
-          && containsAddress == null) {
-      } else if (containsAddress != null && !function.getBody().contains(containsAddress)) {
-      } else if (query.external() != null && function.isExternal() != query.external()) {
-      } else if (query.thunk() != null && function.isThunk() != query.thunk()) {
-      } else {
-        match = FunctionDescriptions.describe(function, query.includes());
+    if (range.afterEnd(firstAddress)) {
+      return scan.finish();
+    }
+    FunctionManager functionManager = context.currentProgram().getFunctionManager();
+    if (firstAddress.isExternalAddress()
+        && (cursorAddress == null || firstAddress.compareTo(cursorAddress) > 0)) {
+      Function externalFunction = functionManager.getFunctionAt(firstAddress);
+      if (externalFunction != null && !range.afterEnd(externalFunction.getEntryPoint())) {
+        visitFunction(scan, externalFunction, normalizedName, entryFunction, containsAddress, query);
+        if (scan.stopped()) return scan.finish();
+        cursorAddress = externalFunction.getEntryPoint();
       }
-      String address = AddressUtil.canonicalAddress(function.getEntryPoint());
-      scan.visit(address, address, match);
+    }
+
+    FunctionIterator functions = functionManager.getFunctions(firstAddress, true);
+    while (functions.hasNext()) {
+      Function function = functions.next();
+      Address entryPoint = function.getEntryPoint();
+      if (cursorAddress != null && entryPoint.compareTo(cursorAddress) <= 0) continue;
+      if (range.afterEnd(entryPoint)) break;
+      visitFunction(scan, function, normalizedName, entryFunction, containsAddress, query);
       if (scan.stopped()) break;
     }
     return scan.finish();
   }
 
+  private static void visitFunction(
+      BoundedAddressScan<FunctionResource> scan,
+      Function function,
+      String normalizedName,
+      Function entryFunction,
+      Address containsAddress,
+      FunctionQuery query) {
+    FunctionResource match = null;
+    if (normalizedName != null
+        && !function.getName().toLowerCase(Locale.ROOT).contains(normalizedName)) {
+    } else if (entryFunction != null
+        && !function.equals(entryFunction)
+        && containsAddress == null) {
+    } else if (containsAddress != null && !function.getBody().contains(containsAddress)) {
+    } else if (query.external() != null && function.isExternal() != query.external()) {
+    } else if (query.thunk() != null && function.isThunk() != query.thunk()) {
+    } else {
+      match = FunctionDescriptions.describe(function, query.includes());
+    }
+    String address = AddressUtil.canonicalAddress(function.getEntryPoint());
+    scan.visit(address, address, match);
+  }
+
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);
-  }
-
-  private Function firstFunction(Address address, boolean resumeStrictlyAfter) {
-    return resumeStrictlyAfter ? context.functionAfter(address) : firstFunctionAtOrAfter(address);
-  }
-
-  private Function nextFunction(Function function) {
-    return context.functionAfter(function);
-  }
-
-  private Function firstFunctionAtOrAfter(Address cursorAddress) {
-    Function function = context.currentProgram().getListing().getFunctionAt(cursorAddress);
-    return function == null ? context.functionAfter(cursorAddress) : function;
   }
 }
