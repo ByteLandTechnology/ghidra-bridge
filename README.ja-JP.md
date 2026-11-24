@@ -45,11 +45,10 @@ ghidra-bridge.jar
 2. Script Manager（スクリプトマネージャ）ウィンドウを開きます。
 3. スクリプトパス一覧に `build/ghidra-script/` を追加します。
 4. `Ghidra Bridge` カテゴリを選択し、`Bridge.java`（WebSocket）または `GhidraMcp.java`（MCP）を実行します。
-5. 初期入力済みの設定ダイアログ（`host`、`port`、`path`、`session_id`、`token`、および WebSocket 用の `ws_url` / `exit_deadline_sec` または MCP 用の `tool_prefix`）を確認・編集し、**OK** をクリックします。
 
-最初のタブでは、WebSocket は `127.0.0.1:8765`、MCP は `127.0.0.1:8766`（`tool_prefix=ghidra`）が初期入力されます。
-2 つ目以降の CodeBrowser タブでは、次の空きループバックポートとプログラム名に基づく `session_id`（および MCP の `tool_prefix`）が自動的に初期入力されるため、複数のバイナリを同時に公開できます。
-ダイアログをキャンセルした場合はそのまま終了し、対話型 GUI 実行では明示的な `program.save` リクエスト時のみプログラムを保存します。
+スクリプト引数を省略した場合、`Bridge.java` は `127.0.0.1:8765`、`GhidraMcp.java` は `127.0.0.1:8766` で待機します。
+カスタム引数を設定するには、Script Manager でスクリプトを右クリックして `Set Script Arguments...` を選択します。
+GUI 実行では、明示的な `program.save` リクエスト時のみプログラムを保存します。
 
 ### Ghidra ヘッドレスモードでの実行
 

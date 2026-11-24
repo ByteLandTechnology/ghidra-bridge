@@ -30,6 +30,8 @@ public final class AgentWebSocketServer implements AutoCloseable {
   private final PendingSockets pendingSockets;
   private ServerSocket serverSocket;
 
+  private Thread acceptorThread;
+
   public AgentWebSocketServer(AgentConfig config, Handler handler) {
     this(config, handler, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_MAX_PENDING_SOCKETS);
   }
@@ -50,8 +52,14 @@ public final class AgentWebSocketServer implements AutoCloseable {
   }
 
   public void start() throws IOException {
+    if (bind()) {
+      startAccepting();
+    }
+  }
+
+  boolean bind() throws IOException {
     if (!running.compareAndSet(false, true)) {
-      return;
+      return false;
     }
     ServerSocket socket = new ServerSocket();
     try {
@@ -64,11 +72,19 @@ public final class AgentWebSocketServer implements AutoCloseable {
       Thread thread = new Thread(acceptor, "agent-ws-server");
       thread.setDaemon(true);
       serverSocket = socket;
-      thread.start();
+      acceptorThread = thread;
+      return true;
     } catch (IOException | RuntimeException startFailure) {
       running.set(false);
       closeAfterFailedStart(socket, startFailure);
       throw startFailure;
+    }
+  }
+
+  void startAccepting() {
+    Thread thread = acceptorThread;
+    if (thread != null && running.get() && !thread.isAlive()) {
+      thread.start();
     }
   }
 

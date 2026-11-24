@@ -2,53 +2,50 @@ package app.byteland.ghidra;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.adapter.ghidra.program.ProgramServiceImpl;
 import app.byteland.ghidra.agent.AgentConfig;
+import app.byteland.ghidra.agent.AgentWebSocketServer;
 import app.byteland.ghidra.mcp.McpConfig;
 import app.byteland.ghidra.service.BridgeServices;
 import com.sun.net.httpserver.HttpServer;
-import docking.widgets.values.GValuesMap;
-import docking.widgets.values.ValuesMapDialog;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.model.DomainFile;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.SymbolTable;
-import ghidra.util.MessageType;
-import ghidra.util.StatusListener;
 import ghidra.util.SystemUtilities;
 import ghidra.util.task.TaskMonitorAdapter;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.swing.JPasswordField;
-import javax.swing.JTextField;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -57,21 +54,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class BootstrapAndGuiDialogTest {
+class BootstrapSaveGuardTest {
 
   private String originalHeadlessProperty;
 
   @BeforeEach
   void saveHeadlessProperty() {
     originalHeadlessProperty = System.getProperty(SystemUtilities.HEADLESS_PROPERTY);
-    GuiConfigDialog.resetForTesting();
-    Bootstrap.setServiceFactoryForTesting(BootstrapAndGuiDialogTest::testBridgeServices);
   }
 
   @AfterEach
   void restoreHeadlessProperty() {
-    Bootstrap.setServiceFactoryForTesting(null);
-    GuiConfigDialog.resetForTesting();
     if (originalHeadlessProperty == null) {
       System.clearProperty(SystemUtilities.HEADLESS_PROPERTY);
     } else {
@@ -105,6 +98,16 @@ class BootstrapAndGuiDialogTest {
               (proxy, method, args) -> {
                 if ("close".equals(method.getName())) {
                   return null;
+                }
+                if ("getStatus".equals(method.getName())) {
+                  return new app.byteland.ghidra.service.analysis.AnalysisResource(
+                      null,
+                      app.byteland.ghidra.service.analysis.AnalysisResource.Status.IDLE,
+                      true,
+                      null,
+                      null,
+                      null,
+                      null);
                 }
                 throw new UnsupportedOperationException(method.getName());
               });
@@ -243,6 +246,51 @@ class BootstrapAndGuiDialogTest {
     return null;
   }
 
+  private static int allocateFreeLoopbackPort() throws IOException {
+    try (ServerSocket probe = new ServerSocket()) {
+      probe.bind(new InetSocketAddress("127.0.0.1", 0));
+      return probe.getLocalPort();
+    }
+  }
+
+  @Test
+  @DisplayName("Bootstrap exposes package-private dependency injection without test hooks")
+  void testBootstrapHasNoMutableStaticHooks() {
+    for (Field field : Bootstrap.class.getDeclaredFields()) {
+      if (Modifier.isStatic(field.getModifiers())) {
+        assertTrue(
+            Modifier.isFinal(field.getModifiers()),
+            () -> "Bootstrap static field must be final: " + field.getName());
+      }
+    }
+    for (Method method : Bootstrap.class.getDeclaredMethods()) {
+      assertFalse(
+          method.getName().toLowerCase(Locale.ROOT).contains("fortesting"),
+          () -> "Bootstrap must not expose test-only hooks: " + method.getName());
+    }
+  }
+
+  @Test
+  @DisplayName("Bootstrap resolves loopback defaults when startup arguments are empty")
+  void testEmptyArgsResolveLoopbackDefaults() {
+    Program program = stubProgram("sample_binary.elf", true, false);
+
+    Bootstrap.EffectiveConfig wsResolved = Bootstrap.resolveConfig(new String[0], program);
+    AgentConfig wsConfig = wsResolved.config();
+    assertEquals("127.0.0.1", wsConfig.host());
+    assertEquals(8765, wsConfig.port());
+    assertEquals("/ws/agent", wsConfig.path());
+    assertEquals("sample_binary.elf", wsConfig.sessionId());
+    assertEquals(3, wsResolved.defaultMessages().size());
+
+    McpConfig mcpConfig = Bootstrap.resolveMcpConfig(new String[0], program);
+    assertEquals("127.0.0.1", mcpConfig.host());
+    assertEquals(8766, mcpConfig.port());
+    assertEquals("/mcp", mcpConfig.path());
+    assertEquals("sample_binary.elf", mcpConfig.sessionId());
+    assertEquals("ghidra", mcpConfig.toolPrefix());
+  }
+
   @Test
   @DisplayName("GracefulExit skips saveAction until explicitly activated")
   void testGracefulExitRequiresActivation() throws Exception {
@@ -266,246 +314,93 @@ class BootstrapAndGuiDialogTest {
   }
 
   @Test
-  @DisplayName("Port and tool_prefix defaults handle single-tab and multi-tab collisions")
-  void testMultiTabDefaultsPreFillFreePortAndToolPrefix() {
-    Program firstProgram = stubProgram("firmware.v1.bin", true, false);
-    Program secondProgram = stubProgram("firmware.v2.bin", true, false);
-    Program numericProgram = stubProgram("123-loader.exe", true, false);
-    Program ghidraNamedProgram = stubProgram("ghidra", true, false);
-
-    // WebSocket skips MCP default port 8766 when 8765 is busy.
-    int wsPortWhen8765Busy =
-        GuiConfigDialog.findFreePort(
-            "127.0.0.1", 8765, Set.of(8766), candidate -> candidate != 8765);
-    assertEquals(8767, wsPortWhen8765Busy);
-
-    // MCP first tab uses 8766 and tool_prefix=ghidra.
-    String firstPrefix = GuiConfigDialog.defaultGuiToolPrefix(firstProgram, 8766, Set.of());
-    assertEquals("ghidra", firstPrefix);
-
-    // MCP second tab when 8766 is busy derives a valid program-based tool_prefix.
-    String secondPrefix =
-        GuiConfigDialog.defaultGuiToolPrefix(secondProgram, 8767, Set.of("ghidra"));
-    assertEquals("firmware_v2_bin", secondPrefix);
-
-    // Program starting with digits gets a valid letter prefix.
-    String numericPrefix =
-        GuiConfigDialog.defaultGuiToolPrefix(numericProgram, 8768, Set.of("ghidra"));
-    assertEquals("ghidra_123-loader_exe", numericPrefix);
-
-    // Program named 'ghidra' on a secondary port avoids colliding with 'ghidra'.
-    String disambiguatedPrefix =
-        GuiConfigDialog.defaultGuiToolPrefix(ghidraNamedProgram, 8769, Set.of("ghidra"));
-    assertEquals("ghidra_8769", disambiguatedPrefix);
-
-    // Duplicate session_id across open tabs is disambiguated.
-    assertEquals(
-        "firmware.v1.bin-2",
-        GuiConfigDialog.defaultGuiSessionId(firstProgram, Set.of("firmware.v1.bin")));
-  }
-
-  @Test
-  @DisplayName("GUI dialogs expose all documented keys, mask tokens, and validate inputs inline")
-  void testDialogFieldsMaskingAndInlineValidation() throws Exception {
-    Program program = stubProgram("target_app", true, false);
-    GuiConfigDialog.WebSocketDefaults wsDefaults =
-        new GuiConfigDialog.WebSocketDefaults("127.0.0.1", 8765, "/ws/agent", "target_app");
-    ValuesMapDialog wsDialog = GuiConfigDialog.createWebSocketDialog(program, wsDefaults);
-    GValuesMap wsValues = wsDialog.getValues();
-
-    assertTrue(wsValues.isDefined("host"));
-    assertTrue(wsValues.isDefined("port"));
-    assertTrue(wsValues.isDefined("path"));
-    assertTrue(wsValues.isDefined("session_id"));
-    assertTrue(wsValues.isDefined("token"));
-    assertTrue(wsValues.isDefined("ws_url"));
-    assertTrue(wsValues.isDefined("exit_deadline_sec"));
-
-    // Token component must be a masked JPasswordField and redact text conversion.
-    var tokenAbstractValue = wsValues.getAbstractValue("token");
-    assertInstanceOf(JPasswordField.class, tokenAbstractValue.getComponent());
-    wsValues.setString("token", "my-secret-value");
-    assertEquals("<redacted>", tokenAbstractValue.getAsText());
-
-    // Setting ws_url in the UI automatically disables host/port/path fields and builds outbound AgentConfig.
-    JTextField wsUrlField = (JTextField) wsValues.getAbstractValue("ws_url").getComponent();
-    wsUrlField.setText("ws://127.0.0.1:9999/ws/agent");
-    assertFalse(wsValues.getAbstractValue("host").getComponent().isEnabled());
-    assertFalse(wsValues.getAbstractValue("port").getComponent().isEnabled());
-    assertFalse(wsValues.getAbstractValue("path").getComponent().isEnabled());
-    wsValues.updateFromComponents();
-    AgentConfig outbound = GuiConfigDialog.parseWebSocketValues(wsValues, wsDefaults);
-    assertTrue(outbound.isOutboundMode());
-    assertEquals("ws://127.0.0.1:9999/ws/agent", outbound.wsUrl());
-    assertNull(outbound.port());
-
-    // Validator rejects non-loopback host without token and reports inline error message.
-    wsUrlField.setText("");
-    ((JPasswordField) tokenAbstractValue.getComponent()).setText("");
-    ((JTextField) wsValues.getAbstractValue("host").getComponent()).setText("0.0.0.0");
-    wsValues.updateFromComponents();
-    AtomicReference<String> errorBanner = new AtomicReference<>();
-    StatusListener status =
-        new StatusListener() {
-          @Override
-          public void setStatusText(String text) {
-            errorBanner.set(text);
-          }
-
-          @Override
-          public void setStatusText(String text, MessageType type) {
-            errorBanner.set(text);
-          }
-
-          @Override
-          public void setStatusText(String text, MessageType type, boolean alert) {
-            errorBanner.set(text);
-          }
-
-          @Override
-          public void clearStatusText() {
-            errorBanner.set(null);
-          }
-        };
-    assertFalse(wsValues.isValid(status));
-    assertNotNull(errorBanner.get());
-    assertTrue(errorBanner.get().contains("token is required"));
-
-    // Invalid ws_url with secret query string never leaks query string in validation message.
-    wsUrlField.setText("http://127.0.0.1:9999/not-ws?secret=do-not-leak");
-    wsValues.updateFromComponents();
-    assertFalse(wsValues.isValid(status));
-    assertFalse(errorBanner.get().contains("do-not-leak"));
-
-    // MCP dialog exposes all documented MCP keys and validates tool_prefix.
-    GuiConfigDialog.McpDefaults mcpDefaults =
-        new GuiConfigDialog.McpDefaults("127.0.0.1", 8766, "/mcp", "target_app", "ghidra");
-    ValuesMapDialog mcpDialog = GuiConfigDialog.createMcpDialog(program, mcpDefaults);
-    GValuesMap mcpValues = mcpDialog.getValues();
-    assertTrue(mcpValues.isDefined("host"));
-    assertTrue(mcpValues.isDefined("port"));
-    assertTrue(mcpValues.isDefined("path"));
-    assertTrue(mcpValues.isDefined("session_id"));
-    assertTrue(mcpValues.isDefined("tool_prefix"));
-    assertTrue(mcpValues.isDefined("token"));
-
-    ((JTextField) mcpValues.getAbstractValue("tool_prefix").getComponent()).setText("99invalid");
-    mcpValues.updateFromComponents();
-    assertFalse(mcpValues.isValid(status));
-    assertTrue(errorBanner.get().contains("tool_prefix"));
-  }
-
-  @Test
-  @DisplayName("Canceling GUI dialog exits Bootstrap cleanly without errors or saves")
-  void testGuiDialogCancelExitsCleanlyWithoutSaves() throws Exception {
+  @DisplayName("GUI mode skips automatic saves on startup and stop and supports program.save")
+  void testGuiModeSkipsAutoSaveAndSupportsExplicitProgramSave() throws Exception {
     System.setProperty(SystemUtilities.HEADLESS_PROPERTY, "false");
-    Program dirtyGuiProgram = stubProgram("dirty_gui_binary", true, true);
-    RecordingScript wsScript = new RecordingScript(dirtyGuiProgram);
-    RecordingScript mcpScript = new RecordingScript(dirtyGuiProgram);
+    int wsPort = allocateFreeLoopbackPort();
+    int mcpPort = allocateFreeLoopbackPort();
+    String secretToken = "gui-super-secret-token";
 
-    AtomicInteger dialogShownCount = new AtomicInteger();
-    GuiConfigDialog.setPresenterForTesting(
-        (kind, dialog) -> {
-          dialogShownCount.incrementAndGet();
-          return false;
-        });
-
-    Bootstrap.startFromScript(wsScript, new String[0], () -> {});
-    Bootstrap.startMcpFromScript(mcpScript, new String[0], () -> {});
-
-    assertEquals(2, dialogShownCount.get());
-    assertEquals(0, wsScript.saveCount(), "GUI cancel must never save program");
-    assertEquals(0, mcpScript.saveCount(), "GUI cancel must never save program");
-    assertTrue(wsScript.stderrLines().isEmpty(), "GUI cancel must not write stderr");
-    assertTrue(mcpScript.stderrLines().isEmpty(), "GUI cancel must not write stderr");
-    assertTrue(wsScript.stdoutLines().isEmpty(), "GUI cancel must exit silently");
-    assertTrue(mcpScript.stdoutLines().isEmpty(), "GUI cancel must exit silently");
-  }
-
-  @Test
-  @DisplayName("GUI mode runs concurrent multi-tab MCP sessions on free ports and never auto-saves")
-  void testConcurrentGuiMcpTabsPreFillFreePortAndNeverAutoSave() throws Exception {
-    System.setProperty(SystemUtilities.HEADLESS_PROPERTY, "false");
-    Program tab1Program = stubProgram("tab_one.elf", true, true);
-    Program tab2Program = stubProgram("tab_two.elf", true, true);
-    RecordingScript tab1Script = new RecordingScript(tab1Program);
-    RecordingScript tab2Script = new RecordingScript(tab2Program);
-
-    CountDownLatch tab1Listening = new CountDownLatch(1);
-    CountDownLatch tab2Listening = new CountDownLatch(1);
-    List<Integer> presentedPorts = new CopyOnWriteArrayList<>();
-    List<String> presentedPrefixes = new CopyOnWriteArrayList<>();
-
-    GuiConfigDialog.setPresenterForTesting(
-        (kind, dialog) -> {
-          GValuesMap map = dialog.getValues();
-          presentedPorts.add(Integer.parseInt(map.getString("port")));
-          presentedPrefixes.add(map.getString("tool_prefix"));
-          // Set a secret token on tab 2 to verify log redaction as well.
-          if (presentedPorts.size() == 2) {
-            map.setString("token", "tab2-super-secret-token");
-          }
-          return true;
-        });
+    Program wsProgram = stubProgram("gui_ws_target.elf", true, true);
+    RecordingScript wsScript = new RecordingScript(wsProgram);
+    wsScript.setScriptArgs(new String[] {"host=127.0.0.1", "port=" + wsPort});
+    Program mcpProgram = stubProgram("gui_mcp_target.elf", true, true);
+    RecordingScript mcpScript = new RecordingScript(mcpProgram);
 
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
-      Future<?> tab1Future =
+      Future<?> wsFuture =
           executor.submit(
               () -> {
-                Bootstrap.startMcpFromScript(tab1Script, new String[0], null);
+                Bootstrap.startFromScript(
+                    wsScript, null, null, BootstrapSaveGuardTest::testBridgeServices);
                 return null;
               });
 
-      waitForLogLine(tab1Script, "MCP endpoint is listening", tab1Listening);
-
-      Future<?> tab2Future =
+      Future<?> mcpFuture =
           executor.submit(
               () -> {
-                Bootstrap.startMcpFromScript(tab2Script, new String[0], null);
+                Bootstrap.startMcpFromScript(
+                    mcpScript,
+                    new String[] {"host=127.0.0.1", "port=" + mcpPort, "token=" + secretToken},
+                    null,
+                    BootstrapSaveGuardTest::testBridgeServices);
                 return null;
               });
 
-      waitForLogLine(tab2Script, "MCP endpoint is listening", tab2Listening);
+      waitForLogLine(wsScript, "Embedded bridge is listening");
+      waitForLogLine(mcpScript, "MCP endpoint is listening");
 
-      assertEquals(2, presentedPorts.size());
-      assertNotEquals(
-          presentedPorts.get(0),
-          presentedPorts.get(1),
-          "Second tab must pre-fill a free non-colliding port");
-      assertEquals("tab_two_elf", presentedPrefixes.get(1));
+      assertEquals(0, wsScript.saveCount(), "GUI WebSocket startup must not save the program");
+      assertEquals(0, mcpScript.saveCount(), "GUI MCP startup must not save the program");
 
-      tab1Script.cancellableMonitor().cancel();
-      tab2Script.cancellableMonitor().cancel();
-      tab1Future.get(10, TimeUnit.SECONDS);
-      tab2Future.get(10, TimeUnit.SECONDS);
+      // Send an explicit program.save call over MCP and check that manual save runs.
+      try (HttpClient httpClient = HttpClient.newHttpClient()) {
+        String requestBody =
+            """
+            {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"name":"ghidra_program","arguments":{"operation":"save","params":{}}}}
+            """;
+        HttpRequest request =
+            HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + mcpPort + "/mcp"))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/event-stream")
+                .header("MCP-Protocol-Version", "2026-07-28")
+                .header("Mcp-Method", "tools/call")
+                .header("Mcp-Name", "ghidra_program")
+                .header("Authorization", "Bearer " + secretToken)
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<String> response =
+            httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertEquals(200, response.statusCode(), response::body);
+        assertFalse(response.body().contains("\"isError\":true"), response::body);
+      }
+      assertEquals(1, mcpScript.saveCount(), "Explicit program.save must save once in GUI mode");
+
+      wsScript.cancellableMonitor().cancel();
+      mcpScript.cancellableMonitor().cancel();
+      wsFuture.get(10, TimeUnit.SECONDS);
+      mcpFuture.get(10, TimeUnit.SECONDS);
     } finally {
       executor.shutdownNow();
     }
 
-    assertEquals(0, tab1Script.saveCount(), "Interactive GUI tab 1 must never auto-save");
-    assertEquals(0, tab2Script.saveCount(), "Interactive GUI tab 2 must never auto-save");
-    for (String line : tab2Script.stdoutLines()) {
-      assertFalse(line.contains("tab2-super-secret-token"), "Token value must never be logged");
+    assertEquals(0, wsScript.saveCount(), "GUI WebSocket shutdown must not auto-save");
+    assertEquals(1, mcpScript.saveCount(), "GUI MCP shutdown must not add an extra auto-save");
+    for (String line : mcpScript.stdoutLines()) {
+      assertFalse(line.contains(secretToken), "Token value must never appear in console output");
     }
   }
 
   @Test
-  @DisplayName("GUI mode bypasses dialog when getScriptArgs() is non-empty and skips save on bind failure")
-  void testGuiWithExplicitArgsBypassesDialogAndSkipsSaveOnBindFailure() throws Exception {
+  @DisplayName("GUI mode skips saves when socket bind fails")
+  void testGuiBindFailureSkipsSaveAndReportsEndpoint() throws Exception {
     System.setProperty(SystemUtilities.HEADLESS_PROPERTY, "false");
-    AtomicBoolean dialogOpened = new AtomicBoolean(false);
-    GuiConfigDialog.setPresenterForTesting(
-        (kind, dialog) -> {
-          dialogOpened.set(true);
-          return false;
-        });
-
     try (ServerSocket occupied = new ServerSocket()) {
       occupied.bind(new InetSocketAddress("127.0.0.1", 0));
       int busyPort = occupied.getLocalPort();
 
-      Program dirtyProgram = stubProgram("companion_script_target", true, true);
+      Program dirtyProgram = stubProgram("gui_bind_conflict", true, true);
       RecordingScript script = new RecordingScript(dirtyProgram);
       String[] explicitArgs = {"host=127.0.0.1", "port=" + busyPort, "session_id=explicit"};
       script.setScriptArgs(explicitArgs);
@@ -513,19 +408,20 @@ class BootstrapAndGuiDialogTest {
       BindException thrown =
           assertThrows(
               BindException.class,
-              () -> Bootstrap.startFromScript(script, script.getScriptArgs(), null));
+              () ->
+                  Bootstrap.startFromScript(
+                      script, null, null, BootstrapSaveGuardTest::testBridgeServices));
       assertTrue(thrown.getMessage().contains("ws://127.0.0.1:" + busyPort + "/ws/agent"));
-      assertFalse(dialogOpened.get(), "Non-empty scriptArgs must bypass GUI dialog");
-      assertEquals(0, script.saveCount(), "Failed GUI bind must never save program");
+      assertEquals(0, script.saveCount(), "Failed GUI bind must never save the program");
     }
   }
 
   @Test
-  @DisplayName("Headless mode skips saves on failed bind or HTTP 401 and saves only after successful bind")
+  @DisplayName("Headless mode skips saves on failed bind or HTTP 401 and saves after bind or connect")
   void testHeadlessDefersSaveUntilBindOrHandshakeSucceeds() throws Exception {
     System.setProperty(SystemUtilities.HEADLESS_PROPERTY, "true");
 
-    // 1. Failed WebSocket bind in headless mode must NEVER save.
+    // Check 1: A failed WebSocket or MCP bind in headless mode does not save the program.
     try (ServerSocket occupied = new ServerSocket()) {
       occupied.bind(new InetSocketAddress("127.0.0.1", 0));
       int busyPort = occupied.getLocalPort();
@@ -536,11 +432,25 @@ class BootstrapAndGuiDialogTest {
           BindException.class,
           () ->
               Bootstrap.startFromScript(
-                  failScript, new String[] {"port=" + busyPort, "session_id=fail"}, null));
-      assertEquals(0, failScript.saveCount(), "Failed headless bind must never save program");
+                  failScript,
+                  new String[] {"port=" + busyPort, "session_id=fail"},
+                  null,
+                  BootstrapSaveGuardTest::testBridgeServices));
+      assertEquals(0, failScript.saveCount(), "Failed headless WS bind must never save");
+
+      RecordingScript failMcpScript = new RecordingScript(dirtyProgram);
+      assertThrows(
+          BindException.class,
+          () ->
+              Bootstrap.startMcpFromScript(
+                  failMcpScript,
+                  new String[] {"port=" + busyPort, "session_id=fail-mcp"},
+                  null,
+                  BootstrapSaveGuardTest::testBridgeServices));
+      assertEquals(0, failMcpScript.saveCount(), "Failed headless MCP bind must never save");
     }
 
-    // 2. Failed outbound HTTP 401 handshake in headless mode must NEVER save.
+    // Check 2: A failed outbound HTTP 401 handshake in headless mode does not save.
     HttpServer server401 = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server401.createContext(
         "/ws/agent",
@@ -562,43 +472,140 @@ class BootstrapAndGuiDialogTest {
                       new String[] {
                         "ws_url=ws://127.0.0.1:" + port401 + "/ws/agent", "session_id=fail401"
                       },
-                      null));
+                      null,
+                      BootstrapSaveGuardTest::testBridgeServices));
       assertTrue(handshakeEx.getMessage().contains("401"));
       assertEquals(0, fail401Script.saveCount(), "Failed headless handshake must never save");
     } finally {
       server401.stop(0);
     }
 
-    // 3. Successful headless bind activates checkpoint and GracefulExit save.
-    int freePort;
-    try (ServerSocket probe = new ServerSocket()) {
-      probe.bind(new InetSocketAddress("127.0.0.1", 0));
-      freePort = probe.getLocalPort();
-    }
-    Program importedProgram = stubProgram("headless_ok", false, true);
-    RecordingScript okScript = new RecordingScript(importedProgram);
+    // Check 3: An unchanged program in a writable project skips auto-save.
+    int unchangedPort = allocateFreeLoopbackPort();
+    Program unchangedWritable = stubProgram("headless_unchanged", true, false);
+    RecordingScript unchangedScript = new RecordingScript(unchangedWritable);
     ExecutorService executor = Executors.newSingleThreadExecutor();
     try {
-      Future<?> runFuture =
+      Future<?> unchangedFuture =
           executor.submit(
               () -> {
                 Bootstrap.startFromScript(
-                    okScript, new String[] {"port=" + freePort, "session_id=ok"}, null);
+                    unchangedScript,
+                    new String[] {"port=" + unchangedPort, "session_id=unchanged"},
+                    null,
+                    BootstrapSaveGuardTest::testBridgeServices);
                 return null;
               });
-      waitForLogLine(okScript, "Embedded bridge is listening", new CountDownLatch(1));
+      waitForLogLine(unchangedScript, "Embedded bridge is listening");
+      unchangedScript.cancellableMonitor().cancel();
+      unchangedFuture.get(10, TimeUnit.SECONDS);
+      assertEquals(
+          0, unchangedScript.saveCount(), "Unchanged writable program must skip auto-save");
+
+      // Check 4: A successful headless WebSocket bind saves an imported program.
+      int okPort = allocateFreeLoopbackPort();
+      Program importedProgram = stubProgram("headless_ok", false, true);
+      RecordingScript okScript = new RecordingScript(importedProgram);
+      Future<?> okFuture =
+          executor.submit(
+              () -> {
+                Bootstrap.startFromScript(
+                    okScript,
+                    new String[] {"port=" + okPort, "session_id=ok"},
+                    null,
+                    BootstrapSaveGuardTest::testBridgeServices);
+                return null;
+              });
+      waitForLogLine(okScript, "Embedded bridge is listening");
       okScript.cancellableMonitor().cancel();
-      runFuture.get(10, TimeUnit.SECONDS);
+      okFuture.get(10, TimeUnit.SECONDS);
+      assertEquals(2, okScript.saveCount(), "Headless WS bind must save at checkpoint and exit");
+
+      // Check 5: A successful headless MCP bind saves an imported program.
+      int okMcpPort = allocateFreeLoopbackPort();
+      Program importedMcpProgram = stubProgram("headless_mcp_ok", false, true);
+      RecordingScript okMcpScript = new RecordingScript(importedMcpProgram);
+      Future<?> okMcpFuture =
+          executor.submit(
+              () -> {
+                Bootstrap.startMcpFromScript(
+                    okMcpScript,
+                    new String[] {"port=" + okMcpPort, "session_id=ok-mcp"},
+                    null,
+                    BootstrapSaveGuardTest::testBridgeServices);
+                return null;
+              });
+      waitForLogLine(okMcpScript, "MCP endpoint is listening");
+      okMcpScript.cancellableMonitor().cancel();
+      okMcpFuture.get(10, TimeUnit.SECONDS);
+      assertEquals(2, okMcpScript.saveCount(), "Headless MCP bind must save at checkpoint and exit");
+
+      // Check 6: A successful headless outbound handshake saves an imported program.
+      int outboundPort = allocateFreeLoopbackPort();
+      CountDownLatch readyReceived = new CountDownLatch(1);
+      AtomicReference<AgentWebSocketServer.Connection> peerRef = new AtomicReference<>();
+      AgentConfig peerConfig =
+          new AgentConfig(null, "127.0.0.1", outboundPort, "/ws/agent", null, "peer", null);
+      try (AgentWebSocketServer peer =
+          new AgentWebSocketServer(
+              peerConfig,
+              new AgentWebSocketServer.Handler() {
+                @Override
+                public void onOpen(AgentWebSocketServer.Connection connection) {
+                  peerRef.set(connection);
+                }
+
+                @Override
+                public void onText(AgentWebSocketServer.Connection connection, String message) {
+                  if (message.contains("ghidra.ready")) {
+                    readyReceived.countDown();
+                  }
+                }
+
+                @Override
+                public void onClose(
+                    AgentWebSocketServer.Connection connection, int statusCode, String reason) {}
+
+                @Override
+                public void onConnectionError(
+                    AgentWebSocketServer.Connection connection, Throwable error) {}
+
+                @Override
+                public void onServerError(Throwable error) {}
+              })) {
+        peer.start();
+        Program outboundProgram = stubProgram("headless_outbound_ok", false, true);
+        RecordingScript outboundScript = new RecordingScript(outboundProgram);
+        Future<?> outboundFuture =
+            executor.submit(
+                () -> {
+                  Bootstrap.startFromScript(
+                      outboundScript,
+                      new String[] {
+                        "ws_url=ws://127.0.0.1:" + outboundPort + "/ws/agent",
+                        "session_id=outbound-ok"
+                      },
+                      null,
+                      BootstrapSaveGuardTest::testBridgeServices);
+                  return null;
+                });
+        waitForLogLine(outboundScript, "Outbound bridge connected");
+        assertTrue(readyReceived.await(5, TimeUnit.SECONDS), "Expected ghidra.ready notification");
+        outboundScript.cancellableMonitor().cancel();
+        outboundFuture.get(10, TimeUnit.SECONDS);
+        assertEquals(
+            2,
+            outboundScript.saveCount(),
+            "Headless outbound handshake must save at checkpoint and exit");
+      }
     } finally {
       executor.shutdownNow();
     }
-    assertTrue(okScript.saveCount() >= 1, "Successful headless run must save imported program");
   }
 
   @Test
-  @DisplayName("Generated Bridge.java preserves nested causes and redacts query strings in rootMessage")
-  void testGeneratedScriptRootMessagePreservesNestedCausesAndRedactsSecrets(
-      @TempDir Path tempClassesDir) throws Exception {
+  @DisplayName("Generated scripts declare Script Manager metadata and redact URL query strings")
+  void testGeneratedScriptMetadataAndRootMessage(@TempDir Path tempClassesDir) throws Exception {
     File generatedBridge =
         Path.of("build", "generated", "scripts", "Bridge.java").toFile().getAbsoluteFile();
     if (!generatedBridge.isFile()) {
@@ -613,6 +620,7 @@ class BootstrapAndGuiDialogTest {
     assertNotNull(compiler);
     List<String> options =
         List.of(
+            "-proc:none",
             "-classpath",
             System.getProperty("java.class.path"),
             "-d",
@@ -642,7 +650,7 @@ class BootstrapAndGuiDialogTest {
     for (File scriptFile : List.of(generatedBridge, generatedMcp)) {
       generic.jar.ResourceFile resourceFile = new generic.jar.ResourceFile(scriptFile);
       ghidra.app.script.ScriptInfo info = scriptInfoCtor.newInstance(provider, resourceFile);
-      assertArrayEqualsCompat(new String[] {"Ghidra Bridge"}, info.getCategory());
+      assertEquals(List.of("Ghidra Bridge"), List.of(info.getCategory()));
       assertFalse(info.getDescription().isBlank(), "Script description must not be blank");
     }
 
@@ -671,12 +679,7 @@ class BootstrapAndGuiDialogTest {
     }
   }
 
-  private static void assertArrayEqualsCompat(String[] expected, String[] actual) {
-    assertEquals(List.of(expected), List.of(actual));
-  }
-
-  private static void waitForLogLine(
-      RecordingScript script, String substring, CountDownLatch unused) throws Exception {
+  private static void waitForLogLine(RecordingScript script, String substring) throws Exception {
     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
     while (System.nanoTime() < deadline) {
       for (String line : script.stdoutLines()) {

@@ -175,8 +175,10 @@ public final class AgentClient {
         new AgentWebSocketServer(
             config, new AgentClientServerHandler(channelRef, disconnectLatch, messageHandler));
     serverRef.set(server);
-    server.start();
-    lifecycleListener.onListening();
+    if (server.bind()) {
+      lifecycleListener.onListening();
+      server.startAccepting();
+    }
     awaitDisconnect(cancellationRequested);
   }
 
