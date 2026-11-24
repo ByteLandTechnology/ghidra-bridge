@@ -3,6 +3,7 @@ package app.byteland.ghidra.network;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import app.byteland.ghidra.network.NetworkBinding.HostAuthority;
 import app.byteland.ghidra.network.NetworkBinding.HostValidationResult;
 import app.byteland.ghidra.network.NetworkBinding.HostValidationStatus;
+import java.net.InetAddress;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
@@ -208,6 +210,34 @@ class NetworkBindingHostTest {
     assertNull(NetworkBinding.parseIpv4Literal("0177.0.0.1"));
     assertNull(NetworkBinding.parseIpv4Literal("2130706433"));
     assertNull(NetworkBinding.parseIpv6Literal("rebind.example.invalid"));
+    assertNull(NetworkBinding.parseIpv6Literal("::\uFF11"));
+
+    InetAddress ipv4Loopback = NetworkBinding.parseIpLiteral("127.0.0.1");
+    assertNotNull(ipv4Loopback);
+    assertTrue(ipv4Loopback.isLoopbackAddress());
+
+    InetAddress ipv6Loopback = NetworkBinding.parseIpLiteral("::1");
+    assertNotNull(ipv6Loopback);
+    assertTrue(ipv6Loopback.isLoopbackAddress());
+    assertEquals(ipv6Loopback, NetworkBinding.parseIpLiteral("0:0:0:0:0:0:0:1"));
+
+    InetAddress mappedLoopback = NetworkBinding.parseIpLiteral("::ffff:127.0.0.1");
+    assertNotNull(mappedLoopback);
+    assertTrue(mappedLoopback.isLoopbackAddress());
+
+    InetAddress ula = NetworkBinding.parseIpLiteral("fd00::1");
+    assertNotNull(ula);
+    assertEquals(ula, NetworkBinding.parseIpLiteral("fd00:0:0:0:0:0:0:1"));
+
+    assertNull(NetworkBinding.parseIpLiteral(null));
+    assertNull(NetworkBinding.parseIpLiteral(""));
+    assertNull(NetworkBinding.parseIpLiteral("127.0.0.1.evil.invalid"));
+    assertNull(NetworkBinding.parseIpLiteral("127.0.0.01"));
+    assertNull(NetworkBinding.parseIpLiteral("127.1"));
+    assertNull(NetworkBinding.parseIpLiteral(":::1"));
+    assertNull(NetworkBinding.parseIpLiteral("::1%lo0"));
+    assertNull(NetworkBinding.parseIpLiteral("[::1]"));
+    assertNull(NetworkBinding.parseIpLiteral("1:2:3:4:5:6::127.0.0.1"));
 
     org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
         Duration.ofSeconds(1),

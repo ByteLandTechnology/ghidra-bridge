@@ -151,7 +151,7 @@ class McpHttpServerHostValidationTest {
     try (RunningMcpServer running = startServer("127.0.0.1", null, programGetCalls)) {
       int port = running.port();
 
-      // Missing Host header
+      // Absent Host header
       RawHttpResponse missing =
           sendRawHttp(port, "GET /mcp HTTP/1.1\r\nConnection: close\r\n\r\n", false);
       assertEquals(400, missing.status());
@@ -271,7 +271,7 @@ class McpHttpServerHostValidationTest {
       int port = running.port();
       String body = pingRequestJson();
 
-      // Missing Host -> 400
+      // Absent Host -> 400
       RawHttpResponse missingHost =
           sendRawHttp(
               port,

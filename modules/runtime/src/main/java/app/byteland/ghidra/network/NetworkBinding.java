@@ -11,7 +11,6 @@ import java.util.Objects;
 public final class NetworkBinding {
   private static final int IPV4_BYTE_LENGTH = 4;
   private static final int IPV6_BYTE_LENGTH = 16;
-  private static final int IPV6_GROUP_COUNT = 8;
   private static final int MAX_HOST_NAME_LENGTH = 255;
   private static final HostValidationResult VALID_HOST_RESULT =
       new HostValidationResult(HostValidationStatus.VALID, "OK");
@@ -85,8 +84,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Validates the inbound HTTP {@code Host} header list for a listener without performing DNS
-   * lookups on the inbound header value.
+   * Validates the inbound HTTP {@code Host} header list for a listener without DNS lookups on the
+   * inbound header value.
    */
   public static HostValidationResult validateHostHeader(
       List<String> hostHeaders, String configuredHost, int listenerPort) {
@@ -99,8 +98,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Validates the inbound HTTP {@code Host} header list with a precomputed listener loopback flag,
-   * executing with zero DNS lookups per request.
+   * Validates the inbound HTTP {@code Host} header list with a precomputed listener loopback flag
+   * and zero DNS lookups per request.
    */
   public static HostValidationResult validateHostHeader(
       List<String> hostHeaders,
@@ -143,7 +142,7 @@ public final class NetworkBinding {
 
   /**
    * Parses {@code host} and optional {@code :port} from an HTTP {@code Host} header value without
-   * performing any {@link InetAddress} DNS resolution.
+   * {@link InetAddress} DNS resolution.
    */
   public static HostAuthority parseHostAuthority(String rawHostHeader) {
     if (rawHostHeader == null) {
@@ -203,6 +202,26 @@ public final class NetworkBinding {
     return new HostAuthority(hostPart, port);
   }
 
+  /**
+   * Parses a canonical IPv4 or unbracketed IPv6 literal into an {@link InetAddress} without DNS
+   * resolution. Returns {@code null} when {@code literal} is invalid.
+   */
+  public static InetAddress parseIpLiteral(String literal) {
+    if (literal == null || literal.isEmpty()) {
+      return null;
+    }
+    byte[] bytes =
+        literal.indexOf(':') >= 0 ? parseIpv6Literal(literal) : parseIpv4Literal(literal);
+    if (bytes == null) {
+      return null;
+    }
+    try {
+      return InetAddress.getByAddress(bytes);
+    } catch (UnknownHostException impossible) {
+      return null;
+    }
+  }
+
   private static boolean isAllowedLoopbackAuthorityHost(
       String authorityHost, String configuredHost) {
     if ("127.0.0.1".equals(authorityHost)
@@ -219,40 +238,12 @@ public final class NetworkBinding {
   }
 
   private static Boolean classifyLoopbackWithoutDns(String configuredHost) {
-    String stripped = stripOptionalBrackets(configuredHost.trim());
+    String stripped = stripOptionalIpv6Brackets(configuredHost.trim());
     if ("localhost".equalsIgnoreCase(stripped)) {
       return Boolean.TRUE;
     }
-    byte[] ip = stripped.indexOf(':') >= 0 ? parseIpv6Literal(stripped) : parseIpv4Literal(stripped);
-    if (ip == null) {
-      return null;
-    }
-    if (ip.length == IPV4_BYTE_LENGTH) {
-      return ip[0] == 127;
-    }
-    return isIpv6LoopbackBytes(ip);
-  }
-
-  private static boolean isIpv6LoopbackBytes(byte[] bytes) {
-    boolean leadingZeros10 = true;
-    for (int i = 0; i < 10; i++) {
-      if (bytes[i] != 0) {
-        leadingZeros10 = false;
-        break;
-      }
-    }
-    if (!leadingZeros10) {
-      return false;
-    }
-    if (bytes[10] == 0
-        && bytes[11] == 0
-        && bytes[12] == 0
-        && bytes[13] == 0
-        && bytes[14] == 0
-        && bytes[15] == 1) {
-      return true;
-    }
-    return bytes[10] == (byte) 0xFF && bytes[11] == (byte) 0xFF && bytes[12] == 127;
+    InetAddress literal = parseIpLiteral(stripped);
+    return literal == null ? null : literal.isLoopbackAddress();
   }
 
   private static byte[] parseHostHeaderLiteralIp(String authorityHost) {
@@ -265,132 +256,141 @@ public final class NetworkBinding {
   }
 
   private static byte[] parseConfiguredLiteralIp(String configuredHost) {
-    String stripped = stripOptionalBrackets(configuredHost.trim());
+    String stripped = stripOptionalIpv6Brackets(configuredHost.trim());
     return stripped.indexOf(':') >= 0 ? parseIpv6Literal(stripped) : parseIpv4Literal(stripped);
   }
 
-  private static String stripOptionalBrackets(String value) {
-    if (value.length() >= 2 && value.charAt(0) == '[' && value.charAt(value.length() - 1) == ']') {
+  private static String stripOptionalIpv6Brackets(String value) {
+    if (value.length() > 2
+        && value.charAt(0) == '['
+        && value.charAt(value.length() - 1) == ']'
+        && value.indexOf(':') >= 0) {
       return value.substring(1, value.length() - 1);
     }
     return value;
   }
 
-  static byte[] parseIpv4Literal(String text) {
-    if (text == null || text.isEmpty() || text.length() > 15) {
+  public static byte[] parseIpv4Literal(String literal) {
+    if (literal == null || literal.isEmpty() || literal.length() > 15) {
       return null;
     }
-    byte[] octets = new byte[IPV4_BYTE_LENGTH];
+    byte[] bytes = new byte[IPV4_BYTE_LENGTH];
     int octetIndex = 0;
-    int start = 0;
-    for (int i = 0; i <= text.length(); i++) {
-      if (i == text.length() || text.charAt(i) == '.') {
-        if (octetIndex >= IPV4_BYTE_LENGTH) {
+    int value = 0;
+    int digits = 0;
+    for (int i = 0; i < literal.length(); i++) {
+      char ch = literal.charAt(i);
+      if (ch == '.') {
+        if (digits == 0 || octetIndex == 3) {
           return null;
         }
-        int len = i - start;
-        if (len < 1 || len > 3) {
+        bytes[octetIndex++] = (byte) value;
+        value = 0;
+        digits = 0;
+      } else if (ch >= '0' && ch <= '9') {
+        if (digits == 1 && value == 0) {
           return null;
         }
-        if (len > 1 && text.charAt(start) == '0') {
+        value = value * 10 + (ch - '0');
+        digits++;
+        if (digits > 3 || value > 255) {
           return null;
         }
-        int value = 0;
-        for (int j = start; j < i; j++) {
-          char c = text.charAt(j);
-          if (c < '0' || c > '9') {
-            return null;
-          }
-          value = value * 10 + (c - '0');
-        }
-        if (value > 255) {
-          return null;
-        }
-        octets[octetIndex++] = (byte) value;
-        start = i + 1;
+      } else {
+        return null;
       }
     }
-    return octetIndex == IPV4_BYTE_LENGTH ? octets : null;
-  }
-
-  static byte[] parseIpv6Literal(String text) {
-    if (text == null || text.isEmpty()) {
+    if (digits == 0 || octetIndex != 3) {
       return null;
     }
-    String working = text;
-    if (working.indexOf('.') >= 0) {
-      int lastColon = working.lastIndexOf(':');
-      if (lastColon < 0) {
-        return null;
-      }
-      byte[] ipv4Tail = parseIpv4Literal(working.substring(lastColon + 1));
-      if (ipv4Tail == null) {
-        return null;
-      }
-      String highGroup =
-          Integer.toHexString(((ipv4Tail[0] & 0xFF) << 8) | (ipv4Tail[1] & 0xFF));
-      String lowGroup =
-          Integer.toHexString(((ipv4Tail[2] & 0xFF) << 8) | (ipv4Tail[3] & 0xFF));
-      working = working.substring(0, lastColon + 1) + highGroup + ":" + lowGroup;
-    }
-
-    int doubleColon = working.indexOf("::");
-    String[] leftGroups;
-    String[] rightGroups;
-    if (doubleColon >= 0) {
-      if (working.indexOf("::", doubleColon + 1) >= 0) {
-        return null;
-      }
-      String left = working.substring(0, doubleColon);
-      String right = working.substring(doubleColon + 2);
-      leftGroups = left.isEmpty() ? new String[0] : left.split(":", -1);
-      rightGroups = right.isEmpty() ? new String[0] : right.split(":", -1);
-      if (leftGroups.length + rightGroups.length >= IPV6_GROUP_COUNT) {
-        return null;
-      }
-    } else {
-      leftGroups = working.split(":", -1);
-      rightGroups = new String[0];
-      if (leftGroups.length != IPV6_GROUP_COUNT) {
-        return null;
-      }
-    }
-
-    byte[] bytes = new byte[IPV6_BYTE_LENGTH];
-    for (int i = 0; i < leftGroups.length; i++) {
-      int groupValue = parseHexGroup16(leftGroups[i]);
-      if (groupValue < 0) {
-        return null;
-      }
-      bytes[i * 2] = (byte) ((groupValue >>> 8) & 0xFF);
-      bytes[i * 2 + 1] = (byte) (groupValue & 0xFF);
-    }
-    int rightStartGroup = IPV6_GROUP_COUNT - rightGroups.length;
-    for (int i = 0; i < rightGroups.length; i++) {
-      int groupValue = parseHexGroup16(rightGroups[i]);
-      if (groupValue < 0) {
-        return null;
-      }
-      int byteOffset = (rightStartGroup + i) * 2;
-      bytes[byteOffset] = (byte) ((groupValue >>> 8) & 0xFF);
-      bytes[byteOffset + 1] = (byte) (groupValue & 0xFF);
-    }
+    bytes[3] = (byte) value;
     return bytes;
   }
 
-  private static int parseHexGroup16(String group) {
-    if (group.isEmpty() || group.length() > 4) {
-      return -1;
+  public static byte[] parseIpv6Literal(String literal) {
+    if (literal == null
+        || literal.length() < 2
+        || literal.indexOf(':') < 0
+        || literal.indexOf('%') >= 0) {
+      return null;
     }
-    int value = 0;
-    for (int i = 0; i < group.length(); i++) {
-      int digit = Character.digit(group.charAt(i), 16);
-      if (digit < 0) {
-        return -1;
+    int doubleColon = literal.indexOf("::");
+    if (doubleColon >= 0 && literal.indexOf("::", doubleColon + 1) >= 0) {
+      return null;
+    }
+    String headPart = doubleColon >= 0 ? literal.substring(0, doubleColon) : literal;
+    String tailPart = doubleColon >= 0 ? literal.substring(doubleColon + 2) : null;
+
+    byte[] headBytes =
+        headPart.isEmpty() ? new byte[0] : parseIpv6Groups(headPart, tailPart == null);
+    if (headBytes == null || (doubleColon < 0 && headPart.isEmpty())) {
+      return null;
+    }
+    if (tailPart == null) {
+      return headBytes.length == IPV6_BYTE_LENGTH ? headBytes : null;
+    }
+    byte[] tailBytes = tailPart.isEmpty() ? new byte[0] : parseIpv6Groups(tailPart, true);
+    if (tailBytes == null || headBytes.length + tailBytes.length >= IPV6_BYTE_LENGTH) {
+      return null;
+    }
+    byte[] result = new byte[IPV6_BYTE_LENGTH];
+    System.arraycopy(headBytes, 0, result, 0, headBytes.length);
+    System.arraycopy(tailBytes, 0, result, IPV6_BYTE_LENGTH - tailBytes.length, tailBytes.length);
+    return result;
+  }
+
+  private static byte[] parseIpv6Groups(String part, boolean allowTrailingIpv4) {
+    if (part.charAt(0) == ':' || part.charAt(part.length() - 1) == ':') {
+      return null;
+    }
+    String[] groups = part.split(":", -1);
+    byte[] buffer = new byte[IPV6_BYTE_LENGTH];
+    int offset = 0;
+    for (int i = 0; i < groups.length; i++) {
+      String group = groups[i];
+      if (group.isEmpty()) {
+        return null;
       }
-      value = (value << 4) | digit;
+      if (group.indexOf('.') >= 0) {
+        if (!allowTrailingIpv4 || i != groups.length - 1 || offset > 12) {
+          return null;
+        }
+        byte[] ipv4 = parseIpv4Literal(group);
+        if (ipv4 == null) {
+          return null;
+        }
+        System.arraycopy(ipv4, 0, buffer, offset, IPV4_BYTE_LENGTH);
+        offset += IPV4_BYTE_LENGTH;
+      } else {
+        if (group.length() > 4 || offset > 14) {
+          return null;
+        }
+        int word = 0;
+        for (int j = 0; j < group.length(); j++) {
+          int digit = asciiHexDigit(group.charAt(j));
+          if (digit < 0) {
+            return null;
+          }
+          word = (word << 4) | digit;
+        }
+        buffer[offset++] = (byte) (word >>> 8);
+        buffer[offset++] = (byte) word;
+      }
     }
-    return value;
+    return Arrays.copyOf(buffer, offset);
+  }
+
+  private static int asciiHexDigit(char ch) {
+    if (ch >= '0' && ch <= '9') {
+      return ch - '0';
+    }
+    if (ch >= 'a' && ch <= 'f') {
+      return ch - 'a' + 10;
+    }
+    if (ch >= 'A' && ch <= 'F') {
+      return ch - 'A' + 10;
+    }
+    return -1;
   }
 
   private static boolean isValidHostNameOrIpv4(String hostPart) {

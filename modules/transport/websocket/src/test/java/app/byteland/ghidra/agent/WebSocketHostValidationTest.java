@@ -148,7 +148,7 @@ class WebSocketHostValidationTest {
                   + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n");
       assertEquals(403, rebindFullStatus);
 
-      // Missing Host -> 400
+      // Absent Host -> 400
       int missingStatus =
           sendWsHandshakeStatus(
               port,
@@ -177,7 +177,7 @@ class WebSocketHostValidationTest {
       assertEquals(400, duplicateStatus);
       assertEquals(0, openCount.get());
 
-      // Allowed loopback Host headers -> 101 Switching Protocols
+      // Valid loopback Host headers -> 101 Switching Protocols
       for (String allowedHost :
           List.of("127.0.0.1:" + port, "[::1]:" + port, "localhost:" + port)) {
         CountDownLatch closedLatch = running.resetCloseLatch();
@@ -206,7 +206,7 @@ class WebSocketHostValidationTest {
     try (RunningWsServer running = startWsServer("0.0.0.0", "ws-secret-token", openCount)) {
       int port = running.port();
 
-      // Missing token -> 401
+      // Absent token -> 401
       int unauthorized =
           sendWsHandshakeStatus(
               port,
@@ -254,7 +254,7 @@ class WebSocketHostValidationTest {
         }
         int status = Integer.parseInt(statusLine.split(" ", 3)[1]);
         if (status == 409 && attempt < 19) {
-          // Previous rejected socket slot still releasing on worker thread; retry briefly.
+          // Retry briefly if cleanup of the previous rejected socket slot races on the worker thread.
           Thread.sleep(25L);
           continue;
         }
