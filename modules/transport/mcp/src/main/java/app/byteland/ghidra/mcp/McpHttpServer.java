@@ -7,9 +7,11 @@ import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
 import app.byteland.ghidra.api.ApiFailures;
 import app.byteland.ghidra.network.NetworkBinding;
+import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -36,6 +38,8 @@ import java.util.function.Consumer;
  * HTTP server that exposes the bridge API as grouped MCP tools through Streamable HTTP and SSE.
  */
 public final class McpHttpServer implements AutoCloseable {
+  static final int MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
+  private static final int HTTP_PAYLOAD_TOO_LARGE = 413;
   private static final int JSONRPC_PARSE_ERROR = -32700;
   private static final int JSONRPC_INVALID_REQUEST = -32600;
   private static final int JSONRPC_METHOD_NOT_FOUND = -32601;
@@ -246,6 +250,7 @@ public final class McpHttpServer implements AutoCloseable {
             }
           }
 
+          validateContentLength(exchange.getRequestHeaders());
           if (!String.valueOf(firstHeader(exchange, "Content-Type")).startsWith("application/json")) {
             throw new JsonRpcError(415, null, JSONRPC_INVALID_REQUEST, "Content-Type must be application/json");
           }
@@ -278,6 +283,9 @@ public final class McpHttpServer implements AutoCloseable {
               .status(error.httpStatus())
               .id(error.id())
               .cause(error.httpStatus() >= 500 ? rootMessage(error) : null);
+          if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
+            exchange.getResponseHeaders().set("Connection", "close");
+          }
           Map<String, Object> errResponse = error.code() == UNSUPPORTED_PROTOCOL_VERSION
               ? mcpErrorResponse(exchange, error.id(), error.code(), error.getMessage(),
                   Map.of("requested", error.requestedVersion(), "supported", SUPPORTED_PROTOCOL_VERSIONS))
@@ -288,7 +296,11 @@ public final class McpHttpServer implements AutoCloseable {
             try {
               activeSse.sendEvent("message", JsonUtil.toJson(errResponse));
             } catch (IOException ignored) {}
-            exchange.sendResponseHeaders(202, -1);
+            if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
+              writeJson(exchange, error.httpStatus(), errResponse);
+            } else {
+              exchange.sendResponseHeaders(202, -1);
+            }
           } else {
             writeJson(exchange, error.httpStatus(), errResponse);
           }
@@ -738,10 +750,72 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static void discardRequestLog(String ignored) {}
 
-  private static String readBody(HttpExchange exchange) throws IOException {
-    try (InputStream input = exchange.getRequestBody()) {
-      return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+  static void validateContentLength(Headers headers) {
+    List<String> values = headers == null ? null : headers.get("Content-Length");
+    if (values == null || values.isEmpty()) {
+      return;
     }
+    if (values.size() > 1) {
+      throw new JsonRpcError(
+          400, null, JSONRPC_INVALID_REQUEST, "Duplicate Content-Length header");
+    }
+    String raw = values.get(0);
+    if (raw == null) {
+      throw new JsonRpcError(
+          400, null, JSONRPC_INVALID_REQUEST, "Invalid Content-Length header");
+    }
+    String trimmed = raw.trim();
+    if (trimmed.isEmpty() || !isAsciiDigits(trimmed)) {
+      throw new JsonRpcError(
+          400, null, JSONRPC_INVALID_REQUEST, "Invalid Content-Length header");
+    }
+    long contentLength;
+    try {
+      contentLength = Long.parseLong(trimmed);
+    } catch (NumberFormatException error) {
+      throw new JsonRpcError(
+          400, null, JSONRPC_INVALID_REQUEST, "Invalid Content-Length header", error);
+    }
+    if (contentLength > MAX_REQUEST_BODY_BYTES) {
+      throw new JsonRpcError(
+          HTTP_PAYLOAD_TOO_LARGE,
+          null,
+          JSONRPC_INVALID_REQUEST,
+          "Request body exceeds maximum size of " + MAX_REQUEST_BODY_BYTES + " bytes");
+    }
+  }
+
+  private static boolean isAsciiDigits(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      if (ch < '0' || ch > '9') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static String readBody(HttpExchange exchange) throws IOException {
+    InputStream input = exchange.getRequestBody();
+    // Guard len == 0 because jdk.httpserver's ChunkedInputStream reads the next chunk header on a
+    // zero-length read after InputStream.readNBytes fills its final buffer.
+    InputStream boundedView =
+        new FilterInputStream(input) {
+          @Override
+          public int read(byte[] buf, int off, int len) throws IOException {
+            return len == 0 ? 0 : in.read(buf, off, len);
+          }
+        };
+    byte[] bytes = boundedView.readNBytes(MAX_REQUEST_BODY_BYTES + 1);
+    if (bytes.length > MAX_REQUEST_BODY_BYTES) {
+      throw new JsonRpcError(
+          HTTP_PAYLOAD_TOO_LARGE,
+          null,
+          JSONRPC_INVALID_REQUEST,
+          "Request body exceeds maximum size of " + MAX_REQUEST_BODY_BYTES + " bytes");
+    }
+    input.close();
+    return new String(bytes, StandardCharsets.UTF_8);
   }
 
   private static void writeJsonRpcError(
@@ -845,7 +919,7 @@ public final class McpHttpServer implements AutoCloseable {
     return message == null || message.isBlank() ? current.getClass().getName() : message;
   }
 
-  private static final class JsonRpcError extends RuntimeException {
+  static final class JsonRpcError extends RuntimeException {
     private static final long serialVersionUID = 1L;
     private final int statusCode;
     private final transient Object requestId;
