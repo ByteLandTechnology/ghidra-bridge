@@ -67,7 +67,45 @@ public interface FunctionService {
   void deleteFunction(String rawAddress);
 
   /**
+   * Parameter definition for atomic function prototype updates.
+   */
+  record ParameterPatch(
+      String name, DataTypeReference dataType, VariableStorageReference storage) {
+    public ParameterPatch {
+      if (dataType == null) {
+        throw new IllegalArgumentException("parameter dataType is required");
+      }
+      name = name == null || name.isBlank() ? null : name.trim();
+    }
+  }
+
+  /**
    * Updates function name, comments, signature, and attributes.
+   */
+  default void patchFunction(
+      String rawAddress,
+      String newName,
+      String newComment,
+      boolean commentPresent,
+      DataTypeReference returnType,
+      VariableStorageReference returnStorage,
+      String callingConvention,
+      FunctionAttributePatch attributes) {
+    patchFunction(
+        rawAddress,
+        newName,
+        newComment,
+        commentPresent,
+        returnType,
+        returnStorage,
+        callingConvention,
+        attributes,
+        null,
+        null);
+  }
+
+  /**
+   * Updates function name, comments, parameters, signature, and attributes.
    */
   void patchFunction(
       String rawAddress,
@@ -77,7 +115,9 @@ public interface FunctionService {
       DataTypeReference returnType,
       VariableStorageReference returnStorage,
       String callingConvention,
-      FunctionAttributePatch attributes);
+      FunctionAttributePatch attributes,
+      java.util.List<ParameterPatch> parameters,
+      String signature);
 
   /**
    * Returns one page of functions that call the target function.

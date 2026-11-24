@@ -122,7 +122,9 @@ public final class FunctionServiceImpl implements FunctionService {
       DataTypeReference returnType,
       VariableStorageReference returnStorage,
       String callingConvention,
-      FunctionAttributePatch attributes) {
+      FunctionAttributePatch attributes,
+      java.util.List<ParameterPatch> parameters,
+      String signature) {
     FunctionMutations.patchFunction(
         context,
         lookupQueries.resolveFunction(rawAddress),
@@ -133,6 +135,8 @@ public final class FunctionServiceImpl implements FunctionService {
         returnStorage,
         callingConvention,
         attributes,
+        parameters,
+        signature,
         dataTypeResolver);
   }
 

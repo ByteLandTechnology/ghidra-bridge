@@ -87,6 +87,9 @@ final class WireValues {
         }
         case DataTypeReference.UntypedPointer ignored -> {
         }
+        case DataTypeReference.CType cType ->
+            throw new IllegalStateException(
+                "output must use canonical DataTypeReference: " + cType.declaration());
       }
       return result;
     }

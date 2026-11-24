@@ -1,5 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
+import app.byteland.ghidra.adapter.ghidra.GhidraCParserSupport;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
@@ -74,6 +75,17 @@ final class DataTypeMutations {
       default -> throw new IllegalArgumentException("unsupported create kind: " + kind);
     }
     manager.addDataType(candidate, DataTypeConflictHandler.DEFAULT_HANDLER);
+  }
+
+  static java.util.List<DataTypeResource> parseC(
+      DataTypeManager manager, String source, String categoryPath) {
+    java.util.List<DataType> created =
+        GhidraCParserSupport.parseCHeader(manager, source, categoryPath);
+    java.util.List<DataTypeResource> resources = new java.util.ArrayList<>(created.size());
+    for (DataType dataType : created) {
+      resources.add(DataTypeDescriptions.detail(dataType));
+    }
+    return java.util.List.copyOf(resources);
   }
 
   private static FunctionDefinition buildFunctionDefinition(

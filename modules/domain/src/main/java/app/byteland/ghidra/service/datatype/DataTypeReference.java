@@ -6,9 +6,21 @@ public sealed interface DataTypeReference
     permits DataTypeReference.Named,
         DataTypeReference.Pointer,
         DataTypeReference.Array,
-        DataTypeReference.UntypedPointer {
+        DataTypeReference.UntypedPointer,
+        DataTypeReference.CType {
 
   String kind();
+
+  record CType(String declaration) implements DataTypeReference {
+    public CType {
+      declaration = requiredText(declaration, "declaration");
+    }
+
+    @Override
+    public String kind() {
+      return "c_type";
+    }
+  }
 
   record Named(String name) implements DataTypeReference {
     public Named {
@@ -67,6 +79,10 @@ public sealed interface DataTypeReference
 
   static DataTypeReference untypedPointer() {
     return new UntypedPointer();
+  }
+
+  static DataTypeReference cType(String declaration) {
+    return new CType(declaration);
   }
 
   private static String requiredText(String value, String field) {

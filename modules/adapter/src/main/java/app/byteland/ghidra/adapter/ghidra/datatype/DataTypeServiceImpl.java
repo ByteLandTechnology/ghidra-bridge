@@ -60,6 +60,11 @@ public final class DataTypeServiceImpl implements DataTypeService {
   }
 
   @Override
+  public java.util.List<DataTypeResource> parseC(String source, String categoryPath) {
+    return DataTypeMutations.parseC(dataTypeManager(), source, categoryPath);
+  }
+
+  @Override
   public void patchDataType(String path, DataTypePatch patch) {
     DataType dataType = requireDataType(path);
     switch (patch) {

@@ -129,6 +129,24 @@ final class DataTypeMethods implements ApiMethodProvider {
           upsertFunctionDataType(request);
           return registry.services().dataTypeService().getDataType(dataTypePath(resource(request)));
         });
+    registry.writeListResult(
+        "data_type.parse_c",
+        MethodEffects.mutation(true, true),
+        "Parse C declarations into data types in the active program.",
+        ApiSchemaCatalog.dataTypeParseCInputSchema(),
+        ApiSchemaCatalog.dataTypeFields(),
+        List.of(ApiVocabulary.PATH),
+        request -> {
+          String source = text(request, ApiVocabulary.SOURCE);
+          if (source.isBlank()) {
+            throw ApiException.badRequest(
+                ApiVocabulary.INVALID_VALUE, "/source must not be blank", "/source");
+          }
+          return registry
+              .services()
+              .dataTypeService()
+              .parseC(source, optionalText(request, ApiVocabulary.CATEGORY_PATH, "/"));
+        });
     registry.writeResult(
         "data_type.delete",
         MethodEffects.mutation(true, true),

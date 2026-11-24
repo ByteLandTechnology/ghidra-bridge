@@ -57,10 +57,12 @@ public final class GhidraDataTypeReferences {
         DataType elementType = resolve(programDataTypeManager, array.element(), depth + 1);
         yield buildArrayDataType(elementType, array.count(), programDataTypeManager);
       }
+      case DataTypeReference.CType cType ->
+          GhidraCParserSupport.resolveCType(programDataTypeManager, cType.declaration());
     };
   }
 
-  private static DataType buildArrayDataType(
+  static DataType buildArrayDataType(
       DataType elementType, int count, DataTypeManager manager) {
     if (isBareFunctionDefinition(elementType)) {
       throw new IllegalArgumentException(
@@ -129,13 +131,18 @@ public final class GhidraDataTypeReferences {
     } else {
       List<DataType> matches = findNamed(programDataTypeManager, normalized);
       if (matches.isEmpty()) {
-        throw new IllegalArgumentException("unknown data type: " + normalized);
-      }
-      if (matches.size() > UNAMBIGUOUS_MATCH_COUNT) {
+        if (normalized.indexOf('*') >= 0
+            || normalized.indexOf('[') >= 0
+            || normalized.indexOf('(') >= 0) {
+          throw new IllegalArgumentException("unknown data type: " + normalized);
+        }
+        selected = GhidraCParserSupport.resolveCType(programDataTypeManager, normalized);
+      } else if (matches.size() > UNAMBIGUOUS_MATCH_COUNT) {
         throw new IllegalArgumentException(
             "ambiguous data type name: " + normalized + "; use an absolute path");
+      } else {
+        selected = matches.getFirst();
       }
-      selected = matches.getFirst();
     }
 
     if (selected instanceof Pointer && !(selected instanceof TypeDef)) {
@@ -257,7 +264,7 @@ public final class GhidraDataTypeReferences {
     return current instanceof FunctionDefinition;
   }
 
-  private static void requirePointerIdentityCanBePreserved(
+  static void requirePointerIdentityCanBePreserved(
       DataTypeManager programDataTypeManager, Pointer requestedPointer) {
     Category category = programDataTypeManager.getCategory(requestedPointer.getCategoryPath());
     if (category == null) {

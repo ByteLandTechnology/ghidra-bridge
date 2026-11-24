@@ -64,6 +64,7 @@ final class ApiVocabulary {
   static final String OPERAND_INDEX = "operand_index";
   static final String ORDINAL = "ordinal";
   static final String PARAMETERS = "parameters";
+  static final String PARSE_C = "parse_c";
   static final String PATCH = "patch";
   static final String PATH = "path";
   static final String PROGRESS = "progress";
@@ -78,6 +79,7 @@ final class ApiVocabulary {
   static final String SELECTOR = "selector";
   static final String SIGNATURE = "signature";
   static final String SIZE = "size";
+  static final String SOURCE = "source";
   static final String START = "start";
   static final String STORAGE = "storage";
   static final String STRING = "string";

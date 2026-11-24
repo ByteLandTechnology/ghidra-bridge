@@ -58,6 +58,7 @@
 | `data_type.create` | `mutation` | Create data type data in the active program. |
 | `data_type.patch` | `destructive mutation` | Change data type data in the active program. |
 | `data_type.upsert` | `destructive mutation` | Create or replace data type data in the active program. |
+| `data_type.parse_c` | `destructive mutation` | Parse C declarations into data types in the active program. |
 | `data_type.delete` | `destructive mutation` | Delete data type data from the active program. |
 | `batch.execute` | `destructive mutation` | Check a batch. Run its items in order. Use per_item to keep item errors. Use all_or_none to revert the batch after an error. |
 

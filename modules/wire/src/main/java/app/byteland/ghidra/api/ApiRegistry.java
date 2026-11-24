@@ -603,6 +603,8 @@ public final class ApiRegistry {
       case "create" -> "Create " + resource + " data in the active program.";
       case ApiVocabulary.PATCH -> "Change " + resource + " data in the active program.";
       case "upsert" -> "Create or replace " + resource + " data in the active program.";
+      case ApiVocabulary.PARSE_C ->
+          "Parse C declarations into data types in the active program.";
       case "delete" -> "Delete " + resource + " data from the active program.";
       case "save" -> "Save the active program to its project file.";
       case ApiVocabulary.START -> "Start automatic analysis of the active program.";
@@ -887,6 +889,13 @@ public final class ApiRegistry {
 
   static DataTypeReference dataType(Object raw, String target) {
     if (raw == null) return null;
+    if (raw instanceof String declaration) {
+      if (declaration.isBlank()) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE, target + " must not be blank", target);
+      }
+      return DataTypeReference.cType(declaration);
+    }
     Map<String, Object> value = objectAt(raw, target);
     String kind = text(value, ApiVocabulary.KIND);
     return switch (kind) {

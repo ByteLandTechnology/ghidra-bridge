@@ -7,6 +7,7 @@ import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
 import static app.byteland.ghidra.api.ApiRegistry.nullableText;
+import static app.byteland.ghidra.api.ApiRegistry.objectAt;
 import static app.byteland.ghidra.api.ApiRegistry.optionalInteger;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 import static app.byteland.ghidra.api.ApiRegistry.patch;
@@ -21,6 +22,8 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
+import app.byteland.ghidra.service.function.FunctionService.ParameterPatch;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -301,6 +304,21 @@ final class FunctionMethods implements ApiMethodProvider {
   private void patchFunction(Map<String, Object> request) {
     String entry = text(selector(request), ApiVocabulary.ENTRY);
     Map<String, Object> patch = patch(request);
+    if (patch.containsKey(ApiVocabulary.SIGNATURE)
+        && (patch.containsKey(ApiVocabulary.PARAMETERS)
+            || patch.containsKey(ApiVocabulary.RETURN_TYPE)
+            || patch.containsKey(ApiVocabulary.CALLING_CONVENTION))) {
+      throw ApiException.badRequest(
+          "conflicting_fields",
+          "signature cannot be combined with parameters, return_type, or calling_convention",
+          "/patch");
+    }
+    String signature = optionalText(patch, ApiVocabulary.SIGNATURE);
+    if (signature != null && signature.isBlank()) {
+      throw ApiException.badRequest(
+          ApiVocabulary.INVALID_VALUE, "/patch/signature must not be blank", "/patch/signature");
+    }
+    List<ParameterPatch> parameters = convertedParameters(patch.get(ApiVocabulary.PARAMETERS));
     DataTypeReference returnType = dataType(patch.get("return_type"), "/patch/return_type");
     registry
         .services()
@@ -318,7 +336,25 @@ final class FunctionMethods implements ApiMethodProvider {
                 bool(patch, "has_no_return").orElse(null),
                 bool(patch, "has_var_args").orElse(null),
                 bool(patch, "has_custom_variable_storage").orElse(null),
-                optionalInteger(patch, "stack_purge_size")));
+                optionalInteger(patch, "stack_purge_size")),
+            parameters,
+            signature);
+  }
+
+  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
+  private static List<ParameterPatch> convertedParameters(Object raw) {
+    if (!(raw instanceof List<?> list)) return null;
+    List<ParameterPatch> parameters = new ArrayList<>(list.size());
+    for (int index = 0; index < list.size(); index++) {
+      String itemTarget = "/patch/parameters/" + index;
+      Map<String, Object> item = objectAt(list.get(index), itemTarget);
+      parameters.add(
+          new ParameterPatch(
+              optionalText(item, ApiVocabulary.NAME),
+              dataType(item.get(ApiVocabulary.DATA_TYPE), itemTarget + "/data_type"),
+              storage(item.get(ApiVocabulary.STORAGE))));
+    }
+    return List.copyOf(parameters);
   }
 
   private FunctionResource.ParameterResource functionParameter(String entry, int ordinal) {

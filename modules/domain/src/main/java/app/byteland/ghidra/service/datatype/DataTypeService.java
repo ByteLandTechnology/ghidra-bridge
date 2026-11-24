@@ -57,6 +57,15 @@ public interface DataTypeService {
       FunctionSignature signature);
 
   /**
+   * Parses C declarations and saves the data types in the program data manager.
+   *
+   * @param source C header declarations to parse
+   * @param categoryPath destination category folder
+   * @return list of created or updated data type resources
+   */
+  java.util.List<DataTypeResource> parseC(String source, String categoryPath);
+
+  /**
    * Updates a data type definition that exists.
    *
    * @param path full path of data type to modify
