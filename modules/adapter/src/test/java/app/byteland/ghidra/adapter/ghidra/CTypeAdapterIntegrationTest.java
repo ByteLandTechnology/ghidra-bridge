@@ -180,7 +180,7 @@ class CTypeAdapterIntegrationTest {
       GhidraSession session = testSession(program);
       DataTypeServiceImpl service = new DataTypeServiceImpl(session);
 
-      // struct create + 409 conflict + upsert replacement (including self-reference)
+      // struct create, 409 conflict, and upsert replacement with a self-reference
       String structPath =
           service.createDataTypeFromDeclaration(
               "/net", "struct Node { int id; struct Node *next; };");
@@ -220,7 +220,7 @@ class CTypeAdapterIntegrationTest {
       service.upsertDataTypeFromDeclaration("/", "enum Status { OK = 0, ERR = 1, RETRY = 2 };");
       assertEquals(3, service.getDataType("/Status").values().size());
 
-      // typedef (including function pointer typedef)
+      // typedef with a function pointer typedef
       String tdPath =
           service.createDataTypeFromDeclaration(
               "/", "typedef void (*handler_t)(const char *msg, int code);");
@@ -285,7 +285,7 @@ class CTypeAdapterIntegrationTest {
       GhidraSession session = testSession(program);
       FunctionServiceImpl functions = new FunctionServiceImpl(session);
 
-      // 1. Dynamic storage atomic parameter replacement + C string types (including fn pointer)
+      // 1. Dynamic storage atomic parameter replacement and C string types with a function pointer
       functions.patchFunction(
           "0x1000",
           null,
@@ -350,7 +350,7 @@ class CTypeAdapterIntegrationTest {
       assertNotNull(alphaStorage);
       assertNotNull(betaStorage);
 
-      // Pure swap + type widen on custom-storage function using cloned VariableStorageReferences!
+      // Pure swap and type widen on custom-storage function with cloned VariableStorageReferences.
       functions.patchFunction(
           "0x1000",
           null,
