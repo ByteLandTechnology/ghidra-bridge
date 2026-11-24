@@ -1,6 +1,7 @@
 package app.byteland.ghidra.agent;
 
 import app.byteland.ghidra.network.NetworkBinding;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
@@ -122,41 +123,28 @@ final class WebSocketHandshakeValidator {
     if (configHost == null || configHost.isBlank()) {
       return false;
     }
-    if (hostsMatchCaseInsensitive(configHost, originHost)) {
+    InetAddress originLiteral = NetworkBinding.parseIpLiteral(originHost);
+    if (originLiteral != null && originLiteral.isAnyLocalAddress()) {
+      return false;
+    }
+    if (NetworkBinding.hostsMatch(configHost, originHost)) {
       return true;
     }
-    return isLoopbackListener(configHost) && isLiteralLoopbackHost(originHost);
-  }
-
-  private static boolean hostsMatchCaseInsensitive(String configHost, String originHost) {
-    return stripIpv6Brackets(configHost.trim())
-        .equalsIgnoreCase(stripIpv6Brackets(originHost));
-  }
-
-  private static boolean isLiteralLoopbackHost(String host) {
-    return "localhost".equalsIgnoreCase(host)
-        || "127.0.0.1".equals(host)
-        || "[::1]".equalsIgnoreCase(host)
-        || "::1".equalsIgnoreCase(host);
+    return NetworkBinding.isLiteralLoopbackHost(originHost) && isLoopbackListener(configHost);
   }
 
   private static boolean isLoopbackListener(String configHost) {
-    String trimmed = configHost.trim();
-    if (isLiteralLoopbackHost(trimmed)) {
+    if (NetworkBinding.isLiteralLoopbackHost(configHost)) {
       return true;
     }
+    if (NetworkBinding.parseIpLiteral(configHost) != null) {
+      return false;
+    }
     try {
-      return NetworkBinding.isLoopback(trimmed);
+      return NetworkBinding.isLoopback(configHost.trim());
     } catch (IllegalArgumentException unresolvedConfigHost) {
       return false;
     }
-  }
-
-  private static String stripIpv6Brackets(String host) {
-    if (host.length() >= 2 && host.charAt(0) == '[' && host.charAt(host.length() - 1) == ']') {
-      return host.substring(1, host.length() - 1);
-    }
-    return host;
   }
 
   private static WebSocketHandshake.HttpHandshakeException forbidden(String message) {

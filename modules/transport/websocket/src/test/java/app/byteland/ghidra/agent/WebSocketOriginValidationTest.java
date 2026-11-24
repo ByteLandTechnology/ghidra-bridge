@@ -42,15 +42,20 @@ class WebSocketOriginValidationTest {
   @ValueSource(
       strings = {
         "http://127.0.0.1:8765",
+        "http://127.0.0.2:8765",
+        "http://127.255.255.254:9000",
         "http://localhost:3000",
         "http://[::1]:8765",
+        "http://[0:0:0:0:0:0:0:1]:8765",
+        "http://[::ffff:127.0.0.1]:8765",
+        "http://[::ffff:127.0.0.2]:8765",
         "https://localhost",
         "https://LOCALHOST:8443",
         "https://[::1]"
       })
   @DisplayName("Permits literal loopback Origin headers on loopback listeners")
   void allowsLoopbackOriginsOnLoopbackListeners(String origin) throws IOException {
-    for (String bindHost : List.of("127.0.0.1", "localhost", "::1")) {
+    for (String bindHost : List.of("127.0.0.1", "127.0.0.2", "localhost", "::1")) {
       AgentConfig config = loopbackConfig(bindHost, 8765);
       WebSocketHandshake.HandshakeRequest request =
           readHandshake(rawUpgradeRequest("127.0.0.1:8765", List.of("Origin: " + origin)));
@@ -68,7 +73,15 @@ class WebSocketOriginValidationTest {
         "http://untrusted-origin.example:8080",
         "http://127.0.0.1.untrusted.example",
         "http://evil-localhost",
-        "http://127.0.0.2:8765",
+        "http://sub.localhost:3000",
+        "http://0.0.0.0:8765",
+        "http://[::]:8765",
+        "http://[fe80::1]:8765",
+        "http://192.0.2.10:8765",
+        "http://127.0.0.01:8765",
+        "http://127.1:8765",
+        "http://2130706433:8765",
+        "http://[::1%25lo0]:8765",
         "null",
         "NULL",
         "",
@@ -169,6 +182,7 @@ class WebSocketOriginValidationTest {
     for (String disallowed :
         List.of(
             "http://127.0.0.1:8765",
+            "http://127.0.0.2:8765",
             "http://localhost:3000",
             "http://[::1]:8765",
             "https://untrusted-origin.example")) {
@@ -204,6 +218,28 @@ class WebSocketOriginValidationTest {
                 List.of(
                     "Origin: https://[2001:DB8::1]:8443", "Authorization: Bearer secret-token")));
     assertDoesNotThrow(() -> WebSocketHandshakeValidator.validate(ipv6Config, matchingIpv6Origin));
+
+    WebSocketHandshake.HandshakeRequest expandedIpv6Origin =
+        readHandshake(
+            rawUpgradeRequest(
+                "[2001:db8::1]:8765",
+                List.of(
+                    "Origin: https://[2001:0db8:0:0:0:0:0:1]:8443",
+                    "Authorization: Bearer secret-token")));
+    assertDoesNotThrow(() -> WebSocketHandshakeValidator.validate(ipv6Config, expandedIpv6Origin));
+
+    AgentConfig wildcardConfig =
+        new AgentConfig(null, "0.0.0.0", 8765, "/ws/agent", "secret-token", "demo", null);
+    WebSocketHandshake.HandshakeRequest wildcardOrigin =
+        readHandshake(
+            rawUpgradeRequest(
+                "192.0.2.10:8765",
+                List.of("Origin: http://0.0.0.0:8765", "Authorization: Bearer secret-token")));
+    WebSocketHandshake.HttpHandshakeException wildcardError =
+        assertThrows(
+            WebSocketHandshake.HttpHandshakeException.class,
+            () -> WebSocketHandshakeValidator.validate(wildcardConfig, wildcardOrigin));
+    assertEquals(403, wildcardError.status());
   }
 
   @Test
@@ -267,7 +303,11 @@ class WebSocketOriginValidationTest {
           port, rawUpgradeRequest("127.0.0.1:" + port, List.of()), handler);
       assertEquals(2, openCount.get());
 
-      // 5. localhost and [::1] Origin headers also succeed with 101 Switching Protocols.
+      // 5. 127.0.0.2, localhost, and [::1] Origin headers also succeed with 101 Switching Protocols.
+      assertSuccessfulUpgradeAndClose(
+          port,
+          rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://127.0.0.2:" + port)),
+          handler);
       assertSuccessfulUpgradeAndClose(
           port,
           rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://localhost:3000")),
@@ -276,7 +316,7 @@ class WebSocketOriginValidationTest {
           port,
           rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://[::1]:" + port)),
           handler);
-      assertEquals(4, openCount.get());
+      assertEquals(5, openCount.get());
     }
   }
 
