@@ -692,31 +692,27 @@ public final class ApiRegistry {
     return new PageRequest(pageLimit(request), cursor, fingerprint);
   }
 
-  static AddressScanOptions addressScan(
-      Map<String, Object> request, String legacyStartField, String legacyEndField) {
-    Map<String, Object> range =
-        request.get("range") instanceof Map<?, ?> ? object(request, "range") : Map.of();
-    Map<String, Object> legacy = filter(request);
-    String rangeStart = optionalText(range, ApiVocabulary.START);
-    String rangeEnd = optionalText(range, ApiVocabulary.END);
-    String legacyStart = legacyStartField == null ? null : optionalText(legacy, legacyStartField);
-    String legacyEnd = legacyEndField == null ? null : optionalText(legacy, legacyEndField);
-    rejectRangeConflict(rangeStart, legacyStart, ApiVocabulary.START, legacyStartField);
-    rejectRangeConflict(rangeEnd, legacyEnd, ApiVocabulary.END, legacyEndField);
-    return new AddressScanOptions(
-        rangeStart == null ? legacyStart : rangeStart,
-        rangeEnd == null ? legacyEnd : rangeEnd,
-        integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS));
+  static AddressScanOptions addressScan(Map<String, Object> request) {
+    return addressScan(request, null);
   }
 
-  private static void rejectRangeConflict(
-      String rangeValue, String legacyValue, String rangeField, String legacyField) {
-    if (rangeValue != null && legacyValue != null && !rangeValue.equals(legacyValue)) {
+  static AddressScanOptions addressScan(Map<String, Object> request, String filterStartField) {
+    Map<String, Object> range =
+        request.get("range") instanceof Map<?, ?> ? object(request, "range") : Map.of();
+    String rangeStart = optionalText(range, ApiVocabulary.START);
+    String rangeEnd = optionalText(range, ApiVocabulary.END);
+    String filterStart =
+        filterStartField == null ? null : optionalText(filter(request), filterStartField);
+    if (rangeStart != null && filterStart != null && !rangeStart.equals(filterStart)) {
       throw ApiException.badRequest(
           "conflicting_range",
-          "range." + rangeField + " conflicts with filter." + legacyField,
-          "/scan/range/" + rangeField);
+          "range.start conflicts with filter." + filterStartField,
+          "/scan/range/start");
     }
+    return new AddressScanOptions(
+        rangeStart == null ? filterStart : rangeStart,
+        rangeEnd,
+        integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS));
   }
 
   static void validateByteLength(Map<String, Object> bytes, String target) {
