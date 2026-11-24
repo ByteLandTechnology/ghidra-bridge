@@ -90,6 +90,11 @@ public interface FunctionService {
   Page<FunctionCallResource> getCallees(String rawAddress, int limit, String cursor);
 
   /**
+   * Returns a bounded call graph from a root function.
+   */
+  FunctionCallGraphResource getCallGraph(FunctionCallGraphResource.FunctionCallGraphQuery query);
+
+  /**
    * Updates a function parameter that exists.
    */
   void patchParameter(

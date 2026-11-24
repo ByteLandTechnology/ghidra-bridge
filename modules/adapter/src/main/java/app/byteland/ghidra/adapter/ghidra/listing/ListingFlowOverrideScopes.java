@@ -8,16 +8,16 @@ import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Function;
 import java.util.NoSuchElementException;
 
-final class ListingFlowOverrideScopes {
-  record ResolvedScope(AddressSetView addresses) {}
+public final class ListingFlowOverrideScopes {
+  public record ResolvedScope(AddressSetView addresses) {}
 
   private final GhidraSession context;
 
-  ListingFlowOverrideScopes(GhidraSession context) {
+  public ListingFlowOverrideScopes(GhidraSession context) {
     this.context = context;
   }
 
-  ResolvedScope resolve(FlowOverrideScope scope) {
+  public ResolvedScope resolve(FlowOverrideScope scope) {
     return switch (scope) {
       case FlowOverrideScope.FunctionScope function -> resolveFunction(function.entry());
       case FlowOverrideScope.RangeScope range -> resolveRange(range.start(), range.end());

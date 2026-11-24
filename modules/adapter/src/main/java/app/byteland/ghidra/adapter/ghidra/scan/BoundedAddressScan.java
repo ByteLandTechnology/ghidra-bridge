@@ -69,6 +69,18 @@ public final class BoundedAddressScan<T> {
     return stopReason != null;
   }
 
+  public void timeout() {
+    if (stopReason == null) {
+      stopReason = ScanProgress.StopReason.TIMEOUT;
+    }
+  }
+
+  public void reachLimit() {
+    if (stopReason == null) {
+      stopReason = ScanProgress.StopReason.LIMIT;
+    }
+  }
+
   public Page<T> finish() {
     ScanProgress.StopReason reason =
         stopReason == null ? ScanProgress.StopReason.COMPLETED : stopReason;

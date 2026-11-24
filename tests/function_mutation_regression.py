@@ -39,6 +39,22 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global leaf_callee
+leaf_callee: mov $7, %eax
+ ret
+.global mid_callee
+mid_callee: push %rbp
+ call leaf_callee
+ call leaf_callee
+ pop %rbp
+ ret
+.global root_caller
+root_caller: push %rbp
+ cmp $0, %edi
+ je .Lskip_call
+ call mid_callee
+.Lskip_call: pop %rbp
+ ret
 """
 
 
@@ -167,6 +183,104 @@ def run_test(headless, root):
                 "resource": {"entry": symbols["label_only"]}, "disassemble": True,
             })["result"]
             assert label["name"] == "label_only"
+
+            leaf = function(30, "create", {
+                "resource": {"entry": symbols["leaf_callee"], "name": "leaf_callee"},
+                "disassemble": True,
+            })["result"]
+            mid = function(31, "create", {
+                "resource": {"entry": symbols["mid_callee"], "name": "mid_callee"},
+                "disassemble": True,
+            })["result"]
+            root_fn = function(32, "create", {
+                "resource": {"entry": symbols["root_caller"], "name": "root_caller"},
+                "disassemble": True,
+            })["result"]
+
+            callees_p1 = function(33, "call.list", {
+                "filter": {"entry": mid["entry"], "direction": "callees"},
+                "page": {"limit": 1},
+            })["result"]
+            assert len(callees_p1["items"]) == 1
+            assert callees_p1["items"][0]["entry"] == leaf["entry"]
+            assert callees_p1["items"][0]["call_site"]
+            callees_p2 = function(34, "call.list", {
+                "filter": {"entry": mid["entry"], "direction": "callees"},
+                "page": {"limit": 1, "cursor": callees_p1["next_cursor"]},
+            })["result"]
+            assert len(callees_p2["items"]) == 1
+            assert callees_p2["items"][0]["entry"] == leaf["entry"]
+            assert callees_p2["items"][0]["call_site"] != callees_p1["items"][0]["call_site"]
+            assert "next_cursor" not in callees_p2
+
+            incoming = function(35, "call.list", {
+                "filter": {"entry": leaf["entry"], "direction": "callers"},
+            })["result"]["items"]
+            assert [row["call_site"] for row in incoming] == [
+                callees_p1["items"][0]["call_site"],
+                callees_p2["items"][0]["call_site"],
+            ]
+
+            graph = function(36, "call_graph.get", {
+                "selector": {"entry": mid["entry"]},
+                "callers_depth": 2,
+                "callees_depth": 2,
+            })["result"]
+            assert graph["root"] == mid["entry"]
+            assert graph["limited"] is False
+            node_entries = {node["entry"] for node in graph["nodes"]}
+            assert node_entries == {root_fn["entry"], mid["entry"], leaf["entry"]}
+            edge_map = {(edge["from"], edge["to"]): edge["sites"] for edge in graph["edges"]}
+            assert len(edge_map[(mid["entry"], leaf["entry"])]) == 2
+            assert len(edge_map[(root_fn["entry"], mid["entry"])]) == 1
+
+            capped_graph = function(37, "call_graph.get", {
+                "selector": {"entry": mid["entry"]},
+                "callers_depth": 2,
+                "callees_depth": 2,
+                "max_nodes": 2,
+            })["result"]
+            assert capped_graph["limited"] is True
+            assert len(capped_graph["nodes"]) == 2
+
+            blocks = tool(38, "ghidra_listing", {
+                "operation": "basic_block.list",
+                "params": {
+                    "filter": {"selector": {"kind": "function", "entry": root_fn["entry"]}},
+                },
+            })["result"]["items"]
+            assert len(blocks) == 3
+            assert blocks[0]["start"] == root_fn["entry"]
+            assert blocks[0]["flow_type"] == "CONDITIONAL_JUMP"
+            dest_types = {edge["type"] for edge in blocks[0]["destinations"]}
+            assert dest_types == {"CONDITIONAL_JUMP", "FALL_THROUGH"}
+            for block in blocks:
+                for edge in block["destinations"]:
+                    assert "CALL" not in edge["type"]
+
+            refs_fn = tool(39, "ghidra_reference", {
+                "operation": "list",
+                "params": {
+                    "filter": {
+                        "direction": "from",
+                        "selector": {"kind": "function", "entry": mid["entry"]},
+                    },
+                    "page": {"limit": 1},
+                },
+            })["result"]
+            assert len(refs_fn["items"]) == 1
+            refs_fn_p2 = tool(40, "ghidra_reference", {
+                "operation": "list",
+                "params": {
+                    "filter": {
+                        "direction": "from",
+                        "selector": {"kind": "function", "entry": mid["entry"]},
+                    },
+                    "page": {"limit": 10, "cursor": refs_fn["next_cursor"]},
+                },
+            })["result"]
+            assert len(refs_fn_p2["items"]) >= 1
+
             print("Function mutation regression checks passed")
         finally:
             if ready:

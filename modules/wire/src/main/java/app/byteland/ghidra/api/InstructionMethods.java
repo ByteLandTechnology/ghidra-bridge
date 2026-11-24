@@ -5,6 +5,7 @@ import static app.byteland.ghidra.api.ApiRegistry.addressScan;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.flowOverrides;
 import static app.byteland.ghidra.api.ApiRegistry.flowScope;
+import static app.byteland.ghidra.api.ApiRegistry.integer;
 import static app.byteland.ghidra.api.ApiRegistry.object;
 import static app.byteland.ghidra.api.ApiRegistry.patch;
 import static app.byteland.ghidra.api.ApiRegistry.selector;
@@ -12,6 +13,7 @@ import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.AddressScanOptions;
+import app.byteland.ghidra.service.listing.BasicBlockResource;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import java.util.List;
@@ -130,6 +132,34 @@ final class InstructionMethods implements ApiMethodProvider {
                   new AddressScanOptions(null, null, AddressScanOptions.DEFAULT_TIMEOUT_MS),
                   MAX_LIMIT,
                   null);
+        });
+    Map<String, Object> basicBlockFilter =
+        WireSchema.object(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.SELECTOR,
+                flowSelector,
+                "max_edges",
+                ApiSchemaCatalog.integerWithDefault(
+                    1, BasicBlockResource.MAX_EDGES, BasicBlockResource.DEFAULT_MAX_EDGES)),
+            ApiVocabulary.SELECTOR);
+    registry.scanList(
+        "basic_block.list",
+        "List basic blocks and flow edges. Select an address, function, or range."
+            + " Use next_cursor to get the next page.",
+        ApiSchemaCatalog.requiredScanListInput(basicBlockFilter),
+        ApiSchemaCatalog.basicBlockFields(),
+        List.of(ApiVocabulary.START, ApiVocabulary.END),
+        (request, page) -> {
+          Map<String, Object> blockFilter = filter(request);
+          return registry
+              .services()
+              .listingService()
+              .listBasicBlocks(
+                  flowScope(object(blockFilter, ApiVocabulary.SELECTOR)),
+                  addressScan(request, null, null),
+                  integer(blockFilter, "max_edges", BasicBlockResource.DEFAULT_MAX_EDGES),
+                  page.limit(),
+                  page.cursor());
         });
   }
 }

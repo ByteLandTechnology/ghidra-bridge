@@ -13,8 +13,7 @@ public final class ReferenceServiceImpl implements ReferenceService {
   }
 
   @Override
-  public Page<ReferenceResource> listReferences(
-      String fromRaw, String toRaw, String type, String direction, int limit, String cursor) {
-    return listQueries.listReferences(fromRaw, toRaw, type, direction, limit, cursor);
+  public Page<ReferenceResource> listReferences(ReferenceQuery query) {
+    return listQueries.listReferences(query);
   }
 }
