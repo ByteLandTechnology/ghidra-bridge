@@ -95,6 +95,7 @@ The verification tasks check:
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
+- **MCP Documentation**: `verifyMcpDocumentation` checks `docs/mcp-tools.json`, the nine guides, and MCP Javadocs.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
 

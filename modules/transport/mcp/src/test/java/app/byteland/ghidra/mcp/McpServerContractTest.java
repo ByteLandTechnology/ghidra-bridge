@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.api.ApiRegistry;
 import app.byteland.ghidra.service.BridgeServices;
@@ -437,9 +436,7 @@ class McpServerContractTest {
             unused(DataTypeService.class),
             transactions,
             "demo.bin");
-    AgentConfig config =
-        new AgentConfig("ws://127.0.0.1:8765/ws/agent", null, null, null, null, sessionId, null);
-    return new AgentDispatcher(services, config);
+    return new AgentDispatcher(services, sessionId);
   }
 
   private interface MethodHandler {
