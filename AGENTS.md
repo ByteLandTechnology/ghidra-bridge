@@ -8,14 +8,36 @@ CI checks compliance with these rules.
 - Use ASD-STE100 Simplified Technical English for all English text.
 - This rule applies to this file, code comments, commit messages, and documentation.
 
+## Build configuration
+
+- Use Java 21 (JDK 21) and Ghidra 12.1 or newer (CI uses Ghidra `12.1.2`).
+- Set `GHIDRA_INSTALL_DIR` to the Ghidra directory, or pass `-PghidraInstallDir=/path/to/ghidra`.
+  Gradle uses Ghidra to compile `:adapter`, `:launcher`, and scripts, and to run Ghidra tests.
+- Run `./gradlew` from the repository root. Do not use a system Gradle binary.
+
 ## Modules and files
+
+The build defines 8 Java modules under `modules/`:
+
+- `:domain` (`modules/domain`)
+- `:wire` (`modules/wire`)
+- `:contracts` (`modules/contracts`)
+- `:runtime` (`modules/runtime`)
+- `:adapter` (`modules/adapter`)
+- `:launcher` (`modules/launcher`)
+- `:transport:websocket` (`modules/transport/websocket`)
+- `:transport:mcp` (`modules/transport/mcp`)
+
+Obey these module and file rules:
 
 - Put all Java modules under `modules/`. The root project must not own source files in `src/`.
 - Keep Ghidra API imports (`ghidra.*`) in `modules/adapter` and `modules/launcher`.
+  The `verifyArchitecture` task checks this rule.
 - Keep `ghidra-bridge.jar` free of third-party runtime dependencies.
 - Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand.
 - Run `./gradlew generateApiContracts` after you change the public API.
-- Do not commit generated launcher scripts (`Bridge.java`, `GhidraMcp.java`) or `build/` files.
+- Do not commit `build/` files, IDE files, or generated scripts (`Bridge.java`, `GhidraMcp.java`).
+- Do not commit zero-byte files or duplicate files.
 
 ## Commit messages
 
@@ -52,8 +74,19 @@ CI checks compliance with these rules.
 Set `GHIDRA_INSTALL_DIR` to a Ghidra 12.1 or newer installation and run local checks:
 
 - `bash .github/scripts/verify-repository-hygiene.sh`: Checks tracked files and contract counts.
-- `./gradlew --no-daemon clean verify`: Verifies architecture rules, contracts, and scripts.
-- `./gradlew --no-daemon :wire:test :contracts:test`: Runs the wire and contract JUnit tests.
+- `./gradlew --no-daemon check`: Runs JUnit tests and module checks across all 8 Java modules.
+- `./gradlew --no-daemon :domain:test` or `./gradlew --no-daemon :adapter:test`:
+  Runs JUnit tests for one module.
+- `./gradlew --no-daemon clean verify`:
+  Runs `check`, `verifyApiContracts`, `verifyDistribution`, and `verifyArchitecture`.
 - `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`:
   Tests function mutations in headless Ghidra on Linux x86-64 after `verify` (`gcc` and `nm`).
 - `bash .github/scripts/package-release.sh`: Builds and verifies the local release archive.
+
+Run these three commands in order to match the `verify` job in `.github/workflows/ci.yml`:
+
+```bash
+bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+```
