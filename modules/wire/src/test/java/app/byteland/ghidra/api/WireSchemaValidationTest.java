@@ -46,7 +46,7 @@ class WireSchemaValidationTest {
     assertEquals("/selector/entry is required", discriminatedBranchFailure.error().message());
     assertEquals("/selector/entry", discriminatedBranchFailure.error().target());
 
-    // Undiscriminated zero-match union reports invalid_union with message and target from the first branch.
+    // Undiscriminated zero-match union reports `invalid_union` with message and target from the first branch.
     Map<String, Object> undiscriminatedSelector =
         WireSchema.oneOf(
             WireSchema.object(Map.of("address", WireSchema.nonBlankString()), "address"),
@@ -158,7 +158,7 @@ class WireSchemaValidationTest {
             WireSchema.validate(
                 Map.of("data_type", Map.of("kind", "untyped_pointer")), schema, "/resource"));
 
-    // Invalid leaf in recursive discriminated data_type_reference reports exact leaf failure.
+    // Invalid leaf in recursive discriminated `data_type_reference` reports exact leaf failure.
     Map<String, Object> invalidLeaf =
         Map.of(
             "data_type",

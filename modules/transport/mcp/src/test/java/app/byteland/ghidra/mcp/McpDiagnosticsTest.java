@@ -24,17 +24,24 @@ import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Proxy;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -366,6 +373,138 @@ class McpDiagnosticsTest {
     assertEquals(-32602, ((Number) badArgsError.get("code")).intValue());
   }
 
+  @Test
+  @SuppressWarnings("unchecked")
+  void unknownDomainOperationMatchesClientToolErrorContractAcrossStatelessHttpAndSse()
+      throws Exception {
+    Map<String, Object> meta =
+        Map.of(
+            "io.modelcontextprotocol/protocolVersion", "2026-07-28",
+            "io.modelcontextprotocol/clientInfo", Map.of("name", "mcp-client", "version", "1.0.0"),
+            "io.modelcontextprotocol/clientCapabilities", Map.of());
+
+    HttpResponse<String> statelessUnknownOp =
+        post(
+            Map.of(
+                "jsonrpc",
+                "2.0",
+                "id",
+                "stateless-op",
+                "method",
+                "tools/call",
+                "params",
+                Map.of(
+                    "_meta", meta,
+                    "name", "ghidra_program",
+                    "arguments", Map.of("operation", "program.get"))),
+            Map.of(
+                "MCP-Protocol-Version", "2026-07-28",
+                "Mcp-Method", "tools/call",
+                "Mcp-Name", "ghidra_program"));
+    assertEquals(200, statelessUnknownOp.statusCode());
+    Map<String, Object> statelessEnvelope =
+        (Map<String, Object>) JsonUtil.parse(statelessUnknownOp.body());
+    Map<String, Object> statelessResult = (Map<String, Object>) statelessEnvelope.get("result");
+    assertEquals("complete", statelessResult.get("resultType"));
+    assertEquals(true, statelessResult.get("isError"));
+    Map<String, Object> statelessStructured =
+        (Map<String, Object>) statelessResult.get("structuredContent");
+    assertEquals(400, statelessStructured.get("status"));
+    assertEquals("invalid_enum", statelessStructured.get("code"));
+    assertEquals("/operation", statelessStructured.get("target"));
+    assertTrue(String.valueOf(statelessStructured.get("message")).contains("\"get\""));
+    List<?> statelessContent = (List<?>) statelessResult.get("content");
+    assertEquals(1, statelessContent.size());
+    assertEquals(
+        statelessStructured,
+        JsonUtil.parse(String.valueOf(((Map<?, ?>) statelessContent.getFirst()).get("text"))));
+
+    HttpResponse<String> statelessUnknownTool =
+        post(
+            Map.of(
+                "jsonrpc",
+                "2.0",
+                "id",
+                "stateless-tool",
+                "method",
+                "tools/call",
+                "params",
+                Map.of(
+                    "_meta", meta,
+                    "name", "ghidra_nonexistent",
+                    "arguments", Map.of())),
+            Map.of(
+                "MCP-Protocol-Version", "2026-07-28",
+                "Mcp-Method", "tools/call",
+                "Mcp-Name", "ghidra_nonexistent"));
+    assertEquals(400, statelessUnknownTool.statusCode());
+    assertEquals(-32602, ((Number) extractRpcError(statelessUnknownTool).get("code")).intValue());
+
+    HttpRequest sseGet =
+        HttpRequest.newBuilder(endpoint).header("Accept", "text/event-stream").GET().build();
+    HttpResponse<InputStream> sseStream =
+        client.send(sseGet, HttpResponse.BodyHandlers.ofInputStream());
+    assertEquals(200, sseStream.statusCode());
+
+    BlockingQueue<SseEvent> sseEvents = new LinkedBlockingQueue<>();
+    Thread reader =
+        new Thread(() -> readSseEvents(sseStream.body(), sseEvents), "mcp-diag-sse-reader");
+    reader.setDaemon(true);
+    reader.start();
+
+    try {
+      SseEvent endpointEvent = sseEvents.poll(5, TimeUnit.SECONDS);
+      assertNotNull(endpointEvent);
+      assertEquals("endpoint", endpointEvent.event());
+      URI sessionUri = endpoint.resolve(endpointEvent.data());
+
+      HttpResponse<String> sseUnknownOpPost =
+          postTo(
+              sessionUri,
+              Map.of(
+                  "jsonrpc",
+                  "2.0",
+                  "id",
+                  "sse-op",
+                  "method",
+                  "tools/call",
+                  "params",
+                  Map.of(
+                      "name", "ghidra_program",
+                      "arguments", Map.of("operation", "program.get"))));
+      assertEquals(202, sseUnknownOpPost.statusCode());
+      SseEvent sseOpEvent = sseEvents.poll(5, TimeUnit.SECONDS);
+      assertNotNull(sseOpEvent);
+      assertEquals("message", sseOpEvent.event());
+      Map<String, Object> sseOpEnvelope = JsonUtil.parseObject(sseOpEvent.data());
+      Map<String, Object> sseOpResult = (Map<String, Object>) sseOpEnvelope.get("result");
+      assertEquals(true, sseOpResult.get("isError"));
+      assertEquals(statelessStructured, sseOpResult.get("structuredContent"));
+
+      HttpResponse<String> sseUnknownToolPost =
+          postTo(
+              sessionUri,
+              Map.of(
+                  "jsonrpc",
+                  "2.0",
+                  "id",
+                  "sse-tool",
+                  "method",
+                  "tools/call",
+                  "params",
+                  Map.of("name", "ghidra_nonexistent", "arguments", Map.of())));
+      assertEquals(202, sseUnknownToolPost.statusCode());
+      SseEvent sseToolEvent = sseEvents.poll(5, TimeUnit.SECONDS);
+      assertNotNull(sseToolEvent);
+      assertEquals("message", sseToolEvent.event());
+      Map<String, Object> sseToolEnvelope = JsonUtil.parseObject(sseToolEvent.data());
+      Map<String, Object> sseToolError = (Map<String, Object>) sseToolEnvelope.get("error");
+      assertEquals(-32602, ((Number) sseToolError.get("code")).intValue());
+    } finally {
+      sseStream.body().close();
+    }
+  }
+
   private void assertDottedSuggestion(String toolName, String dottedOperation, String expectedBare)
       throws Exception {
     Map<String, Object> error =
@@ -439,6 +578,49 @@ class McpDiagnosticsTest {
     headers.forEach(builder::header);
     return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
   }
+
+  private HttpResponse<String> postTo(URI targetUri, Map<String, Object> body) throws Exception {
+    HttpRequest request =
+        HttpRequest.newBuilder(targetUri)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(JsonUtil.toJson(body)))
+            .build();
+    return client.send(request, HttpResponse.BodyHandlers.ofString());
+  }
+
+  private static void readSseEvents(InputStream body, BlockingQueue<SseEvent> sink) {
+    try (BufferedReader reader =
+        new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
+      String event = null;
+      StringBuilder data = new StringBuilder();
+      String line;
+      while ((line = reader.readLine()) != null) {
+        if (line.isEmpty()) {
+          if (event != null || !data.isEmpty()) {
+            sink.offer(new SseEvent(event, data.toString()));
+            event = null;
+            data.setLength(0);
+          }
+          continue;
+        }
+        if (line.startsWith(":")) {
+          continue;
+        }
+        if (line.startsWith("event:")) {
+          event = line.substring("event:".length()).trim();
+        } else if (line.startsWith("data:")) {
+          if (!data.isEmpty()) {
+            data.append('\n');
+          }
+          data.append(line.substring("data:".length()).trim());
+        }
+      }
+    } catch (IOException ignored) {
+      // Closed at end of test.
+    }
+  }
+
+  private record SseEvent(String event, String data) {}
 
   private static void assertNoForbiddenLabels(String message) {
     assertFalse(message.contains("HeaderMismatch"), message);
