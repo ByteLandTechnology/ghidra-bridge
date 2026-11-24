@@ -218,7 +218,6 @@ final class DataTypeMethods implements ApiMethodProvider {
     registry.services().dataTypeService().patchDataType(path, typedPatch);
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   private List<DataTypePatch.CompositeField> convertedDataTypeFields(Object raw, String target) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.CompositeField> result = new ArrayList<>();
@@ -237,7 +236,6 @@ final class DataTypeMethods implements ApiMethodProvider {
     return List.copyOf(result);
   }
 
-  @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
   private List<DataTypePatch.EnumValue> convertedEnumValues(Object raw, String target) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.EnumValue> result = new ArrayList<>();

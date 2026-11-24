@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
+import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
 import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.api.ApiFailures;
 import app.byteland.ghidra.api.ApiRegistry;
@@ -28,8 +29,6 @@ import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
-import ghidra.framework.Application;
-import ghidra.framework.ApplicationConfiguration;
 import ghidra.program.model.data.ByteDataType;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
@@ -55,7 +54,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
-import utility.application.DummyApplicationLayout;
 
 class DataTypeMutationsTest {
   private StandAloneDataTypeManager manager;
@@ -64,12 +62,8 @@ class DataTypeMutationsTest {
   private ApiRegistry registry;
 
   @BeforeAll
-  static void initializeGhidra() throws Exception {
-    if (!Application.isInitialized()) {
-      ApplicationConfiguration config = new ApplicationConfiguration();
-      config.setInitializeLogging(false);
-      Application.initializeApplication(new DummyApplicationLayout("ghidra-datatype-test"), config);
-    }
+  static void initializeGhidra() {
+    GhidraTestSupport.x64Language();
   }
 
   @BeforeEach
