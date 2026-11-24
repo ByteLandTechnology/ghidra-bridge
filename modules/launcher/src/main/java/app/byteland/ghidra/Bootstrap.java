@@ -6,6 +6,7 @@ import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.mcp.McpConfig;
 import app.byteland.ghidra.mcp.McpHttpServer;
+import app.byteland.ghidra.network.NetworkBinding;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.program.ProgramService;
 import ghidra.app.script.GhidraScript;
@@ -16,6 +17,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * The generated Bridge and GhidraMcp scripts call this entry point.
@@ -26,27 +29,95 @@ public final class Bootstrap {
   @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
   private static final String LOOPBACK_HOST = "127.0.0.1";
 
+  private static final String BRIDGE_PREFIX = "[ghidra-bridge]";
+  private static final String MCP_PREFIX = "[ghidra-mcp]";
   private static final String SESSION_ID_ARGUMENT = "session_id";
+
+  @FunctionalInterface
+  private interface SessionRunner {
+    void run(BridgeServices services, GracefulExit gracefulExit) throws Exception;
+  }
 
   private Bootstrap() {}
 
   public static void startFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
+    Program program = requireScriptProgram(script);
+    EffectiveConfig effectiveConfig =
+        resolveOrPrintUsage(script, () -> resolveConfig(args, program), Bootstrap::printUsage);
+    AgentConfig config = effectiveConfig.config();
+
+    runWithGracefulExit(
+        script,
+        program,
+        BRIDGE_PREFIX,
+        () -> logBridgeStartup(script, program, effectiveConfig),
+        (services, gracefulExit) -> {
+          try (AgentDispatcher dispatcher = new AgentDispatcher(services, config.sessionId())) {
+            runBridgeSession(script, config, dispatcher, gracefulExit, onShutdown);
+          }
+        });
+  }
+
+  public static void startMcpFromScript(GhidraScript script, String[] args, Runnable onShutdown)
+      throws Exception {
+    Program program = requireScriptProgram(script);
+    McpConfig mcpConfig =
+        resolveOrPrintUsage(
+            script, () -> resolveMcpConfig(args, program), Bootstrap::printMcpUsage);
+
+    runWithGracefulExit(
+        script,
+        program,
+        MCP_PREFIX,
+        () -> logMcpStartup(script, program, mcpConfig),
+        (services, gracefulExit) -> {
+          try (AgentDispatcher dispatcher = new AgentDispatcher(services, mcpConfig.sessionId());
+              McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher, script::println)) {
+            runMcpSession(script, server, gracefulExit, onShutdown);
+          }
+        });
+  }
+
+  private static Program requireScriptProgram(GhidraScript script) {
     if (script == null) {
       throw new IllegalArgumentException("script is required");
     }
-
-    Program program = requireCurrentProgram(script);
-    EffectiveConfig effectiveConfig;
-    try {
-      effectiveConfig = resolveConfig(args, program);
-    } catch (IllegalArgumentException e) {
-      printUsage(script);
-      throw e;
+    Program program = script.getCurrentProgram();
+    if (program == null) {
+      throw new IllegalStateException("No current program is open in Ghidra");
     }
-    AgentConfig config = effectiveConfig.config();
-    saveCheckpoint(script, program, "[ghidra-bridge]");
+    return program;
+  }
 
+  private static <T> T resolveOrPrintUsage(
+      GhidraScript script, Supplier<T> resolver, Consumer<GhidraScript> usagePrinter) {
+    try {
+      return resolver.get();
+    } catch (IllegalArgumentException error) {
+      usagePrinter.accept(script);
+      throw error;
+    }
+  }
+
+  private static void runWithGracefulExit(
+      GhidraScript script,
+      Program program,
+      String prefix,
+      Runnable startupLogger,
+      SessionRunner sessionRunner)
+      throws Exception {
+    saveCheckpoint(script, program, prefix);
+    startupLogger.run();
+    BridgeServices services = GhidraServiceFactory.create(script);
+    try (GracefulExit gracefulExit = gracefulExit(services.programService(), script, prefix)) {
+      sessionRunner.run(services, gracefulExit);
+    }
+  }
+
+  private static void logBridgeStartup(
+      GhidraScript script, Program program, EffectiveConfig effectiveConfig) {
+    AgentConfig config = effectiveConfig.config();
     script.println("[ghidra-bridge] Starting bridge service");
     script.println("[ghidra-bridge]   Program: " + program.getName());
     for (String defaultMessage : effectiveConfig.defaultMessages()) {
@@ -71,74 +142,50 @@ public final class Bootstrap {
       script.println("[ghidra-bridge] Starting embedded bridge listener...");
     }
     script.println("[ghidra-bridge]   Session ID: " + config.sessionId());
-
-    BridgeServices services = GhidraServiceFactory.create(script);
-    try (GracefulExit gracefulExit =
-        gracefulExit(services.programService(), script, "[ghidra-bridge]")) {
-      try (AgentDispatcher dispatcher = new AgentDispatcher(services, config)) {
-        AgentClient client =
-            new AgentClient(
-                config,
-                dispatcher,
-                new AgentClient.LifecycleListener() {
-                  @Override
-                  public void onListening() {
-                    script.println(
-                        "[ghidra-bridge] Embedded bridge is listening for WebSocket clients.");
-                  }
-
-                  @Override
-                  public void onConnected() {
-                    script.println("[ghidra-bridge] Outbound bridge connected to remote endpoint.");
-                  }
-                });
-
-        if (onShutdown != null) {
-          gracefulExit.installShutdownHook(client::disconnect, onShutdown);
-        }
-
-        try {
-          client.connect(scriptCancelRequested(script));
-        } finally {
-          // Start the deadline for all session end conditions.
-          // The close, the save, and the exit follow.
-          if (config.exitDeadlineSeconds() != null) {
-            gracefulExit.startExitDeadline(
-                Duration.ofSeconds(config.exitDeadlineSeconds()), script::printerr);
-          }
-        }
-        script.println("[ghidra-bridge] Bridge session ended.");
-      }
-    }
   }
 
-  public static void startMcpFromScript(GhidraScript script, String[] args, Runnable onShutdown)
+  private static void runBridgeSession(
+      GhidraScript script,
+      AgentConfig config,
+      AgentDispatcher dispatcher,
+      GracefulExit gracefulExit,
+      Runnable onShutdown)
       throws Exception {
-    if (script == null) {
-      throw new IllegalArgumentException("script is required");
+    AgentClient client =
+        new AgentClient(
+            config,
+            dispatcher,
+            new AgentClient.LifecycleListener() {
+              @Override
+              public void onListening() {
+                script.println(
+                    "[ghidra-bridge] Embedded bridge is listening for WebSocket clients.");
+              }
+
+              @Override
+              public void onConnected() {
+                script.println("[ghidra-bridge] Outbound bridge connected to remote endpoint.");
+              }
+            });
+
+    if (onShutdown != null) {
+      gracefulExit.installShutdownHook(client::disconnect, onShutdown);
     }
 
-    Program program = requireCurrentProgram(script);
-    McpConfig mcpConfig;
     try {
-      mcpConfig = resolveMcpConfig(args, program);
-    } catch (IllegalArgumentException e) {
-      printMcpUsage(script);
-      throw e;
+      client.connect(scriptCancelRequested(script));
+    } finally {
+      // Start the deadline for all session end conditions.
+      // The close, the save, and the exit follow.
+      if (config.exitDeadlineSeconds() != null) {
+        gracefulExit.startExitDeadline(
+            Duration.ofSeconds(config.exitDeadlineSeconds()), script::printerr);
+      }
     }
+    script.println("[ghidra-bridge] Bridge session ended.");
+  }
 
-    AgentConfig dispatcherConfig =
-        new AgentConfig(
-            null,
-            mcpConfig.host(),
-            mcpConfig.port(),
-            mcpConfig.path(),
-            mcpConfig.token(),
-            mcpConfig.sessionId(),
-            null);
-
-    saveCheckpoint(script, program, "[ghidra-mcp]");
-
+  private static void logMcpStartup(GhidraScript script, Program program, McpConfig mcpConfig) {
     script.println("[ghidra-mcp] Starting MCP HTTP service");
     script.println("[ghidra-mcp]   Program: " + program.getName());
     script.println("[ghidra-mcp]   Endpoint: " + mcpConfig.endpoint());
@@ -146,34 +193,30 @@ public final class Bootstrap {
         "[ghidra-mcp]   Auth Token: " + (mcpConfig.token() == null ? "disabled" : "configured"));
     script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
     script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
+  }
 
-    BridgeServices services = GhidraServiceFactory.create(script);
-    try (GracefulExit gracefulExit =
-        gracefulExit(services.programService(), script, "[ghidra-mcp]")) {
-      try (AgentDispatcher dispatcher = new AgentDispatcher(services, dispatcherConfig);
-          McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher, script::println)) {
-        if (onShutdown != null) {
-          gracefulExit.installShutdownHook(server::close, onShutdown);
-        }
+  private static void runMcpSession(
+      GhidraScript script, McpHttpServer server, GracefulExit gracefulExit, Runnable onShutdown) {
+    if (onShutdown != null) {
+      gracefulExit.installShutdownHook(server::close, onShutdown);
+    }
 
-        server.start();
-        script.println("[ghidra-mcp] MCP endpoint is listening for HTTP clients.");
-        boolean stoppedBySession = false;
-        boolean interrupted = false;
-        try {
-          stoppedBySession = server.awaitShutdown(scriptCancelRequested(script));
-        } catch (InterruptedException interruptedException) {
-          interrupted = true;
-          script.println("[ghidra-mcp] Stop requested; shutting down MCP HTTP service.");
-        }
-        if (!stoppedBySession && !interrupted) {
-          script.println("[ghidra-mcp] Stop requested; shutting down MCP HTTP service.");
-        }
-        script.println("[ghidra-mcp] MCP session ended.");
-        if (interrupted) {
-          Thread.currentThread().interrupt();
-        }
-      }
+    server.start();
+    script.println("[ghidra-mcp] MCP endpoint is listening for HTTP clients.");
+    boolean stoppedBySession = false;
+    boolean interrupted = false;
+    try {
+      stoppedBySession = server.awaitShutdown(scriptCancelRequested(script));
+    } catch (InterruptedException interruptedException) {
+      interrupted = true;
+      script.println("[ghidra-mcp] Stop requested; shutting down MCP HTTP service.");
+    }
+    if (!stoppedBySession && !interrupted) {
+      script.println("[ghidra-mcp] Stop requested; shutting down MCP HTTP service.");
+    }
+    script.println("[ghidra-mcp] MCP session ended.");
+    if (interrupted) {
+      Thread.currentThread().interrupt();
     }
   }
 
@@ -194,14 +237,6 @@ public final class Bootstrap {
     } catch (Exception failure) {
       script.println(prefix + " Program save checkpoint skipped: " + failure.getMessage());
     }
-  }
-
-  private static Program requireCurrentProgram(GhidraScript script) {
-    Program program = script.getCurrentProgram();
-    if (program == null) {
-      throw new IllegalStateException("No current program is open in Ghidra");
-    }
-    return program;
   }
 
   private static String errorMessage(Throwable failure) {
@@ -246,11 +281,12 @@ public final class Bootstrap {
   }
 
   private static EffectiveConfig resolveConfig(String[] args, Program program) {
-    Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
+    Map<String, String> parsedArgs = new LinkedHashMap<>(NetworkBinding.parseArgs(args));
     List<String> defaultMessages = new ArrayList<>();
 
-    if (isBlank(parsedArgs.get("ws_url")) && isBlank(parsedArgs.get("port"))) {
-      if (isBlank(parsedArgs.get("host"))) {
+    if (NetworkBinding.optionalText(parsedArgs.get("ws_url")) == null
+        && NetworkBinding.optionalText(parsedArgs.get("port")) == null) {
+      if (NetworkBinding.optionalText(parsedArgs.get("host")) == null) {
         parsedArgs.put("host", LOOPBACK_HOST);
         defaultMessages.add("host=" + LOOPBACK_HOST);
       }
@@ -258,33 +294,31 @@ public final class Bootstrap {
       defaultMessages.add("port=8765 (embedded server mode)");
     }
 
-    if (isBlank(parsedArgs.get(SESSION_ID_ARGUMENT))) {
-      String defaultSessionId = defaultSessionId(program);
-      parsedArgs.put(SESSION_ID_ARGUMENT, defaultSessionId);
+    String defaultSessionId = applyDefaultSessionId(parsedArgs, program);
+    if (defaultSessionId != null) {
       defaultMessages.add("session_id=" + defaultSessionId);
     }
 
     return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages);
   }
 
-  private static String defaultSessionId(Program program) {
-    if (program == null) {
-      return "ghidra-bridge";
-    }
-    String name = program.getName();
-    return isBlank(name) ? "ghidra-bridge" : name;
-  }
-
   private static McpConfig resolveMcpConfig(String[] args, Program program) {
-    Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
-    if (isBlank(parsedArgs.get(SESSION_ID_ARGUMENT))) {
-      parsedArgs.put(SESSION_ID_ARGUMENT, defaultSessionId(program));
-    }
+    Map<String, String> parsedArgs = new LinkedHashMap<>(NetworkBinding.parseArgs(args));
+    applyDefaultSessionId(parsedArgs, program);
     return McpConfig.fromMap(parsedArgs);
   }
 
-  private static boolean isBlank(String value) {
-    return value == null || value.isBlank();
+  private static String applyDefaultSessionId(Map<String, String> parsedArgs, Program program) {
+    if (NetworkBinding.optionalText(parsedArgs.get(SESSION_ID_ARGUMENT)) != null) {
+      return null;
+    }
+    String sessionId = defaultSessionId(program);
+    parsedArgs.put(SESSION_ID_ARGUMENT, sessionId);
+    return sessionId;
+  }
+
+  private static String defaultSessionId(Program program) {
+    return NetworkBinding.defaultSessionId(program == null ? null : program.getName());
   }
 
   record EffectiveConfig(AgentConfig config, List<String> defaultMessages) {
