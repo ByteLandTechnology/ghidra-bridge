@@ -64,7 +64,7 @@ final class ReferenceMethods implements ApiMethodProvider {
                   optionalText(filter, ApiVocabulary.TYPE),
                   optionalText(filter, ApiVocabulary.DIRECTION),
                   scope,
-                  addressScan(request, null, null),
+                  addressScan(request),
                   page.limit(),
                   page.cursor());
         });

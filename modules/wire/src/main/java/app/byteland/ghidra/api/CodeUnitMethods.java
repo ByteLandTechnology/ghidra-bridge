@@ -20,10 +20,8 @@ final class CodeUnitMethods implements ApiMethodProvider {
     Map<String, Object> listingFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
-                ApiVocabulary.START, WireSchema.string(),
-                ApiVocabulary.END, WireSchema.string(),
                 ApiVocabulary.KIND,
-                    WireSchema.stringEnum("all", "instruction", ApiVocabulary.DATA)));
+                WireSchema.stringEnum("all", "instruction", ApiVocabulary.DATA)));
     registry.scanList(
         "code_unit.list",
         ApiSchemaCatalog.scanListInput(listingFilter),
@@ -44,20 +42,14 @@ final class CodeUnitMethods implements ApiMethodProvider {
                 .services()
                 .listingService()
                 .listCodeUnits(
-                    addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
+                    addressScan(request),
                     page.limit(),
                     optionalText(filter(request), ApiVocabulary.KIND, "all"),
                     "forward",
                     page.cursor()));
     registry.scanList(
         "data_unit.list",
-        ApiSchemaCatalog.scanListInput(
-            WireSchema.object(
-                ApiSchemaCatalog.props(
-                    ApiVocabulary.START,
-                    WireSchema.string(),
-                    ApiVocabulary.END,
-                    WireSchema.string()))),
+        ApiSchemaCatalog.scanListInput(WireSchema.object(Map.of())),
         Set.of(
             ApiVocabulary.ADDRESS,
             ApiVocabulary.LENGTH,
@@ -71,7 +63,7 @@ final class CodeUnitMethods implements ApiMethodProvider {
                 .services()
                 .listingService()
                 .listDataUnits(
-                    addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
+                    addressScan(request),
                     page.limit(),
                     "forward",
                     page.cursor()));

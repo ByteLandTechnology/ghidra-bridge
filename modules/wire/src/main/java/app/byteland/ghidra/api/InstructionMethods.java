@@ -41,32 +41,28 @@ final class InstructionMethods implements ApiMethodProvider {
     registry.scanList(
         "instruction.list",
         ApiSchemaCatalog.scanListInput(
-            WireSchema.object(
-                ApiSchemaCatalog.props(
-                    ApiVocabulary.START,
-                    WireSchema.string(),
-                    ApiVocabulary.END,
-                    WireSchema.string(),
-                    ApiVocabulary.SELECTOR,
-                    flowSelector))),
+            WireSchema.object(ApiSchemaCatalog.props(ApiVocabulary.SELECTOR, flowSelector))),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
         (request, page) -> {
           Map<String, Object> filter = filter(request);
           Object rawSelector = filter.get(ApiVocabulary.SELECTOR);
-          FlowOverrideScope scope =
-              rawSelector instanceof Map<?, ?>
-                  ? flowScope(object(filter, ApiVocabulary.SELECTOR))
-                  : null;
+          AddressScanOptions scan = addressScan(request);
+          if (rawSelector instanceof Map<?, ?>) {
+            return registry
+                .services()
+                .listingService()
+                .listInstructions(
+                    flowScope(object(filter, ApiVocabulary.SELECTOR)),
+                    scan,
+                    page.limit(),
+                    "forward",
+                    page.cursor());
+          }
           return registry
               .services()
               .listingService()
-              .listInstructions(
-                  scope,
-                  addressScan(request, ApiVocabulary.START, ApiVocabulary.END),
-                  page.limit(),
-                  "forward",
-                  page.cursor());
+              .listInstructions(scan, page.limit(), "forward", page.cursor());
         });
     Map<String, Object> flowFilter =
         WireSchema.object(
@@ -92,7 +88,7 @@ final class InstructionMethods implements ApiMethodProvider {
                   flowOverrides(
                       filter(request).get("flow_overrides"),
                       List.of("branch", "call", "call_return", "return")),
-                  addressScan(request, null, null),
+                  addressScan(request),
                   page.limit(),
                   page.cursor());
         });

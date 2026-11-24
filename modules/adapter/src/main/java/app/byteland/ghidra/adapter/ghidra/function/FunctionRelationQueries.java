@@ -7,17 +7,15 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressIterator;
+import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.ReferenceManager;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Objects;
+import ghidra.util.task.TaskMonitor;
+import java.util.HashSet;
 import java.util.Set;
 
 final class FunctionRelationQueries {
@@ -38,25 +36,39 @@ final class FunctionRelationQueries {
   private Page<FunctionCallResource> getFunctionRelations(
       String rawAddress, boolean callers, int limit, String cursor) {
     Function function = resolver.resolveFunction(rawAddress);
-    List<FunctionCallResource> rows =
-        callers ? collectCallers(function) : collectCallees(function);
-    rows.sort(
-        Comparator.comparing(FunctionCallResource::entry)
-            .thenComparing(row -> Objects.requireNonNullElse(row.callSite(), "")));
-    return Page.paginate(
-        rows,
-        limit,
-        cursor,
-        row ->
-            CompositeCursor.key(row.entry(), Objects.requireNonNullElse(row.callSite(), "")));
+    Page.Selector<CallEdge> selector = Page.selector(limit, cursor);
+    Set<String> seenEntries = new HashSet<>();
+    Program program = function.getProgram();
+    if (program != null) {
+      if (callers) {
+        offerCallerReferences(function, program, selector, seenEntries);
+      } else {
+        offerCalleeReferences(function, program, selector, seenEntries);
+      }
+    }
+    Iterable<Function> related =
+        callers
+            ? function.getCallingFunctions(TaskMonitor.DUMMY)
+            : function.getCalledFunctions(TaskMonitor.DUMMY);
+    for (Function relatedFunction : related) {
+      String entry = AddressUtil.canonicalAddress(relatedFunction.getEntryPoint());
+      if (seenEntries.add(entry)) {
+        selector.offer(edgeCursorKey(entry, null), new CallEdge(relatedFunction, entry, null));
+      }
+    }
+    FunctionCallResource.Direction direction =
+        callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;
+    return selector.finish(edge -> toResource(edge, direction));
   }
 
-  private static List<FunctionCallResource> collectCallers(Function targetFunction) {
-    Program program = targetFunction.getProgram();
+  private static void offerCallerReferences(
+      Function targetFunction,
+      Program program,
+      Page.Selector<CallEdge> selector,
+      Set<String> seenEntries) {
     ReferenceManager refManager = program.getReferenceManager();
     FunctionManager functionManager = program.getFunctionManager();
-    Set<EdgeKey> seen = new LinkedHashSet<>();
-    List<FunctionCallResource> rows = new ArrayList<>();
+    Set<EdgeKey> seenEdges = new HashSet<>();
     ReferenceIterator refs = refManager.getReferencesTo(targetFunction.getEntryPoint());
     while (refs.hasNext()) {
       Reference ref = refs.next();
@@ -70,20 +82,26 @@ final class FunctionRelationQueries {
       }
       String entry = AddressUtil.canonicalAddress(caller.getEntryPoint());
       String callSite = AddressUtil.canonicalAddress(callSiteAddress);
-      if (seen.add(new EdgeKey(entry, callSite))) {
-        rows.add(toResource(caller, entry, callSite, FunctionCallResource.Direction.CALLERS));
+      seenEntries.add(entry);
+      if (seenEdges.add(new EdgeKey(entry, callSite))) {
+        selector.offer(edgeCursorKey(entry, callSite), new CallEdge(caller, entry, callSite));
       }
     }
-    return rows;
   }
 
-  private static List<FunctionCallResource> collectCallees(Function callerFunction) {
-    Program program = callerFunction.getProgram();
+  private static void offerCalleeReferences(
+      Function callerFunction,
+      Program program,
+      Page.Selector<CallEdge> selector,
+      Set<String> seenEntries) {
+    AddressSetView body = callerFunction.getBody();
+    if (body == null) {
+      return;
+    }
     ReferenceManager refManager = program.getReferenceManager();
     FunctionManager functionManager = program.getFunctionManager();
-    Set<EdgeKey> seen = new LinkedHashSet<>();
-    List<FunctionCallResource> rows = new ArrayList<>();
-    AddressIterator sources = refManager.getReferenceSourceIterator(callerFunction.getBody(), true);
+    Set<EdgeKey> seenEdges = new HashSet<>();
+    AddressIterator sources = refManager.getReferenceSourceIterator(body, true);
     for (Address fromAddress : sources) {
       String callSite = AddressUtil.canonicalAddress(fromAddress);
       for (Reference ref : refManager.getReferencesFrom(fromAddress)) {
@@ -95,30 +113,33 @@ final class FunctionRelationQueries {
           continue;
         }
         String entry = AddressUtil.canonicalAddress(callee.getEntryPoint());
-        if (seen.add(new EdgeKey(entry, callSite))) {
-          rows.add(toResource(callee, entry, callSite, FunctionCallResource.Direction.CALLEES));
+        seenEntries.add(entry);
+        if (seenEdges.add(new EdgeKey(entry, callSite))) {
+          selector.offer(edgeCursorKey(entry, callSite), new CallEdge(callee, entry, callSite));
         }
       }
     }
-    return rows;
+  }
+
+  private static String edgeCursorKey(String entry, String callSite) {
+    return callSite == null ? entry : CompositeCursor.key(entry, callSite);
   }
 
   private static FunctionCallResource toResource(
-      Function relatedFunction,
-      String entry,
-      String callSite,
-      FunctionCallResource.Direction direction) {
+      CallEdge edge, FunctionCallResource.Direction direction) {
+    Function relatedFunction = edge.function();
+    String name = relatedFunction.getName();
     return new FunctionCallResource(
-        entry,
-        relatedFunction.getName(),
-        callSite,
+        edge.entry(),
+        name,
+        edge.callSite(),
         direction,
         relatedFunction.getParentNamespace().getName(true),
         CppSymbolNames.demangled(
-            relatedFunction.getProgram(),
-            relatedFunction.getName(),
-            relatedFunction.getEntryPoint()));
+            relatedFunction.getProgram(), name, relatedFunction.getEntryPoint()));
   }
+
+  private record CallEdge(Function function, String entry, String callSite) {}
 
   private record EdgeKey(String entry, String callSite) {}
 }

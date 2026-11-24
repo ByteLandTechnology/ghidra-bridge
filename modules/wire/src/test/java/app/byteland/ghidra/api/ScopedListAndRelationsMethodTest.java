@@ -146,14 +146,16 @@ class ScopedListAndRelationsMethodTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void instructionListAcceptsFunctionSelectorAndLegacyRange() throws Exception {
+  void instructionListAcceptsFunctionSelectorAndScanRange() throws Exception {
     AtomicReference<FlowOverrideScope> capturedScope = new AtomicReference<>();
+    AtomicReference<AddressScanOptions> capturedScan = new AtomicReference<>();
     ListingService listing =
         proxy(
             ListingService.class,
             (method, args) -> {
               assertEquals("listInstructions", method);
               capturedScope.set((FlowOverrideScope) args[0]);
+              capturedScan.set((AddressScanOptions) args[1]);
               InstructionResource instr =
                   new InstructionResource(
                       "ram:00401000",
@@ -185,9 +187,12 @@ class ScopedListAndRelationsMethodTest {
                 "instruction.list",
                 Map.of(
                     "filter",
-                    Map.of("selector", Map.of("kind", "function", "entry", "0x401000"))));
+                    Map.of("selector", Map.of("kind", "function", "entry", "0x401000")),
+                    "scan",
+                    Map.of("range", Map.of("start", "0x401000", "end", "0x409000"), "timeout_ms", 2000)));
 
     assertEquals(new FlowOverrideScope.FunctionScope("0x401000"), capturedScope.get());
+    assertEquals(new AddressScanOptions("0x401000", "0x409000", 2000), capturedScan.get());
     List<Map<String, Object>> items = (List<Map<String, Object>>) response.get("items");
     assertEquals(1, items.size());
     assertEquals("RET", items.getFirst().get("mnemonic"));

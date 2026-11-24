@@ -15,6 +15,18 @@ public record CodeUnitResource(
     DataTypeReference dataType,
     String value,
     String representation) {
+  public CodeUnitResource(
+      String address,
+      Kind kind,
+      int length,
+      ByteSequence bytes,
+      String text,
+      String mnemonic,
+      List<String> operands,
+      DataTypeReference dataType) {
+    this(address, kind, length, bytes, text, mnemonic, operands, dataType, null, null);
+  }
+
   public CodeUnitResource {
     operands = immutableCopyOrNull(operands);
   }

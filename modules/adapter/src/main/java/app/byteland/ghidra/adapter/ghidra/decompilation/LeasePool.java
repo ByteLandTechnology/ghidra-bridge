@@ -85,7 +85,6 @@ final class LeasePool<T> implements AutoCloseable {
     }
   }
 
-  @SuppressWarnings("PMD.AvoidCatchingGenericException")
   private void destroyQuietly(T resource) {
     try {
       destroyer.accept(resource);

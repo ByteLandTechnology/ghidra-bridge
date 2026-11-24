@@ -8,11 +8,14 @@ import app.byteland.ghidra.adapter.ghidra.scan.BoundedAddressScan;
 import app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
+import app.byteland.ghidra.service.ScanProgress;
+import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressIterator;
 import ghidra.program.model.address.AddressSet;
+import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceManager;
 import java.util.ArrayList;
@@ -21,12 +24,31 @@ import java.util.Comparator;
 import java.util.List;
 
 final class ReferenceListQueries {
+  private static final long NANOS_PER_MILLISECOND = 1_000_000L;
+
   private final GhidraSession context;
   private final AddressScopeResolver scopes;
+
+  ReferenceListQueries(GhidraSession context) {
+    this(context, new AddressScopeResolver(context));
+  }
 
   ReferenceListQueries(GhidraSession context, AddressScopeResolver scopes) {
     this.context = context;
     this.scopes = scopes;
+  }
+
+  Page<ReferenceResource> listReferences(
+      String fromRaw, String toRaw, String type, String direction, int limit, String cursor) {
+    return listReferences(
+        fromRaw,
+        toRaw,
+        type,
+        direction,
+        null,
+        new AddressScanOptions(null, null, AddressScanOptions.DEFAULT_TIMEOUT_MS),
+        limit,
+        cursor);
   }
 
   Page<ReferenceResource> listReferences(
@@ -51,7 +73,7 @@ final class ReferenceListQueries {
         && options.end() == null
         && primaryAnchor != null) {
       return listSingleAnchor(
-          primaryAnchor, incoming, fromFilter, toFilter, type, options, normalizedLimit, cursor);
+          primaryAnchor, incoming, fromFilter, toFilter, type, normalizedLimit, cursor);
     }
     return listScopedOrRange(
         incoming, fromFilter, toFilter, type, scope, options, normalizedLimit, cursor);
@@ -63,33 +85,46 @@ final class ReferenceListQueries {
       Address fromFilter,
       Address toFilter,
       String type,
-      AddressScanOptions options,
       int limit,
       String cursor) {
-    String anchorText = AddressUtil.canonicalAddress(anchor);
-    List<KeyedReference> candidates = new ArrayList<>();
+    long startedNanos = System.nanoTime();
+    String canonicalAnchor = AddressUtil.canonicalAddress(anchor);
+    Page.Selector<Reference> selector = Page.selector(limit, cursor);
+    boolean visitedAny = false;
     for (Reference reference : context.references(anchor, incoming)) {
-      candidates.add(
-          new KeyedReference(reference, ReferenceDescriptions.referenceKey(reference).encoded()));
-    }
-    candidates.sort(Comparator.comparing(KeyedReference::encodedKey));
-
-    BoundedAddressScan<ReferenceResource> scan =
-        BoundedAddressScan.start(limit, options.timeoutMs(), anchorText, anchorText);
-    for (KeyedReference keyed : candidates) {
-      if (cursor != null && !cursor.isBlank() && keyed.encodedKey().compareTo(cursor) <= 0) {
+      visitedAny = true;
+      if (!ReferenceQuerySupport.matchesType(type, reference)
+          || !matchesEndpoint(fromFilter, reference.getFromAddress())
+          || !matchesEndpoint(toFilter, reference.getToAddress())) {
         continue;
       }
-      boolean matches =
-          ReferenceQuerySupport.matchesType(type, keyed.reference())
-              && matchesEndpoint(fromFilter, keyed.reference().getFromAddress())
-              && matchesEndpoint(toFilter, keyed.reference().getToAddress());
-      ReferenceResource item =
-          matches ? ReferenceDescriptions.describe(keyed.reference(), context) : null;
-      scan.visit(anchorText, keyed.encodedKey(), item);
-      if (scan.stopped()) break;
+      String encoded =
+          ReferenceDescriptions.referenceKey(reference, anchor, canonicalAnchor).encoded();
+      selector.offer(encoded, reference);
     }
-    return scan.finish();
+    FunctionManager functionManager =
+        selector.retainedCount() == 0 ? null : context.currentProgram().getFunctionManager();
+    AddressResource.FunctionSummary anchorFunction =
+        ReferenceDescriptions.functionSummary(functionManager, anchor);
+    Page<ReferenceResource> selected =
+        selector.finish(
+            reference ->
+                ReferenceDescriptions.describe(
+                    reference, functionManager, anchor, canonicalAnchor, anchorFunction));
+    long elapsedMs = Math.max(0L, (System.nanoTime() - startedNanos) / NANOS_PER_MILLISECOND);
+    boolean complete = selected.nextCursor() == null;
+    String scannedBound = visitedAny ? canonicalAnchor : null;
+    ScanProgress progress =
+        new ScanProgress(
+            ScanProgress.Kind.ADDRESS,
+            canonicalAnchor,
+            canonicalAnchor,
+            scannedBound,
+            scannedBound,
+            complete,
+            complete ? ScanProgress.StopReason.COMPLETED : ScanProgress.StopReason.LIMIT,
+            elapsedMs);
+    return Page.scanned(selected.items(), selected.limit(), selected.nextCursor(), progress);
   }
 
   private Page<ReferenceResource> listScopedOrRange(
@@ -123,14 +158,18 @@ final class ReferenceListQueries {
     BoundedAddressScan<ReferenceResource> scan =
         BoundedAddressScan.start(limit, options.timeoutMs(), requestedStart, requestedEnd);
     ReferenceManager refManager = context.currentProgram().getReferenceManager();
+    FunctionManager functionManager = context.currentProgram().getFunctionManager();
     AddressIterator addresses =
         incoming
             ? refManager.getReferenceDestinationIterator(iterationSet, true)
             : refManager.getReferenceSourceIterator(iterationSet, true);
 
     for (Address anchor : addresses) {
-      List<KeyedReference> atAnchor = referencesAtAnchor(refManager, anchor, incoming);
       String anchorCanonical = AddressUtil.canonicalAddress(anchor);
+      List<KeyedReference> atAnchor =
+          referencesAtAnchor(refManager, anchor, anchorCanonical, incoming);
+      AddressResource.FunctionSummary anchorFunction = null;
+      boolean anchorFunctionResolved = false;
       for (KeyedReference keyed : atAnchor) {
         if (cursorPosition != null && compare(anchor, keyed.encodedKey(), cursorPosition) <= 0) {
           continue;
@@ -139,8 +178,16 @@ final class ReferenceListQueries {
             ReferenceQuerySupport.matchesType(type, keyed.reference())
                 && matchesEndpoint(fromFilter, keyed.reference().getFromAddress())
                 && matchesEndpoint(toFilter, keyed.reference().getToAddress());
-        ReferenceResource item =
-            matches ? ReferenceDescriptions.describe(keyed.reference(), context) : null;
+        ReferenceResource item = null;
+        if (matches) {
+          if (!anchorFunctionResolved) {
+            anchorFunction = ReferenceDescriptions.functionSummary(functionManager, anchor);
+            anchorFunctionResolved = true;
+          }
+          item =
+              ReferenceDescriptions.describe(
+                  keyed.reference(), functionManager, anchor, anchorCanonical, anchorFunction);
+        }
         scan.visit(
             anchorCanonical, CompositeCursor.key(anchorCanonical, keyed.encodedKey()), item);
         if (scan.stopped()) break;
@@ -176,7 +223,7 @@ final class ReferenceListQueries {
   }
 
   private static List<KeyedReference> referencesAtAnchor(
-      ReferenceManager refManager, Address anchor, boolean incoming) {
+      ReferenceManager refManager, Address anchor, String anchorCanonical, boolean incoming) {
     Iterable<Reference> raw =
         incoming
             ? ReferenceDescriptions.iterable(refManager.getReferencesTo(anchor))
@@ -184,7 +231,9 @@ final class ReferenceListQueries {
     List<KeyedReference> keyed = new ArrayList<>();
     for (Reference reference : raw) {
       keyed.add(
-          new KeyedReference(reference, ReferenceDescriptions.referenceKey(reference).encoded()));
+          new KeyedReference(
+              reference,
+              ReferenceDescriptions.referenceKey(reference, anchor, anchorCanonical).encoded()));
     }
     keyed.sort(Comparator.comparing(KeyedReference::encodedKey));
     return keyed;
@@ -208,7 +257,6 @@ final class ReferenceListQueries {
   private record KeyedReference(Reference reference, String encodedKey) {}
 
   private record CursorPosition(Address address, String key) {}
-
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);
   }

@@ -14,21 +14,50 @@ import java.util.Comparator;
 final class ReferenceDescriptions {
   private ReferenceDescriptions() {}
 
+  static ReferenceResource describe(Reference reference) {
+    return describe(reference, (FunctionManager) null, null, null, null);
+  }
+
   static ReferenceResource describe(Reference reference, GhidraSession context) {
+    return describe(reference, context, null, null);
+  }
+
+  static ReferenceResource describe(
+      Reference reference, GhidraSession context, Address anchor, String canonicalAnchor) {
     FunctionManager functionManager =
         context == null ? null : context.currentProgram().getFunctionManager();
+    return describe(
+        reference,
+        functionManager,
+        anchor,
+        canonicalAnchor,
+        anchor == null ? null : functionSummary(functionManager, anchor));
+  }
+
+  static ReferenceResource describe(
+      Reference reference,
+      FunctionManager functionManager,
+      Address anchor,
+      String canonicalAnchor,
+      AddressResource.FunctionSummary anchorFunction) {
+    Address fromAddress = reference.getFromAddress();
+    Address toAddress = reference.getToAddress();
     return new ReferenceResource(
-        AddressUtil.canonicalAddress(reference.getFromAddress()),
-        AddressUtil.canonicalAddress(reference.getToAddress()),
+        canonicalEndpoint(fromAddress, anchor, canonicalAnchor),
+        canonicalEndpoint(toAddress, anchor, canonicalAnchor),
         reference.getReferenceType().getName(),
         reference.getOperandIndex(),
         reference.isPrimary(),
         String.valueOf(reference.getSource()),
-        functionSummary(functionManager, reference.getFromAddress()),
-        functionSummary(functionManager, reference.getToAddress()));
+        anchor != null && anchor.equals(fromAddress)
+            ? anchorFunction
+            : functionSummary(functionManager, fromAddress),
+        anchor != null && anchor.equals(toAddress)
+            ? anchorFunction
+            : functionSummary(functionManager, toAddress));
   }
 
-  private static AddressResource.FunctionSummary functionSummary(
+  static AddressResource.FunctionSummary functionSummary(
       FunctionManager functionManager, Address address) {
     if (functionManager == null || address == null) {
       return null;
@@ -55,10 +84,22 @@ final class ReferenceDescriptions {
   }
 
   static ReferenceCursorKey referenceKey(Reference reference) {
+    return referenceKey(reference, null, null);
+  }
+
+  static ReferenceCursorKey referenceKey(
+      Reference reference, Address anchor, String canonicalAnchor) {
     return new ReferenceCursorKey(
-        AddressUtil.canonicalAddress(reference.getFromAddress()),
-        AddressUtil.canonicalAddress(reference.getToAddress()),
+        canonicalEndpoint(reference.getFromAddress(), anchor, canonicalAnchor),
+        canonicalEndpoint(reference.getToAddress(), anchor, canonicalAnchor),
         reference.getReferenceType().getName(),
         reference.getOperandIndex());
+  }
+
+  private static String canonicalEndpoint(
+      Address address, Address anchor, String canonicalAnchor) {
+    return anchor != null && anchor.equals(address)
+        ? canonicalAnchor
+        : AddressUtil.canonicalAddress(address);
   }
 }
