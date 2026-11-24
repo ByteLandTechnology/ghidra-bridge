@@ -74,18 +74,12 @@ final class CommentMethods implements ApiMethodProvider {
             ApiVocabulary.ADDRESS,
             ApiVocabulary.TYPE,
             ApiVocabulary.TEXT);
-    registry.writeResource(
-        "comment.create",
-        MethodEffects.mutation(false, false),
+    Map<String, Object> commentInput =
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(ApiVocabulary.RESOURCE, commentResource),
-            ApiVocabulary.RESOURCE),
-        ApiSchemaCatalog.commentFields(),
-        List.of(ApiVocabulary.ADDRESS, ApiVocabulary.TYPE),
-        request -> {
-          writeComment(request, false);
-          return requireComment(resource(request));
-        });
+            ApiVocabulary.RESOURCE);
+    registerCommentWrite(
+        "comment.create", MethodEffects.mutation(false, false), commentInput, false);
     registry.writeResource(
         "comment.patch",
         MethodEffects.mutation(true, true),
@@ -104,18 +98,8 @@ final class CommentMethods implements ApiMethodProvider {
           patchComment(request);
           return requireComment(selector(request));
         });
-    registry.writeResource(
-        "comment.upsert",
-        MethodEffects.mutation(true, true),
-        ApiSchemaCatalog.input(
-            ApiSchemaCatalog.props(ApiVocabulary.RESOURCE, commentResource),
-            ApiVocabulary.RESOURCE),
-        ApiSchemaCatalog.commentFields(),
-        List.of(ApiVocabulary.ADDRESS, ApiVocabulary.TYPE),
-        request -> {
-          writeComment(request, true);
-          return requireComment(resource(request));
-        });
+    registerCommentWrite(
+        "comment.upsert", MethodEffects.mutation(true, true), commentInput, true);
     registry.writeResult(
         "comment.delete",
         MethodEffects.mutation(true, true),
@@ -130,6 +114,20 @@ final class CommentMethods implements ApiMethodProvider {
                   text(selector(request), ApiVocabulary.ADDRESS),
                   commentType(text(selector(request), ApiVocabulary.TYPE)));
           return Map.of(ApiVocabulary.DELETED, true);
+        });
+  }
+
+  private void registerCommentWrite(
+      String name, MethodEffects effects, Map<String, Object> input, boolean upsert) {
+    registry.writeResource(
+        name,
+        effects,
+        input,
+        ApiSchemaCatalog.commentFields(),
+        List.of(ApiVocabulary.ADDRESS, ApiVocabulary.TYPE),
+        request -> {
+          writeComment(request, upsert);
+          return requireComment(resource(request));
         });
   }
 

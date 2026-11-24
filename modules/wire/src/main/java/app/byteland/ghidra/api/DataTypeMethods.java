@@ -185,18 +185,7 @@ final class DataTypeMethods implements ApiMethodProvider {
     String kind = text(patch, ApiVocabulary.KIND);
     DataTypePatch typedPatch =
         switch (kind) {
-          case "struct" ->
-              new DataTypePatch.Struct(
-                  convertedDataTypeFields(patch.get("add_fields"), "/patch/add_fields"),
-                  convertedDataTypeFields(patch.get("rename_fields"), "/patch/rename_fields"),
-                  convertedDataTypeFields(patch.get("update_fields"), "/patch/update_fields"),
-                  convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields"));
-          case "union" ->
-              new DataTypePatch.Union(
-                  convertedDataTypeFields(patch.get("add_fields"), "/patch/add_fields"),
-                  convertedDataTypeFields(patch.get("rename_fields"), "/patch/rename_fields"),
-                  convertedDataTypeFields(patch.get("update_fields"), "/patch/update_fields"),
-                  convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields"));
+          case "struct", "union" -> compositePatch(kind, patch);
           case "enum" ->
               new DataTypePatch.EnumPatch(
                   convertedEnumValues(patch.get("add_values")),
@@ -206,6 +195,20 @@ final class DataTypeMethods implements ApiMethodProvider {
           default -> throw new AssertionError(kind);
         };
     registry.services().dataTypeService().patchDataType(path, typedPatch);
+  }
+
+  private DataTypePatch compositePatch(String kind, Map<String, Object> patch) {
+    List<DataTypePatch.CompositeField> addFields =
+        convertedDataTypeFields(patch.get("add_fields"), "/patch/add_fields");
+    List<DataTypePatch.CompositeField> renameFields =
+        convertedDataTypeFields(patch.get("rename_fields"), "/patch/rename_fields");
+    List<DataTypePatch.CompositeField> updateFields =
+        convertedDataTypeFields(patch.get("update_fields"), "/patch/update_fields");
+    List<DataTypePatch.CompositeField> removeFields =
+        convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields");
+    return "struct".equals(kind)
+        ? new DataTypePatch.Struct(addFields, renameFields, updateFields, removeFields)
+        : new DataTypePatch.Union(addFields, renameFields, updateFields, removeFields);
   }
 
   @SuppressWarnings("PMD.ReturnEmptyCollectionRatherThanNull")
