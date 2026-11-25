@@ -39,6 +39,9 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global caller_entry
+caller_entry: call label_only
+ ret
 .global leaf_callee
 leaf_callee: mov $7, %eax
  ret
@@ -365,27 +368,92 @@ def run_test(headless, root):
                 "after_auto",
             ]
 
-            leaf = function(40, "create", {
+            decomp_initial = tool(37, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a" in decomp_initial["c"]
+            decomp_repeat = tool(38, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert decomp_repeat["c"] == decomp_initial["c"]
+
+            sym_items = tool(39, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "func_a", "address": symbols["func_a"]}},
+            })["result"]["items"]
+            assert len(sym_items) == 1
+            renamed_sym = tool(40, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": sym_items[0]["id"]},
+                    "patch": {"name": "func_a_renamed"},
+                },
+            })["result"]
+            assert renamed_sym["name"] == "func_a_renamed"
+            decomp_after_rename = tool(41, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a_renamed" in decomp_after_rename["c"]
+
+            caller = function(42, "create", {
+                "resource": {"entry": symbols["caller_entry"], "name": "caller_entry"},
+                "disassemble": True,
+            })["result"]
+            assert caller["name"] == "caller_entry"
+            caller_before = tool(43, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_only(" in caller_before["c"]
+            caller_repeat = tool(44, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert caller_repeat["c"] == caller_before["c"]
+
+            callee_syms = tool(45, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "label_only", "address": symbols["label_only"]}},
+            })["result"]["items"]
+            assert len(callee_syms) == 1
+            tool(46, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": callee_syms[0]["id"]},
+                    "patch": {"name": "label_renamed"},
+                },
+            })
+            caller_after = tool(47, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_renamed(" in caller_after["c"]
+            assert "label_only(" not in caller_after["c"]
+
+            leaf = function(48, "create", {
                 "resource": {"entry": symbols["leaf_callee"], "name": "leaf_callee"},
                 "disassemble": True,
             })["result"]
-            mid = function(41, "create", {
+            mid = function(49, "create", {
                 "resource": {"entry": symbols["mid_callee"], "name": "mid_callee"},
                 "disassemble": True,
             })["result"]
-            root_fn = function(42, "create", {
+            root_fn = function(50, "create", {
                 "resource": {"entry": symbols["root_caller"], "name": "root_caller"},
                 "disassemble": True,
             })["result"]
 
-            callees_p1 = function(43, "call.list", {
+            callees_p1 = function(51, "call.list", {
                 "filter": {"entry": mid["entry"], "direction": "callees"},
                 "page": {"limit": 1},
             })["result"]
             assert len(callees_p1["items"]) == 1
             assert callees_p1["items"][0]["entry"] == leaf["entry"]
             assert callees_p1["items"][0]["call_site"]
-            callees_p2 = function(44, "call.list", {
+            callees_p2 = function(52, "call.list", {
                 "filter": {"entry": mid["entry"], "direction": "callees"},
                 "page": {"limit": 1, "cursor": callees_p1["next_cursor"]},
             })["result"]
@@ -394,7 +462,7 @@ def run_test(headless, root):
             assert callees_p2["items"][0]["call_site"] != callees_p1["items"][0]["call_site"]
             assert "next_cursor" not in callees_p2
 
-            incoming = function(45, "call.list", {
+            incoming = function(53, "call.list", {
                 "filter": {"entry": leaf["entry"], "direction": "callers"},
             })["result"]["items"]
             assert [row["call_site"] for row in incoming] == [
@@ -402,7 +470,7 @@ def run_test(headless, root):
                 callees_p2["items"][0]["call_site"],
             ]
 
-            graph = function(46, "call_graph.get", {
+            graph = function(54, "call_graph.get", {
                 "selector": {"entry": mid["entry"]},
                 "callers_depth": 2,
                 "callees_depth": 2,
@@ -415,7 +483,7 @@ def run_test(headless, root):
             assert len(edge_map[(mid["entry"], leaf["entry"])]) == 2
             assert len(edge_map[(root_fn["entry"], mid["entry"])]) == 1
 
-            capped_graph = function(47, "call_graph.get", {
+            capped_graph = function(55, "call_graph.get", {
                 "selector": {"entry": mid["entry"]},
                 "callers_depth": 2,
                 "callees_depth": 2,
@@ -424,7 +492,7 @@ def run_test(headless, root):
             assert capped_graph["limited"] is True
             assert len(capped_graph["nodes"]) == 2
 
-            blocks = tool(48, "ghidra_listing", {
+            blocks = tool(56, "ghidra_listing", {
                 "operation": "basic_block.list",
                 "params": {
                     "filter": {"selector": {"kind": "function", "entry": root_fn["entry"]}},
@@ -439,7 +507,7 @@ def run_test(headless, root):
                 for edge in block["destinations"]:
                     assert "CALL" not in edge["type"]
 
-            refs_fn = tool(49, "ghidra_reference", {
+            refs_fn = tool(57, "ghidra_reference", {
                 "operation": "list",
                 "params": {
                     "filter": {
@@ -458,7 +526,7 @@ def run_test(headless, root):
                 "entry": leaf["entry"],
                 "name": "leaf_callee",
             }
-            refs_fn_p2 = tool(50, "ghidra_reference", {
+            refs_fn_p2 = tool(58, "ghidra_reference", {
                 "operation": "list",
                 "params": {
                     "filter": {
