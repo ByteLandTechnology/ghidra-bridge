@@ -59,7 +59,7 @@ public final class CppSymbolNames {
       long symbolCount = symbolTable.getNumSymbols();
       if (symbolCount <= 0) return MIN_CAPACITY;
       long scaled = symbolCount + (symbolCount >>> 2);
-      return (int) Math.clamp(scaled, MIN_CAPACITY, MAX_CAPACITY);
+      return Math.clamp(scaled, MIN_CAPACITY, MAX_CAPACITY);
     } catch (RuntimeException ignored) {
       return MIN_CAPACITY;
     }

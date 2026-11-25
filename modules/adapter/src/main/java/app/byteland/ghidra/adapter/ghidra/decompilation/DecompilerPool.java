@@ -15,7 +15,7 @@ import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Shares a bounded pool of {@link DecompInterface} instances across session services. */
+/** Shares a bounded pool of {@link DecompInterface} objects across session services. */
 public final class DecompilerPool implements AutoCloseable {
   private final LeasePool<DecompInterface> pool;
   private final Supplier<Program> fallbackProgram;
@@ -65,14 +65,6 @@ public final class DecompilerPool implements AutoCloseable {
     DecompileResults results =
         decompile(function, DecompilationService.DEFAULT_TIMEOUT_MS, false);
     return results != null && results.decompileCompleted() ? results.getHighFunction() : null;
-  }
-
-  int maxSize() {
-    return pool.maxSize();
-  }
-
-  int createdCount() {
-    return pool.createdCount();
   }
 
   @Override

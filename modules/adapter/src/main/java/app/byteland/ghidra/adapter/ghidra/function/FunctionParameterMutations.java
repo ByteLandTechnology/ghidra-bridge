@@ -9,7 +9,6 @@ import app.byteland.ghidra.service.function.VariableStorageReference;
 import ghidra.app.cmd.function.DeleteVariableCmd;
 import ghidra.app.cmd.function.SetVariableDataTypeCmd;
 import ghidra.app.cmd.function.SetVariableNameCmd;
-import ghidra.app.cmd.function.UpdateFunctionCommand;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Function.FunctionUpdateType;
@@ -185,20 +184,16 @@ final class FunctionParameterMutations {
       DataTypeReference dataTypeInput,
       VariableStorageReference storage,
       FunctionMutations.ParameterDataTypeResolver dataTypeResolver) {
-    if (storage != null) {
-      addParameterWithStorage(
-          context, function, ordinal, parameterName, dataTypeInput, storage, dataTypeResolver);
-      return;
-    }
     if (parameterName == null || parameterName.isBlank()) {
       throw new IllegalArgumentException("parameter name is required");
     }
-    if (dataTypeInput == null) {
-      throw new IllegalArgumentException("dataType is required");
-    }
-
     DataType dataType =
         FunctionMutationSupport.requireParameterDataType(dataTypeResolver, dataTypeInput);
+    if (storage != null) {
+      addParameterWithStorage(context, function, ordinal, parameterName, dataType, storage);
+      return;
+    }
+
     ParameterImpl parameter;
     try {
       parameter =
@@ -212,11 +207,7 @@ final class FunctionParameterMutations {
       throw new IllegalArgumentException("unable to create parameter: " + ex.getMessage(), ex);
     }
 
-    int previousCount = function.getParameterCount();
-    int insertOrdinal = ordinal < 0 ? previousCount : ordinal;
-    if (insertOrdinal < 0 || insertOrdinal > previousCount) {
-      throw new IllegalArgumentException("parameter ordinal out of range: " + insertOrdinal);
-    }
+    int insertOrdinal = resolveInsertOrdinal(function, ordinal);
 
     Parameter[] currentParameters = function.getParameters();
     int autoCount = 0;
@@ -247,12 +238,17 @@ final class FunctionParameterMutations {
       parameters.add(insertOrdinal - autoCount, parameter);
     }
 
-    context.runCommand(
-        new UpdateFunctionCommand(
-            function, updateType, null, null, parameters, SourceType.USER_DEFINED, false),
-        "unable to add parameter");
-
-    Function updated = FunctionMutationSupport.refreshFunction(context, function, "add parameter");
+    Function updated =
+        FunctionMutationSupport.updateFunction(
+            context,
+            function,
+            updateType,
+            null,
+            null,
+            parameters,
+            SourceType.USER_DEFINED,
+            "unable to add parameter",
+            "add parameter");
     FunctionVariableMutationSupport.requireParameter(updated, insertOrdinal);
   }
 
@@ -291,21 +287,11 @@ final class FunctionParameterMutations {
         replacement.setComment(parameter.getComment());
         parameters.add(replacement);
       } else {
-        parameters.add(
-            FunctionStorageSupport.copyParameter(
-                context.currentProgram(),
-                parameter,
-                parameter.getName(),
-                parameter.getFormalDataType(),
-                parameter.getVariableStorage()));
+        parameters.add(FunctionStorageSupport.copyParameter(context.currentProgram(), parameter));
       }
     }
 
-    Function updated = applyCustomSignature(context, function, parameters);
-    FunctionStorageSupport.requireValidCustomSignature(updated);
-    Parameter actual = FunctionVariableMutationSupport.requireParameter(updated, ordinal);
-    FunctionMutationSupport.requireStorageApplied(
-        STORAGE_FIELD, targetStorage.serialization(), actual.getVariableStorage());
+    applyCustomSignature(context, function, parameters, ordinal, targetStorage);
   }
 
   private static void addParameterWithStorage(
@@ -313,35 +299,15 @@ final class FunctionParameterMutations {
       Function function,
       int ordinal,
       String parameterName,
-      DataTypeReference dataTypeInput,
-      VariableStorageReference storageInput,
-      FunctionMutations.ParameterDataTypeResolver dataTypeResolver) {
-    if (parameterName == null || parameterName.isBlank()) {
-      throw new IllegalArgumentException("parameter name is required");
-    }
-    if (dataTypeInput == null) {
-      throw new IllegalArgumentException("dataType is required");
-    }
-
-    DataType dataType =
-        FunctionMutationSupport.requireParameterDataType(dataTypeResolver, dataTypeInput);
+      DataType dataType,
+      VariableStorageReference storageInput) {
     FunctionStorageSupport.ParsedStorage targetStorage =
         FunctionStorageSupport.parseExplicit(context.currentProgram(), storageInput, STORAGE_FIELD);
-    int previousCount = function.getParameterCount();
-    int insertOrdinal = ordinal < 0 ? previousCount : ordinal;
-    if (insertOrdinal < 0 || insertOrdinal > previousCount) {
-      throw new IllegalArgumentException("parameter ordinal out of range: " + insertOrdinal);
-    }
+    int insertOrdinal = resolveInsertOrdinal(function, ordinal);
 
     List<Variable> parameters = new ArrayList<>();
     for (Parameter parameter : function.getParameters()) {
-      parameters.add(
-          FunctionStorageSupport.copyParameter(
-              context.currentProgram(),
-              parameter,
-              parameter.getName(),
-              parameter.getFormalDataType(),
-              parameter.getVariableStorage()));
+      parameters.add(FunctionStorageSupport.copyParameter(context.currentProgram(), parameter));
     }
     parameters.add(
         insertOrdinal,
@@ -354,39 +320,45 @@ final class FunctionParameterMutations {
             SourceType.USER_DEFINED,
             "parameter " + insertOrdinal));
 
-    Function updated = applyCustomSignature(context, function, parameters);
-    FunctionStorageSupport.requireValidCustomSignature(updated);
-    Parameter added = FunctionVariableMutationSupport.requireParameter(updated, insertOrdinal);
-    FunctionMutationSupport.requireStorageApplied(
-        STORAGE_FIELD, targetStorage.serialization(), added.getVariableStorage());
+    applyCustomSignature(context, function, parameters, insertOrdinal, targetStorage);
   }
 
-  private static Function applyCustomSignature(
-      GhidraSession context, Function function, List<? extends Variable> parameters) {
+  private static int resolveInsertOrdinal(Function function, int ordinal) {
+    int previousCount = function.getParameterCount();
+    int insertOrdinal = ordinal < 0 ? previousCount : ordinal;
+    if (insertOrdinal < 0 || insertOrdinal > previousCount) {
+      throw new IllegalArgumentException("parameter ordinal out of range: " + insertOrdinal);
+    }
+    return insertOrdinal;
+  }
+
+  private static void applyCustomSignature(
+      GhidraSession context,
+      Function function,
+      List<? extends Variable> parameters,
+      int targetOrdinal,
+      FunctionStorageSupport.ParsedStorage targetStorage) {
     ReturnParameterImpl returnParameter =
         FunctionStorageSupport.createReturn(
             context.currentProgram(),
             function.getReturnType(),
             function.getReturn().getVariableStorage());
-    SourceType source = function.getSignatureSource();
-    if (source == null) {
-      source = SourceType.USER_DEFINED;
-    }
-    context.runCommand(
-        new UpdateFunctionCommand(
+    Function updated =
+        FunctionMutationSupport.updateFunction(
+            context,
             function,
             FunctionUpdateType.CUSTOM_STORAGE,
             null,
             returnParameter,
             parameters,
-            source,
-            false),
-        "unable to apply custom parameter storage");
-    Function updated =
-        FunctionMutationSupport.refreshFunction(
-            context, function, "custom parameter storage update");
+            FunctionMutationSupport.signatureSource(function),
+            "unable to apply custom parameter storage",
+            "custom parameter storage update");
     FunctionStorageSupport.requireSignatureApplied(updated, returnParameter, parameters);
-    return updated;
+    FunctionStorageSupport.requireValidCustomSignature(updated);
+    Parameter applied = FunctionVariableMutationSupport.requireParameter(updated, targetOrdinal);
+    FunctionMutationSupport.requireStorageApplied(
+        STORAGE_FIELD, targetStorage.serialization(), applied.getVariableStorage());
   }
 
   static void removeParameter(GhidraSession context, Function function, int ordinal) {
