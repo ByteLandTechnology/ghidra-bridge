@@ -1174,7 +1174,7 @@ class AgentDispatcherConcurrencyTest {
       return new ListingService() {
         @Override
         public Page<CodeUnitResource> listCodeUnits(
-            AddressScanOptions scan, int limit, String kind, String direction, String cursor) {
+            AddressScanOptions scan, int limit, String kind, String cursor) {
           observe("code_unit.list", false);
           return Page.scanned(
               List.of(
@@ -1194,7 +1194,7 @@ class AgentDispatcherConcurrencyTest {
 
         @Override
         public Page<InstructionResource> listInstructions(
-            AddressScanOptions scan, int limit, String direction, String cursor) {
+            AddressScanOptions scan, int limit, String cursor) {
           observe("instruction.list", false);
           return Page.scanned(List.of(insn), limit, null, completedScan());
         }
@@ -1207,7 +1207,7 @@ class AgentDispatcherConcurrencyTest {
 
         @Override
         public Page<DataUnitResource> listDataUnits(
-            AddressScanOptions scan, int limit, String direction, String cursor) {
+            AddressScanOptions scan, int limit, String cursor) {
           observe("data_unit.list", false);
           return Page.scanned(
               List.of(

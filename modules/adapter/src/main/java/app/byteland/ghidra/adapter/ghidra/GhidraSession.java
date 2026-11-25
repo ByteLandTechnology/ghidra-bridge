@@ -73,7 +73,7 @@ public final class GhidraSession {
   }
 
   public Address parseAddress(String rawAddress) {
-    return AddressUtil.parseAddress(currentProgram(), rawAddress);
+    return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
   public Iterable<Reference> references(Address address, boolean to) {
