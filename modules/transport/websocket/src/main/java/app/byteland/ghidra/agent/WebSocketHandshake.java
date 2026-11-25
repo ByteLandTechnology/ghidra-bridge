@@ -5,6 +5,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Serial;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -253,6 +254,7 @@ final class WebSocketHandshake {
   }
 
   static final class HttpHandshakeException extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
     private final int statusCode;
     private final String reasonPhrase;

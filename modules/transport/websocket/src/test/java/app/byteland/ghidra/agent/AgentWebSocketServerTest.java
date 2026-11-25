@@ -1,6 +1,7 @@
 package app.byteland.ghidra.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -320,19 +321,20 @@ class AgentWebSocketServerTest {
         HttpClient httpClient = HttpClient.newHttpClient()) {
       int port = started.port();
 
-      try (Socket pending1 = openPartialHandshake(port);
-          Socket pending2 = openPartialHandshake(port)) {
-        waitForPendingSlotSaturation(port);
+      try (Socket pending2 = openPartialHandshake(port)) {
+        try (Socket pending1 = openPartialHandshake(port)) {
+          assertFalse(pending1.isClosed());
+          waitForPendingSlotSaturation(port);
+        }
 
         TestWebSocketListener listener = new TestWebSocketListener();
-        pending1.close();
 
         // Retry briefly if the freed handshake slot cleanup races on the connection thread.
         WebSocket ws = connectWithSlotReleaseRetry(httpClient, port, listener);
         assertNotNull(ws);
         assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS));
         ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
-        assertNotNull(pending2);
+        assertFalse(pending2.isClosed());
       }
     }
   }
