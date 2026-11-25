@@ -81,6 +81,7 @@ final class WebSocketHandshake {
     }
 
     Map<String, String> headers = new LinkedHashMap<>();
+    List<String> originHeaders = new ArrayList<>();
     for (int i = 1; i < lines.size(); i++) {
       String line = lines.get(i);
       if (line.isEmpty()) {
@@ -90,15 +91,24 @@ final class WebSocketHandshake {
       if (idx <= 0) {
         continue;
       }
-      headers.put(
-          line.substring(0, idx).trim().toLowerCase(Locale.ROOT), line.substring(idx + 1).trim());
+      String headerName = line.substring(0, idx).trim().toLowerCase(Locale.ROOT);
+      String headerValue = line.substring(idx + 1).trim();
+      if ("origin".equals(headerName)) {
+        if (!originHeaders.isEmpty()) {
+          throw new HttpHandshakeException(
+              403, "Forbidden", "Multiple Origin headers are not allowed");
+        }
+        originHeaders.add(headerValue);
+      }
+      headers.put(headerName, headerValue);
     }
 
     String target = requestLine.get(1);
     int queryIndex = target.indexOf('?');
     String path = queryIndex >= 0 ? target.substring(0, queryIndex) : target;
     String query = queryIndex >= 0 ? target.substring(queryIndex + 1) : "";
-    return new HandshakeRequest(requestLine.getFirst(), path, parseQuery(query), headers);
+    return new HandshakeRequest(
+        requestLine.getFirst(), path, parseQuery(query), headers, originHeaders);
   }
 
   private static void updateReadTimeout(Socket socket, long deadlineNanos) throws SocketException {
@@ -219,10 +229,41 @@ final class WebSocketHandshake {
   }
 
   record HandshakeRequest(
-      String method, String path, Map<String, String> query, Map<String, String> headers) {
+      String method,
+      String path,
+      Map<String, String> query,
+      Map<String, String> headers,
+      List<String> originHeaders) {
     HandshakeRequest {
       query = immutableOrderedCopy(query, "query");
       headers = immutableOrderedCopy(headers, "headers");
+      originHeaders = sanitizeOriginHeaders(originHeaders);
+    }
+
+    HandshakeRequest(
+        String method, String path, Map<String, String> query, Map<String, String> headers) {
+      this(method, path, query, headers, extractOriginHeaders(headers));
+    }
+
+    private static List<String> sanitizeOriginHeaders(List<String> origins) {
+      Objects.requireNonNull(origins, "originHeaders");
+      List<String> copy = new ArrayList<>(origins.size());
+      for (String origin : origins) {
+        copy.add(origin == null ? "" : origin);
+      }
+      return Collections.unmodifiableList(copy);
+    }
+
+    private static List<String> extractOriginHeaders(Map<String, String> headers) {
+      Objects.requireNonNull(headers, "headers");
+      List<String> origins = new ArrayList<>();
+      for (Map.Entry<String, String> entry : headers.entrySet()) {
+        if ("origin".equalsIgnoreCase(entry.getKey())) {
+          String value = entry.getValue();
+          origins.add(value == null ? "" : value);
+        }
+      }
+      return origins;
     }
 
     private static Map<String, String> immutableOrderedCopy(

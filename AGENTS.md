@@ -34,6 +34,7 @@ CI checks compliance with these rules across Linux, macOS, and Windows.
 Use JDK 21 and Ghidra 12.1 or newer (CI uses Ghidra `12.1.4`).
 Set `GHIDRA_INSTALL_DIR` or `GHIDRA_HOME` to a Ghidra installation when Gradle cannot detect Ghidra automatically.
 Run `./gradlew --no-daemon check` (or `:domain:test`, `:adapter:test`) to run module JUnit tests.
+CI runs `verify` on a new checkout; run `clean verify` locally to delete old build output.
 
 Run every CI check locally on Linux or macOS:
 
