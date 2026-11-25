@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.5.0](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.4.1...v1.5.0) (2026-11-25)
+
+
+### Features
+
+* **launcher:** select fallback GUI ports automatically and guard program saves ([#98](https://github.com/ByteLandTechnology/ghidra-bridge/issues/98)) ([e18197c](https://github.com/ByteLandTechnology/ghidra-bridge/commit/e18197c23f874b8484c6379d4134cccc9e1fb85f))
+* **mcp:** add opt-in allowed_origins override on top of default loopback policy ([#16](https://github.com/ByteLandTechnology/ghidra-bridge/issues/16)) ([9bd4e19](https://github.com/ByteLandTechnology/ghidra-bridge/commit/9bd4e190d953bfdcba54772e72db467f991af531))
+
+
+### Bug Fixes
+
+* **build:** eliminate Java 21 compiler warnings and enforce Gradle Xlint ([#123](https://github.com/ByteLandTechnology/ghidra-bridge/issues/123)) ([8f5d046](https://github.com/ByteLandTechnology/ghidra-bridge/commit/8f5d0463ba4f20298198e093dbbe8ea227e7eee5))
+* validate literal HTTP Host headers across loopback transports ([#38](https://github.com/ByteLandTechnology/ghidra-bridge/issues/38)) ([6d180b8](https://github.com/ByteLandTechnology/ghidra-bridge/commit/6d180b82f045163947552bd53a27c8b99f19b433))
+* **websocket:** cap outbound WebSocket messages at 16 MiB ([#40](https://github.com/ByteLandTechnology/ghidra-bridge/issues/40)) ([789d2d8](https://github.com/ByteLandTechnology/ghidra-bridge/commit/789d2d82ea919836bda916e6d8d0c5c3653198c0))
+* **websocket:** isolate envelope validation and send errors ([#88](https://github.com/ByteLandTechnology/ghidra-bridge/issues/88)) ([0da3687](https://github.com/ByteLandTechnology/ghidra-bridge/commit/0da36873164e924b0d83abacee78c5ebde52c140))
+* **websocket:** validate Origin headers during upgrade handshakes ([#13](https://github.com/ByteLandTechnology/ghidra-bridge/issues/13)) ([c550874](https://github.com/ByteLandTechnology/ghidra-bridge/commit/c5508743a090b6e8da295da603dbbf6a91928f53))
+
+
+### Performance Improvements
+
+* **adapter:** cache per-render lookups in GuiDocument.render ([#25](https://github.com/ByteLandTechnology/ghidra-bridge/issues/25)) ([727f9a6](https://github.com/ByteLandTechnology/ghidra-bridge/commit/727f9a62089e8102ee3e901322e5a72edd2a86b8))
+* **adapter:** flush decompiler cache only after program modifications ([#34](https://github.com/ByteLandTechnology/ghidra-bridge/issues/34)) ([9289a96](https://github.com/ByteLandTechnology/ghidra-bridge/commit/9289a96fee09134c2a0140a3299cd54c03cee16a))
+* **adapter:** share scan-resistant demangler cache with SymbolDemangling ([#108](https://github.com/ByteLandTechnology/ghidra-bridge/issues/108)) ([15cb2e6](https://github.com/ByteLandTechnology/ghidra-bridge/commit/15cb2e628da51e1d8a6ccbe9d186f50f66644ad8))
+* **wire:** stream JSON string slices without per-string buffers ([#32](https://github.com/ByteLandTechnology/ghidra-bridge/issues/32)) ([5b108b7](https://github.com/ByteLandTechnology/ghidra-bridge/commit/5b108b78e4ce0947f01bceef13582535e3953986))
+
 ## [1.4.1](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.4.0...v1.4.1) (2026-11-24)
 
 

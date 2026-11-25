@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.ByteSequence;
+import app.byteland.ghidra.service.analysis.AnalysisResource;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.listing.InstructionResource;
@@ -337,6 +338,100 @@ class DynamicProgramSwitchingTest {
         assertEquals("step", betaAfterAlphaClose.name());
       }
     }
+  }
+
+  @Test
+  void analysisTasksRunAndRestoreOptionsAcrossSwitchedPrograms() throws Exception {
+    GhidraTestSupport.x64Language();
+    ClassSearcher.search(TaskMonitor.DUMMY);
+
+    try (var alphaHolder = GhidraTestSupport.createX64Program("alpha.elf");
+        var betaHolder = GhidraTestSupport.createX64Program("beta.elf")) {
+      alphaHolder.inTransaction(
+          program -> {
+            Address start =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+            byte[] data =
+                "alpha_analysis_string\0\0\0\0\0\0\0\0\0\0\0"
+                    .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".rodata",
+                    start,
+                    new ByteArrayInputStream(data),
+                    data.length,
+                    TaskMonitor.DUMMY,
+                    false);
+          });
+      betaHolder.inTransaction(
+          program -> {
+            Address start =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+            byte[] data =
+                "beta_analysis_string\0\0\0\0\0\0\0\0\0\0\0\0"
+                    .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".rodata",
+                    start,
+                    new ByteArrayInputStream(data),
+                    data.length,
+                    TaskMonitor.DUMMY,
+                    false);
+          });
+
+      Program alpha = alphaHolder.program();
+      Program beta = betaHolder.program();
+      AtomicReference<Program> active = new AtomicReference<>(alpha);
+      GhidraSession session = new GhidraSession(active::get);
+
+      try (var services = GhidraServiceFactory.create(session, "gui-fallback")) {
+        AnalysisResource startedAlpha =
+            services.analysisService().startAnalysis(List.of("ASCII Strings"));
+        assertEquals(AnalysisResource.Kind.BRIDGE, startedAlpha.kind());
+
+        // Switch active tab to beta.elf while alpha.elf finishes analysis.
+        active.set(beta);
+        assertEquals(false, services.analysisService().getStatus().analyzed());
+        assertEquals(0L, beta.getListing().getNumDefinedData());
+
+        active.set(alpha);
+        AnalysisResource completedAlpha = awaitAnalysisCompletion(services);
+        assertEquals(AnalysisResource.Status.COMPLETED, completedAlpha.status());
+        assertTrue(completedAlpha.analyzed());
+        assertTrue(alpha.getListing().getNumDefinedData() > 0);
+        assertTrue(
+            alpha.getOptions(Program.ANALYSIS_PROPERTIES).getBoolean("Stack", false));
+
+        // beta.elf stays unanalyzed until its own task starts.
+        active.set(beta);
+        assertEquals(false, services.analysisService().getStatus().analyzed());
+        services.analysisService().startAnalysis(List.of("ASCII Strings"));
+        AnalysisResource completedBeta = awaitAnalysisCompletion(services);
+        assertEquals(AnalysisResource.Status.COMPLETED, completedBeta.status());
+        assertTrue(completedBeta.analyzed());
+        assertTrue(beta.getListing().getNumDefinedData() > 0);
+
+        session.notifyProgramClosed(alpha);
+        assertTrue(services.analysisService().getStatus().analyzed());
+      }
+    }
+  }
+
+  private static AnalysisResource awaitAnalysisCompletion(
+      app.byteland.ghidra.service.BridgeServices services) throws InterruptedException {
+    long deadlineNanos = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
+    while (System.nanoTime() < deadlineNanos) {
+      AnalysisResource current = services.analysisService().getStatus();
+      if (current.kind() == AnalysisResource.Kind.BRIDGE
+          && current.status() != AnalysisResource.Status.RUNNING) {
+        return current;
+      }
+      Thread.sleep(20L);
+    }
+    throw new AssertionError("Timed out waiting for analysis task to finish");
   }
 
   private static byte[] betaChecksBytes(Program program, long offset, int length) {

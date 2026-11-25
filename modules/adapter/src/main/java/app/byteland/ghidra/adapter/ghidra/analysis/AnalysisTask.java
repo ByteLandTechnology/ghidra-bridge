@@ -15,12 +15,13 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BooleanSupplier;
 
 final class AnalysisTask {
   private final String id = UUID.randomUUID().toString();
-  private final BooleanSupplier analyzed;
-  private final TaskBody body;
+  private final GhidraSession context;
+  private final AutoAnalysisManager manager;
+  private final Program program;
+  private final AnalyzerSelection selection;
   private final AnalysisTaskMonitor monitor = new AnalysisTaskMonitor();
   private volatile AnalysisResource.Status status = AnalysisResource.Status.RUNNING;
   private final long startedAt = System.currentTimeMillis();
@@ -31,39 +32,23 @@ final class AnalysisTask {
       Program program,
       AutoAnalysisManager manager,
       AnalyzerSelection selection) {
-    GhidraSession session = Objects.requireNonNull(context, "context");
-    Program targetProgram = Objects.requireNonNull(program, "program");
-    AutoAnalysisManager analysisManager = Objects.requireNonNull(manager, "manager");
-    AnalyzerSelection analyzerSelection = Objects.requireNonNull(selection, "selection");
-    this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(targetProgram);
-    this.body = () -> performAnalysis(session, analysisManager, targetProgram, analyzerSelection);
-  }
-
-  AnalysisTask(BooleanSupplier analyzed, Runnable operation) {
-    this.analyzed = Objects.requireNonNull(analyzed, "analyzed");
-    Objects.requireNonNull(operation, "operation");
-    this.body =
-        () -> {
-          operation.run();
-          return new TaskOutcome(AnalysisResource.Status.COMPLETED, null);
-        };
+    this.context = Objects.requireNonNull(context, "context");
+    this.program = Objects.requireNonNull(program, "program");
+    this.manager = Objects.requireNonNull(manager, "manager");
+    this.selection = Objects.requireNonNull(selection, "selection");
   }
 
   void run() {
     TaskOutcome outcome;
     try {
-      outcome = Objects.requireNonNull(body.run(), "analysis task outcome");
+      outcome = Objects.requireNonNull(performAnalysis(), "analysis task outcome");
     } catch (RuntimeException failure) {
       outcome = new TaskOutcome(AnalysisResource.Status.FAILED, errorMessage(failure));
     }
     publish(outcome);
   }
 
-  private TaskOutcome performAnalysis(
-      GhidraSession context,
-      AutoAnalysisManager manager,
-      Program program,
-      AnalyzerSelection selection) {
+  private TaskOutcome performAnalysis() {
     Map<String, String> previousAnalysisOptions = null;
     AnalysisResource.Status terminalStatus;
     String terminalError = null;
@@ -143,15 +128,11 @@ final class AnalysisTask {
     return new AnalysisResource(
         AnalysisResource.Kind.BRIDGE,
         status,
-        analyzed.getAsBoolean(),
+        GhidraProgramUtilities.isAnalyzed(program),
         id,
         java.time.Instant.ofEpochMilli(startedAt),
         completedAt == null ? null : java.time.Instant.ofEpochMilli(completedAt),
         monitor.percent());
-  }
-
-  String message() {
-    return monitor.getMessage();
   }
 
   private void publish(TaskOutcome outcome) {
@@ -224,7 +205,18 @@ final class AnalysisTask {
 
   private void runAndWaitForAnalysis(AutoAnalysisManager manager) {
     PluginTool tool = manager.getAnalysisTool();
-    if (tool == null || tool.threadIsBackgroundTaskThread()) {
+    if (tool == null) {
+      int transactionId = program.startTransaction("Ghidra Bridge Analysis");
+      boolean commit = false;
+      try {
+        manager.startAnalysis(monitor, true);
+        commit = !program.hasTerminatedTransaction();
+      } finally {
+        program.endTransaction(transactionId, commit);
+      }
+      return;
+    }
+    if (tool.threadIsBackgroundTaskThread()) {
       manager.startAnalysis(monitor, true);
       return;
     }
@@ -253,11 +245,6 @@ final class AnalysisTask {
     private static Map<String, String> immutableCopy(Map<String, String> values) {
       return Collections.unmodifiableMap(new LinkedHashMap<>(values));
     }
-  }
-
-  @FunctionalInterface
-  private interface TaskBody {
-    TaskOutcome run();
   }
 
   private record TaskOutcome(AnalysisResource.Status status, String error) {}
