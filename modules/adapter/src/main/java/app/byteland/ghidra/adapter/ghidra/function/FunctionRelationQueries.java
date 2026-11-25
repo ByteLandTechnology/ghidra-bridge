@@ -45,13 +45,15 @@ final class FunctionRelationQueries {
       return selectRelationsBounded(function, callers, limit, cursor);
     }
 
+    QuerySnapshotCache snapshots = context.querySnapshots();
+    long clearEpoch = snapshots.clearEpoch();
     long modNumber = context.modificationNumber();
     String canonicalTarget = AddressUtil.canonicalAddress(function.getEntryPoint());
     String directionKey = callers ? "callers" : "callees";
     QuerySnapshotCache.Key cacheKey =
         QuerySnapshotCache.Key.of(
             FUNCTION_CALL_RESOURCE, modNumber, canonicalTarget, directionKey);
-    String[] sortedKeys = context.querySnapshots().get(cacheKey);
+    String[] sortedKeys = snapshots.get(cacheKey);
     if (sortedKeys == null) {
       List<String> keys = new ArrayList<>();
       for (Function relatedFunction : relatedFunctions(function, callers)) {
@@ -63,7 +65,7 @@ final class FunctionRelationQueries {
         return selectRelationsBounded(function, callers, limit, cursor);
       }
       if (context.modificationNumber() == modNumber) {
-        context.querySnapshots().put(cacheKey, sortedKeys);
+        snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }
     FunctionCallResource.Direction direction =

@@ -28,6 +28,30 @@ class AddressUtilTest {
     protected void run() {}
   }
 
+  private static final class PoisonReadScript extends GhidraScript {
+    private final Program exposedProgram;
+
+    private PoisonReadScript(Program exposedProgram) {
+      this.exposedProgram = exposedProgram;
+      this.monitor =
+          (TaskMonitor)
+              Proxy.newProxyInstance(
+                  TaskMonitor.class.getClassLoader(),
+                  new Class<?>[] {TaskMonitor.class},
+                  (proxy, method, args) -> {
+                    throw new AssertionError("read path touched monitor: " + method.getName());
+                  });
+    }
+
+    @Override
+    protected void run() {}
+
+    @Override
+    public Program getCurrentProgram() {
+      return exposedProgram;
+    }
+  }
+
   @Test
   void parseAddressResolvesCanonicalSpaceHexWithoutAddressEvaluator() {
     GenericAddressSpace ram = new GenericAddressSpace("ram", 64, AddressSpace.TYPE_RAM, 0);
@@ -46,17 +70,20 @@ class AddressUtilTest {
                   throw new AssertionError("unexpected evaluator call: " + method.getName());
                 });
     GhidraScript script = new TestScript(strictProgram);
+    GhidraSession poisonSession = new GhidraSession(new PoisonReadScript(strictProgram));
 
+    assertEquals(
+        ram.getAddress(0x00401000L), AddressUtil.parseAddress(strictProgram, "ram:00401000"));
     assertEquals(ram.getAddress(0x00401000L), AddressUtil.parseAddress(script, "ram:00401000"));
     assertEquals(ram.getAddress(0x004010abL), AddressUtil.parseAddress(script, "  ram:0x4010AB "));
-    assertEquals(register.getAddress(0x18L), AddressUtil.parseAddress(script, "register:0018"));
+    assertEquals(register.getAddress(0x18L), poisonSession.parseAddress("register:0018"));
   }
 
   @Test
   void parseAddressFallsBackForBareOffsetsSegmentedSpacesExpressionsAndInvalidInput() {
     try (GhidraTestSupport.ProgramHolder holder =
         GhidraTestSupport.createX64Program("addr-fast-path")) {
-      GhidraSession session = GhidraTestSupport.sessionFor(holder.program());
+      GhidraSession session = new GhidraSession(new PoisonReadScript(holder.program()));
       AddressSpace ram = holder.program().getAddressFactory().getDefaultAddressSpace();
 
       assertEquals(ram.getAddress(0x00402000L), session.parseAddress("00402000"));
@@ -64,7 +91,11 @@ class AddressUtilTest {
       assertEquals(ram.getAddress(0x00401010L), session.parseAddress("0x401000 + 0x10"));
 
       assertThrows(
-          IllegalArgumentException.class, () -> AddressUtil.parseAddress(null, "ram:0"));
+          IllegalArgumentException.class,
+          () -> AddressUtil.parseAddress((Program) null, "ram:0"));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> AddressUtil.parseAddress((GhidraScript) null, "ram:0"));
       assertThrows(IllegalArgumentException.class, () -> session.parseAddress(" "));
       assertThrows(IllegalArgumentException.class, () -> session.parseAddress("unknown:zzzz"));
     }

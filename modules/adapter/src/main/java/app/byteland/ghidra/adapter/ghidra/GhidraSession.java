@@ -7,7 +7,13 @@ import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceIterator;
+import ghidra.program.model.symbol.ReferenceManager;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
@@ -20,6 +26,7 @@ public final class GhidraSession implements AutoCloseable {
   private final BooleanSupplier analyzingSupplier;
   private final boolean allowProxySnapshots;
   private final Object executionLock = new Object();
+  private volatile WeakReference<Program> snapshotProgram = new WeakReference<>(null);
   private int transactionDepth;
 
   public GhidraSession(GhidraScript script) {
@@ -59,6 +66,15 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public QuerySnapshotCache querySnapshots() {
+    Program program = currentProgramOrNull();
+    if (!snapshotProgram.refersTo(program)) {
+      synchronized (querySnapshots) {
+        if (!snapshotProgram.refersTo(program)) {
+          querySnapshots.clear();
+          snapshotProgram = new WeakReference<>(program);
+        }
+      }
+    }
     return querySnapshots;
   }
 
@@ -131,16 +147,16 @@ public final class GhidraSession implements AutoCloseable {
     return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
-  public Iterable<ghidra.program.model.symbol.Reference> references(Address address, boolean to) {
-    ghidra.program.model.symbol.ReferenceManager manager = currentProgram().getReferenceManager();
+  public Iterable<Reference> references(Address address, boolean to) {
+    ReferenceManager manager = currentProgram().getReferenceManager();
     if (to) {
       return () -> {
-        ghidra.program.model.symbol.ReferenceIterator incoming = manager.getReferencesTo(address);
-        return incoming == null ? java.util.Collections.emptyIterator() : incoming;
+        ReferenceIterator incoming = manager.getReferencesTo(address);
+        return incoming == null ? Collections.emptyIterator() : incoming;
       };
     }
-    ghidra.program.model.symbol.Reference[] outgoing = manager.getReferencesFrom(address);
-    return outgoing == null ? java.util.List.of() : java.util.Arrays.asList(outgoing);
+    Reference[] outgoing = manager.getReferencesFrom(address);
+    return outgoing == null ? List.of() : Arrays.asList(outgoing);
   }
 
   public Reference reference(Address fromAddress, Address toAddress, int operandIndex) {

@@ -42,11 +42,13 @@ final class DataTypeQueries {
       return selectCategoriesBounded(category, limit, cursor);
     }
 
+    QuerySnapshotCache snapshots = context.querySnapshots();
+    long clearEpoch = snapshots.clearEpoch();
     long modNumber = context.modificationNumber();
     String canonicalCategoryPath = category.getCategoryPath().getPath();
     QuerySnapshotCache.Key cacheKey =
         QuerySnapshotCache.Key.of(CATEGORY_RESOURCE, modNumber, canonicalCategoryPath);
-    String[] sortedKeys = context.querySnapshots().get(cacheKey);
+    String[] sortedKeys = snapshots.get(cacheKey);
     if (sortedKeys == null) {
       Category[] children = category.getCategories();
       if (children == null) {
@@ -62,7 +64,7 @@ final class DataTypeQueries {
         return selectCategoriesBounded(category, limit, cursor);
       }
       if (context.modificationNumber() == modNumber) {
-        context.querySnapshots().put(cacheKey, sortedKeys);
+        snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }
     return QuerySnapshotCache.slice(
@@ -117,11 +119,13 @@ final class DataTypeQueries {
           cursor);
     }
 
+    QuerySnapshotCache snapshots = context.querySnapshots();
+    long clearEpoch = snapshots.clearEpoch();
     long modNumber = context.modificationNumber();
     QuerySnapshotCache.Key cacheKey =
         QuerySnapshotCache.Key.of(
             DATA_TYPE_RESOURCE, modNumber, lowerQuery, categoryPath, normalizedKind);
-    String[] sortedKeys = context.querySnapshots().get(cacheKey);
+    String[] sortedKeys = snapshots.get(cacheKey);
     if (sortedKeys == null) {
       List<String> keys = new ArrayList<>();
       Iterator<DataType> iterator = candidateIterator(manager, scopedCategory);
@@ -143,7 +147,7 @@ final class DataTypeQueries {
             cursor);
       }
       if (context.modificationNumber() == modNumber) {
-        context.querySnapshots().put(cacheKey, sortedKeys);
+        snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }
     return QuerySnapshotCache.slice(

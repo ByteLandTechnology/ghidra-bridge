@@ -32,6 +32,7 @@ public final class QuerySnapshotCache {
   private final Map<Key, Entry> entries;
   private int totalKeys;
   private Long lastModificationNumber;
+  private long clearEpoch;
 
   public QuerySnapshotCache() {
     this(DEFAULT_MAX_ENTRIES, DEFAULT_MAX_TOTAL_KEYS, DEFAULT_TTL, System::nanoTime);
@@ -57,13 +58,23 @@ public final class QuerySnapshotCache {
   }
 
   /**
+   * Returns the current clear epoch so concurrent readers can detect an intervening {@link #clear()}
+   * before storing a newly scanned snapshot.
+   */
+  public synchronized long clearEpoch() {
+    return clearEpoch;
+  }
+
+  /**
    * Returns a cached sorted key snapshot on hit, or {@code null} on miss or expiration.
    */
   public synchronized String[] get(Key key) {
     Objects.requireNonNull(key, "key");
     long now = nanoTime.getAsLong();
     evictExpired(now);
-    evictStaleModificationNumbers(key.modificationNumber());
+    if (!advanceModificationNumber(key.modificationNumber())) {
+      return null;
+    }
     Entry entry = entries.get(key);
     return entry == null ? null : entry.keys;
   }
@@ -72,11 +83,30 @@ public final class QuerySnapshotCache {
    * Stores an already-sorted key array if it fits within the cache entry and key caps.
    */
   public synchronized void put(Key key, String[] sortedKeys) {
+    putInternal(this.clearEpoch, key, sortedKeys);
+  }
+
+  /**
+   * Stores an already-sorted key array only if no {@link #clear()} occurred since {@code
+   * expectedClearEpoch} and {@code key.modificationNumber()} is not older than the latest observed
+   * modification number.
+   */
+  public synchronized void putIfUnchanged(
+      long expectedClearEpoch, Key key, String[] sortedKeys) {
+    putInternal(expectedClearEpoch, key, sortedKeys);
+  }
+
+  private void putInternal(long expectedClearEpoch, Key key, String[] sortedKeys) {
     Objects.requireNonNull(key, "key");
     Objects.requireNonNull(sortedKeys, "sortedKeys");
     long now = nanoTime.getAsLong();
     evictExpired(now);
-    evictStaleModificationNumbers(key.modificationNumber());
+    if (this.clearEpoch != expectedClearEpoch) {
+      return;
+    }
+    if (!advanceModificationNumber(key.modificationNumber())) {
+      return;
+    }
 
     Entry existing = entries.remove(key);
     if (existing != null) {
@@ -103,6 +133,7 @@ public final class QuerySnapshotCache {
     entries.clear();
     totalKeys = 0;
     lastModificationNumber = null;
+    clearEpoch++;
   }
 
   public synchronized int entryCount() {
@@ -199,9 +230,19 @@ public final class QuerySnapshotCache {
     }
   }
 
-  private void evictStaleModificationNumbers(long currentModificationNumber) {
-    if (lastModificationNumber != null && lastModificationNumber == currentModificationNumber) {
-      return;
+  /**
+   * Evicts entries from older modification numbers when {@code currentModificationNumber} advances,
+   * and returns {@code false} if {@code currentModificationNumber} is older than the latest
+   * observed modification number.
+   */
+  private boolean advanceModificationNumber(long currentModificationNumber) {
+    if (lastModificationNumber != null) {
+      if (currentModificationNumber < lastModificationNumber) {
+        return false;
+      }
+      if (currentModificationNumber == lastModificationNumber) {
+        return true;
+      }
     }
     lastModificationNumber = currentModificationNumber;
     Iterator<Map.Entry<Key, Entry>> iterator = entries.entrySet().iterator();
@@ -212,6 +253,7 @@ public final class QuerySnapshotCache {
         iterator.remove();
       }
     }
+    return true;
   }
 
   /**

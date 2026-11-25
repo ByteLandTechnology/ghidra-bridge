@@ -7,8 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import app.byteland.ghidra.service.Page;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
@@ -121,5 +127,85 @@ class QuerySnapshotCacheTest {
     assertEquals("k04", page.nextCursor());
     assertEquals(4, resolvedCount.get());
     assertEquals(2, mappedCount.get(), "mapper must never discard records");
+  }
+
+  @Test
+  void rejectsStaleConcurrentPutsAndSupportsConcurrentReaderSweeps() throws Exception {
+    AtomicLong clock = new AtomicLong(1_000L);
+    QuerySnapshotCache cache =
+        new QuerySnapshotCache(8, 256, Duration.ofSeconds(30), clock::get);
+
+    // A stale reader with an older modification number cannot evict newer snapshots.
+    long initialEpoch = cache.clearEpoch();
+    QuerySnapshotCache.Key newer = QuerySnapshotCache.Key.of("data_type", 20L, "", null, null);
+    QuerySnapshotCache.Key older = QuerySnapshotCache.Key.of("data_type", 19L, "", null, null);
+    cache.putIfUnchanged(initialEpoch, newer, new String[] {"/new_a", "/new_b"});
+    cache.putIfUnchanged(initialEpoch, older, new String[] {"/stale"});
+    assertNull(cache.get(older));
+    assertArrayEquals(new String[] {"/new_a", "/new_b"}, cache.get(newer));
+    assertEquals(1, cache.entryCount());
+    assertEquals(2, cache.totalKeyCount());
+
+    // An intervening clear() increments clearEpoch and drops in-flight puts from before clear().
+    long staleEpoch = cache.clearEpoch();
+    cache.clear();
+    cache.putIfUnchanged(staleEpoch, newer, new String[] {"/stale_after_clear"});
+    assertNull(cache.get(newer));
+    assertEquals(0, cache.entryCount());
+
+    // Concurrent readers and periodic modification advances preserve cache bounds and slice order.
+    AtomicLong modNumber = new AtomicLong(100L);
+    CountDownLatch start = new CountDownLatch(1);
+    try (ExecutorService pool = Executors.newFixedThreadPool(10)) {
+      List<Future<Void>> futures = new ArrayList<>();
+      for (int t = 0; t < 8; t++) {
+        final int readerId = t;
+        futures.add(
+            pool.submit(
+                () -> {
+                  start.await();
+                  String[] keys = {"k0", "k1", "k2", "k3", "k4", "k5"};
+                  Map<String, String> live =
+                      Map.of("k0", "v0", "k1", "v1", "k2", "v2", "k3", "v3", "k4", "v4", "k5", "v5");
+                  for (int iter = 0; iter < 100; iter++) {
+                    long epoch = cache.clearEpoch();
+                    long mod = modNumber.get();
+                    QuerySnapshotCache.Key key =
+                        QuerySnapshotCache.Key.of(
+                            "reference", mod, "to", "ram:00" + (readerId % 4), null);
+                    String[] cached = cache.get(key);
+                    if (cached == null) {
+                      cached = keys.clone();
+                      cache.putIfUnchanged(epoch, key, cached);
+                    }
+                    Page<String> sliced =
+                        QuerySnapshotCache.slice(cached, 2, "k1", live::get, v -> v);
+                    assertEquals(List.of("v2", "v3"), sliced.items());
+                    assertEquals("k3", sliced.nextCursor());
+                  }
+                  return null;
+                }));
+      }
+      for (int w = 0; w < 2; w++) {
+        final int writerId = w;
+        futures.add(
+            pool.submit(
+                () -> {
+                  start.await();
+                  for (int iter = 0; iter < 25; iter++) {
+                    if ((iter + writerId) % 2 == 0) {
+                      modNumber.incrementAndGet();
+                    } else {
+                      cache.clear();
+                    }
+                  }
+                  return null;
+                }));
+      }
+      start.countDown();
+      for (Future<Void> future : futures) {
+        future.get(10, TimeUnit.SECONDS);
+      }
+    }
   }
 }

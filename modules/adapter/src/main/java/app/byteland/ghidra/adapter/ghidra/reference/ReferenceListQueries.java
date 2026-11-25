@@ -40,12 +40,14 @@ final class ReferenceListQueries {
           anchor, canonicalAnchor, incoming, type, normalizedLimit, cursor);
     }
 
+    QuerySnapshotCache snapshots = context.querySnapshots();
+    long clearEpoch = snapshots.clearEpoch();
     long modNumber = context.modificationNumber();
     String normalizedType = type == null ? null : type.toUpperCase(Locale.ROOT);
     QuerySnapshotCache.Key cacheKey =
         QuerySnapshotCache.Key.of(
             REFERENCE_RESOURCE, modNumber, normalizedDirection, canonicalAnchor, normalizedType);
-    String[] sortedKeys = context.querySnapshots().get(cacheKey);
+    String[] sortedKeys = snapshots.get(cacheKey);
     if (sortedKeys == null) {
       List<String> keys = new ArrayList<>();
       for (Reference reference : context.references(anchor, incoming)) {
@@ -61,7 +63,7 @@ final class ReferenceListQueries {
             anchor, canonicalAnchor, incoming, type, normalizedLimit, cursor);
       }
       if (context.modificationNumber() == modNumber) {
-        context.querySnapshots().put(cacheKey, sortedKeys);
+        snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }
     return QuerySnapshotCache.slice(

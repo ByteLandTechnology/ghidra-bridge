@@ -6,16 +6,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
 import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.GenericAddressSpace;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Namespace;
+import ghidra.program.model.symbol.RefType;
+import ghidra.program.model.symbol.SourceType;
+import ghidra.util.classfinder.ClassSearcher;
+import ghidra.util.task.TaskMonitor;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -27,9 +33,15 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class FunctionRelationQueriesTest {
@@ -155,6 +167,115 @@ class FunctionRelationQueriesTest {
         new FunctionRelationQueries(raw -> emptyTarget).getCallers("ram:00400000", 5, null);
     assertTrue(empty.items().isEmpty());
     assertNull(empty.nextCursor());
+  }
+
+  @Test
+  void concurrentProgramDbReadsResolveCallersDemangleCppNamesAndInvalidateOnProgramSwitch()
+      throws Exception {
+    GhidraTestSupport.x64Language();
+    ClassSearcher.search(TaskMonitor.DUMMY);
+    try (GhidraTestSupport.ProgramHolder primary =
+            GhidraTestSupport.createX64Program("fn-callers-primary");
+        GhidraTestSupport.ProgramHolder secondary =
+            GhidraTestSupport.createX64Program("fn-callers-secondary")) {
+      primary.inTransaction(
+          program -> {
+            try {
+              program.setExecutableFormat("Executable and Linking Format (ELF)");
+              AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+              Address targetAddr = space.getAddress(0x00401000L);
+              program
+                  .getFunctionManager()
+                  .createFunction(
+                      "target_fn",
+                      targetAddr,
+                      new AddressSet(targetAddr, targetAddr.add(3)),
+                      SourceType.USER_DEFINED);
+              for (int i = 0; i < 6; i++) {
+                Address callerAddr = space.getAddress(0x00401100L + (i * 0x20L));
+                String fnName = "caller" + i;
+                String mangledName = "_ZN3pkg" + fnName.length() + fnName + "Ei";
+                program
+                    .getFunctionManager()
+                    .createFunction(
+                        mangledName,
+                        callerAddr,
+                        new AddressSet(callerAddr, callerAddr.add(7)),
+                        SourceType.USER_DEFINED);
+                program
+                    .getReferenceManager()
+                    .addMemoryReference(
+                        callerAddr,
+                        targetAddr,
+                        RefType.UNCONDITIONAL_CALL,
+                        SourceType.USER_DEFINED,
+                        0);
+              }
+            } catch (Exception error) {
+              throw new RuntimeException(error);
+            }
+          });
+
+      AtomicReference<Program> activeProgram = new AtomicReference<>(primary.program());
+      GhidraScript poisonScript =
+          new GhidraScript() {
+            {
+              this.monitor =
+                  (TaskMonitor)
+                      Proxy.newProxyInstance(
+                          TaskMonitor.class.getClassLoader(),
+                          new Class<?>[] {TaskMonitor.class},
+                          (proxy, method, args) -> {
+                            throw new AssertionError("read touched monitor: " + method.getName());
+                          });
+            }
+
+            @Override
+            protected void run() {}
+
+            @Override
+            public Program getCurrentProgram() {
+              return activeProgram.get();
+            }
+          };
+
+      GhidraSession session = new GhidraSession(poisonScript);
+      FunctionServiceImpl service = new FunctionServiceImpl(session);
+
+      CountDownLatch start = new CountDownLatch(1);
+      try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
+        List<Future<List<FunctionCallResource>>> readers = new ArrayList<>();
+        for (int t = 0; t < 8; t++) {
+          readers.add(
+              pool.submit(
+                  () -> {
+                    start.await();
+                    List<FunctionCallResource> all = new ArrayList<>();
+                    String cursor = null;
+                    while (true) {
+                      Page<FunctionCallResource> page =
+                          service.getCallers("0x00401000", 2, cursor);
+                      all.addAll(page.items());
+                      cursor = page.nextCursor();
+                      if (cursor == null) break;
+                    }
+                    return all;
+                  }));
+        }
+        start.countDown();
+        for (Future<List<FunctionCallResource>> reader : readers) {
+          List<FunctionCallResource> callers = reader.get(15, TimeUnit.SECONDS);
+          assertEquals(6, callers.size());
+          assertEquals("_ZN3pkg7caller0Ei", callers.getFirst().name());
+          assertTrue(callers.getFirst().demangledName().contains("pkg::caller0(int)"));
+        }
+      }
+      assertEquals(1, session.querySnapshots().entryCount());
+
+      // Program switch clears cached snapshots even before any new modification occurs.
+      activeProgram.set(secondary.program());
+      assertEquals(0, session.querySnapshots().entryCount());
+    }
   }
 
   private static Function rootFunction(Set<Function> callers, Set<Function> callees) {
