@@ -88,6 +88,8 @@ class BootstrapGuiAndSaveGuardTest {
           tab1.joinedStdout().contains("Endpoint URL: http://127.0.0.1:" + basePort + "/mcp"));
       assertTrue(tab1.joinedStdout().contains("session_id: client.exe"));
       assertTrue(tab1.joinedStdout().contains("tool_prefix: ghidra"));
+      assertTrue(
+          tab1.joinedStdout().contains("Allowed Origins: loopback and host (default)"));
 
       Future<?> secondRun =
           pool.submit(

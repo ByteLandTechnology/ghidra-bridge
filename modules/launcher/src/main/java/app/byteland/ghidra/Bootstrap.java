@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
@@ -168,6 +169,7 @@ public final class Bootstrap {
       throw startupFailure;
     }
 
+    script.println("[ghidra-mcp] Starting MCP HTTP service");
     if (usedFallback) {
       script.println(
           "[ghidra-mcp] Default port "
@@ -387,6 +389,8 @@ public final class Bootstrap {
     script.println("[ghidra-mcp]   tool_prefix: " + mcpConfig.toolPrefix());
     script.println(
         "[ghidra-mcp]   Auth Token: " + (mcpConfig.token() == null ? "disabled" : "configured"));
+    script.println(
+        "[ghidra-mcp]   Allowed Origins: " + formatAllowedOrigins(mcpConfig.allowedOrigins()));
     script.println("[ghidra-mcp] " + BANNER_DIVIDER);
   }
 
@@ -465,12 +469,23 @@ public final class Bootstrap {
         "[ghidra-mcp] Defaults: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp"
-            + " session_id=<current-program-name> tool_prefix=ghidra");
+            + " session_id=<current-program-name> tool_prefix=ghidra"
+            + " allowed_origins=<loopback-and-host>");
     script.printerr(
         "[ghidra-mcp] Example: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp session_id=demo-session"
-            + " token=secret");
+            + " token=secret allowed_origins=https://inspector.example.com");
+  }
+
+  private static String formatAllowedOrigins(Set<String> allowedOrigins) {
+    if (allowedOrigins == null) {
+      return "loopback and host (default)";
+    }
+    if (allowedOrigins.isEmpty()) {
+      return "none";
+    }
+    return String.join(", ", allowedOrigins);
   }
 
   static EffectiveConfig resolveWsConfig(
@@ -531,6 +546,11 @@ public final class Bootstrap {
   private static String defaultSessionId(Program program) {
     String name = programNameOrNull(program);
     return isBlank(name) ? "ghidra-bridge" : name;
+  }
+
+  static McpConfig resolveMcpConfig(String[] args, Program program) {
+    return resolveMcpConfig(
+        AgentConfig.parseArgs(args), program, McpConfig.DEFAULT_PORT, false);
   }
 
   private static boolean isDefaultLoopbackHost(String host) {
