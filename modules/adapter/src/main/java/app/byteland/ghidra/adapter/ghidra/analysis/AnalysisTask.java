@@ -45,14 +45,6 @@ final class AnalysisTask {
     this.body = () -> performAnalysis(session, analysisManager, program, optionChange);
   }
 
-  AnalysisTask(BooleanSupplier analyzed, Runnable operation) {
-    this(
-        analyzed,
-        ignored -> {
-          Objects.requireNonNull(operation, "operation").run();
-        });
-  }
-
   AnalysisTask(BooleanSupplier analyzed, Consumer<AnalysisTaskMonitor> operation) {
     this.analyzed = Objects.requireNonNull(analyzed, "analyzed");
     Objects.requireNonNull(operation, "operation");
@@ -166,10 +158,6 @@ final class AnalysisTask {
     monitor.requestCancel();
   }
 
-  AnalysisTaskMonitor monitor() {
-    return monitor;
-  }
-
   AnalysisResource snapshot() {
     AnalysisResource.Status currentStatus = status;
     boolean terminal = currentStatus != AnalysisResource.Status.RUNNING;
@@ -187,12 +175,8 @@ final class AnalysisTask {
         currentError);
   }
 
-  String message() {
+  private String message() {
     return normalizeMessage(monitor.getMessage());
-  }
-
-  String error() {
-    return error;
   }
 
   private void publish(TaskOutcome outcome) {
@@ -482,7 +466,7 @@ final class AnalysisTask {
             releaseNow = true;
           }
           case RUNNING -> {
-            // Keep waiting until applyTo unwinds so post-analysis cleanup never races execution.
+            // Wait until applyTo finishes so cleanup does not run concurrently with analysis.
           }
           case AWAITING_TASK_COMPLETED -> {
             phase = Phase.DONE;
