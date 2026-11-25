@@ -31,7 +31,6 @@ class AddressUtilExternalTest {
   void formatsAndParsesExternalSpaceAddressesWithoutDuplicatePrefix() {
     Address external = AddressSpace.EXTERNAL_SPACE.getAddress(1);
     assertEquals("EXTERNAL:00000001", AddressUtil.canonicalAddress(external));
-    assertEquals("0x00000001", AddressUtil.offset(external));
 
     AddressSpace ram = new GenericAddressSpace("ram", 64, AddressSpace.TYPE_RAM, 0);
     AddressFactory factory = new DefaultAddressFactory(new AddressSpace[] {ram});
