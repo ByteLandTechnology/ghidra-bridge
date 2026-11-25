@@ -21,11 +21,10 @@ final class ListingCodeUnitQueries {
   }
 
   Page<CodeUnitResource> listCodeUnits(
-      AddressScanOptions options, int limit, String kind, String direction, String cursorRaw) {
+      AddressScanOptions options, int limit, String kind, String cursorRaw) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
-    boolean forward = !"backward".equalsIgnoreCase(direction);
 
     BoundedAddressScan<CodeUnitResource> scan =
         BoundedAddressScan.start(
@@ -33,23 +32,22 @@ final class ListingCodeUnitQueries {
     Listing listing = context.currentProgram().getListing();
 
     if ("instruction".equalsIgnoreCase(kind)) {
-      return listFiltered(
-          listing, range, cursor, forward, scan, CodeUnitResource.Kind.INSTRUCTION, true);
+      return listFiltered(listing, range, cursor, scan, CodeUnitResource.Kind.INSTRUCTION, true);
     }
     if ("data".equalsIgnoreCase(kind)) {
-      return listFiltered(listing, range, cursor, forward, scan, CodeUnitResource.Kind.DATA, false);
+      return listFiltered(listing, range, cursor, scan, CodeUnitResource.Kind.DATA, false);
     }
 
-    Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor, forward);
-    if (ListingInstructionQueries.outOfRange(iterationStart, range, forward)) {
+    Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor);
+    if (range.afterEnd(iterationStart)) {
       return scan.finish();
     }
-    CodeUnitIterator codeUnits = listing.getCodeUnits(iterationStart, forward);
+    CodeUnitIterator codeUnits = listing.getCodeUnits(iterationStart, true);
     while (codeUnits.hasNext()) {
       CodeUnit codeUnit = codeUnits.next();
       Address address = codeUnit.getAddress();
-      if (ListingInstructionQueries.atOrBeforeCursor(address, cursor, forward)) continue;
-      if (ListingInstructionQueries.outOfRange(address, range, forward)) break;
+      if (ListingInstructionQueries.atOrBeforeCursor(address, cursor)) continue;
+      if (range.afterEnd(address)) break;
       CodeUnitResource.Kind kindValue = ListingDescriptions.classify(codeUnit);
       CodeUnitResource match =
           matchesKind(kind, kindValue)
@@ -67,27 +65,26 @@ final class ListingCodeUnitQueries {
       Listing listing,
       AddressScanRanges.Resolved range,
       Address cursor,
-      boolean forward,
       BoundedAddressScan<CodeUnitResource> scan,
       CodeUnitResource.Kind targetKind,
       boolean instructionsOnly) {
-    CodeUnit firstCodeUnit = firstCodeUnitInWindow(listing, range, cursor, forward);
+    CodeUnit firstCodeUnit = firstCodeUnitInWindow(listing, range, cursor);
     if (firstCodeUnit == null) {
       return scan.finish();
     }
     scan.anchorStart(AddressUtil.canonicalAddress(firstCodeUnit.getAddress()));
 
-    Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor, forward);
+    Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor);
     Iterator<? extends CodeUnit> codeUnits =
         instructionsOnly
-            ? listing.getInstructions(iterationStart, forward)
-            : listing.getDefinedData(iterationStart, forward);
+            ? listing.getInstructions(iterationStart, true)
+            : listing.getDefinedData(iterationStart, true);
     CodeUnit lastVisited = null;
     while (codeUnits.hasNext()) {
       CodeUnit codeUnit = codeUnits.next();
       Address address = codeUnit.getAddress();
-      if (ListingInstructionQueries.atOrBeforeCursor(address, cursor, forward)) continue;
-      if (ListingInstructionQueries.outOfRange(address, range, forward)) break;
+      if (ListingInstructionQueries.atOrBeforeCursor(address, cursor)) continue;
+      if (range.afterEnd(address)) break;
       String canonical = AddressUtil.canonicalAddress(address);
       scan.visit(
           canonical, canonical, ListingDescriptions.toCodeUnitItem(codeUnit, targetKind, context));
@@ -97,10 +94,10 @@ final class ListingCodeUnitQueries {
 
     if (!scan.stopped()) {
       CodeUnit boundaryCandidate = lastVisited != null ? lastVisited : firstCodeUnit;
-      if (reachesWindowEnd(boundaryCandidate, range, forward)) {
+      if (reachesWindowEnd(boundaryCandidate, range)) {
         scan.anchorCompletedEnd(AddressUtil.canonicalAddress(boundaryCandidate.getAddress()));
       } else {
-        CodeUnit lastCodeUnit = lastCodeUnitInWindow(listing, range, forward);
+        CodeUnit lastCodeUnit = lastCodeUnitInWindow(listing, range);
         if (lastCodeUnit != null) {
           scan.anchorCompletedEnd(AddressUtil.canonicalAddress(lastCodeUnit.getAddress()));
         }
@@ -121,55 +118,37 @@ final class ListingCodeUnitQueries {
   }
 
   private static CodeUnit firstCodeUnitInWindow(
-      Listing listing, AddressScanRanges.Resolved range, Address cursor, boolean forward) {
-    if (forward) {
-      if (cursor != null && cursor.compareTo(range.start()) >= 0) {
-        if (cursor.compareTo(range.end()) >= 0) {
-          return null;
-        }
-        CodeUnit afterCursor = listing.getCodeUnitAfter(cursor);
-        return afterCursor != null && !range.afterEnd(afterCursor.getAddress())
-            ? afterCursor
-            : null;
-      }
-      CodeUnit atStart = listing.getCodeUnitAt(range.start());
-      CodeUnit first = atStart != null ? atStart : listing.getCodeUnitAfter(range.start());
-      return first != null && !range.afterEnd(first.getAddress()) ? first : null;
-    }
-
-    if (cursor != null && cursor.compareTo(range.end()) <= 0) {
-      if (cursor.compareTo(range.start()) <= 0) {
+      Listing listing, AddressScanRanges.Resolved range, Address cursor) {
+    if (cursor != null && cursor.compareTo(range.start()) >= 0) {
+      if (range.end() != null && cursor.compareTo(range.end()) >= 0) {
         return null;
       }
-      CodeUnit beforeCursor = listing.getCodeUnitBefore(cursor);
-      return beforeCursor != null && beforeCursor.getAddress().compareTo(range.start()) >= 0
-          ? beforeCursor
-          : null;
-    }
-    CodeUnit containingEnd = listing.getCodeUnitContaining(range.end());
-    CodeUnit first = containingEnd != null ? containingEnd : listing.getCodeUnitBefore(range.end());
-    return first != null && first.getAddress().compareTo(range.start()) >= 0 ? first : null;
-  }
-
-  private static CodeUnit lastCodeUnitInWindow(
-      Listing listing, AddressScanRanges.Resolved range, boolean forward) {
-    if (forward) {
-      CodeUnit containingEnd = listing.getCodeUnitContaining(range.end());
-      CodeUnit last =
-          containingEnd != null ? containingEnd : listing.getCodeUnitBefore(range.end());
-      return last != null && range.includes(last.getAddress()) ? last : null;
+      CodeUnit afterCursor = listing.getCodeUnitAfter(cursor);
+      return afterCursor != null && !range.afterEnd(afterCursor.getAddress()) ? afterCursor : null;
     }
     CodeUnit atStart = listing.getCodeUnitAt(range.start());
-    CodeUnit last = atStart != null ? atStart : listing.getCodeUnitAfter(range.start());
-    return last != null && range.includes(last.getAddress()) ? last : null;
+    CodeUnit first = atStart != null ? atStart : listing.getCodeUnitAfter(range.start());
+    return first != null && !range.afterEnd(first.getAddress()) ? first : null;
   }
 
-  private static boolean reachesWindowEnd(
-      CodeUnit codeUnit, AddressScanRanges.Resolved range, boolean forward) {
-    if (forward) {
-      Address maxAddress = codeUnit.getMaxAddress();
-      return maxAddress != null && maxAddress.compareTo(range.end()) >= 0;
+  private static CodeUnit lastCodeUnitInWindow(Listing listing, AddressScanRanges.Resolved range) {
+    if (range.end() == null) {
+      return null;
     }
-    return codeUnit.getAddress().compareTo(range.start()) <= 0;
+    CodeUnit containingEnd = listing.getCodeUnitContaining(range.end());
+    CodeUnit last = containingEnd != null ? containingEnd : listing.getCodeUnitBefore(range.end());
+    return last != null
+            && last.getAddress().compareTo(range.start()) >= 0
+            && !range.afterEnd(last.getAddress())
+        ? last
+        : null;
+  }
+
+  private static boolean reachesWindowEnd(CodeUnit codeUnit, AddressScanRanges.Resolved range) {
+    if (range.end() == null) {
+      return false;
+    }
+    Address maxAddress = codeUnit.getMaxAddress();
+    return maxAddress != null && maxAddress.compareTo(range.end()) >= 0;
   }
 }

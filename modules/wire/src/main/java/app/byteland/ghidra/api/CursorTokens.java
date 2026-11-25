@@ -1,12 +1,10 @@
 package app.byteland.ghidra.api;
 
+import app.byteland.ghidra.JsonUtil;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import javax.crypto.Mac;
@@ -76,34 +74,16 @@ public final class CursorTokens {
       if ("filter".equals(entry.getKey())
           && entry.getValue() instanceof Map<?, ?> filter
           && filter.isEmpty()) continue;
-      query.put(entry.getKey(), canonical(entry.getValue()));
+      query.put(entry.getKey(), JsonUtil.canonical(entry.getValue()));
     }
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       return Base64.getUrlEncoder()
           .withoutPadding()
-          .encodeToString(
-              digest.digest(
-                  app.byteland.ghidra.JsonUtil.toJson(query).getBytes(StandardCharsets.UTF_8)));
+          .encodeToString(digest.digest(JsonUtil.toJson(query).getBytes(StandardCharsets.UTF_8)));
     } catch (java.security.GeneralSecurityException impossible) {
       throw new IllegalStateException(impossible);
     }
-  }
-
-  private static Object canonical(Object value) {
-    if (value instanceof Map<?, ?> map) {
-      Map<String, Object> sorted = new TreeMap<>();
-      for (Map.Entry<?, ?> entry : map.entrySet()) {
-        sorted.put(String.valueOf(entry.getKey()), canonical(entry.getValue()));
-      }
-      return new LinkedHashMap<>(sorted);
-    }
-    if (value instanceof Iterable<?> iterable) {
-      List<Object> result = new ArrayList<>();
-      for (Object item : iterable) result.add(canonical(item));
-      return result;
-    }
-    return value;
   }
 
   private static String signature(String payload) {

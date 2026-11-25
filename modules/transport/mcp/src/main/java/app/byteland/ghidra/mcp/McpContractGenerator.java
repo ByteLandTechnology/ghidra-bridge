@@ -6,9 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 public final class McpContractGenerator {
   private McpContractGenerator() {}
@@ -20,7 +18,7 @@ public final class McpContractGenerator {
     Files.writeString(
         output,
         JsonUtil.toJson(
-                canonical(
+                JsonUtil.canonical(
                     Map.of(
                         "version",
                         ApiRegistry.INTERFACE_VERSION,
@@ -30,16 +28,5 @@ public final class McpContractGenerator {
                         new McpToolRegistry(ApiRegistry.catalog()).listTools())))
             + "\n",
         StandardCharsets.UTF_8);
-  }
-
-  private static Object canonical(Object value) {
-    if (value instanceof Map<?, ?> map) {
-      Map<String, Object> sorted = new TreeMap<>();
-      map.forEach((key, child) -> sorted.put(String.valueOf(key), canonical(child)));
-      return sorted;
-    }
-    if (value instanceof List<?> list)
-      return list.stream().map(McpContractGenerator::canonical).toList();
-    return value;
   }
 }

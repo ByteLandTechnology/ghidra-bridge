@@ -8,18 +8,16 @@ import java.util.List;
 public interface ListingService {
   /** Returns one page of code units. */
   Page<CodeUnitResource> listCodeUnits(
-      AddressScanOptions scan, int limit, String kind, String direction, String cursor);
+      AddressScanOptions scan, int limit, String kind, String cursor);
 
   /** Returns one page of instructions. */
-  Page<InstructionResource> listInstructions(
-      AddressScanOptions scan, int limit, String direction, String cursor);
+  Page<InstructionResource> listInstructions(AddressScanOptions scan, int limit, String cursor);
 
   /** Returns the metadata for one instruction by address. */
   InstructionResource getInstruction(String rawAddress);
 
   /** Returns one page of defined data units. */
-  Page<DataUnitResource> listDataUnits(
-      AddressScanOptions scan, int limit, String direction, String cursor);
+  Page<DataUnitResource> listDataUnits(AddressScanOptions scan, int limit, String cursor);
 
   /** Returns instructions that have active flow overrides. */
   Page<InstructionResource> getFlowOverrides(

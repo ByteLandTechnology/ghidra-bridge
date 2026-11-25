@@ -1,11 +1,10 @@
 package app.byteland.ghidra.adapter.ghidra.symbol;
 
 import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
+import app.byteland.ghidra.adapter.ghidra.CppSymbolNames.NameCandidate;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.symbol.SymbolService.DemangleResult;
-import ghidra.app.util.demangler.DemangledObject;
 import ghidra.app.util.demangler.DemangledVariable;
-import ghidra.app.util.demangler.DemanglerUtil;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Symbol;
@@ -37,9 +36,10 @@ final class SymbolDemangling {
         String name = symbol.getName();
         boolean applied = false;
         String error = "No supported C++ name";
-        for (DemangledObject decoded : DemanglerUtil.demangle(program, name, symbol.getAddress())) {
+        for (NameCandidate decoded :
+            CppSymbolNames.decode(program, name, symbol.getAddress()).candidates()) {
           try {
-            applied = new NameOnly(decoded).applyName(program, symbol.getAddress());
+            applied = new NameOnly(name, decoded).applyName(program, symbol.getAddress());
           } catch (InvalidInputException failure) {
             error = failure.getMessage();
           }
@@ -63,9 +63,9 @@ final class SymbolDemangling {
    * the namespaces and keeps the mangled name as a secondary label.
    */
   private static final class NameOnly extends DemangledVariable {
-    NameOnly(DemangledObject decoded) {
-      super(decoded.getMangledString(), decoded.getOriginalDemangled(), decoded.getName());
-      setNamespace(decoded.getNamespace());
+    NameOnly(String mangled, NameCandidate decoded) {
+      super(mangled, decoded.originalDemangled(), decoded.name());
+      setNamespace(decoded.namespace());
     }
 
     boolean applyName(Program program, Address address) throws InvalidInputException {

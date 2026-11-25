@@ -46,7 +46,7 @@ final class InstructionMethods implements ApiMethodProvider {
             registry
                 .services()
                 .listingService()
-                .listInstructions(addressScan(request), page.limit(), "forward", page.cursor()));
+                .listInstructions(addressScan(request), page.limit(), page.cursor()));
     Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
     Map<String, Object> flowFilter =
         WireSchema.object(

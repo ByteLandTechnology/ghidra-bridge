@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -135,6 +136,8 @@ public final class Bootstrap {
         "[ghidra-mcp]   Auth Token: " + (mcpConfig.token() == null ? "disabled" : "configured"));
     script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
     script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
+    script.println(
+        "[ghidra-mcp]   Allowed Origins: " + formatAllowedOrigins(mcpConfig.allowedOrigins()));
 
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
@@ -225,12 +228,23 @@ public final class Bootstrap {
         "[ghidra-mcp] Defaults: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp"
-            + " session_id=<current-program-name> tool_prefix=ghidra");
+            + " session_id=<current-program-name> tool_prefix=ghidra"
+            + " allowed_origins=<loopback-and-host>");
     script.printerr(
         "[ghidra-mcp] Example: host="
             + LOOPBACK_HOST
             + " port=8766 path=/mcp session_id=demo-session"
-            + " token=secret");
+            + " token=secret allowed_origins=https://inspector.example.com");
+  }
+
+  private static String formatAllowedOrigins(Set<String> allowedOrigins) {
+    if (allowedOrigins == null) {
+      return "loopback and host (default)";
+    }
+    if (allowedOrigins.isEmpty()) {
+      return "none";
+    }
+    return String.join(", ", allowedOrigins);
   }
 
   private static EffectiveConfig resolveConfig(String[] args, Program program) {
@@ -263,7 +277,7 @@ public final class Bootstrap {
     return isBlank(name) ? "ghidra-bridge" : name;
   }
 
-  private static McpConfig resolveMcpConfig(String[] args, Program program) {
+  static McpConfig resolveMcpConfig(String[] args, Program program) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
     if (isBlank(parsedArgs.get(SESSION_ID_ARGUMENT))) {
       parsedArgs.put(SESSION_ID_ARGUMENT, defaultSessionId(program));

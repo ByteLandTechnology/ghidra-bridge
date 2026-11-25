@@ -86,7 +86,7 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
 
 ### Full Build and Verification (`clean verify`)
 
-Run the full Gradle verification gate used in pull requests and release archives:
+Run the full local Gradle verification check. CI runs `./gradlew --no-daemon verify` on a new checkout for pull requests and release archives. Keep `clean verify` locally to delete previous build output:
 
 ```bash
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
@@ -108,7 +108,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 
 ### Headless Regression Tests
 
-After `buildGhidraScript` or `clean verify` populates `build/ghidra-script/`, run the headless Ghidra function-mutation regression test on Linux x86-64 (requires `gcc` and `nm`):
+After `buildGhidraScript`, `verify`, or `clean verify` populates `build/ghidra-script/`, run the headless Ghidra function-mutation regression test on Linux x86-64 (requires `gcc` and `nm`):
 
 ```bash
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
@@ -116,7 +116,7 @@ python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analy
 
 ### Exact Local CI Sequence
 
-Run these four commands in order to match the `verify` job in `.github/workflows/ci.yml`:
+Run these four commands in order to match the `verify` job in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
