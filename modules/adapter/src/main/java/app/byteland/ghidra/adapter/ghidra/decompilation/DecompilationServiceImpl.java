@@ -18,10 +18,12 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.WeakHashMap;
+import java.util.function.LongSupplier;
 
 public final class DecompilationServiceImpl implements DecompilationService {
   private final GhidraSession context;
   private final LeasePool<DecompInterface> decompilerPool;
+  private final LongSupplier nanoTime;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
   private final Map<DecompInterface, CacheState> cacheStates =
@@ -34,8 +36,14 @@ public final class DecompilationServiceImpl implements DecompilationService {
   }
 
   DecompilationServiceImpl(GhidraSession context, LeasePool<DecompInterface> decompilerPool) {
+    this(context, decompilerPool, System::nanoTime);
+  }
+
+  DecompilationServiceImpl(
+      GhidraSession context, LeasePool<DecompInterface> decompilerPool, LongSupplier nanoTime) {
     this.context = Objects.requireNonNull(context, "context");
     this.decompilerPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
+    this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
   }
 
   @Override
@@ -65,7 +73,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
       Function function, int timeoutMs, DecompilationResource.Format format,
       boolean includeComments) {
     try (LeasePool.Lease<DecompInterface> lease = decompilerPool.acquire()) {
-      long startedAt = System.nanoTime();
+      long startedAt = nanoTime.getAsLong();
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
       DecompInterface decompiler = lease.value();
       applyCommentMode(decompiler, includeComments);
@@ -92,12 +100,13 @@ public final class DecompilationServiceImpl implements DecompilationService {
         lines = document.lines();
       }
       FunctionComments comments = includeComments
-          ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
+          ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings, nanoTime)
           : null;
+      long elapsedMs = Math.max(0L, nanoTime.getAsLong() - startedAt) / 1_000_000L;
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
           function.getName(), effectiveFormat, completed,
-          (System.nanoTime() - startedAt) / 1_000_000L,
+          elapsedMs,
           code, tokens, lines,
           comments == null ? null : comments.items(),
           comments == null ? null : comments.complete(), warnings);

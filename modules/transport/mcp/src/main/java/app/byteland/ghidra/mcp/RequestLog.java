@@ -100,7 +100,7 @@ final class RequestLog {
   }
 
   void finish() {
-    long elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000L;
+    long elapsedMs = Math.max(0L, System.nanoTime() - startedAtNanos) / 1_000_000L;
     int estimatedCapacity =
         FIXED_LINE_CAPACITY
             + jsonRpcId.length()

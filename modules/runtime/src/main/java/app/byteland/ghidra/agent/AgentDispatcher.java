@@ -44,6 +44,27 @@ public final class AgentDispatcher implements AutoCloseable {
     services.close();
   }
 
+  @FunctionalInterface
+  public interface ExclusiveOperation<T> {
+    T execute() throws Exception;
+  }
+
+  /** Runs an operation under the dispatch sequence lock. */
+  public <T> T runExclusive(ExclusiveOperation<T> operation) throws Exception {
+    Objects.requireNonNull(operation, "operation");
+    synchronized (sequenceLock) {
+      return operation.execute();
+    }
+  }
+
+  /** Runs an action under the dispatch sequence lock. */
+  public void runExclusive(Runnable action) {
+    Objects.requireNonNull(action, "action");
+    synchronized (sequenceLock) {
+      action.run();
+    }
+  }
+
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {

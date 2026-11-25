@@ -391,6 +391,187 @@ class BootstrapGuiAndSaveGuardTest {
     }
   }
 
+  @Test
+  void headlessCheckpointSaveFinishesBeforeFirstRpcDispatches() throws Exception {
+    System.setProperty(SystemUtilities.HEADLESS_PROPERTY, "true");
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      int mcpPort = findConsecutivePortWindow(2);
+      CountDownLatch mcpSaveEntered = new CountDownLatch(1);
+      CountDownLatch mcpAllowSaveFinish = new CountDownLatch(1);
+      AtomicBoolean mcpSaveInProgress = new AtomicBoolean(false);
+      AtomicBoolean mcpOverlapDetected = new AtomicBoolean(false);
+
+      RecordingFixture mcpFixture =
+          new RecordingFixture(
+              "mcp-race.bin",
+              true,
+              () -> {
+                mcpSaveInProgress.set(true);
+                mcpSaveEntered.countDown();
+                try {
+                  mcpAllowSaveFinish.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                  Thread.currentThread().interrupt();
+                } finally {
+                  mcpSaveInProgress.set(false);
+                }
+              },
+              () -> {
+                if (mcpSaveInProgress.get()) {
+                  mcpOverlapDetected.set(true);
+                }
+              });
+
+      Future<?> mcpServer =
+          pool.submit(
+              () -> {
+                Bootstrap.startMcpFromScript(
+                    mcpFixture.script,
+                    new String[] {"port=" + mcpPort},
+                    null,
+                    ignored -> mcpFixture.services,
+                    mcpPort);
+                return null;
+              });
+
+      try {
+        assertTrue(mcpSaveEntered.await(5, TimeUnit.SECONDS));
+        HttpClient httpClient = HttpClient.newHttpClient();
+        String mcpEndpoint = "http://127.0.0.1:" + mcpPort + "/mcp";
+        Future<Map<String, Object>> initCall =
+            pool.submit(
+                () ->
+                    postJsonRpc(
+                        httpClient,
+                        mcpEndpoint,
+                        Map.of(
+                            "jsonrpc",
+                            "2.0",
+                            "id",
+                            1,
+                            "method",
+                            "initialize",
+                            "params",
+                            Map.of(
+                                "protocolVersion",
+                                "2025-11-25",
+                                "capabilities",
+                                Map.of(),
+                                "clientInfo",
+                                Map.of("name", "race-test", "version", "1.0")))));
+
+        Thread.sleep(75L);
+        assertFalse(initCall.isDone(), "HTTP initialize must wait until checkpoint save finishes");
+
+        mcpAllowSaveFinish.countDown();
+        assertNull(initCall.get(5, TimeUnit.SECONDS).get("error"));
+        Map<String, Object> bridgeCall =
+            postJsonRpc(
+                httpClient,
+                mcpEndpoint,
+                Map.of(
+                    "jsonrpc",
+                    "2.0",
+                    "id",
+                    2,
+                    "method",
+                    "tools/call",
+                    "params",
+                    Map.of(
+                        "name",
+                        "ghidra_bridge",
+                        "arguments",
+                        Map.of("operation", "get", "params", Map.of()))));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) bridgeCall.get("result");
+        assertEquals(Boolean.FALSE, result.get("isError"));
+        assertFalse(mcpOverlapDetected.get());
+        assertEquals(1, mcpFixture.checkpointSaves.get());
+      } finally {
+        mcpAllowSaveFinish.countDown();
+        mcpFixture.monitor.cancel();
+      }
+      mcpServer.get(10, TimeUnit.SECONDS);
+
+      int wsPort = findConsecutivePortWindow(2);
+      CountDownLatch wsSaveEntered = new CountDownLatch(1);
+      CountDownLatch wsAllowSaveFinish = new CountDownLatch(1);
+      AtomicBoolean wsSaveInProgress = new AtomicBoolean(false);
+      AtomicBoolean wsOverlapDetected = new AtomicBoolean(false);
+
+      RecordingFixture wsFixture =
+          new RecordingFixture(
+              "ws-race.bin",
+              true,
+              () -> {
+                wsSaveInProgress.set(true);
+                wsSaveEntered.countDown();
+                try {
+                  wsAllowSaveFinish.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                  Thread.currentThread().interrupt();
+                } finally {
+                  wsSaveInProgress.set(false);
+                }
+              },
+              () -> {
+                if (wsSaveInProgress.get()) {
+                  wsOverlapDetected.set(true);
+                }
+              });
+
+      Future<?> wsServer =
+          pool.submit(
+              () -> {
+                Bootstrap.startFromScript(
+                    wsFixture.script,
+                    new String[] {"port=" + wsPort},
+                    null,
+                    ignored -> wsFixture.services,
+                    wsPort);
+                return null;
+              });
+
+      HttpClient wsHttpClient = HttpClient.newHttpClient();
+      WebSocket ws = null;
+      try {
+        assertTrue(wsSaveEntered.await(5, TimeUnit.SECONDS));
+        WsReplyListener listener = new WsReplyListener();
+        ws =
+            wsHttpClient
+                .newWebSocketBuilder()
+                .buildAsync(URI.create("ws://127.0.0.1:" + wsPort + "/ws/agent"), listener)
+                .get(5, TimeUnit.SECONDS);
+        String readyNotification = listener.messages.poll(5, TimeUnit.SECONDS);
+        assertTrue(readyNotification != null && readyNotification.contains("ghidra.ready"));
+
+        ws.sendText(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"program.get\",\"params\":{}}", true)
+            .get(5, TimeUnit.SECONDS);
+
+        assertNull(
+            listener.messages.poll(75, TimeUnit.MILLISECONDS),
+            "WebSocket RPC must wait until checkpoint save finishes");
+
+        wsAllowSaveFinish.countDown();
+        String reply = listener.messages.poll(5, TimeUnit.SECONDS);
+        assertTrue(reply != null && reply.contains("ws-race.bin"));
+        assertFalse(wsOverlapDetected.get());
+        ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+      } finally {
+        wsAllowSaveFinish.countDown();
+        if (ws != null) {
+          ws.abort();
+        }
+        wsFixture.monitor.cancel();
+      }
+      wsServer.get(10, TimeUnit.SECONDS);
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
   @SuppressWarnings("unchecked")
   private static Map<String, Object> postJsonRpc(
       HttpClient client, String endpoint, Map<String, Object> payload)
@@ -472,6 +653,14 @@ class BootstrapGuiAndSaveGuardTest {
     final GhidraScript script;
 
     RecordingFixture(String programName, boolean initiallyChanged) {
+      this(programName, initiallyChanged, () -> {}, () -> {});
+    }
+
+    RecordingFixture(
+        String programName,
+        boolean initiallyChanged,
+        Runnable onCheckpointSave,
+        Runnable onProgramGet) {
       this.changed = new AtomicBoolean(initiallyChanged);
       this.program =
           (Program)
@@ -493,6 +682,22 @@ class BootstrapGuiAndSaveGuardTest {
                     if ("saveProgram".equals(method.getName())) {
                       exitSaves.incrementAndGet();
                       return null;
+                    }
+                    if ("getProgram".equals(method.getName())) {
+                      onProgramGet.run();
+                      return new app.byteland.ghidra.service.program.ProgramResource(
+                          programName,
+                          "/" + programName,
+                          "ELF",
+                          "ram:00400000",
+                          "ram:00400000",
+                          "ram:00401000",
+                          "x86:LE:64:default",
+                          "gcc",
+                          null,
+                          null,
+                          0,
+                          0);
                     }
                     throw new UnsupportedOperationException(method.getName());
                   });
@@ -560,6 +765,7 @@ class BootstrapGuiAndSaveGuardTest {
             @Override
             public void saveProgram(Program target) {
               checkpointSaves.incrementAndGet();
+              onCheckpointSave.run();
             }
           };
     }

@@ -252,6 +252,30 @@ class DecompilationServiceImplTest {
     assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(null));
     assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(null, pool));
     assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(fixture.session, null));
+    assertThrows(
+        NullPointerException.class,
+        () -> new DecompilationServiceImpl(fixture.session, pool, null));
+  }
+
+  @Test
+  void clampsNegativeClockDeltaToZeroElapsedMilliseconds() {
+    Fixture fixture = createFixture(new AtomicLong(1L));
+    FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
+    long[] ticks = {10_000_000L, 8_000_000L, 7_500_000L, 20_000_000L, 25_600_000L};
+    AtomicInteger index = new AtomicInteger();
+
+    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
+        fixture.session,
+        new LeasePool<>(1, () -> decompiler),
+        () -> ticks[index.getAndIncrement()])) {
+      DecompilationResource backwardClock =
+          service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, true);
+      assertEquals(0L, backwardClock.elapsedMs());
+
+      DecompilationResource forwardClock =
+          service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
+      assertEquals(5L, forwardClock.elapsedMs());
+    }
   }
 
   @Test

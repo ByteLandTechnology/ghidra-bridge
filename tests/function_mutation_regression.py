@@ -270,9 +270,9 @@ def run_test(headless, root):
     url = f"http://127.0.0.1:{port}/mcp"
     headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
 
-    def call(message):
+    def call(message, timeout=30):
         request = urllib.request.Request(url, json.dumps(message).encode(), headers, method="POST")
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode()
         if not body:
             return {}
@@ -337,7 +337,7 @@ def run_test(headless, root):
                         + log_path.read_text(encoding="utf-8", errors="replace")[-2000:]
                     )
                 try:
-                    if call(initialize).get("result"):
+                    if call(initialize, timeout=5).get("result"):
                         ready = True
                         break
                 except (OSError, TimeoutError, urllib.error.URLError):

@@ -21,6 +21,9 @@ public record DecompilationResource(
     Objects.requireNonNull(entry, "entry");
     Objects.requireNonNull(name, "name");
     Objects.requireNonNull(format, "format");
+    if (elapsedMs < 0) {
+      throw new IllegalArgumentException("elapsedMs must not be negative");
+    }
     if (format == Format.TEXT && c == null) {
       throw new IllegalArgumentException("text decompilation requires c");
     }

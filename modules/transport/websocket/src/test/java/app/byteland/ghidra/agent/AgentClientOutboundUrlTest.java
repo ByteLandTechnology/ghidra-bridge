@@ -138,14 +138,22 @@ class AgentClientOutboundUrlTest {
       Thread responder =
           new Thread(
               () -> {
-                try (var socket = rejectServer.accept()) {
-                  socket
-                      .getOutputStream()
-                      .write(
-                          "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"
-                              .getBytes( java.nio.charset.StandardCharsets.US_ASCII));
-                  socket.getOutputStream().flush();
-                } catch (IOException ignored) {
+                while (!rejectServer.isClosed()) {
+                  try (var socket = rejectServer.accept()) {
+                    WebSocketHandshake.readHandshake(
+                        socket, System.nanoTime() + TimeUnit.SECONDS.toNanos(5));
+                    WebSocketHandshake.writeHttpResponse(
+                        socket.getOutputStream(),
+                        401,
+                        "Unauthorized",
+                        java.util.List.of("Connection: close"),
+                        null);
+                    WebSocketHandshake.closeAfterHttpError(socket, 250, 8192);
+                  } catch (IOException ignored) {
+                    if (rejectServer.isClosed()) {
+                      break;
+                    }
+                  }
                 }
               });
       responder.setDaemon(true);
