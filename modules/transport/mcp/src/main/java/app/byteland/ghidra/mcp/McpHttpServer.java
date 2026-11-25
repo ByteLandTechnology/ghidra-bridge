@@ -135,10 +135,6 @@ public final class McpHttpServer implements AutoCloseable {
     server.start();
   }
 
-  public void awaitShutdown() throws InterruptedException {
-    shutdownLatch.await();
-  }
-
   public boolean awaitShutdown(BooleanSupplier cancelRequested) throws InterruptedException {
     return awaitShutdown(shutdownLatch, cancelRequested, this::close, 250L);
   }
@@ -323,7 +319,7 @@ public final class McpHttpServer implements AutoCloseable {
       String sessionId = UUID.randomUUID().toString();
       SseSession session;
       try {
-        session = new SseSession(sessionId, exchange);
+        session = new SseSession(exchange);
       } catch (IOException error) {
         log.method(HTTP_GET_METHOD).error().status(500);
         return;
@@ -914,10 +910,6 @@ public final class McpHttpServer implements AutoCloseable {
         config.allowedOrigins());
   }
 
-  boolean isAllowedOrigin(HttpExchange exchange) {
-    return validateOrigin(exchange).allowed();
-  }
-
   static boolean isAllowedOrigin(List<String> originHeaders, String configuredHost) {
     return isAllowedOrigin(originHeaders, configuredHost, null);
   }
@@ -1126,7 +1118,6 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   static final class SseSession implements AutoCloseable {
-    private final String id;
     private final HttpExchange exchange;
     private final OutputStream output;
     private final AtomicBoolean active = new AtomicBoolean(true);
@@ -1134,8 +1125,7 @@ public final class McpHttpServer implements AutoCloseable {
     private final CountDownLatch closeLatch = new CountDownLatch(1);
     private final ReentrantLock writeLock = new ReentrantLock();
 
-    SseSession(String id, HttpExchange exchange) throws IOException {
-      this.id = id;
+    SseSession(HttpExchange exchange) throws IOException {
       this.exchange = exchange;
       exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
       exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-transform");
