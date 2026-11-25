@@ -178,7 +178,7 @@ class WebSocketHostValidationTest {
       assertEquals(400, duplicateStatus);
       assertEquals(0, openCount.get());
 
-      // Valid loopback Host headers -> 101 Switching Protocols
+      // Valid loopback Host headers return `101 Switching Protocols`.
       for (String allowedHost :
           List.of("127.0.0.1:" + port, "[::1]:" + port, "localhost:" + port)) {
         CountDownLatch closedLatch = running.resetCloseLatch();

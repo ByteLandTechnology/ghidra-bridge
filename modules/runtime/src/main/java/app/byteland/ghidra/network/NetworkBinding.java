@@ -224,8 +224,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Normalizes a host string by trimming ASCII whitespace, stripping surrounding IPv6 brackets when
-   * a colon is present, and lowercasing in {@link Locale#ROOT}.
+   * Normalizes a host string to lowercase in {@link Locale#ROOT}. Trims ASCII whitespace and
+   * removes outer IPv6 brackets when a colon is present.
    */
   public static String normalizeHost(String host) {
     Objects.requireNonNull(host, "host");
@@ -240,9 +240,9 @@ public final class NetworkBinding {
   }
 
   /**
-   * Returns {@code true} when {@code host} is {@code localhost} (case-insensitive) or parses
-   * syntactically as a literal IPv4/IPv6 loopback address ({@code 127.0.0.0/8}, {@code ::1}, or
-   * IPv4-mapped loopback {@code ::ffff:127.0.0.0/104}) without performing DNS lookups.
+   * Returns {@code true} when {@code host} is {@code localhost} or a literal IPv4/IPv6 loopback
+   * address ({@code 127.0.0.0/8}, {@code ::1}, or {@code ::ffff:127.0.0.0/104}). Does not run DNS
+   * lookups.
    */
   public static boolean isLiteralLoopbackHost(String host) {
     if (host == null) {
@@ -257,8 +257,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Compares two host strings case-insensitively and across canonical IPv4/IPv6 literal
-   * representations without performing DNS lookups.
+   * Compares two host strings case-insensitively and across canonical IPv4/IPv6 literal forms.
+   * Does not run DNS lookups.
    */
   public static boolean hostsMatch(String firstHost, String secondHost) {
     if (firstHost == null || secondHost == null) {
@@ -281,8 +281,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Parses a strict IPv4 or (optionally bracketed) IPv6 literal into an {@link InetAddress} without
-   * performing DNS resolution, or returns {@code null} if {@code host} is not a valid IP literal.
+   * Parses a strict IPv4 or IPv6 literal (with optional brackets) into an {@link InetAddress}
+   * without DNS resolution. Returns {@code null} if {@code host} is not a valid IP literal.
    */
   public static InetAddress parseIpLiteral(String host) {
     if (host == null) {
@@ -346,8 +346,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Parses a strict dotted-quad decimal IPv4 literal (rejecting leading zeros, short forms, and
-   * non-ASCII digits) into a 4-byte array, or returns {@code null} if invalid.
+   * Parses a strict dotted-quad decimal IPv4 literal into a 4-byte array, or returns {@code null}
+   * if invalid. Rejects zero prefixes, short forms, and non-ASCII digits.
    */
   public static byte[] parseIpv4Literal(String literal) {
     if (literal == null || literal.isEmpty() || literal.length() > 15) {
@@ -387,9 +387,9 @@ public final class NetworkBinding {
   }
 
   /**
-   * Parses a strict unbracketed IPv6 literal (supporting {@code ::} zero-compression and trailing
-   * dotted-quad IPv4, while rejecting {@code %} zone IDs) into a 16-byte array, or returns {@code
-   * null} if invalid.
+   * Parses a strict unbracketed IPv6 literal into a 16-byte array, or returns {@code null} if
+   * invalid. Accepts {@code ::} zero-compression and an embedded dotted-quad IPv4 suffix, and
+   * rejects {@code %} zone IDs.
    */
   public static byte[] parseIpv6Literal(String literal) {
     if (literal == null

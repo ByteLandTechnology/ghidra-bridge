@@ -378,7 +378,7 @@ class WebSocketEnvelopeAndSendErrorTest {
       assertProtocolError(sent.removeFirst(), -32600);
       assertFalse(disconnected.get());
 
-      // Check that a raw map with non-string keys throws ApiException.
+      // Check that a raw map with non-text keys throws ApiException.
       Map<Object, Object> untyped = new HashMap<>();
       untyped.put(42, "bad-key");
       @SuppressWarnings("unchecked")
@@ -498,8 +498,8 @@ class WebSocketEnvelopeAndSendErrorTest {
                     WebSocketFrames.Frame readyFrame =
                         WebSocketFrames.readFrame(peer.getInputStream());
                     assertEquals(WebSocketFrames.TEXT_OPCODE, readyFrame.opcode());
-                    // Use an ID larger than the 16 KiB JDK WebSocket buffer so the reply flushes
-                    // more than one buffer to the reset socket and fails immediately.
+                    // Use an ID larger than the 16 KiB JDK WebSocket buffer.
+                    // The reply then flushes across buffers to the reset socket and fails fast.
                     String largeId = "req-rst-" + "x".repeat(20_000);
                     byte[] requestBytes =
                         ("{\"jsonrpc\":\"2.0\",\"id\":\""
