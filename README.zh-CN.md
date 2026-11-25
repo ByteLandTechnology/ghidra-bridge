@@ -44,8 +44,8 @@ ghidra-bridge.jar
 1. 在 Ghidra CodeBrowser 中打开目标二进制程序。
 2. 打开 Script Manager（脚本管理器）窗口。
 3. 将 `build/ghidra-script/` 目录添加到脚本目录列表中。
-4. 运行 `Bridge.java`（WebSocket）或 `GhidraMcp.java`（MCP）。
-5. 在弹出的参数窗口中输入配置参数。
+4. 在 `Ghidra Bridge` 分类下运行 `Bridge.java`（WebSocket）或 `GhidraMcp.java`（MCP）。
+5. 在 Console（控制台）窗口查看绑定的端点 URL、`session_id` 和 `tool_prefix`。脚本无需弹窗即可在 `127.0.0.1`（默认端口 `8765` 或 `8766`）自动启动，并在多标签页端口冲突时顺延使用下一个空闲端口。
 
 ### 在 Ghidra Headless 无头模式中运行
 
@@ -102,6 +102,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `token` | *(无)* | Bearer 认证所需的共享密钥 Token。 |
 | `ws_url` | *(无)* | 出站客户端模式中的远程 WebSocket URL。 |
 | `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra.program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
+| `allowed_origins` | 回环与 `host` | 仅限 MCP。以逗号分隔的允许浏览器来源列表（`scheme://host[:port]`），或设为 `none` 以拒绝所有 `Origin` 头部；优先级高于 `GHIDRA_MCP_ALLOWED_ORIGINS`，包含非回环来源时必须配置 `token`。 |
 | `jar` | *(自动)* | 当 `ghidra-bridge.jar` 不在脚本文件旁边时使用的路径。 |
 | `exit_deadline_sec` | *(无)* | 仅出站模式。会话结束后若 Ghidra 在该秒数内仍未退出，则强制停止 JVM。活动保存会先完成。仅用于由宿主启动的 headless Ghidra。 |
 
@@ -110,7 +111,8 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 桥接服务强制执行严格的安全边界：
 
 - **默认回环**：监听服务默认绑定至 `127.0.0.1`。
-- **强制 Token**：非回环网络接口上的监听器必须配置 `token`。
+- **强制 Token**：非回环网络接口上的监听器，或 `allowed_origins` / `GHIDRA_MCP_ALLOWED_ORIGINS` 中包含非回环来源时，必须配置 `token`。
+- **浏览器来源策略**：MCP HTTP 服务端默认仅允许回环地址和已配置的 `host` 来源，并以 HTTP 403 拒绝外部来源；可通过 `allowed_origins` 或 `GHIDRA_MCP_ALLOWED_ORIGINS` 显式覆盖白名单，或设为 `none` 拒绝所有携带 `Origin` 头部的请求。
 - **Bearer 请求头**：入站请求必须携带 `Authorization: Bearer <token>` 头部。
 - **拒绝 URL Token**：服务端直接以 HTTP 400 拒绝在 URL 查询参数中传递 Token。
 - **日志脱敏**：服务端绝不会把安全 Token 写入日志文件或输出控制台。

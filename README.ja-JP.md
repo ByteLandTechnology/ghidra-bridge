@@ -44,8 +44,8 @@ ghidra-bridge.jar
 1. Ghidra CodeBrowser で対象のバイナリを開きます。
 2. Script Manager（スクリプトマネージャ）ウィンドウを開きます。
 3. スクリプトパス一覧に `build/ghidra-script/` を追加します。
-4. `Bridge.java`（WebSocket）または `GhidraMcp.java`（MCP）を実行します。
-5. プロンプトウィンドウに設定引数を入力します。
+4. `Ghidra Bridge` カテゴリの `Bridge.java`（WebSocket）または `GhidraMcp.java`（MCP）を実行します。
+5. Console（コンソール）ウィンドウに出力されるバインド済みエンドポイント URL、`session_id`、`tool_prefix` を確認します。スクリプトはプロンプトなしで `127.0.0.1`（既定ポート `8765` または `8766`）で自動起動し、追加タブでポートが使用中の場合は次の空きポートを自動選択します。
 
 ### Ghidra ヘッドレスモードでの実行
 
@@ -102,6 +102,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `token` | *(なし)* | Bearer 認証用の共有シークレットトークン。 |
 | `ws_url` | *(なし)* | 送信型クライアントモードのリモート WebSocket URL。 |
 | `tool_prefix` | `ghidra` | MCP 専用。すべてのツール名の先頭部分（`ghidra.program` の `ghidra` など）。1 つのクライアントが複数のサーバーに接続する場合、サーバーごとに異なる値を指定します。 |
+| `allowed_origins` | ループバックおよび `host` | MCP 専用。許可するブラウザオリジンのカンマ区切りリスト（`scheme://host[:port]`）、またはすべての `Origin` ヘッダーを拒否する `none`。`GHIDRA_MCP_ALLOWED_ORIGINS` より優先され、ループバック以外のオリジンには `token` が必要です。 |
 | `jar` | *(自動)* | `ghidra-bridge.jar` がスクリプトファイルの隣にない場合のパス。 |
 | `exit_deadline_sec` | *(なし)* | 送信型のみ。セッション終了後、この秒数以内に Ghidra が終了しない場合に JVM を強制停止します。アクティブな保存は先に完了します。ホストが起動するヘッドレスの Ghidra にのみ使用してください。 |
 
@@ -110,7 +111,8 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 ブリッジは厳格なセキュリティ境界を適用します:
 
 - **ループバック既定**: リスナーはデフォルトで `127.0.0.1` にバインドされます。
-- **トークン必須**: ループバック以外のネットワークインターフェース上のリスナーには `token` が必要です。
+- **トークン必須**: ループバック以外のネットワークインターフェース上のリスナー、または `allowed_origins` / `GHIDRA_MCP_ALLOWED_ORIGINS` にループバック以外のオリジンが含まれる場合は `token` が必要です。
+- **ブラウザオリジンポリシー**: MCP HTTP サーバーはデフォルトでループバックおよび設定済みの `host` オリジンのみを許可し、外部オリジンを HTTP 403 で拒否します。`allowed_origins` または `GHIDRA_MCP_ALLOWED_ORIGINS` で許可リストを上書きでき、`none` を指定するとすべての `Origin` ヘッダー付きリクエストを拒否します。
 - **Bearer ヘッダー**: 受信リクエストは `Authorization: Bearer <token>` を送信する必要があります。
 - **URL トークンの拒否**: URL クエリ文字列に含まれるトークンは HTTP 400 で拒否されます。
 - **ログの機密保護**: サーバーはシークレットトークンをログファイルやコンソールに出力しません。

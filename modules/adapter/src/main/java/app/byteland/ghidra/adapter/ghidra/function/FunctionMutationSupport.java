@@ -3,9 +3,14 @@ package app.byteland.ghidra.adapter.ghidra.function;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import ghidra.app.cmd.function.UpdateFunctionCommand;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.Function.FunctionUpdateType;
+import ghidra.program.model.listing.Variable;
 import ghidra.program.model.listing.VariableStorage;
+import ghidra.program.model.symbol.SourceType;
+import java.util.List;
 
 final class FunctionMutationSupport {
   private FunctionMutationSupport() {}
@@ -30,6 +35,28 @@ final class FunctionMutationSupport {
           "function definition parameter types must use kind=pointer: " + dataType.getPathName());
     }
     return dataType;
+  }
+
+  static SourceType signatureSource(Function function) {
+    SourceType source = function.getSignatureSource();
+    return source == null ? SourceType.USER_DEFINED : source;
+  }
+
+  static Function updateFunction(
+      GhidraSession context,
+      Function function,
+      FunctionUpdateType updateType,
+      String callingConvention,
+      Variable returnVar,
+      List<? extends Variable> parameters,
+      SourceType source,
+      String failureMessage,
+      String operation) {
+    context.runCommand(
+        new UpdateFunctionCommand(
+            function, updateType, callingConvention, returnVar, parameters, source, false),
+        failureMessage);
+    return refreshFunction(context, function, operation);
   }
 
   static Function refreshFunction(GhidraSession context, Function function, String operation) {

@@ -39,6 +39,9 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global caller_entry
+caller_entry: call label_only
+ ret
 """
 
 
@@ -121,6 +124,18 @@ def run_test(headless, root):
             if not ready:
                 raise RuntimeError("Ghidra did not start")
             call({"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+            initial_history = tool(100, "ghidra_program", {
+                "operation": "history",
+                "params": {},
+            })["result"]
+            assert initial_history == {
+                "can_undo": False,
+                "can_redo": False,
+                "undo_list": [],
+                "redo_list": [],
+            }, f"unexpected initial_history: {initial_history}"
+            tool(101, "ghidra_program", {"operation": "undo", "params": {}}, success=False)
 
             first = function(2, "create", {
                 "resource": {"entry": symbols["func_a"], "name": "func_a"},
@@ -349,35 +364,109 @@ def run_test(headless, root):
                 "after_auto",
             ]
 
-            history_before_batch = tool(37, "ghidra_program", {
+            decomp_initial = tool(37, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a" in decomp_initial["c"]
+            decomp_repeat = tool(38, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert decomp_repeat["c"] == decomp_initial["c"]
+
+            sym_items = tool(39, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "func_a", "address": symbols["func_a"]}},
+            })["result"]["items"]
+            assert len(sym_items) == 1
+            renamed_sym = tool(40, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": sym_items[0]["id"]},
+                    "patch": {"name": "func_a_renamed"},
+                },
+            })["result"]
+            assert renamed_sym["name"] == "func_a_renamed"
+            decomp_after_rename = tool(41, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a_renamed" in decomp_after_rename["c"]
+
+            caller = function(42, "create", {
+                "resource": {"entry": symbols["caller_entry"], "name": "caller_entry"},
+                "disassemble": True,
+            })["result"]
+            assert caller["name"] == "caller_entry"
+            caller_before = tool(43, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_only(" in caller_before["c"]
+            caller_repeat = tool(44, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert caller_repeat["c"] == caller_before["c"]
+
+            callee_syms = tool(45, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "label_only", "address": symbols["label_only"]}},
+            })["result"]["items"]
+            assert len(callee_syms) == 1
+            tool(46, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": callee_syms[0]["id"]},
+                    "patch": {"name": "label_renamed"},
+                },
+            })
+            caller_after = tool(47, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_renamed(" in caller_after["c"]
+            assert "label_only(" not in caller_after["c"]
+
+            history_before_batch = tool(48, "ghidra_program", {
                 "operation": "history",
                 "params": {},
             })["result"]
             assert history_before_batch["can_undo"] is True
-            assert history_before_batch["undo_name"] == "function_parameter.create"
+            assert history_before_batch["undo_name"] == "symbol.patch"
             assert history_before_batch["can_redo"] is False
 
-            undone_param = tool(38, "ghidra_program", {
+            undone_rename = tool(49, "ghidra_program", {
                 "operation": "undo",
                 "params": {},
             })["result"]
-            assert undone_param["action"] == "undo"
-            assert undone_param["transaction_name"] == "function_parameter.create"
-            assert undone_param["can_redo"] is True
-            assert function(39, "get", selector("label_only"))["result"]["parameter_count"] == 1
+            assert undone_rename["action"] == "undo"
+            assert undone_rename["transaction_name"] == "symbol.patch"
+            assert undone_rename["can_redo"] is True
+            caller_after_undo = tool(50, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_only(" in caller_after_undo["c"]
+            assert "label_renamed(" not in caller_after_undo["c"]
 
-            redone_param = tool(40, "ghidra_program", {
+            redone_rename = tool(51, "ghidra_program", {
                 "operation": "redo",
                 "params": {},
             })["result"]
-            assert redone_param["action"] == "redo"
-            assert redone_param["transaction_name"] == "function_parameter.create"
-            assert redone_param["can_redo"] is False
-            assert function(41, "get", selector("label_only"))["result"]["parameter_count"] == 2
+            assert redone_rename["action"] == "redo"
+            assert redone_rename["transaction_name"] == "symbol.patch"
+            assert redone_rename["can_redo"] is False
+            caller_after_redo = tool(52, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_renamed(" in caller_after_redo["c"]
 
-            tool(42, "ghidra_program", {"operation": "redo", "params": {}}, success=False)
+            tool(53, "ghidra_program", {"operation": "redo", "params": {}}, success=False)
 
-            tool(43, "ghidra_batch", {
+            tool(54, "ghidra_batch", {
                 "operation": "execute",
                 "params": {
                     "transaction_mode": "all_or_none",
@@ -404,33 +493,32 @@ def run_test(headless, root):
                     ],
                 },
             })
-            history_after_batch = tool(44, "ghidra_program", {
+            history_after_batch = tool(55, "ghidra_program", {
                 "operation": "history",
                 "params": {},
             })["result"]
             assert history_after_batch["can_undo"] is True
             assert history_after_batch["undo_name"] == "batch.execute"
 
-            undone_batch = tool(45, "ghidra_program", {
+            undone_batch = tool(56, "ghidra_program", {
                 "operation": "undo",
                 "params": {},
             })["result"]
             assert undone_batch["transaction_name"] == "batch.execute"
-            assert function(46, "get", selector("func_a"))["result"]["name"] == "func_a"
-            tool(47, "ghidra_comment", {
+            assert function(57, "get", selector("func_a"))["result"]["name"] == "func_a_renamed"
+            tool(58, "ghidra_comment", {
                 "operation": "get",
                 "params": {"selector": {"address": symbols["func_a"], "type": "plate"}},
             }, success=False)
 
-            tool(48, "ghidra_program", {"operation": "save", "params": {}})
-            history_after_save = tool(49, "ghidra_program", {
+            tool(59, "ghidra_program", {"operation": "save", "params": {}})
+            history_after_save = tool(60, "ghidra_program", {
                 "operation": "history",
                 "params": {},
             })["result"]
             assert history_after_save["can_undo"] is False
             assert history_after_save["can_redo"] is False
-            tool(50, "ghidra_program", {"operation": "undo", "params": {}}, success=False)
-
+            tool(61, "ghidra_program", {"operation": "undo", "params": {}}, success=False)
             print("Function mutation regression checks passed")
         finally:
             if ready:

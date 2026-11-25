@@ -306,61 +306,7 @@
                     - "undo_list"
                     - "redo_list"
                     "type": "object"
-                  - "$defs":
-                      "data_type_reference":
-                        "oneOf":
-                        - "additionalProperties": !!bool "false"
-                          "properties":
-                            "kind":
-                              "enum":
-                              - "named"
-                              "type": "string"
-                            "name":
-                              "minLength": !!int "1"
-                              "type": "string"
-                          "required":
-                          - "kind"
-                          - "name"
-                          "type": "object"
-                        - "additionalProperties": !!bool "false"
-                          "properties":
-                            "kind":
-                              "enum":
-                              - "pointer"
-                              "type": "string"
-                            "target":
-                              "$ref": "#/$defs/data_type_reference"
-                          "required":
-                          - "kind"
-                          - "target"
-                          "type": "object"
-                        - "additionalProperties": !!bool "false"
-                          "properties":
-                            "count":
-                              "maximum": !!int "2147483647"
-                              "minimum": !!int "1"
-                              "type": "integer"
-                            "element":
-                              "$ref": "#/$defs/data_type_reference"
-                            "kind":
-                              "enum":
-                              - "array"
-                              "type": "string"
-                          "required":
-                          - "kind"
-                          - "element"
-                          - "count"
-                          "type": "object"
-                        - "additionalProperties": !!bool "false"
-                          "properties":
-                            "kind":
-                              "enum":
-                              - "untyped_pointer"
-                              "type": "string"
-                          "required":
-                          - "kind"
-                          "type": "object"
-                    "additionalProperties": !!bool "false"
+                  - "additionalProperties": !!bool "false"
                     "properties":
                       "action":
                         "enum":
@@ -397,61 +343,7 @@
                     - "undo_list"
                     - "redo_list"
                     "type": "object"
-                  - "$defs":
-                      "data_type_reference":
-                        "oneOf":
-                        - "additionalProperties": !!bool "false"
-                          "properties":
-                            "kind":
-                              "enum":
-                              - "named"
-                              "type": "string"
-                            "name":
-                              "minLength": !!int "1"
-                              "type": "string"
-                          "required":
-                          - "kind"
-                          - "name"
-                          "type": "object"
-                        - "additionalProperties": !!bool "false"
-                          "properties":
-                            "kind":
-                              "enum":
-                              - "pointer"
-                              "type": "string"
-                            "target":
-                              "$ref": "#/$defs/data_type_reference"
-                          "required":
-                          - "kind"
-                          - "target"
-                          "type": "object"
-                        - "additionalProperties": !!bool "false"
-                          "properties":
-                            "count":
-                              "maximum": !!int "2147483647"
-                              "minimum": !!int "1"
-                              "type": "integer"
-                            "element":
-                              "$ref": "#/$defs/data_type_reference"
-                            "kind":
-                              "enum":
-                              - "array"
-                              "type": "string"
-                          "required":
-                          - "kind"
-                          - "element"
-                          - "count"
-                          "type": "object"
-                        - "additionalProperties": !!bool "false"
-                          "properties":
-                            "kind":
-                              "enum":
-                              - "untyped_pointer"
-                              "type": "string"
-                          "required":
-                          - "kind"
-                          "type": "object"
-                    "additionalProperties": !!bool "false"
+                  - "additionalProperties": !!bool "false"
                     "properties":
                       "action":
                         "enum":
@@ -7355,60 +7247,6 @@
                 "const": "program.history"
                 "type": "string"
               "params":
-                "$defs":
-                  "data_type_reference":
-                    "oneOf":
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "named"
-                          "type": "string"
-                        "name":
-                          "minLength": !!int "1"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      - "name"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "pointer"
-                          "type": "string"
-                        "target":
-                          "$ref": "#/$defs/data_type_reference"
-                      "required":
-                      - "kind"
-                      - "target"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "count":
-                          "maximum": !!int "2147483647"
-                          "minimum": !!int "1"
-                          "type": "integer"
-                        "element":
-                          "$ref": "#/$defs/data_type_reference"
-                        "kind":
-                          "enum":
-                          - "array"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      - "element"
-                      - "count"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "untyped_pointer"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      "type": "object"
                 "additionalProperties": !!bool "false"
                 "properties": {}
                 "type": "object"
@@ -7432,60 +7270,6 @@
                 "const": "program.undo"
                 "type": "string"
               "params":
-                "$defs":
-                  "data_type_reference":
-                    "oneOf":
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "named"
-                          "type": "string"
-                        "name":
-                          "minLength": !!int "1"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      - "name"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "pointer"
-                          "type": "string"
-                        "target":
-                          "$ref": "#/$defs/data_type_reference"
-                      "required":
-                      - "kind"
-                      - "target"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "count":
-                          "maximum": !!int "2147483647"
-                          "minimum": !!int "1"
-                          "type": "integer"
-                        "element":
-                          "$ref": "#/$defs/data_type_reference"
-                        "kind":
-                          "enum":
-                          - "array"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      - "element"
-                      - "count"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "untyped_pointer"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      "type": "object"
                 "additionalProperties": !!bool "false"
                 "properties": {}
                 "type": "object"
@@ -7509,60 +7293,6 @@
                 "const": "program.redo"
                 "type": "string"
               "params":
-                "$defs":
-                  "data_type_reference":
-                    "oneOf":
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "named"
-                          "type": "string"
-                        "name":
-                          "minLength": !!int "1"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      - "name"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "pointer"
-                          "type": "string"
-                        "target":
-                          "$ref": "#/$defs/data_type_reference"
-                      "required":
-                      - "kind"
-                      - "target"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "count":
-                          "maximum": !!int "2147483647"
-                          "minimum": !!int "1"
-                          "type": "integer"
-                        "element":
-                          "$ref": "#/$defs/data_type_reference"
-                        "kind":
-                          "enum":
-                          - "array"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      - "element"
-                      - "count"
-                      "type": "object"
-                    - "additionalProperties": !!bool "false"
-                      "properties":
-                        "kind":
-                          "enum":
-                          - "untyped_pointer"
-                          "type": "string"
-                      "required":
-                      - "kind"
-                      "type": "object"
                 "additionalProperties": !!bool "false"
                 "properties": {}
                 "type": "object"
@@ -31352,60 +31082,6 @@
       "read_only": !!bool "true"
       "requires_transaction": !!bool "false"
     "input_schema":
-      "$defs":
-        "data_type_reference":
-          "oneOf":
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "named"
-                "type": "string"
-              "name":
-                "minLength": !!int "1"
-                "type": "string"
-            "required":
-            - "kind"
-            - "name"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "pointer"
-                "type": "string"
-              "target":
-                "$ref": "#/$defs/data_type_reference"
-            "required":
-            - "kind"
-            - "target"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "count":
-                "maximum": !!int "2147483647"
-                "minimum": !!int "1"
-                "type": "integer"
-              "element":
-                "$ref": "#/$defs/data_type_reference"
-              "kind":
-                "enum":
-                - "array"
-                "type": "string"
-            "required":
-            - "kind"
-            - "element"
-            - "count"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "untyped_pointer"
-                "type": "string"
-            "required":
-            - "kind"
-            "type": "object"
       "additionalProperties": !!bool "false"
       "properties": {}
       "type": "object"
@@ -31502,118 +31178,10 @@
       "read_only": !!bool "false"
       "requires_transaction": !!bool "false"
     "input_schema":
-      "$defs":
-        "data_type_reference":
-          "oneOf":
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "named"
-                "type": "string"
-              "name":
-                "minLength": !!int "1"
-                "type": "string"
-            "required":
-            - "kind"
-            - "name"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "pointer"
-                "type": "string"
-              "target":
-                "$ref": "#/$defs/data_type_reference"
-            "required":
-            - "kind"
-            - "target"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "count":
-                "maximum": !!int "2147483647"
-                "minimum": !!int "1"
-                "type": "integer"
-              "element":
-                "$ref": "#/$defs/data_type_reference"
-              "kind":
-                "enum":
-                - "array"
-                "type": "string"
-            "required":
-            - "kind"
-            - "element"
-            - "count"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "untyped_pointer"
-                "type": "string"
-            "required":
-            - "kind"
-            "type": "object"
       "additionalProperties": !!bool "false"
       "properties": {}
       "type": "object"
     "output_schema":
-      "$defs":
-        "data_type_reference":
-          "oneOf":
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "named"
-                "type": "string"
-              "name":
-                "minLength": !!int "1"
-                "type": "string"
-            "required":
-            - "kind"
-            - "name"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "pointer"
-                "type": "string"
-              "target":
-                "$ref": "#/$defs/data_type_reference"
-            "required":
-            - "kind"
-            - "target"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "count":
-                "maximum": !!int "2147483647"
-                "minimum": !!int "1"
-                "type": "integer"
-              "element":
-                "$ref": "#/$defs/data_type_reference"
-              "kind":
-                "enum":
-                - "array"
-                "type": "string"
-            "required":
-            - "kind"
-            - "element"
-            - "count"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "untyped_pointer"
-                "type": "string"
-            "required":
-            - "kind"
-            "type": "object"
       "additionalProperties": !!bool "false"
       "properties":
         "action":
@@ -31737,118 +31305,10 @@
       "read_only": !!bool "false"
       "requires_transaction": !!bool "false"
     "input_schema":
-      "$defs":
-        "data_type_reference":
-          "oneOf":
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "named"
-                "type": "string"
-              "name":
-                "minLength": !!int "1"
-                "type": "string"
-            "required":
-            - "kind"
-            - "name"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "pointer"
-                "type": "string"
-              "target":
-                "$ref": "#/$defs/data_type_reference"
-            "required":
-            - "kind"
-            - "target"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "count":
-                "maximum": !!int "2147483647"
-                "minimum": !!int "1"
-                "type": "integer"
-              "element":
-                "$ref": "#/$defs/data_type_reference"
-              "kind":
-                "enum":
-                - "array"
-                "type": "string"
-            "required":
-            - "kind"
-            - "element"
-            - "count"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "untyped_pointer"
-                "type": "string"
-            "required":
-            - "kind"
-            "type": "object"
       "additionalProperties": !!bool "false"
       "properties": {}
       "type": "object"
     "output_schema":
-      "$defs":
-        "data_type_reference":
-          "oneOf":
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "named"
-                "type": "string"
-              "name":
-                "minLength": !!int "1"
-                "type": "string"
-            "required":
-            - "kind"
-            - "name"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "pointer"
-                "type": "string"
-              "target":
-                "$ref": "#/$defs/data_type_reference"
-            "required":
-            - "kind"
-            - "target"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "count":
-                "maximum": !!int "2147483647"
-                "minimum": !!int "1"
-                "type": "integer"
-              "element":
-                "$ref": "#/$defs/data_type_reference"
-              "kind":
-                "enum":
-                - "array"
-                "type": "string"
-            "required":
-            - "kind"
-            - "element"
-            - "count"
-            "type": "object"
-          - "additionalProperties": !!bool "false"
-            "properties":
-              "kind":
-                "enum":
-                - "untyped_pointer"
-                "type": "string"
-            "required":
-            - "kind"
-            "type": "object"
       "additionalProperties": !!bool "false"
       "properties":
         "action":

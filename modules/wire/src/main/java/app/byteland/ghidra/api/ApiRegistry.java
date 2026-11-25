@@ -24,7 +24,6 @@ public final class ApiRegistry {
   public static final String INTERFACE_VERSION = "0.2.0";
   public static final int DEFAULT_LIMIT = 100;
   public static final int MAX_LIMIT = Page.MAX_LIMIT;
-  public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
   static final String ANALYSIS_START_METHOD = "analysis.start";
@@ -124,14 +123,6 @@ public final class ApiRegistry {
     return catalogSnapshot;
   }
 
-  public List<ApiMethod<Map<String, Object>, Object>> methods() {
-    return List.copyOf(methodsByName.values());
-  }
-
-  public Set<String> methodNames() {
-    return Collections.unmodifiableSet(methodsByName.keySet());
-  }
-
   public ApiMethod<Map<String, Object>, Object> method(String name) {
     return methodsByName.get(name);
   }
@@ -143,14 +134,6 @@ public final class ApiRegistry {
     }
     Map<String, Object> decoded = method.decodeRequest(params);
     return invokeDecoded(method, decoded, true);
-  }
-
-  Object dispatchWithoutTransaction(String name, Map<String, Object> params) throws Exception {
-    ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
-    if (method == null) {
-      throw new ApiException(404, "unknown_operation", "No such operation: " + name, "/operation");
-    }
-    return invokeDecoded(method, method.decodeRequest(params), false);
   }
 
   <T> T inTransaction(
@@ -246,15 +229,8 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
-    register(
-        name,
-        MethodEffects.readOnlyMethod(),
-        description,
-        input,
-        ApiSchemaCatalog.resourceSchema(fields, identityFields),
-        fields,
-        identityFields,
-        request -> WireValues.restrict(WireValues.resource(handler.handle(request)), fields));
+    registerResource(
+        name, MethodEffects.readOnlyMethod(), description, input, fields, identityFields, handler);
   }
 
   private static Map<String, Object> interfaceSchema(int methodCount) {
@@ -315,20 +291,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
-    register(
-        name,
-        MethodEffects.readOnlyMethod(),
-        description,
-        input,
-        ApiSchemaCatalog.listSchema(fields, identityFields),
-        fields,
-        identityFields,
-        request -> {
-          String resource = name.substring(0, name.indexOf('.'));
-          PageRequest page = decodePage(request, resource);
-          return canonicalList(
-              resource, request, handler.handle(request, page), page, fields, identityFields);
-        });
+    registerPagedList(name, description, input, fields, identityFields, false, handler);
   }
 
   void scanList(
@@ -354,12 +317,25 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
+    registerPagedList(name, description, input, fields, identityFields, true, handler);
+  }
+
+  private void registerPagedList(
+      String name,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      boolean includeScan,
+      PagedHandler handler) {
     register(
         name,
         MethodEffects.readOnlyMethod(),
         description,
         input,
-        ApiSchemaCatalog.scanListSchema(fields, identityFields),
+        includeScan
+            ? ApiSchemaCatalog.scanListSchema(fields, identityFields)
+            : ApiSchemaCatalog.listSchema(fields, identityFields),
         fields,
         identityFields,
         request -> {
@@ -408,6 +384,17 @@ public final class ApiRegistry {
   }
 
   void writeResource(
+      String name,
+      MethodEffects effects,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      ApiMethod.Handler<Map<String, Object>, Object> handler) {
+    registerResource(name, effects, description, input, fields, identityFields, handler);
+  }
+
+  private void registerResource(
       String name,
       MethodEffects effects,
       String description,
