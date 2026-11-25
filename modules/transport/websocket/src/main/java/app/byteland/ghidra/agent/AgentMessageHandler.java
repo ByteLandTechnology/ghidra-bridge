@@ -18,7 +18,6 @@ final class AgentMessageHandler {
     this.disconnectAction = disconnectAction;
   }
 
-  @SuppressWarnings("unchecked")
   void handleMessage(AgentClientChannels.MessageChannel channel, String message) {
     if (channel == null) return;
     Object parsed;
@@ -27,7 +26,16 @@ final class AgentMessageHandler {
     } catch (IllegalArgumentException invalidJson) {
       sendProtocolError(channel, -32700, "parse_error", "Invalid JSON");
       return;
+    } catch (RuntimeException invalidMessage) {
+      sendProtocolError(channel, -32600, "invalid_request", "Invalid JSON-RPC message");
+      return;
     }
+    handleParsed(channel, parsed);
+  }
+
+  @SuppressWarnings("unchecked")
+  void handleParsed(AgentClientChannels.MessageChannel channel, Object parsed) {
+    if (channel == null) return;
     if (!(parsed instanceof Map<?, ?> raw)) {
       sendProtocolError(channel, -32600, "invalid_request", "Message must be an object");
       return;
@@ -38,6 +46,9 @@ final class AgentMessageHandler {
     } catch (ApiException invalidEnvelope) {
       sendProtocolError(
           channel, -32600, invalidEnvelope.error().code(), invalidEnvelope.error().message());
+      return;
+    } catch (RuntimeException invalidEnvelope) {
+      sendProtocolError(channel, -32600, "invalid_request", "Invalid JSON-RPC message");
       return;
     }
     if (envelope instanceof MessageEnvelope.Request request) {
@@ -69,7 +80,7 @@ final class AgentMessageHandler {
     }
     channel.sendText(serialized);
     if (dispatcher.isShuttingDown()) {
-      disconnectAction.run();
+      disconnectOnShutdown();
     }
   }
 
@@ -78,15 +89,38 @@ final class AgentMessageHandler {
       return JsonUtil.toJson(
           AgentErrorMapper.errorResponse(requestId, error).toMap(), MAX_MESSAGE_BYTES);
     } catch (ApiException oversizedError) {
-      BridgeError fallback =
-          new BridgeError(
-              413, "response_too_large", "Response exceeds maximum size", null, Map.of());
-      MessageEnvelope.Response response =
+      return serializeOversizedFallback(requestId);
+    } catch (RuntimeException serializationFailure) {
+      try {
+        return JsonUtil.toJson(
+            AgentErrorMapper.errorResponse(
+                    requestId, new IllegalStateException("Internal error", serializationFailure))
+                .toMap(),
+            MAX_MESSAGE_BYTES);
+      } catch (ApiException oversizedError) {
+        return serializeOversizedFallback(null);
+      }
+    }
+  }
+
+  private static String serializeOversizedFallback(Object requestId) {
+    BridgeError fallback =
+        new BridgeError(
+            413, "response_too_large", "Response exceeds maximum size", null, Map.of());
+    MessageEnvelope.Response response =
+        new MessageEnvelope.Response(
+            requestId,
+            null,
+            new MessageEnvelope.RpcError(-32000, fallback.message(), fallback.toMap()));
+    try {
+      return JsonUtil.toJson(response.toMap(), MAX_MESSAGE_BYTES);
+    } catch (ApiException oversizedId) {
+      MessageEnvelope.Response nullIdResponse =
           new MessageEnvelope.Response(
-              requestId,
+              null,
               null,
               new MessageEnvelope.RpcError(-32000, fallback.message(), fallback.toMap()));
-      return JsonUtil.toJson(response.toMap(), MAX_MESSAGE_BYTES);
+      return JsonUtil.toJson(nullIdResponse.toMap(), MAX_MESSAGE_BYTES);
     }
   }
 
@@ -97,7 +131,15 @@ final class AgentMessageHandler {
       return;
     }
     if (dispatcher.isShuttingDown()) {
+      disconnectOnShutdown();
+    }
+  }
+
+  private void disconnectOnShutdown() {
+    try {
       disconnectAction.run();
+    } catch (RuntimeException failure) {
+      AgentClient.logTransportError("WebSocket shutdown disconnect failed", failure);
     }
   }
 

@@ -109,8 +109,8 @@ class BatchMethodLimitTest {
             passthroughTransactions(new AtomicBoolean(), new AtomicBoolean()));
     ApiRegistry baseRegistry = new ApiRegistry(services, "test", Map::of, () -> {});
     Map<String, ApiMethod<Map<String, Object>, Object>> methods = new java.util.LinkedHashMap<>();
-    for (ApiMethod<Map<String, Object>, Object> method : baseRegistry.methods()) {
-      methods.put(method.name(), method);
+    for (ApiCatalog.MethodDescriptor descriptor : baseRegistry.methodCatalog().methods()) {
+      methods.put(descriptor.name(), baseRegistry.method(descriptor.name()));
     }
     BatchMethod smallCapBatch =
         new BatchMethod(

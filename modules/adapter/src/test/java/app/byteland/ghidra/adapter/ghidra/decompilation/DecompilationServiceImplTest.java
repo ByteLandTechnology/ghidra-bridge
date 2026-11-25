@@ -231,9 +231,11 @@ class DecompilationServiceImplTest {
 
       modificationNumber.set(11L);
       try (LeasePool.Lease<DecompInterface> held = pool.acquire()) {
+        assertSame(secondDecompiler, held.value());
         service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       }
       try (LeasePool.Lease<DecompInterface> held = pool.acquire()) {
+        assertSame(firstDecompiler, held.value());
         service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       }
       assertEquals(1, firstDecompiler.flushCalls.get());

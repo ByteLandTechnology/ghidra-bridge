@@ -180,6 +180,95 @@ class AgentMessageHandlerLimitTest {
       assertEquals(2, sentMessages.size());
       assertFalse(disconnected.get());
       assertRpcResponseTooLarge(sentMessages.get(1), "comment-1");
+
+      // Oversized error details and unserializable error details both return bounded JSON-RPC errors.
+      MemoryService failingDetailsMemory =
+          proxy(
+              MemoryService.class,
+              (method, args) -> {
+                if (memoryReads.incrementAndGet() == 65) {
+                  throw new app.byteland.ghidra.api.ApiException(
+                      400, "bad_input", oversizedCommentText, "/selector");
+                }
+                throw new app.byteland.ghidra.api.ApiException(
+                    400,
+                    new app.byteland.ghidra.api.BridgeError(
+                        400,
+                        "bad_details",
+                        "bad",
+                        "/selector",
+                        Map.of("nested", Map.of(42, "bad-key"))));
+              });
+      BridgeServices errorServices =
+          new BridgeServices(
+              unused(ProgramService.class),
+              unused(AddressService.class),
+              oversizedComments,
+              unused(ReferenceService.class),
+              failingDetailsMemory,
+              unused(ListingService.class),
+              unused(FunctionService.class),
+              unused(GlobalVariableService.class),
+              analysis,
+              unused(DecompilationService.class),
+              unused(SymbolService.class),
+              unused(DataTypeService.class),
+              transactions,
+              "ws-test-program");
+      try (AgentDispatcher errorDispatcher = new AgentDispatcher(errorServices, config)) {
+        AgentMessageHandler errorHandler =
+            new AgentMessageHandler(config, errorDispatcher, () -> disconnected.set(true));
+        String readReq1 =
+            JsonUtil.toJson(
+                Map.of(
+                    "jsonrpc",
+                    "2.0",
+                    "id",
+                    "err-oversized",
+                    "method",
+                    "memory.read",
+                    "params",
+                    Map.of(
+                        "selector",
+                        Map.of("address", "ram:00100000"),
+                        "length",
+                        16,
+                        "encoding",
+                        "hex")));
+        errorHandler.handleMessage(channel, readReq1);
+        assertRpcResponseTooLarge(sentMessages.get(2), "err-oversized");
+
+        String readReq2 =
+            JsonUtil.toJson(
+                Map.of(
+                    "jsonrpc",
+                    "2.0",
+                    "id",
+                    "err-unserializable",
+                    "method",
+                    "memory.read",
+                    "params",
+                    Map.of(
+                        "selector",
+                        Map.of("address", "ram:00100000"),
+                        "length",
+                        16,
+                        "encoding",
+                        "hex")));
+        errorHandler.handleMessage(channel, readReq2);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> fallbackEnvelope =
+            (Map<String, Object>) JsonUtil.parse(sentMessages.get(3));
+        assertEquals("err-unserializable", fallbackEnvelope.get("id"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> fallbackError = (Map<String, Object>) fallbackEnvelope.get("error");
+        assertEquals(-32000, fallbackError.get("code"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> fallbackData = (Map<String, Object>) fallbackError.get("data");
+        assertEquals(500, fallbackData.get("status"));
+        assertEquals("internal_error", fallbackData.get("code"));
+        assertFalse(disconnected.get());
+      }
     }
   }
 
