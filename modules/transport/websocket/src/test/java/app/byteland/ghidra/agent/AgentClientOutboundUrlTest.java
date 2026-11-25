@@ -125,6 +125,51 @@ class AgentClientOutboundUrlTest {
               .getMessage()
               .contains("ws://127.0.0.1:" + unusedPort + "/ws/agent?<redacted>"));
       assertFalse(failure.getMessage().contains("marker-query-param"));
+      assertTrue(failure.getCause() != null);
+    }
+  }
+
+  @Test
+  @DisplayName("Preserves HTTP 401 handshake rejection cause when openSession fails")
+  void preservesHttp401CauseInOpenSession() throws Exception {
+    try (ServerSocket rejectServer = new ServerSocket()) {
+      rejectServer.bind(new InetSocketAddress("127.0.0.1", 0));
+      int port = rejectServer.getLocalPort();
+      Thread responder =
+          new Thread(
+              () -> {
+                try (var socket = rejectServer.accept()) {
+                  socket
+                      .getOutputStream()
+                      .write(
+                          "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"
+                              .getBytes( java.nio.charset.StandardCharsets.US_ASCII));
+                  socket.getOutputStream().flush();
+                } catch (IOException ignored) {
+                }
+              });
+      responder.setDaemon(true);
+      responder.start();
+
+      AgentConfig config =
+          AgentConfig.fromArgs(
+              "ws_url=ws://127.0.0.1:" + port + "/ws/agent", "session_id=outbound-401");
+      try (AgentDispatcher dispatcher =
+          new AgentDispatcher(stubBridgeServices(), config.sessionId())) {
+        AgentClient client =
+            new AgentClient(
+                config, dispatcher, new AgentClient.LifecycleListener() {}, Duration.ofSeconds(5));
+        IOException failure = assertThrows(IOException.class, () -> client.openSession(() -> false));
+        assertTrue(failure.getMessage().contains("ws://127.0.0.1:" + port + "/ws/agent"));
+        boolean found401 = false;
+        for (Throwable cause = failure.getCause(); cause != null; cause = cause.getCause()) {
+          if (cause.getMessage() != null && cause.getMessage().contains("401")) {
+            found401 = true;
+            break;
+          }
+        }
+        assertTrue(found401, "Expected nested cause chain to include HTTP 401 status detail");
+      }
     }
   }
 

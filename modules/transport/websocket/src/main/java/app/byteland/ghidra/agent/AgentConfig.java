@@ -79,6 +79,15 @@ public record AgentConfig(
     return port != null;
   }
 
+  public String serverEndpoint() {
+    if (port == null) {
+      return null;
+    }
+    String formattedHost =
+        host.indexOf(':') >= 0 && !host.startsWith("[") ? "[" + host + "]" : host;
+    return "ws://" + formattedHost + ":" + port + path;
+  }
+
   public String redactedWsUrl() {
     return redactWsUrl(wsUrl);
   }

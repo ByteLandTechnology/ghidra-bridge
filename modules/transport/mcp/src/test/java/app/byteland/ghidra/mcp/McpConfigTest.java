@@ -148,6 +148,46 @@ class McpConfigTest {
   }
 
   @Test
+  @DisplayName("Derives sanitized fallback tool_prefix and session_id from program names")
+  void derivesSanitizedFallbackToolPrefixAndSessionId() {
+    assertEquals("firmware_bin", McpConfig.deriveFallbackToolPrefix("firmware.bin", 8767));
+    assertEquals("firmware_bin-8767", McpConfig.deriveFallbackSessionId("firmware.bin", 8767));
+
+    assertEquals(
+        "my_app_x64_v2_exe", McpConfig.deriveFallbackToolPrefix("  My App (x64) v2.exe  ", 8767));
+    assertEquals(
+        "my_app_x64_v2_exe-8767",
+        McpConfig.deriveFallbackSessionId("  My App (x64) v2.exe  ", 8767));
+
+    assertEquals("ghidra_64bit_dll", McpConfig.deriveFallbackToolPrefix("64bit.dll", 8767));
+    assertEquals("64bit_dll-8767", McpConfig.deriveFallbackSessionId("64bit.dll", 8767));
+
+    assertEquals("ghidra_8767", McpConfig.deriveFallbackToolPrefix("ghidra", 8767));
+    assertEquals("ghidra-8767", McpConfig.deriveFallbackSessionId("ghidra", 8767));
+    assertEquals("ghidra_8768", McpConfig.deriveFallbackToolPrefix("GHIDRA", 8768));
+
+    assertEquals("ghidra_8767", McpConfig.deriveFallbackToolPrefix("...", 8767));
+    assertEquals("ghidra-8767", McpConfig.deriveFallbackSessionId("...", 8767));
+    assertEquals("ghidra_8767", McpConfig.deriveFallbackToolPrefix(null, 8767));
+    assertEquals("ghidra-8767", McpConfig.deriveFallbackSessionId(null, 8767));
+
+    String veryLong = "alpha_" + "b".repeat(90) + ".bin";
+    String longPrefix = McpConfig.deriveFallbackToolPrefix(veryLong, 8767);
+    assertEquals(64, longPrefix.length());
+    assertEquals(longPrefix, McpConfig.requireToolPrefix(longPrefix));
+
+    String longSessionId = McpConfig.deriveFallbackSessionId(veryLong, 8767);
+    assertEquals(64, longSessionId.length());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> McpConfig.deriveFallbackToolPrefix("firmware.bin", 0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> McpConfig.deriveFallbackSessionId("firmware.bin", 70000));
+  }
+
+  @Test
   @DisplayName("Executes NetworkBinding DNS validation once across McpConfig and AgentDispatcher")
   void validatesHostOnceDuringMcpDispatcherStartupWithUncachedDns() throws Exception {
     String javaBin =

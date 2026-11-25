@@ -28,6 +28,9 @@ class AgentConfigTest {
     assertEquals("demo", defaults.sessionId());
     assertNull(defaults.exitDeadlineSeconds());
     assertNull(defaults.redactedWsUrl());
+    assertEquals(
+        "ws://" + NetworkBinding.DEFAULT_LOOPBACK_HOST + ":8765/ws/agent",
+        defaults.serverEndpoint());
 
     AgentConfig custom =
         AgentConfig.fromArgs(
@@ -41,6 +44,10 @@ class AgentConfigTest {
     assertEquals("/custom/ws", custom.path());
     assertEquals("s3cr3t", custom.token());
     assertEquals("remote-demo", custom.sessionId());
+    assertEquals("ws://0.0.0.0:9000/custom/ws", custom.serverEndpoint());
+
+    AgentConfig ipv6Server = new AgentConfig(null, "::1", 8765, "/ws/agent", null, "v6-demo", null);
+    assertEquals("ws://[::1]:8765/ws/agent", ipv6Server.serverEndpoint());
   }
 
   @Test
@@ -58,6 +65,7 @@ class AgentConfigTest {
     assertEquals("md5-session", outbound.sessionId());
     assertEquals("bearer-secret", outbound.token());
     assertEquals(10, outbound.exitDeadlineSeconds());
+    assertNull(outbound.serverEndpoint());
     assertEquals("ws://127.0.0.1:18489/ws/agent?<redacted>", outbound.redactedWsUrl());
 
     AgentConfig fragmentOnly =
