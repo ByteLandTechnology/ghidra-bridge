@@ -86,7 +86,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
           effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
       List<DecompilationResource.Line> lines = null;
       if (effectiveFormat == DecompilationResource.Format.DOCUMENT) {
-        GuiDocument document = GuiDocument.render(function, markup);
+        GuiDocument document = GuiDocument.render(context, function, markup);
         code = document.code();
         lines = document.lines();
       }

@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra.decompilation;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.adapter.ghidra.symbol.SymbolDescriptions;
 import app.byteland.ghidra.service.decompilation.DecompilationResource.Line;
 import app.byteland.ghidra.service.decompilation.DecompilationResource.LocatedToken;
@@ -41,6 +42,10 @@ record GuiDocument(String code, List<Line> lines) {
   }
 
   static GuiDocument render(Function function, ClangTokenGroup markup) {
+    return render(null, function, markup);
+  }
+
+  static GuiDocument render(GhidraSession context, Function function, ClangTokenGroup markup) {
     if (markup == null) return new GuiDocument("", List.of());
     Program program = function.getProgram();
     List<ClangLine> nativeLines = new PrettyPrinter(function, markup, null).getLines();
@@ -60,7 +65,7 @@ record GuiDocument(String code, List<Line> lines) {
         SymbolResource symbol = null;
         if (token instanceof ClangFuncNameToken nameToken) {
           Function target = DecompilerUtils.getFunction(program, nameToken);
-          if (target != null) symbol = SymbolDescriptions.describe(target.getSymbol());
+          if (target != null) symbol = SymbolDescriptions.describe(context, target.getSymbol());
         }
         tokens.add(new LocatedToken(
             DecompilationServiceImpl.tokenKind(token), text, column, column + text.length(),

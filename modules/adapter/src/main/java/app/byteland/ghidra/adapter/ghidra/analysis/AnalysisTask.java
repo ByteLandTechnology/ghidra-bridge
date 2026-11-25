@@ -60,6 +60,7 @@ final class AnalysisTask {
       AutoAnalysisManager manager,
       Program program,
       AnalyzerSelection selection) {
+    context.onAnalysisStarted();
     Map<String, String> previousAnalysisOptions = null;
     AnalysisResource.Status terminalStatus;
     String terminalError = null;
@@ -112,17 +113,21 @@ final class AnalysisTask {
         terminalError = appendError(terminalError, restoreError);
       }
     }
-    if (terminalStatus == AnalysisResource.Status.COMPLETED) {
-      if (monitor.isCancelled()) {
-        return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
+    try {
+      if (terminalStatus == AnalysisResource.Status.COMPLETED) {
+        if (monitor.isCancelled()) {
+          return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
+        }
+        context.withTransaction(
+            () -> {
+              GhidraProgramUtilities.markProgramAnalyzed(program);
+              return null;
+            });
       }
-      context.withTransaction(
-          () -> {
-            GhidraProgramUtilities.markProgramAnalyzed(program);
-            return null;
-          });
+      return new TaskOutcome(terminalStatus, terminalError);
+    } finally {
+      context.onAnalysisFinished();
     }
-    return new TaskOutcome(terminalStatus, terminalError);
   }
 
   boolean isRunning() {

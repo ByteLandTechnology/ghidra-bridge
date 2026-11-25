@@ -27,6 +27,7 @@ import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.util.demangler.DemanglerUtil;
 import java.util.Objects;
 
 /**
@@ -42,41 +43,60 @@ public final class GhidraServiceFactory {
    * @return bridge services instance
    */
   public static BridgeServices create(GhidraScript script) {
+    return create(script, CppSymbolIndex.Config.defaults(), DemanglerUtil::demangle);
+  }
+
+  static BridgeServices create(
+      GhidraScript script,
+      CppSymbolIndex.Config indexConfig,
+      CppSymbolIndex.Demangler demangler) {
     Objects.requireNonNull(script, "script");
-    GhidraSession context = new GhidraSession(script);
+    GhidraSession context = new GhidraSession(script, indexConfig, demangler);
+    boolean initialized = false;
+    try {
+      ProgramService programService = new ProgramServiceImpl(context);
+      FunctionService functionService = new FunctionServiceImpl(context);
+      GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
+      MemoryService memoryService = new MemoryServiceImpl(context);
+      ListingService listingService = new ListingServiceImpl(context);
+      DecompilationService decompilationService = new DecompilationServiceImpl(context);
+      AnalysisService analysisService = new AnalysisServiceImpl(context);
+      SymbolService symbolService = new SymbolServiceImpl(context);
+      ReferenceService referenceService = new ReferenceServiceImpl(context);
+      CommentService commentService = new CommentServiceImpl(context);
+      AddressService addressService = new AddressServiceImpl(context);
+      DataTypeService dataTypeService = new DataTypeServiceImpl(context);
 
-    ProgramService programService = new ProgramServiceImpl(context);
-    FunctionService functionService = new FunctionServiceImpl(context);
-    GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
-    MemoryService memoryService = new MemoryServiceImpl(context);
-    ListingService listingService = new ListingServiceImpl(context);
-    DecompilationService decompilationService = new DecompilationServiceImpl(context);
-    AnalysisService analysisService = new AnalysisServiceImpl(context);
-    SymbolService symbolService = new SymbolServiceImpl(context);
-    ReferenceService referenceService = new ReferenceServiceImpl(context);
-    CommentService commentService = new CommentServiceImpl(context);
-    AddressService addressService = new AddressServiceImpl(context);
-    DataTypeService dataTypeService = new DataTypeServiceImpl(context);
-
-    return new BridgeServices(
-        programService,
-        addressService,
-        commentService,
-        referenceService,
-        memoryService,
-        listingService,
-        functionService,
-        globalVariableService,
-        analysisService,
-        decompilationService,
-        symbolService,
-        dataTypeService,
-        new TransactionRunner() {
-          @Override
-          public <T> T run(Operation<T> operation) {
-            return context.withTransaction(operation::execute);
-          }
-        },
-        context.currentProgram().getName());
+      String programName = context.currentProgram().getName();
+      context.startCppSymbolPrewarm();
+      BridgeServices services =
+          new BridgeServices(
+              programService,
+              addressService,
+              commentService,
+              referenceService,
+              memoryService,
+              listingService,
+              functionService,
+              globalVariableService,
+              analysisService,
+              decompilationService,
+              symbolService,
+              dataTypeService,
+              new TransactionRunner() {
+                @Override
+                public <T> T run(Operation<T> operation) {
+                  return context.withTransaction(operation::execute);
+                }
+              },
+              programName,
+              context);
+      initialized = true;
+      return services;
+    } finally {
+      if (!initialized) {
+        context.close();
+      }
+    }
   }
 }

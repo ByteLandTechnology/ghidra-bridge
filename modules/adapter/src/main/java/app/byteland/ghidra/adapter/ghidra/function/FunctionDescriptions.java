@@ -3,8 +3,10 @@ package app.byteland.ghidra.adapter.ghidra.function;
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
+import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.VariableStorageReference;
+import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Parameter;
@@ -18,10 +20,36 @@ final class FunctionDescriptions {
   private FunctionDescriptions() {}
 
   static FunctionResource describe(Function function, Set<String> includes) {
-    AddressSetView body = function.getBody();
-    return new FunctionResource(
-        AddressUtil.canonicalAddress(function.getEntryPoint()),
+    return describe(null, function, includes);
+  }
+
+  static FunctionResource describe(GhidraSession context, Function function, Set<String> includes) {
+    Address entryPoint = function.getEntryPoint();
+    return describe(
+        context,
+        function,
+        entryPoint,
+        AddressUtil.canonicalAddress(entryPoint),
         function.getName(),
+        includes);
+  }
+
+  static FunctionResource describe(
+      GhidraSession context,
+      Function function,
+      Address entryPoint,
+      String canonicalEntry,
+      String name,
+      Set<String> includes) {
+    AddressSetView body = function.getBody();
+    int stackPurgeSize = function.getStackPurgeSize();
+    String demangled =
+        CppSymbolNames.isMangled(name)
+            ? CppSymbolNames.demangled(context, function.getProgram(), name, entryPoint)
+            : null;
+    return new FunctionResource(
+        canonicalEntry,
+        name,
         String.valueOf(function.getParentNamespace()),
         body.isEmpty()
             ? null
@@ -41,13 +69,12 @@ final class FunctionDescriptions {
         function.hasNoReturn(),
         function.hasVarArgs(),
         function.hasCustomVariableStorage(),
-        function.getStackPurgeSize() < 0 ? null : function.getStackPurgeSize(),
+        stackPurgeSize < 0 ? null : stackPurgeSize,
         function.isExternal(),
         function.isThunk(),
         function.getRepeatableComment(),
         describeTags(function),
-        CppSymbolNames.demangled(
-            function.getProgram(), function.getName(), function.getEntryPoint()));
+        demangled);
   }
 
   static List<FunctionResource.ParameterResource> describeParameters(Function function) {

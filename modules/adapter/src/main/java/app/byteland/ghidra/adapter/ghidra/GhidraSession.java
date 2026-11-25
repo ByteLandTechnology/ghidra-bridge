@@ -1,22 +1,65 @@
 package app.byteland.ghidra.adapter.ghidra;
 
+import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionExecutionException;
+import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.util.demangler.DemanglerUtil;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
 /**
- * Coordinates Ghidra program access, commands, and transaction lifecycles.
+ * Coordinates Ghidra program access, commands, transaction lifecycles, and session C++ indexing.
  */
-public final class GhidraSession {
+public final class GhidraSession implements BridgeServices.SessionCloseable {
   private final GhidraScript ghidraScript;
-  private final Object executionLock = new Object();
-  private int transactionDepth;
+  private final ReentrantLock executionLock = new ReentrantLock();
+  private final AtomicInteger bridgeAnalysisDepth = new AtomicInteger();
+  private final CppSymbolIndex cppSymbols;
+  private volatile int transactionDepth;
 
   public GhidraSession(GhidraScript script) {
+    this(script, CppSymbolIndex.Config.defaults(), DemanglerUtil::demangle);
+  }
+
+  public GhidraSession(
+      GhidraScript script,
+      CppSymbolIndex.Config indexConfig,
+      CppSymbolIndex.Demangler demangler) {
     this.ghidraScript = Objects.requireNonNull(script, "script");
+    this.cppSymbols = new CppSymbolIndex(this, indexConfig, demangler);
+  }
+
+  public CppSymbolIndex cppSymbols() {
+    return cppSymbols;
+  }
+
+  public void startCppSymbolPrewarm() {
+    cppSymbols.startPrewarm();
+  }
+
+  public boolean holdsExecutionLock() {
+    return executionLock.isHeldByCurrentThread();
+  }
+
+  public void onAnalysisStarted() {
+    bridgeAnalysisDepth.incrementAndGet();
+    cppSymbols.onSessionStateChanged();
+  }
+
+  public void onAnalysisFinished() {
+    bridgeAnalysisDepth.decrementAndGet();
+    cppSymbols.onSessionStateChanged();
+  }
+
+  @Override
+  public void close() {
+    cppSymbols.close();
   }
 
   public GhidraScript script() {
@@ -36,7 +79,8 @@ public final class GhidraSession {
   }
 
   public void saveCurrentProgram() {
-    synchronized (executionLock) {
+    executionLock.lock();
+    try {
       var monitor = ghidraScript.getMonitor();
       boolean restoreCancellation = monitor != null && monitor.isCancelled();
       if (restoreCancellation) {
@@ -60,6 +104,8 @@ public final class GhidraSession {
           monitor.cancel();
         }
       }
+    } finally {
+      unlockAndNotify();
     }
   }
 
@@ -89,7 +135,8 @@ public final class GhidraSession {
 
   private <T> T withTransaction(TransactionalOperation<T> operation, boolean commitChanges) {
     Objects.requireNonNull(operation, "operation");
-    synchronized (executionLock) {
+    executionLock.lock();
+    try {
       if (transactionDepth > 0) {
         if (!commitChanges) {
           throw new IllegalStateException("Temporary changes require an independent transaction");
@@ -113,21 +160,63 @@ public final class GhidraSession {
           ghidraScript.start();
         }
       }
+    } finally {
+      unlockAndNotify();
     }
   }
 
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
-    synchronized (executionLock) {
+    executionLock.lock();
+    try {
       if (ghidraScript.runCommand(command)) {
         return;
       }
+    } finally {
+      unlockAndNotify();
     }
     String status = command.getStatusMsg();
     if (status == null || status.isBlank()) {
       status = "command failed";
     }
     throw new TransactionExecutionException(failurePrefix + ": " + status);
+  }
+
+  boolean isPausedForPrewarm(Program program) {
+    return transactionDepth > 0
+        || executionLock.isLocked()
+        || bridgeAnalysisDepth.get() > 0
+        || isGhidraAnalyzing(program);
+  }
+
+  <T> T tryCollectForPrewarm(Program program, Supplier<T> collector, T pausedValue) {
+    if (transactionDepth > 0 || bridgeAnalysisDepth.get() > 0 || isGhidraAnalyzing(program)) {
+      return pausedValue;
+    }
+    if (!executionLock.tryLock()) {
+      return pausedValue;
+    }
+    try {
+      if (transactionDepth > 0 || bridgeAnalysisDepth.get() > 0 || isGhidraAnalyzing(program)) {
+        return pausedValue;
+      }
+      return collector.get();
+    } finally {
+      executionLock.unlock();
+    }
+  }
+
+  private void unlockAndNotify() {
+    executionLock.unlock();
+    if (!executionLock.isHeldByCurrentThread()) {
+      cppSymbols.onSessionStateChanged();
+    }
+  }
+
+  private static boolean isGhidraAnalyzing(Program program) {
+    return program != null
+        && AutoAnalysisManager.hasAutoAnalysisManager(program)
+        && AutoAnalysisManager.getAnalysisManager(program).isAnalyzing();
   }
 
   @FunctionalInterface

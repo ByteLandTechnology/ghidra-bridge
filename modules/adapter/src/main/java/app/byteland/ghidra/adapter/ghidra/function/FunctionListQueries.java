@@ -59,7 +59,14 @@ final class FunctionListQueries {
         && (cursorAddress == null || firstAddress.compareTo(cursorAddress) > 0)) {
       Function externalFunction = functionManager.getFunctionAt(firstAddress);
       if (externalFunction != null && !range.afterEnd(externalFunction.getEntryPoint())) {
-        visitFunction(scan, externalFunction, normalizedName, entryFunction, containsAddress, query);
+        visitFunction(
+            scan,
+            externalFunction,
+            externalFunction.getEntryPoint(),
+            normalizedName,
+            entryFunction,
+            containsAddress,
+            query);
         if (scan.stopped()) return scan.finish();
         cursorAddress = externalFunction.getEntryPoint();
       }
@@ -71,22 +78,25 @@ final class FunctionListQueries {
       Address entryPoint = function.getEntryPoint();
       if (cursorAddress != null && entryPoint.compareTo(cursorAddress) <= 0) continue;
       if (range.afterEnd(entryPoint)) break;
-      visitFunction(scan, function, normalizedName, entryFunction, containsAddress, query);
+      visitFunction(scan, function, entryPoint, normalizedName, entryFunction, containsAddress, query);
       if (scan.stopped()) break;
     }
     return scan.finish();
   }
 
-  private static void visitFunction(
+  private void visitFunction(
       BoundedAddressScan<FunctionResource> scan,
       Function function,
+      Address entryPoint,
       String normalizedName,
       Function entryFunction,
       Address containsAddress,
       FunctionQuery query) {
+    String address = AddressUtil.canonicalAddress(entryPoint);
+    String functionName = function.getName();
     FunctionResource match = null;
     if (normalizedName != null
-        && !function.getName().toLowerCase(Locale.ROOT).contains(normalizedName)) {
+        && !functionName.toLowerCase(Locale.ROOT).contains(normalizedName)) {
     } else if (entryFunction != null
         && !function.equals(entryFunction)
         && containsAddress == null) {
@@ -94,9 +104,10 @@ final class FunctionListQueries {
     } else if (query.external() != null && function.isExternal() != query.external()) {
     } else if (query.thunk() != null && function.isThunk() != query.thunk()) {
     } else {
-      match = FunctionDescriptions.describe(function, query.includes());
+      match =
+          FunctionDescriptions.describe(
+              context, function, entryPoint, address, functionName, query.includes());
     }
-    String address = AddressUtil.canonicalAddress(function.getEntryPoint());
     scan.visit(address, address, match);
   }
 

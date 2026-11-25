@@ -34,7 +34,7 @@ public final class FunctionServiceImpl implements FunctionService {
     this.context = context;
     this.lookupQueries = new FunctionLookupQueries(context);
     this.listQueries = new FunctionListQueries(context, lookupQueries);
-    this.relationQueries = new FunctionRelationQueries(lookupQueries);
+    this.relationQueries = new FunctionRelationQueries(context, lookupQueries);
     this.dataTypeResolver =
         input ->
             GhidraDataTypeReferences.resolve(context.currentProgram().getDataTypeManager(), input);
@@ -48,7 +48,7 @@ public final class FunctionServiceImpl implements FunctionService {
   @Override
   public FunctionResource getFunction(String rawAddress, Set<String> includes) {
     return FunctionDescriptions.describe(
-        lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes));
+        context, lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes));
   }
 
   @Override
@@ -95,7 +95,7 @@ public final class FunctionServiceImpl implements FunctionService {
     if (name != null && !name.equals(function.getName())) {
       throw new IllegalArgumentException("function name was not applied: " + name);
     }
-    return FunctionDescriptions.describe(function, Set.of());
+    return FunctionDescriptions.describe(context, function, Set.of());
   }
 
   @Override
