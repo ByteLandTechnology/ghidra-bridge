@@ -116,11 +116,6 @@ public final class FunctionServiceImpl implements FunctionService {
     }
   }
 
-  static FunctionResource toFunctionSummary(
-      ghidra.program.model.listing.Function function, Set<String> includes) {
-    return FunctionDescriptions.describe(function, FunctionIncludes.normalize(includes));
-  }
-
   @Override
   public void patchFunction(
       String rawAddress,

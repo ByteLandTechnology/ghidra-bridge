@@ -29,9 +29,6 @@ public final class ApiRegistry {
   /** Maximum page size permitted for list operations. */
   public static final int MAX_LIMIT = Page.MAX_LIMIT;
 
-  /** Maximum number of sub-requests permitted in one batch call. */
-  public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
-
   static final int NOT_FOUND_STATUS = 404;
   static final String ANALYSIS_START_METHOD = "analysis.start";
   static final String PATCH_DATA_TYPE_TARGET = "/patch/data_type";
@@ -148,24 +145,6 @@ public final class ApiRegistry {
   }
 
   /**
-   * Returns all registered API method definitions in registration order.
-   *
-   * @return unmodifiable list of API methods
-   */
-  public List<ApiMethod<Map<String, Object>, Object>> methods() {
-    return List.copyOf(methodsByName.values());
-  }
-
-  /**
-   * Returns all registered dotted method names in registration order.
-   *
-   * @return unmodifiable set of dotted method names
-   */
-  public Set<String> methodNames() {
-    return Collections.unmodifiableSet(methodsByName.keySet());
-  }
-
-  /**
    * Looks up one registered API method by its dotted name.
    *
    * @param name dotted method name
@@ -190,14 +169,6 @@ public final class ApiRegistry {
     }
     Map<String, Object> decoded = method.decodeRequest(params);
     return invokeDecoded(method, decoded, true);
-  }
-
-  Object dispatchWithoutTransaction(String name, Map<String, Object> params) throws Exception {
-    ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
-    if (method == null) {
-      throw new ApiException(404, "unknown_operation", "No such operation: " + name, "/operation");
-    }
-    return invokeDecoded(method, method.decodeRequest(params), false);
   }
 
   <T> T inTransaction(app.byteland.ghidra.service.TransactionRunner.Operation<T> operation) {

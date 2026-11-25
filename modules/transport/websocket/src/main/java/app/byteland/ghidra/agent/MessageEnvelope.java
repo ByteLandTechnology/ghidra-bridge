@@ -2,6 +2,7 @@ package app.byteland.ghidra.agent;
 
 import app.byteland.ghidra.JsonRpc;
 import app.byteland.ghidra.api.ApiException;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -14,21 +15,21 @@ sealed interface MessageEnvelope
     public Request {
       id = requiredId(id);
       method = requiredText(method, JsonRpc.METHOD);
-      params = params == null ? Map.of() : Map.copyOf(params);
+      params =
+          params == null
+              ? Map.of()
+              : Collections.unmodifiableMap(
+                  new LinkedHashMap<>(validatedMap(params, "/" + JsonRpc.PARAMS)));
     }
 
     @Override
     public Map<String, Object> toMap() {
-      return new LinkedHashMap<>(
-          Map.of(
-              JsonRpc.VERSION,
-              JsonRpc.VERSION_VALUE,
-              JsonRpc.ID,
-              id,
-              JsonRpc.METHOD,
-              method,
-              JsonRpc.PARAMS,
-              params));
+      Map<String, Object> map = new LinkedHashMap<>();
+      map.put(JsonRpc.VERSION, JsonRpc.VERSION_VALUE);
+      map.put(JsonRpc.ID, id);
+      map.put(JsonRpc.METHOD, method);
+      map.put(JsonRpc.PARAMS, params);
+      return map;
     }
   }
 
@@ -50,65 +51,80 @@ sealed interface MessageEnvelope
   record Notification(String method, Map<String, Object> params) implements MessageEnvelope {
     public Notification {
       method = requiredText(method, JsonRpc.METHOD);
-      params = params == null ? Map.of() : Map.copyOf(params);
+      params =
+          params == null
+              ? Map.of()
+              : Collections.unmodifiableMap(
+                  new LinkedHashMap<>(validatedMap(params, "/" + JsonRpc.PARAMS)));
     }
 
     @Override
     public Map<String, Object> toMap() {
-      return new LinkedHashMap<>(
-          Map.of(
-              JsonRpc.VERSION,
-              JsonRpc.VERSION_VALUE,
-              JsonRpc.METHOD,
-              method,
-              JsonRpc.PARAMS,
-              params));
+      Map<String, Object> map = new LinkedHashMap<>();
+      map.put(JsonRpc.VERSION, JsonRpc.VERSION_VALUE);
+      map.put(JsonRpc.METHOD, method);
+      map.put(JsonRpc.PARAMS, params);
+      return map;
     }
   }
 
   record RpcError(int code, String message, Map<String, Object> data) {
     public RpcError {
-      if (message == null || message.isBlank())
-        throw new IllegalArgumentException("message is required");
-      data = data == null ? Map.of() : Map.copyOf(data);
+      if (message == null || message.isBlank()) {
+        throw invalid(
+            "error message must not be blank", "/" + JsonRpc.ERROR + "/" + JsonRpc.MESSAGE);
+      }
+      data =
+          data == null
+              ? Map.of()
+              : Collections.unmodifiableMap(
+                  new LinkedHashMap<>(
+                      validatedMap(data, "/" + JsonRpc.ERROR + "/" + JsonRpc.DATA)));
     }
 
     Map<String, Object> toMap() {
-      return Map.of(JsonRpc.CODE, code, JsonRpc.MESSAGE, message, JsonRpc.DATA, data);
+      Map<String, Object> map = new LinkedHashMap<>();
+      map.put(JsonRpc.CODE, code);
+      map.put(JsonRpc.MESSAGE, message);
+      map.put(JsonRpc.DATA, data);
+      return Collections.unmodifiableMap(map);
     }
   }
 
   static MessageEnvelope fromMap(Map<String, Object> map) {
     if (map == null) throw invalid("message must be an object", "/");
-    if (!JsonRpc.isVersion(map.get(JsonRpc.VERSION))) {
+    Map<String, Object> validated = validatedMap(map, "");
+    if (!JsonRpc.isVersion(validated.get(JsonRpc.VERSION))) {
       throw invalid("jsonrpc must equal 2.0", "/" + JsonRpc.VERSION);
     }
-    if (map.containsKey(JsonRpc.METHOD)) {
-      String method = required(map, JsonRpc.METHOD, String.class);
-      Map<String, Object> params = params(map);
-      if (map.containsKey(JsonRpc.ID)) {
+    if (validated.containsKey(JsonRpc.METHOD)) {
+      String method = required(validated, JsonRpc.METHOD, String.class);
+      Map<String, Object> params = params(validated);
+      if (validated.containsKey(JsonRpc.ID)) {
         exact(
-            map,
+            validated,
             Set.of(JsonRpc.VERSION, JsonRpc.ID, JsonRpc.METHOD, JsonRpc.PARAMS),
-            Set.of(JsonRpc.VERSION, JsonRpc.ID, JsonRpc.METHOD));
-        return new Request(requiredId(map.get(JsonRpc.ID)), method, params);
+            Set.of(JsonRpc.VERSION, JsonRpc.ID, JsonRpc.METHOD),
+            "");
+        return new Request(requiredId(validated.get(JsonRpc.ID)), method, params);
       }
       exact(
-          map,
+          validated,
           Set.of(JsonRpc.VERSION, JsonRpc.METHOD, JsonRpc.PARAMS),
-          Set.of(JsonRpc.VERSION, JsonRpc.METHOD));
+          Set.of(JsonRpc.VERSION, JsonRpc.METHOD),
+          "");
       return new Notification(method, params);
     }
     Set<String> responseFields =
-        map.containsKey(JsonRpc.ERROR)
+        validated.containsKey(JsonRpc.ERROR)
             ? Set.of(JsonRpc.VERSION, JsonRpc.ID, JsonRpc.ERROR)
             : Set.of(JsonRpc.VERSION, JsonRpc.ID, JsonRpc.RESULT);
-    exact(map, responseFields, responseFields);
-    Object id = map.get(JsonRpc.ID);
+    exact(validated, responseFields, responseFields, "");
+    Object id = validated.get(JsonRpc.ID);
     if (id != null) requiredId(id);
-    if (map.containsKey(JsonRpc.ERROR))
-      return new Response(id, null, parseError(map.get(JsonRpc.ERROR)));
-    return new Response(id, map.get(JsonRpc.RESULT), null);
+    if (validated.containsKey(JsonRpc.ERROR))
+      return new Response(id, null, parseError(validated.get(JsonRpc.ERROR)));
+    return new Response(id, validated.get(JsonRpc.RESULT), null);
   }
 
   @SuppressWarnings("unchecked")
@@ -123,27 +139,67 @@ sealed interface MessageEnvelope
   private static RpcError parseError(Object value) {
     if (!(value instanceof Map<?, ?> raw))
       throw invalid("error must be an object", "/" + JsonRpc.ERROR);
-    Map<String, Object> map = (Map<String, Object>) raw;
+    Map<String, Object> map = validatedMap((Map<String, Object>) raw, "/" + JsonRpc.ERROR);
     exact(
         map,
         Set.of(JsonRpc.CODE, JsonRpc.MESSAGE, JsonRpc.DATA),
-        Set.of(JsonRpc.CODE, JsonRpc.MESSAGE));
-    Object code = map.get(JsonRpc.CODE);
-    if (!(code instanceof Number number))
-      throw invalid("error code must be an integer", "/" + JsonRpc.ERROR + "/" + JsonRpc.CODE);
+        Set.of(JsonRpc.CODE, JsonRpc.MESSAGE),
+        "/" + JsonRpc.ERROR);
     return new RpcError(
-        number.intValue(),
-        required(map, JsonRpc.MESSAGE, String.class),
-        map.containsKey(JsonRpc.DATA)
-            ? params(Map.of(JsonRpc.PARAMS, map.get(JsonRpc.DATA)))
-            : Map.of());
+        parseErrorCode(map.get(JsonRpc.CODE)),
+        requiredErrorMessage(map.get(JsonRpc.MESSAGE)),
+        parseErrorData(map));
   }
 
-  private static void exact(Map<String, Object> map, Set<String> allowed, Set<String> required) {
+  private static int parseErrorCode(Object code) {
+    if (code instanceof Byte || code instanceof Short || code instanceof Integer) {
+      return ((Number) code).intValue();
+    }
+    if (code instanceof Long value && value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
+      return value.intValue();
+    }
+    throw invalid("error code must be an integer", "/" + JsonRpc.ERROR + "/" + JsonRpc.CODE);
+  }
+
+  private static String requiredErrorMessage(Object value) {
+    if (!(value instanceof String text)) {
+      throw invalid(
+          "error message has an invalid type", "/" + JsonRpc.ERROR + "/" + JsonRpc.MESSAGE);
+    }
+    if (text.isBlank()) {
+      throw invalid("error message must not be blank", "/" + JsonRpc.ERROR + "/" + JsonRpc.MESSAGE);
+    }
+    return text;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> parseErrorData(Map<String, Object> map) {
+    if (!map.containsKey(JsonRpc.DATA)) {
+      return Map.of();
+    }
+    Object data = map.get(JsonRpc.DATA);
+    if (!(data instanceof Map<?, ?> object)) {
+      throw invalid("error data must be an object", "/" + JsonRpc.ERROR + "/" + JsonRpc.DATA);
+    }
+    return (Map<String, Object>) object;
+  }
+
+  private static Map<String, Object> validatedMap(Map<String, Object> map, String pointer) {
+    String target = pointer.isEmpty() ? "/" : pointer;
+    for (Object key : ((Map<?, ?>) map).keySet()) {
+      if (!(key instanceof String)) {
+        throw invalid("object keys must be strings", target);
+      }
+    }
+    return map;
+  }
+
+  private static void exact(
+      Map<String, Object> map, Set<String> allowed, Set<String> required, String prefix) {
     for (String key : map.keySet())
-      if (!allowed.contains(key)) throw invalid("unknown field: " + key, "/" + key);
+      if (!allowed.contains(key)) throw invalid("unknown field: " + key, prefix + "/" + key);
     for (String key : required)
-      if (!map.containsKey(key)) throw invalid(key + " is required", "/" + key);
+      if (!map.containsKey(key)) throw invalid(key + " is required", prefix + "/" + key);
   }
 
   private static <T> T required(Map<String, Object> map, String key, Class<T> type) {
@@ -159,6 +215,12 @@ sealed interface MessageEnvelope
 
   private static Object requiredId(Object value) {
     if (value instanceof String text && !text.isBlank()) return text;
+    if (value instanceof Double d && !Double.isFinite(d)) {
+      throw invalid("id must be a string or number", "/id");
+    }
+    if (value instanceof Float f && !Float.isFinite(f)) {
+      throw invalid("id must be a string or number", "/id");
+    }
     if (value instanceof Number) return value;
     throw invalid("id must be a string or number", "/id");
   }

@@ -99,17 +99,30 @@ public final class AgentClient {
    * @throws Exception if startup or connection fails
    */
   public void connect(BooleanSupplier cancellationRequested) throws Exception {
-    try {
-      connectUntilDisconnected(cancellationRequested);
-    } finally {
-      disconnect();
+    try (ActiveSession session = openSession(cancellationRequested)) {
+      if (session != null) {
+        session.awaitDisconnect();
+      }
     }
   }
 
-  private void connectUntilDisconnected(BooleanSupplier cancellationRequested) throws Exception {
+  /**
+   * Binds the embedded listener or completes the outbound handshake, then returns an active
+   * session handle. Returns {@code null} if cancellation occurs during the outbound handshake.
+   *
+   * @param cancellationRequested supplier that reports external cancellation
+   * @return active session handle, or {@code null} when handshake cancellation occurs
+   * @throws Exception if listener bind or outbound connection fails
+   */
+  public ActiveSession openSession(BooleanSupplier cancellationRequested) throws Exception {
     if (config.isServerMode()) {
-      serve(cancellationRequested);
-      return;
+      try {
+        startServer();
+        return new ActiveSession(cancellationRequested, null, null);
+      } catch (Exception | Error startFailure) {
+        disconnect();
+        throw startFailure;
+      }
     }
 
     String wsUrl = config.wsUrl();
@@ -117,7 +130,8 @@ public final class AgentClient {
     URI uri = parseOutboundUri(wsUrl);
     AgentMessageHandler messageHandler =
         new AgentMessageHandler(config, dispatcher, this::disconnect);
-    try (HttpClient client = HttpClient.newBuilder().connectTimeout(connectTimeout).build()) {
+    HttpClient client = HttpClient.newBuilder().connectTimeout(connectTimeout).build();
+    try {
       WebSocket.Builder webSocketBuilder = client.newWebSocketBuilder();
       if (config.token() != null) {
         webSocketBuilder.header("Authorization", "Bearer " + config.token());
@@ -128,13 +142,60 @@ public final class AgentClient {
 
       WebSocket ws = awaitHandshake(wsFuture, displayUrl, connectTimeout, cancellationRequested);
       if (ws == null) {
-        return;
+        disconnect();
+        client.close();
+        return null;
       }
       AgentClientChannels.OutboundMessageChannel channel =
           activateOutbound(ws, channelRef, messageHandler::sendReady);
       lifecycleListener.onConnected();
+      return new ActiveSession(cancellationRequested, channel, client);
+    } catch (Exception | Error connectFailure) {
+      try {
+        disconnect();
+      } finally {
+        client.close();
+      }
+      throw connectFailure;
+    }
+  }
 
-      awaitDisconnect(cancellationRequested, channel);
+  /**
+   * Handle for a bound embedded WebSocket server or connected outbound WebSocket session.
+   */
+  public final class ActiveSession implements AutoCloseable {
+    private final BooleanSupplier cancellationRequested;
+    private final AgentClientChannels.OutboundMessageChannel outboundChannel;
+    private final HttpClient httpClient;
+
+    private ActiveSession(
+        BooleanSupplier cancellationRequested,
+        AgentClientChannels.OutboundMessageChannel outboundChannel,
+        HttpClient httpClient) {
+      this.cancellationRequested = cancellationRequested;
+      this.outboundChannel = outboundChannel;
+      this.httpClient = httpClient;
+    }
+
+    /**
+     * Waits until the WebSocket session disconnects or cancellation is requested.
+     *
+     * @throws InterruptedException if the caller thread is interrupted before disconnect
+     */
+    public void awaitDisconnect() throws InterruptedException {
+      AgentClient.this.awaitDisconnect(cancellationRequested, outboundChannel);
+    }
+
+    /** Closes the WebSocket session and releases any outbound HTTP client resources. */
+    @Override
+    public void close() {
+      try {
+        disconnect();
+      } finally {
+        if (httpClient != null) {
+          httpClient.close();
+        }
+      }
     }
   }
 
@@ -189,7 +250,7 @@ public final class AgentClient {
     if (failure != null) throw failure;
   }
 
-  private void serve(BooleanSupplier cancellationRequested) throws Exception {
+  private void startServer() throws IOException {
     AgentMessageHandler messageHandler =
         new AgentMessageHandler(config, dispatcher, this::disconnect);
     AgentWebSocketServer server =
@@ -198,11 +259,6 @@ public final class AgentClient {
     serverRef.set(server);
     server.start();
     lifecycleListener.onListening();
-    awaitDisconnect(cancellationRequested);
-  }
-
-  private void awaitDisconnect(BooleanSupplier cancellationRequested) throws InterruptedException {
-    awaitDisconnect(cancellationRequested, null);
   }
 
   /**

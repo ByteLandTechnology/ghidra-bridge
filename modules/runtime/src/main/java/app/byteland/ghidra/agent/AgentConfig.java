@@ -139,6 +139,20 @@ public record AgentConfig(
   }
 
   /**
+   * Returns the local WebSocket listener URL in server mode.
+   *
+   * @return WebSocket endpoint URL, or {@code null} in outbound mode
+   */
+  public String serverEndpoint() {
+    if (port == null) {
+      return null;
+    }
+    String formattedHost =
+        host.indexOf(':') >= 0 && !host.startsWith("[") ? "[" + host + "]" : host;
+    return "ws://" + formattedHost + ":" + port + path;
+  }
+
+  /**
    * Returns the outbound WebSocket URL with query and fragment components redacted.
    *
    * @return redacted WebSocket URL, or {@code null} if unset

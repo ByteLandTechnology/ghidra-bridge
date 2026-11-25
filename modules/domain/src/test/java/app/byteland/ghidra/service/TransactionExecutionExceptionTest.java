@@ -7,7 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -120,28 +124,29 @@ class TransactionExecutionExceptionTest {
   }
 
   @Test
-  @DisplayName("Serialization preserves message and target and returns an empty details map")
-  void testSerializationRoundTrip() throws Exception {
-    var original =
-        new TransactionExecutionException(
-            "failed", "var1", Map.of("step", 2), new IOException("disk"));
-    byte[] bytes;
-    try (var out = new java.io.ByteArrayOutputStream();
-        var objectOut = new java.io.ObjectOutputStream(out)) {
-      objectOut.writeObject(original);
-      bytes = out.toByteArray();
+  @DisplayName("Default serialization excludes non-serializable details while keeping in-memory map")
+  void testSerializationExcludesNonSerializableDetails() throws Exception {
+    Object nonSerializableDiagnostic = new Object();
+    Map<String, Object> details = Map.of("diagnostic", nonSerializableDiagnostic);
+    var ex = new TransactionExecutionException("failed", "var1", details, new IOException("io"));
+    assertSame(nonSerializableDiagnostic, ex.details().get("diagnostic"));
+
+    byte[] serialized;
+    try (var buffer = new ByteArrayOutputStream();
+        var out = new ObjectOutputStream(buffer)) {
+      out.writeObject(ex);
+      out.flush();
+      serialized = buffer.toByteArray();
     }
+
     TransactionExecutionException restored;
-    try (var in = new java.io.ByteArrayInputStream(bytes);
-        var objectIn = new java.io.ObjectInputStream(in)) {
-      restored = (TransactionExecutionException) objectIn.readObject();
+    try (var in = new ObjectInputStream(new ByteArrayInputStream(serialized))) {
+      restored = (TransactionExecutionException) in.readObject();
     }
     assertEquals("failed", restored.getMessage());
     assertEquals("var1", restored.target());
     assertEquals(500, restored.status());
     assertEquals("transaction_failed", restored.code());
-    assertNotNull(restored.getCause());
-    assertNotNull(restored.details());
     assertTrue(restored.details().isEmpty());
   }
 }

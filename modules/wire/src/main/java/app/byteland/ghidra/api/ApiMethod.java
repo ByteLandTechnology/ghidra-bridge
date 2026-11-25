@@ -44,17 +44,6 @@ public record ApiMethod<Request, Response>(
   }
 
   /**
-   * Decodes raw parameters, executes the handler, and projects response fields.
-   *
-   * @param params raw JSON request parameters
-   * @return encoded and projected response value
-   * @throws Exception if validation or handler execution fails
-   */
-  public Object invoke(Object params) throws Exception {
-    return invokeDecoded(decodeRequest(params));
-  }
-
-  /**
    * Decodes raw request parameters with this method's request codec.
    *
    * @param params raw JSON request parameters

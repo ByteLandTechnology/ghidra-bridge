@@ -66,32 +66,6 @@ public final class AddressUtil {
     return addressSpace + ":" + normalizeOffset(offsetHex);
   }
 
-  /**
-   * Returns the address space name of a Ghidra {@link Address}.
-   *
-   * @param address Ghidra address, or {@code null}
-   * @return address space name, or {@code null}
-   */
-  public static String addressSpace(Address address) {
-    if (address == null) {
-      return null;
-    }
-    return address.getAddressSpace().getName();
-  }
-
-  /**
-   * Formats the hexadecimal offset of a Ghidra {@link Address} with a {@code 0x} prefix.
-   *
-   * @param address Ghidra address, or {@code null}
-   * @return prefixed hexadecimal offset, or {@code null}
-   */
-  public static String offset(Address address) {
-    if (address == null) {
-      return null;
-    }
-    return "0x" + address.toString();
-  }
-
   private static String normalizeOffset(String offset) {
     if (offset == null) {
       return null;
