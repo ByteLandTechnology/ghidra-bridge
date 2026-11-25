@@ -15,27 +15,42 @@ import java.util.Set;
 
 final class BatchMethod {
   static final String NAME = "batch.execute";
+  static final String QUERY_NAME = "batch.query";
   static final int MAX_ITEMS = 1000;
   private static final String ITEMS_TARGET = "/" + ApiVocabulary.ITEMS;
 
   private final Map<String, ApiMethod<Map<String, Object>, Object>> methods;
   private final BatchRuntime runtime;
   private final Set<String> batchableMethods;
+  private final Set<String> readOnlyBatchableMethods;
   private final Map<String, Object> requestSchema;
+  private final Map<String, Object> queryRequestSchema;
 
   BatchMethod(Map<String, ApiMethod<Map<String, Object>, Object>> methods, BatchRuntime runtime) {
     this.methods = Objects.requireNonNull(methods, "methods");
     this.runtime = Objects.requireNonNull(runtime, "runtime");
 
     Set<String> allowedMethods = new LinkedHashSet<>();
+    Set<String> readOnlyMethods = new LinkedHashSet<>();
     methods.forEach(
         (methodName, method) -> {
-          if (method.effects().batchable()) allowedMethods.add(methodName);
+          MethodEffects effects = method.effects();
+          if (effects.batchable()) {
+            allowedMethods.add(methodName);
+            if (effects.readOnly()) {
+              readOnlyMethods.add(methodName);
+            }
+          }
         });
     batchableMethods = Collections.unmodifiableSet(allowedMethods);
+    readOnlyBatchableMethods = Collections.unmodifiableSet(readOnlyMethods);
+    requestSchema = buildRequestSchema(batchableMethods);
+    queryRequestSchema = buildRequestSchema(readOnlyBatchableMethods);
+  }
 
+  private Map<String, Object> buildRequestSchema(Set<String> methodNames) {
     List<Map<String, Object>> itemAlternatives = new ArrayList<>();
-    batchableMethods.forEach(
+    methodNames.forEach(
         methodName -> {
           ApiMethod<Map<String, Object>, Object> target = methods.get(methodName);
           itemAlternatives.add(
@@ -51,22 +66,29 @@ final class BatchMethod {
                   ApiVocabulary.METHOD,
                   ApiVocabulary.ARGUMENTS));
         });
-    requestSchema =
-        ApiSchemaCatalog.input(
-            ApiSchemaCatalog.props(
-                ApiVocabulary.ITEMS,
-                WireSchema.array(WireSchema.oneOf(itemAlternatives), 1, MAX_ITEMS),
-                ApiVocabulary.TRANSACTION_MODE,
-                WireSchema.stringEnum("per_item", "all_or_none")),
-            ApiVocabulary.ITEMS);
+    return ApiSchemaCatalog.input(
+        ApiSchemaCatalog.props(
+            ApiVocabulary.ITEMS,
+            WireSchema.array(WireSchema.oneOf(itemAlternatives), 1, MAX_ITEMS),
+            ApiVocabulary.TRANSACTION_MODE,
+            WireSchema.stringEnum("per_item", "all_or_none")),
+        ApiVocabulary.ITEMS);
   }
 
   Registration registration() {
     return new Registration(
         batchEffects(batchableMethods),
-        batchCodec(requestSchema),
+        batchCodec(requestSchema, batchableMethods),
         batchResultSchema(),
-        this::executeBatch);
+        request -> executeBatch(request, batchableMethods));
+  }
+
+  Registration queryRegistration() {
+    return new Registration(
+        batchEffects(readOnlyBatchableMethods),
+        batchCodec(queryRequestSchema, readOnlyBatchableMethods),
+        batchResultSchema(),
+        request -> executeBatch(request, readOnlyBatchableMethods));
   }
 
   boolean allowedDuringAnalysis(Map<String, Object> request) {
@@ -94,7 +116,8 @@ final class BatchMethod {
     return WireSchema.oneOf(success, failure);
   }
 
-  private JsonCodec<Map<String, Object>> batchCodec(Map<String, Object> schema) {
+  private JsonCodec<Map<String, Object>> batchCodec(
+      Map<String, Object> schema, Set<String> allowedMethods) {
     Map<String, Object> publishedSchema = immutableSchema(schema);
     return new JsonCodec<>() {
       @Override
@@ -104,7 +127,7 @@ final class BatchMethod {
               ApiVocabulary.INVALID_TYPE, target + " must be an object", target);
         }
         Map<String, Object> request = stringMap(raw);
-        prepareBatch(request);
+        prepareBatch(request, allowedMethods);
         return Collections.unmodifiableMap(request);
       }
 
@@ -186,14 +209,15 @@ final class BatchMethod {
         readOnly, mutatesProgram, false, allowedDuringAnalysis, destructive, idempotent, false);
   }
 
-  private Map<String, Object> executeBatch(Map<String, Object> request) {
-    PreparedBatch batch = prepareBatch(request);
+  private Map<String, Object> executeBatch(
+      Map<String, Object> request, Set<String> allowedMethods) {
+    PreparedBatch batch = prepareBatch(request, allowedMethods);
     return "all_or_none".equals(batch.transactionMode())
         ? executeAllOrNone(batch.items())
         : executePerItem(batch.items());
   }
 
-  private PreparedBatch prepareBatch(Map<String, Object> request) {
+  private PreparedBatch prepareBatch(Map<String, Object> request, Set<String> allowedMethods) {
     List<PreparedItem> prepared = new ArrayList<>();
     List<Map<String, Object>> violations = new ArrayList<>();
     Set<String> seenIds = new LinkedHashSet<>();
@@ -267,9 +291,12 @@ final class BatchMethod {
         violations.add(
             violation(
                 itemTarget + "/method", ApiVocabulary.INVALID_TYPE, "method must be a string"));
-      } else if (!batchableMethods.contains(method)) {
-        violations.add(
-            violation(itemTarget + "/method", "invalid_method", "method is not batchable"));
+      } else if (!allowedMethods.contains(method)) {
+        String reason =
+            allowedMethods.equals(readOnlyBatchableMethods) && batchableMethods.contains(method)
+                ? "method is not read-only"
+                : "method is not batchable";
+        violations.add(violation(itemTarget + "/method", "invalid_method", reason));
       }
       Object rawArguments = item.get(ApiVocabulary.ARGUMENTS);
       if (!(rawArguments instanceof Map<?, ?>)) {
@@ -283,7 +310,7 @@ final class BatchMethod {
       }
       if (id == null
           || method == null
-          || !batchableMethods.contains(method)
+          || !allowedMethods.contains(method)
           || !(rawArguments instanceof Map<?, ?>)) {
         continue;
       }

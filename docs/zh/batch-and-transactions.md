@@ -1,7 +1,8 @@
 # 批处理与事务 (Batch and Transactions)
 
-`batch.execute` 方法允许在单次网络请求中执行多个 API 操作。
-该方法接受指定的事务模式以及包含 1 至 1000 个条目的列表。
+`batch.execute` 与 `batch.query` 方法支持在单次网络请求中执行多个 API 操作。
+`batch.query` 仅接受只读可批处理方法，并在预校验阶段拒绝任何修改操作。
+每个方法均接受指定的事务模式以及包含 1 至 1000 个条目的列表。
 
 ## 请求结构
 
@@ -59,6 +60,7 @@
 - `analysis.start`
 - `session.shutdown`
 - `batch.execute`
+- `batch.query`
 
 包含上述任一方法将导致预校验直接失败。
 

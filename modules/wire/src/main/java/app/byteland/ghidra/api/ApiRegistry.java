@@ -485,6 +485,17 @@ public final class ApiRegistry {
         Set.of(),
         List.of(),
         registration.handler());
+    BatchMethod.Registration queryRegistration = batchMethod.queryRegistration();
+    registerWithCodec(
+        BatchMethod.QUERY_NAME,
+        queryRegistration.effects(),
+        "Check a read-only batch. Run its items in order. Use per_item to keep item errors."
+            + " Use all_or_none to stop the batch after an error.",
+        queryRegistration.requestCodec(),
+        queryRegistration.responseSchema(),
+        Set.of(),
+        List.of(),
+        queryRegistration.handler());
   }
 
   private void register(

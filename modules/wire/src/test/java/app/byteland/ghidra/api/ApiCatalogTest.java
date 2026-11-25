@@ -53,23 +53,31 @@ class ApiCatalogTest {
             "description",
             "inputSchema",
             "outputSchema",
+            "readOnly",
+            "destructive",
+            "idempotent",
             "contractValue",
             "interfaceValue",
             "effectSummary"),
         publicMethods);
 
     ApiCatalog catalog = ApiRegistry.catalog();
-    assertEquals(56, catalog.methods().size());
+    assertEquals(57, catalog.methods().size());
     Map<String, Object> description = catalog.interfaceDescription();
     assertEquals(catalog.interfaceVersion(), description.get("interface_version"));
     List<?> methods = (List<?>) description.get("methods");
-    assertEquals(56, methods.size());
+    assertEquals(57, methods.size());
 
     for (ApiCatalog.MethodDescriptor descriptor : catalog.methods()) {
       Map<String, Object> contract = descriptor.contractValue();
       assertEquals(
           List.of("description", "input_schema", "output_schema", "effects"),
           List.copyOf(contract.keySet()));
+      @SuppressWarnings("unchecked")
+      Map<String, Object> effects = (Map<String, Object>) contract.get("effects");
+      assertEquals(effects.get("read_only"), descriptor.readOnly());
+      assertEquals(effects.get("destructive"), descriptor.destructive());
+      assertEquals(effects.get("idempotent"), descriptor.idempotent());
       Map<String, Object> interfaceValue = descriptor.interfaceValue();
       assertEquals(
           List.of("name", "description", "input_schema", "output_schema", "effects"),

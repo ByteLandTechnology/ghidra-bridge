@@ -1,7 +1,8 @@
 # バッチとトランザクション (Batch and Transactions)
 
-`batch.execute` メソッドは、1 回のリクエストで複数の API 操作を実行します。
-トランザクションモードと 1 〜 1000 個の項目リストを受け取ります。
+`batch.execute` および `batch.query` メソッドは、1 回のリクエストで複数の API 操作を実行します。
+`batch.query` は読み取り専用のバッチ対象メソッドのみを受け付け、変更操作を事前検証で拒否します。
+各メソッドはトランザクションモードと 1 〜 1000 個の項目リストを受け取ります。
 
 ## リクエスト構造
 
@@ -59,6 +60,7 @@
 - `analysis.start`
 - `session.shutdown`
 - `batch.execute`
+- `batch.query`
 
 上記メソッドを含めると事前検証エラーとなります。
 

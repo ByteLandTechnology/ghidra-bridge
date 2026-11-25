@@ -76,12 +76,15 @@ final class McpToolRegistry {
 
     String purpose = "listing".equals(domain)
         ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
+    boolean readOnlyHint = operations.values().stream().allMatch(MethodDescriptor::readOnly);
+    boolean destructiveHint = operations.values().stream().anyMatch(MethodDescriptor::destructive);
+    boolean idempotentHint = operations.values().stream().allMatch(MethodDescriptor::idempotent);
     return Map.of("name", toolName(domain),
         "description", "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
         "inputSchema", inputSchema,
-        "annotations", Map.of("readOnlyHint", false, "destructiveHint", true,
-            "idempotentHint", false, "openWorldHint", false));
+        "annotations", Map.of("readOnlyHint", readOnlyHint, "destructiveHint", destructiveHint,
+            "idempotentHint", idempotentHint, "openWorldHint", false));
   }
 
   List<Map<String, Object>> listTools() { return listedTools; }

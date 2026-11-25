@@ -51,8 +51,8 @@
                           - "output_schema"
                           - "effects"
                           "type": "object"
-                        "maxItems": !!int "56"
-                        "minItems": !!int "56"
+                        "maxItems": !!int "57"
+                        "minItems": !!int "57"
                         "type": "array"
                     "required":
                     - "interface_version"
@@ -6489,6 +6489,113 @@
                         "type": "boolean"
                     "required":
                     - "deleted"
+                    "type": "object"
+                  - "$defs":
+                      "data_type_reference":
+                        "oneOf":
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "named"
+                              "type": "string"
+                            "name":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "name"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "pointer"
+                              "type": "string"
+                            "target":
+                              "$ref": "#/$defs/data_type_reference"
+                          "required":
+                          - "kind"
+                          - "target"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "count":
+                              "maximum": !!int "2147483647"
+                              "minimum": !!int "1"
+                              "type": "integer"
+                            "element":
+                              "$ref": "#/$defs/data_type_reference"
+                            "kind":
+                              "enum":
+                              - "array"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "element"
+                          - "count"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "untyped_pointer"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          "type": "object"
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "items":
+                        "items":
+                          "oneOf":
+                          - "additionalProperties": !!bool "false"
+                            "properties":
+                              "id":
+                                "minLength": !!int "1"
+                                "type": "string"
+                              "result": {}
+                            "required":
+                            - "id"
+                            - "result"
+                            "type": "object"
+                          - "additionalProperties": !!bool "false"
+                            "properties":
+                              "error":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "code":
+                                    "pattern": "^[a-z][a-z0-9_]*$"
+                                    "type": "string"
+                                  "details":
+                                    "additionalProperties": !!bool "true"
+                                    "type": "object"
+                                  "message":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "status":
+                                    "maximum": !!int "599"
+                                    "minimum": !!int "400"
+                                    "type": "integer"
+                                  "target":
+                                    "type": "string"
+                                "required":
+                                - "status"
+                                - "code"
+                                - "message"
+                                "type": "object"
+                              "id":
+                                "minLength": !!int "1"
+                                "type": "string"
+                            "required":
+                            - "id"
+                            - "error"
+                            "type": "object"
+                        "maxItems": !!int "1000"
+                        "minItems": !!int "1"
+                        "type": "array"
+                    "required":
+                    - "items"
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
@@ -16403,6 +16510,1832 @@
             - "method"
             - "params"
             "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "id":
+                "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
+                - "type": "number"
+              "jsonrpc":
+                "const": "2.0"
+                "type": "string"
+              "method":
+                "const": "batch.query"
+                "type": "string"
+              "params":
+                "$defs":
+                  "data_type_reference":
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "named"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "pointer"
+                          "type": "string"
+                        "target":
+                          "$ref": "#/$defs/data_type_reference"
+                      "required":
+                      - "kind"
+                      - "target"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "count":
+                          "maximum": !!int "2147483647"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                        "element":
+                          "$ref": "#/$defs/data_type_reference"
+                        "kind":
+                          "enum":
+                          - "array"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "element"
+                      - "count"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "untyped_pointer"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      "type": "object"
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "items":
+                    "items":
+                      "oneOf":
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "id"
+                                      - "program_name"
+                                      - "status"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "session.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "compiler_spec_id"
+                                      - "created_at"
+                                      - "executable_format"
+                                      - "executable_path"
+                                      - "function_count"
+                                      - "image_base"
+                                      - "language_id"
+                                      - "max_address"
+                                      - "min_address"
+                                      - "modified_at"
+                                      - "name"
+                                      - "symbol_count"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "program.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address_size"
+                                      - "compiler_spec_id"
+                                      - "endian"
+                                      - "language_id"
+                                      - "processor"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "program_language.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties": {}
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "default"
+                                      - "kind"
+                                      - "max_address"
+                                      - "min_address"
+                                      - "name"
+                                      - "size"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "address_space.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "code_unit"
+                                      - "function"
+                                      - "in_memory"
+                                      - "memory_block"
+                                      - "symbol"
+                                      - "valid"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "address":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "address"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "address.resolve"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "comment"
+                                      - "end"
+                                      - "execute"
+                                      - "initialized"
+                                      - "kind"
+                                      - "length"
+                                      - "name"
+                                      - "overlay"
+                                      - "read"
+                                      - "start"
+                                      - "volatile"
+                                      - "write"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "name":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "name"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "memory_block.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "execute":
+                                    "type": "boolean"
+                                  "name":
+                                    "type": "string"
+                                  "read":
+                                    "type": "boolean"
+                                  "write":
+                                    "type": "boolean"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "comment"
+                                      - "end"
+                                      - "execute"
+                                      - "initialized"
+                                      - "kind"
+                                      - "length"
+                                      - "name"
+                                      - "overlay"
+                                      - "read"
+                                      - "start"
+                                      - "volatile"
+                                      - "write"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "memory_block.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "encoding":
+                                "enum":
+                                - "base64"
+                                - "hex"
+                                "type": "string"
+                              "length":
+                                "maximum": !!int "65536"
+                                "minimum": !!int "1"
+                                "type": "integer"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "bytes"
+                                      - "bytes.data"
+                                      - "bytes.encoding"
+                                      - "bytes.length"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "address":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "address"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "memory.read"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "all"
+                                    - "data"
+                                    - "instruction"
+                                    "type": "string"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "bytes"
+                                      - "data_type"
+                                      - "kind"
+                                      - "length"
+                                      - "mnemonic"
+                                      - "operands"
+                                      - "text"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "code_unit.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties": {}
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "bytes"
+                                      - "data_type"
+                                      - "length"
+                                      - "representation"
+                                      - "value"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "data_unit.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "data_type"
+                                      - "length"
+                                      - "name"
+                                      - "namespace"
+                                      - "representation"
+                                      - "source_type"
+                                      - "value"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "address":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "address"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "global_variable.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "case_sensitive":
+                                    "type": "boolean"
+                                  "name":
+                                    "type": "string"
+                                  "namespace":
+                                    "type": "string"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "data_type"
+                                      - "length"
+                                      - "name"
+                                      - "namespace"
+                                      - "representation"
+                                      - "source_type"
+                                      - "value"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "global_variable.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "bytes"
+                                      - "default_flow_type"
+                                      - "fall_through"
+                                      - "flow_override"
+                                      - "flow_type"
+                                      - "length"
+                                      - "mnemonic"
+                                      - "operands"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "address":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "address"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "instruction.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties": {}
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "bytes"
+                                      - "default_flow_type"
+                                      - "fall_through"
+                                      - "flow_override"
+                                      - "flow_type"
+                                      - "length"
+                                      - "mnemonic"
+                                      - "operands"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "instruction.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "flow_overrides":
+                                    "items":
+                                      "enum":
+                                      - "branch"
+                                      - "call"
+                                      - "call_return"
+                                      - "none"
+                                      - "return"
+                                      "type": "string"
+                                    "maxItems": !!int "5"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                  "selector":
+                                    "oneOf":
+                                    - "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "address":
+                                          "minLength": !!int "1"
+                                          "type": "string"
+                                        "kind":
+                                          "enum":
+                                          - "address"
+                                          "type": "string"
+                                      "required":
+                                      - "kind"
+                                      - "address"
+                                      "type": "object"
+                                    - "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "entry":
+                                          "minLength": !!int "1"
+                                          "type": "string"
+                                        "kind":
+                                          "enum":
+                                          - "function"
+                                          "type": "string"
+                                      "required":
+                                      - "kind"
+                                      - "entry"
+                                      "type": "object"
+                                    - "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "end":
+                                          "minLength": !!int "1"
+                                          "type": "string"
+                                        "kind":
+                                          "enum":
+                                          - "range"
+                                          "type": "string"
+                                        "start":
+                                          "minLength": !!int "1"
+                                          "type": "string"
+                                      "required":
+                                      - "kind"
+                                      - "start"
+                                      - "end"
+                                      "type": "object"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "bytes"
+                                      - "default_flow_type"
+                                      - "fall_through"
+                                      - "flow_override"
+                                      - "flow_type"
+                                      - "length"
+                                      - "mnemonic"
+                                      - "operands"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "required":
+                            - "filter"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "flow_override.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "body"
+                                      - "body.end"
+                                      - "body.num_addresses"
+                                      - "body.start"
+                                      - "calling_convention"
+                                      - "comment"
+                                      - "demangled_name"
+                                      - "entry"
+                                      - "external"
+                                      - "has_custom_variable_storage"
+                                      - "has_no_return"
+                                      - "has_var_args"
+                                      - "is_inline"
+                                      - "local_variables"
+                                      - "local_variables.data_type"
+                                      - "local_variables.name"
+                                      - "local_variables.storage"
+                                      - "name"
+                                      - "namespace"
+                                      - "parameter_count"
+                                      - "parameters"
+                                      - "parameters.data_type"
+                                      - "parameters.name"
+                                      - "parameters.ordinal"
+                                      - "parameters.storage"
+                                      - "repeatable_comment"
+                                      - "return_storage"
+                                      - "return_type"
+                                      - "signature"
+                                      - "stack_purge_size"
+                                      - "tags"
+                                      - "thunk"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "entry":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "entry"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "function.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "contains":
+                                    "type": "string"
+                                  "entry":
+                                    "type": "string"
+                                  "external":
+                                    "type": "boolean"
+                                  "name":
+                                    "type": "string"
+                                  "thunk":
+                                    "type": "boolean"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "body"
+                                      - "body.end"
+                                      - "body.num_addresses"
+                                      - "body.start"
+                                      - "calling_convention"
+                                      - "comment"
+                                      - "demangled_name"
+                                      - "entry"
+                                      - "external"
+                                      - "has_custom_variable_storage"
+                                      - "has_no_return"
+                                      - "has_var_args"
+                                      - "is_inline"
+                                      - "local_variables"
+                                      - "local_variables.data_type"
+                                      - "local_variables.name"
+                                      - "local_variables.storage"
+                                      - "name"
+                                      - "namespace"
+                                      - "parameter_count"
+                                      - "parameters"
+                                      - "parameters.data_type"
+                                      - "parameters.name"
+                                      - "parameters.ordinal"
+                                      - "parameters.storage"
+                                      - "repeatable_comment"
+                                      - "return_storage"
+                                      - "return_type"
+                                      - "signature"
+                                      - "stack_purge_size"
+                                      - "tags"
+                                      - "thunk"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "function.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "direction":
+                                    "enum":
+                                    - "callees"
+                                    - "callers"
+                                    "type": "string"
+                                  "entry":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "entry"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "call_site"
+                                      - "demangled_name"
+                                      - "direction"
+                                      - "entry"
+                                      - "name"
+                                      - "namespace"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "required":
+                            - "filter"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "function_call.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "analyzed"
+                                      - "finished_at"
+                                      - "kind"
+                                      - "progress"
+                                      - "started_at"
+                                      - "status"
+                                      - "task_id"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "analysis.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "format":
+                                "enum":
+                                - "document"
+                                - "text"
+                                - "tokens"
+                                "type": "string"
+                              "include_comments":
+                                "type": "boolean"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "c"
+                                      - "comments"
+                                      - "comments_complete"
+                                      - "completed"
+                                      - "elapsed_ms"
+                                      - "entry"
+                                      - "format"
+                                      - "lines"
+                                      - "name"
+                                      - "tokens"
+                                      - "warnings"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "timeout_ms":
+                                    "default": !!int "30000"
+                                    "maximum": !!int "300000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "entry":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "entry"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "decompilation.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "demangled_name"
+                                      - "id"
+                                      - "name"
+                                      - "namespace"
+                                      - "primary"
+                                      - "source_type"
+                                      - "type"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "id":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "id"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "symbol.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "address":
+                                    "type": "string"
+                                  "case_sensitive":
+                                    "type": "boolean"
+                                  "name":
+                                    "type": "string"
+                                  "namespace":
+                                    "type": "string"
+                                  "source_type":
+                                    "type": "string"
+                                  "type":
+                                    "type": "string"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "demangled_name"
+                                      - "id"
+                                      - "name"
+                                      - "namespace"
+                                      - "primary"
+                                      - "source_type"
+                                      - "type"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "symbol.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "direction":
+                                    "enum":
+                                    - "from"
+                                    - "to"
+                                    "type": "string"
+                                  "from":
+                                    "type": "string"
+                                  "to":
+                                    "type": "string"
+                                  "type":
+                                    "type": "string"
+                                "required":
+                                - "direction"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "from"
+                                      - "operand_index"
+                                      - "primary"
+                                      - "source_type"
+                                      - "to"
+                                      - "type"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "required":
+                            - "filter"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "reference.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "text"
+                                      - "type"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "address":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "type":
+                                    "enum":
+                                    - "eol"
+                                    - "plate"
+                                    - "post"
+                                    - "pre"
+                                    - "repeatable"
+                                    "type": "string"
+                                "required":
+                                - "address"
+                                - "type"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "comment.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "address":
+                                    "type": "string"
+                                  "text":
+                                    "type": "string"
+                                  "type":
+                                    "enum":
+                                    - "eol"
+                                    - "plate"
+                                    - "post"
+                                    - "pre"
+                                    - "repeatable"
+                                    "type": "string"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "text"
+                                      - "type"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "comment.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "path":
+                                    "type": "string"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "category_count"
+                                      - "data_type_count"
+                                      - "name"
+                                      - "path"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "data_type_category.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "base_type"
+                                      - "category_path"
+                                      - "description"
+                                      - "fields"
+                                      - "kind"
+                                      - "length"
+                                      - "name"
+                                      - "path"
+                                      - "signature"
+                                      - "signature.parameters"
+                                      - "signature.return_type"
+                                      - "size"
+                                      - "values"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "selector":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "path":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "path"
+                                "type": "object"
+                            "required":
+                            - "selector"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "data_type.get"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "category_path":
+                                    "type": "string"
+                                  "kind":
+                                    "type": "string"
+                                  "query":
+                                    "type": "string"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "base_type"
+                                      - "category_path"
+                                      - "description"
+                                      - "fields"
+                                      - "kind"
+                                      - "length"
+                                      - "name"
+                                      - "path"
+                                      - "signature"
+                                      - "signature.parameters"
+                                      - "signature.return_type"
+                                      - "size"
+                                      - "values"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "data_type.list"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                    "maxItems": !!int "1000"
+                    "minItems": !!int "1"
+                    "type": "array"
+                  "transaction_mode":
+                    "enum":
+                    - "all_or_none"
+                    - "per_item"
+                    "type": "string"
+                "required":
+                - "items"
+                "type": "object"
+            "required":
+            - "jsonrpc"
+            - "id"
+            - "method"
+            - "params"
+            "type": "object"
 "info":
   "description": "Generated contract for the canonical dotted-method interface."
   "title": "Ghidra Bridge JSON-RPC WebSocket Interface"
@@ -20420,6 +22353,1932 @@
                 "method":
                   "enum":
                   - "data_type.delete"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+          "maxItems": !!int "1000"
+          "minItems": !!int "1"
+          "type": "array"
+        "transaction_mode":
+          "enum":
+          - "all_or_none"
+          - "per_item"
+          "type": "string"
+      "required":
+      - "items"
+      "type": "object"
+    "output_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "items":
+          "items":
+            "oneOf":
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "result": {}
+              "required":
+              - "id"
+              - "result"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "error":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "code":
+                      "pattern": "^[a-z][a-z0-9_]*$"
+                      "type": "string"
+                    "details":
+                      "additionalProperties": !!bool "true"
+                      "type": "object"
+                    "message":
+                      "minLength": !!int "1"
+                      "type": "string"
+                    "status":
+                      "maximum": !!int "599"
+                      "minimum": !!int "400"
+                      "type": "integer"
+                    "target":
+                      "type": "string"
+                  "required":
+                  - "status"
+                  - "code"
+                  - "message"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+              "required":
+              - "id"
+              - "error"
+              "type": "object"
+          "maxItems": !!int "1000"
+          "minItems": !!int "1"
+          "type": "array"
+      "required":
+      - "items"
+      "type": "object"
+  "batch.query":
+    "description": "Check a read-only batch. Run its items in order. Use\
+      \ per_item to keep item errors. Use all_or_none to stop the batch\
+      \ after an error."
+    "effects":
+      "allowed_during_analysis": !!bool "true"
+      "destructive": !!bool "false"
+      "idempotent": !!bool "true"
+      "mutates_program": !!bool "false"
+      "read_only": !!bool "true"
+      "requires_transaction": !!bool "false"
+    "input_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "items":
+          "items":
+            "oneOf":
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "id"
+                            - "program_name"
+                            - "status"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "session.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "compiler_spec_id"
+                            - "created_at"
+                            - "executable_format"
+                            - "executable_path"
+                            - "function_count"
+                            - "image_base"
+                            - "language_id"
+                            - "max_address"
+                            - "min_address"
+                            - "modified_at"
+                            - "name"
+                            - "symbol_count"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "program.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address_size"
+                            - "compiler_spec_id"
+                            - "endian"
+                            - "language_id"
+                            - "processor"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "program_language.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties": {}
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "default"
+                            - "kind"
+                            - "max_address"
+                            - "min_address"
+                            - "name"
+                            - "size"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "address_space.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "code_unit"
+                            - "function"
+                            - "in_memory"
+                            - "memory_block"
+                            - "symbol"
+                            - "valid"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "address":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "address"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "address.resolve"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "comment"
+                            - "end"
+                            - "execute"
+                            - "initialized"
+                            - "kind"
+                            - "length"
+                            - "name"
+                            - "overlay"
+                            - "read"
+                            - "start"
+                            - "volatile"
+                            - "write"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "name"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "memory_block.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "execute":
+                          "type": "boolean"
+                        "name":
+                          "type": "string"
+                        "read":
+                          "type": "boolean"
+                        "write":
+                          "type": "boolean"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "comment"
+                            - "end"
+                            - "execute"
+                            - "initialized"
+                            - "kind"
+                            - "length"
+                            - "name"
+                            - "overlay"
+                            - "read"
+                            - "start"
+                            - "volatile"
+                            - "write"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "memory_block.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "encoding":
+                      "enum":
+                      - "base64"
+                      - "hex"
+                      "type": "string"
+                    "length":
+                      "maximum": !!int "65536"
+                      "minimum": !!int "1"
+                      "type": "integer"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "bytes"
+                            - "bytes.data"
+                            - "bytes.encoding"
+                            - "bytes.length"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "address":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "address"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "memory.read"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "all"
+                          - "data"
+                          - "instruction"
+                          "type": "string"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "bytes"
+                            - "data_type"
+                            - "kind"
+                            - "length"
+                            - "mnemonic"
+                            - "operands"
+                            - "text"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "code_unit.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties": {}
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "bytes"
+                            - "data_type"
+                            - "length"
+                            - "representation"
+                            - "value"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "data_unit.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "data_type"
+                            - "length"
+                            - "name"
+                            - "namespace"
+                            - "representation"
+                            - "source_type"
+                            - "value"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "address":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "address"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "global_variable.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "case_sensitive":
+                          "type": "boolean"
+                        "name":
+                          "type": "string"
+                        "namespace":
+                          "type": "string"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "data_type"
+                            - "length"
+                            - "name"
+                            - "namespace"
+                            - "representation"
+                            - "source_type"
+                            - "value"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "global_variable.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "bytes"
+                            - "default_flow_type"
+                            - "fall_through"
+                            - "flow_override"
+                            - "flow_type"
+                            - "length"
+                            - "mnemonic"
+                            - "operands"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "address":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "address"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "instruction.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties": {}
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "bytes"
+                            - "default_flow_type"
+                            - "fall_through"
+                            - "flow_override"
+                            - "flow_type"
+                            - "length"
+                            - "mnemonic"
+                            - "operands"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "instruction.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "flow_overrides":
+                          "items":
+                            "enum":
+                            - "branch"
+                            - "call"
+                            - "call_return"
+                            - "none"
+                            - "return"
+                            "type": "string"
+                          "maxItems": !!int "5"
+                          "minItems": !!int "1"
+                          "type": "array"
+                        "selector":
+                          "oneOf":
+                          - "additionalProperties": !!bool "false"
+                            "properties":
+                              "address":
+                                "minLength": !!int "1"
+                                "type": "string"
+                              "kind":
+                                "enum":
+                                - "address"
+                                "type": "string"
+                            "required":
+                            - "kind"
+                            - "address"
+                            "type": "object"
+                          - "additionalProperties": !!bool "false"
+                            "properties":
+                              "entry":
+                                "minLength": !!int "1"
+                                "type": "string"
+                              "kind":
+                                "enum":
+                                - "function"
+                                "type": "string"
+                            "required":
+                            - "kind"
+                            - "entry"
+                            "type": "object"
+                          - "additionalProperties": !!bool "false"
+                            "properties":
+                              "end":
+                                "minLength": !!int "1"
+                                "type": "string"
+                              "kind":
+                                "enum":
+                                - "range"
+                                "type": "string"
+                              "start":
+                                "minLength": !!int "1"
+                                "type": "string"
+                            "required":
+                            - "kind"
+                            - "start"
+                            - "end"
+                            "type": "object"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "bytes"
+                            - "default_flow_type"
+                            - "fall_through"
+                            - "flow_override"
+                            - "flow_type"
+                            - "length"
+                            - "mnemonic"
+                            - "operands"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "required":
+                  - "filter"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "flow_override.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "body"
+                            - "body.end"
+                            - "body.num_addresses"
+                            - "body.start"
+                            - "calling_convention"
+                            - "comment"
+                            - "demangled_name"
+                            - "entry"
+                            - "external"
+                            - "has_custom_variable_storage"
+                            - "has_no_return"
+                            - "has_var_args"
+                            - "is_inline"
+                            - "local_variables"
+                            - "local_variables.data_type"
+                            - "local_variables.name"
+                            - "local_variables.storage"
+                            - "name"
+                            - "namespace"
+                            - "parameter_count"
+                            - "parameters"
+                            - "parameters.data_type"
+                            - "parameters.name"
+                            - "parameters.ordinal"
+                            - "parameters.storage"
+                            - "repeatable_comment"
+                            - "return_storage"
+                            - "return_type"
+                            - "signature"
+                            - "stack_purge_size"
+                            - "tags"
+                            - "thunk"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "entry":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "entry"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "function.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "contains":
+                          "type": "string"
+                        "entry":
+                          "type": "string"
+                        "external":
+                          "type": "boolean"
+                        "name":
+                          "type": "string"
+                        "thunk":
+                          "type": "boolean"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "body"
+                            - "body.end"
+                            - "body.num_addresses"
+                            - "body.start"
+                            - "calling_convention"
+                            - "comment"
+                            - "demangled_name"
+                            - "entry"
+                            - "external"
+                            - "has_custom_variable_storage"
+                            - "has_no_return"
+                            - "has_var_args"
+                            - "is_inline"
+                            - "local_variables"
+                            - "local_variables.data_type"
+                            - "local_variables.name"
+                            - "local_variables.storage"
+                            - "name"
+                            - "namespace"
+                            - "parameter_count"
+                            - "parameters"
+                            - "parameters.data_type"
+                            - "parameters.name"
+                            - "parameters.ordinal"
+                            - "parameters.storage"
+                            - "repeatable_comment"
+                            - "return_storage"
+                            - "return_type"
+                            - "signature"
+                            - "stack_purge_size"
+                            - "tags"
+                            - "thunk"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "function.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "direction":
+                          "enum":
+                          - "callees"
+                          - "callers"
+                          "type": "string"
+                        "entry":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "entry"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "call_site"
+                            - "demangled_name"
+                            - "direction"
+                            - "entry"
+                            - "name"
+                            - "namespace"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "required":
+                  - "filter"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "function_call.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "analyzed"
+                            - "finished_at"
+                            - "kind"
+                            - "progress"
+                            - "started_at"
+                            - "status"
+                            - "task_id"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "analysis.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "format":
+                      "enum":
+                      - "document"
+                      - "text"
+                      - "tokens"
+                      "type": "string"
+                    "include_comments":
+                      "type": "boolean"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "c"
+                            - "comments"
+                            - "comments_complete"
+                            - "completed"
+                            - "elapsed_ms"
+                            - "entry"
+                            - "format"
+                            - "lines"
+                            - "name"
+                            - "tokens"
+                            - "warnings"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "timeout_ms":
+                          "default": !!int "30000"
+                          "maximum": !!int "300000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "entry":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "entry"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "decompilation.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "demangled_name"
+                            - "id"
+                            - "name"
+                            - "namespace"
+                            - "primary"
+                            - "source_type"
+                            - "type"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "id":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "id"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "symbol.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "address":
+                          "type": "string"
+                        "case_sensitive":
+                          "type": "boolean"
+                        "name":
+                          "type": "string"
+                        "namespace":
+                          "type": "string"
+                        "source_type":
+                          "type": "string"
+                        "type":
+                          "type": "string"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "demangled_name"
+                            - "id"
+                            - "name"
+                            - "namespace"
+                            - "primary"
+                            - "source_type"
+                            - "type"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "symbol.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "direction":
+                          "enum":
+                          - "from"
+                          - "to"
+                          "type": "string"
+                        "from":
+                          "type": "string"
+                        "to":
+                          "type": "string"
+                        "type":
+                          "type": "string"
+                      "required":
+                      - "direction"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "from"
+                            - "operand_index"
+                            - "primary"
+                            - "source_type"
+                            - "to"
+                            - "type"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "required":
+                  - "filter"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "reference.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "text"
+                            - "type"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "address":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "type":
+                          "enum":
+                          - "eol"
+                          - "plate"
+                          - "post"
+                          - "pre"
+                          - "repeatable"
+                          "type": "string"
+                      "required":
+                      - "address"
+                      - "type"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "comment.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "address":
+                          "type": "string"
+                        "text":
+                          "type": "string"
+                        "type":
+                          "enum":
+                          - "eol"
+                          - "plate"
+                          - "post"
+                          - "pre"
+                          - "repeatable"
+                          "type": "string"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "text"
+                            - "type"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "comment.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "path":
+                          "type": "string"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "category_count"
+                            - "data_type_count"
+                            - "name"
+                            - "path"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "data_type_category.list"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "base_type"
+                            - "category_path"
+                            - "description"
+                            - "fields"
+                            - "kind"
+                            - "length"
+                            - "name"
+                            - "path"
+                            - "signature"
+                            - "signature.parameters"
+                            - "signature.return_type"
+                            - "size"
+                            - "values"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "selector":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "path":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "path"
+                      "type": "object"
+                  "required":
+                  - "selector"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "data_type.get"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "category_path":
+                          "type": "string"
+                        "kind":
+                          "type": "string"
+                        "query":
+                          "type": "string"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "base_type"
+                            - "category_path"
+                            - "description"
+                            - "fields"
+                            - "kind"
+                            - "length"
+                            - "name"
+                            - "path"
+                            - "signature"
+                            - "signature.parameters"
+                            - "signature.return_type"
+                            - "size"
+                            - "values"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "data_type.list"
                   "type": "string"
               "required":
               - "id"
@@ -29867,8 +33726,8 @@
             - "output_schema"
             - "effects"
             "type": "object"
-          "maxItems": !!int "56"
-          "minItems": !!int "56"
+          "maxItems": !!int "57"
+          "minItems": !!int "57"
           "type": "array"
       "required":
       - "interface_version"
