@@ -290,15 +290,8 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
-    register(
-        name,
-        MethodEffects.readOnlyMethod(),
-        description,
-        input,
-        ApiSchemaCatalog.resourceSchema(fields, identityFields),
-        fields,
-        identityFields,
-        request -> WireValues.restrict(WireValues.resource(handler.handle(request)), fields));
+    registerResource(
+        name, MethodEffects.readOnlyMethod(), description, input, fields, identityFields, handler);
   }
 
   private static Map<String, Object> interfaceSchema(int methodCount) {
@@ -359,20 +352,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
-    register(
-        name,
-        MethodEffects.readOnlyMethod(),
-        description,
-        input,
-        ApiSchemaCatalog.listSchema(fields, identityFields),
-        fields,
-        identityFields,
-        request -> {
-          String resource = name.substring(0, name.indexOf('.'));
-          PageRequest page = decodePage(request, resource);
-          return canonicalList(
-              resource, request, handler.handle(request, page), page, fields, identityFields);
-        });
+    registerPagedList(name, description, input, fields, identityFields, false, handler);
   }
 
   void scanList(
@@ -398,12 +378,25 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
+    registerPagedList(name, description, input, fields, identityFields, true, handler);
+  }
+
+  private void registerPagedList(
+      String name,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      boolean includeScan,
+      PagedHandler handler) {
     register(
         name,
         MethodEffects.readOnlyMethod(),
         description,
         input,
-        ApiSchemaCatalog.scanListSchema(fields, identityFields),
+        includeScan
+            ? ApiSchemaCatalog.scanListSchema(fields, identityFields)
+            : ApiSchemaCatalog.listSchema(fields, identityFields),
         fields,
         identityFields,
         request -> {
@@ -452,6 +445,17 @@ public final class ApiRegistry {
   }
 
   void writeResource(
+      String name,
+      MethodEffects effects,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      ApiMethod.Handler<Map<String, Object>, Object> handler) {
+    registerResource(name, effects, description, input, fields, identityFields, handler);
+  }
+
+  private void registerResource(
       String name,
       MethodEffects effects,
       String description,

@@ -1,8 +1,11 @@
 package app.byteland.ghidra;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * Serializes objects to compact JSON and parses JSON text.
@@ -66,5 +69,29 @@ public final class JsonUtil {
       object.put(key, entry.getValue());
     }
     return object;
+  }
+
+  /**
+   * Converts maps to sorted-key maps and iterables to lists recursively.
+   *
+   * @param value JSON-compatible value to normalize
+   * @return value with sorted map keys and list collections
+   */
+  public static Object canonical(Object value) {
+    if (value instanceof Map<?, ?> map) {
+      Map<String, Object> sorted = new TreeMap<>();
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        sorted.put(String.valueOf(entry.getKey()), canonical(entry.getValue()));
+      }
+      return sorted;
+    }
+    if (value instanceof Iterable<?> iterable) {
+      List<Object> result = new ArrayList<>();
+      for (Object item : iterable) {
+        result.add(canonical(item));
+      }
+      return result;
+    }
+    return value;
   }
 }

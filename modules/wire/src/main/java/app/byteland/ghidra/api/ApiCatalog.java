@@ -1,6 +1,5 @@
 package app.byteland.ghidra.api;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -86,8 +85,8 @@ public final class ApiCatalog {
       ApiMethod.MethodEffects effects = method.effects();
       this.methodName = method.name();
       this.methodDescription = method.description();
-      this.requestSchema = immutableSchemaSnapshot(method.requestCodec().schema());
-      this.responseSchema = immutableSchemaSnapshot(method.responseCodec().schema());
+      this.requestSchema = WireSchema.snapshot(method.requestCodec().schema());
+      this.responseSchema = WireSchema.snapshot(method.responseCodec().schema());
       this.readOnly = effects.readOnly();
       this.mutatesProgram = effects.mutatesProgram();
       this.requiresTransaction = effects.requiresTransaction();
@@ -182,37 +181,5 @@ public final class ApiCatalog {
           "destructive", destructive,
           "idempotent", idempotent);
     }
-  }
-
-  private static Map<String, Object> immutableSchemaSnapshot(Map<?, ?> source) {
-    Objects.requireNonNull(source, "schema");
-    Map<String, Object> copy = new LinkedHashMap<>();
-    for (Map.Entry<?, ?> entry : source.entrySet()) {
-      if (!(entry.getKey() instanceof String key)) {
-        throw new IllegalArgumentException("schema object keys must be strings");
-      }
-      copy.put(key, immutableJsonSnapshot(entry.getValue()));
-    }
-    return Collections.unmodifiableMap(copy);
-  }
-
-  private static Object immutableJsonSnapshot(Object value) {
-    if (value instanceof Map<?, ?> map) {
-      return immutableSchemaSnapshot(map);
-    }
-    if (value instanceof List<?> list) {
-      List<Object> copy = new ArrayList<>(list.size());
-      for (Object item : list) {
-        copy.add(immutableJsonSnapshot(item));
-      }
-      return Collections.unmodifiableList(copy);
-    }
-    if (value == null
-        || value instanceof String
-        || value instanceof Number
-        || value instanceof Boolean) {
-      return value;
-    }
-    throw new IllegalArgumentException("unsupported schema value: " + value.getClass().getName());
   }
 }

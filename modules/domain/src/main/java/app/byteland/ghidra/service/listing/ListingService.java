@@ -14,24 +14,21 @@ public interface ListingService {
    * @param scan address scan bounds and timeout options
    * @param limit maximum code units to return
    * @param kind optional code unit kind filter
-   * @param direction scan direction ({@code "forward"} or {@code "backward"})
    * @param cursor optional pagination cursor
    * @return page of code unit resources
    */
   Page<CodeUnitResource> listCodeUnits(
-      AddressScanOptions scan, int limit, String kind, String direction, String cursor);
+      AddressScanOptions scan, int limit, String kind, String cursor);
 
   /**
    * Returns one page of instructions.
    *
    * @param scan address scan bounds and timeout options
    * @param limit maximum instructions to return
-   * @param direction scan direction ({@code "forward"} or {@code "backward"})
    * @param cursor optional pagination cursor
    * @return page of instruction resources
    */
-  Page<InstructionResource> listInstructions(
-      AddressScanOptions scan, int limit, String direction, String cursor);
+  Page<InstructionResource> listInstructions(AddressScanOptions scan, int limit, String cursor);
 
   /**
    * Returns the metadata for one instruction by address.
@@ -46,12 +43,10 @@ public interface ListingService {
    *
    * @param scan address scan bounds and timeout options
    * @param limit maximum data units to return
-   * @param direction scan direction ({@code "forward"} or {@code "backward"})
    * @param cursor optional pagination cursor
    * @return page of defined data unit resources
    */
-  Page<DataUnitResource> listDataUnits(
-      AddressScanOptions scan, int limit, String direction, String cursor);
+  Page<DataUnitResource> listDataUnits(AddressScanOptions scan, int limit, String cursor);
 
   /**
    * Returns instructions that have active flow overrides.

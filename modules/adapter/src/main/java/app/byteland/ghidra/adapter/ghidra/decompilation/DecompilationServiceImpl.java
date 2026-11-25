@@ -10,6 +10,7 @@ import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -26,7 +27,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
   private final LeasePool<DecompInterface> decompilerPool;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
-  private final Map<DecompInterface, Long> programModifications =
+  private final Map<DecompInterface, CacheState> cacheStates =
       Collections.synchronizedMap(new WeakHashMap<>());
 
   /**
@@ -77,7 +78,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
       DecompInterface decompiler = lease.value();
       applyCommentMode(decompiler, includeComments);
       // The native process keeps program data. Clear it when program modifications occur.
-      flushCacheIfModified(decompiler, function.getProgram());
+      flushCacheIfNeeded(decompiler, function.getProgram());
       DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
       boolean completed = results.decompileCompleted();
       List<String> warnings = new ArrayList<>();
@@ -138,19 +139,52 @@ public final class DecompilationServiceImpl implements DecompilationService {
     commentModes.put(decompiler, includeComments);
   }
 
-  /** Flushes the native cache only when the modification number of the program changes. */
-  private void flushCacheIfModified(DecompInterface decompiler, Program program) {
+  /** Flushes the native cache only when the program or its modification number changes. */
+  private void flushCacheIfNeeded(DecompInterface decompiler, Program program) {
     Program target = program != null ? program : context.currentProgramOrNull();
     if (target == null) {
-      programModifications.remove(decompiler);
+      cacheStates.put(decompiler, CacheState.dirtyWithoutProgram());
       decompiler.flushCache();
       return;
     }
     long modificationNumber = target.getModificationNumber();
-    if (Long.valueOf(modificationNumber).equals(programModifications.get(decompiler))) return;
-    programModifications.remove(decompiler);
+    CacheState state = cacheStates.get(decompiler);
+    if (state == null) {
+      Program openedProgram = decompiler.getProgram();
+      if (openedProgram == null || openedProgram == target) {
+        cacheStates.put(decompiler, CacheState.clean(target, modificationNumber));
+        return;
+      }
+    } else if (state.isCleanFor(target, modificationNumber)) {
+      return;
+    }
+    cacheStates.put(
+        decompiler, state == null ? CacheState.dirtyWithoutProgram() : state.markDirty());
     if (decompiler.flushCache() >= 0) {
-      programModifications.put(decompiler, modificationNumber);
+      cacheStates.put(decompiler, CacheState.clean(target, modificationNumber));
+    }
+  }
+
+  private record CacheState(
+      WeakReference<Program> program, long modificationNumber, boolean dirty) {
+    private static final WeakReference<Program> NO_PROGRAM = new WeakReference<>(null);
+
+    static CacheState clean(Program program, long modificationNumber) {
+      return new CacheState(new WeakReference<>(program), modificationNumber, false);
+    }
+
+    static CacheState dirtyWithoutProgram() {
+      return new CacheState(NO_PROGRAM, 0L, true);
+    }
+
+    CacheState markDirty() {
+      return dirty ? this : new CacheState(program, modificationNumber, true);
+    }
+
+    boolean isCleanFor(Program candidate, long candidateModificationNumber) {
+      return !dirty
+          && program.refersTo(candidate)
+          && modificationNumber == candidateModificationNumber;
     }
   }
 

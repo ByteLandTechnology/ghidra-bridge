@@ -68,7 +68,8 @@ The `./gradlew --no-daemon clean verify` and `verify-repository-hygiene.sh` chec
 
 ## Verification
 
-Set `GHIDRA_INSTALL_DIR` to a Ghidra 12.1 installation and run these checks before you commit:
+Set `GHIDRA_INSTALL_DIR` to a Ghidra 12.1 installation and run these checks before you commit
+(CI runs `./gradlew --no-daemon verify` on a new checkout):
 
 ```bash
 # Check tracked file and documentation hygiene

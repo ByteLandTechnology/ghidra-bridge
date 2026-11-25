@@ -94,16 +94,6 @@ public final class AddressScanRanges {
     }
 
     /**
-     * Reports whether an address falls within {@code [start, end]}.
-     *
-     * @param address candidate address in the same address space
-     * @return {@code true} if {@code address} is inside the range
-     */
-    public boolean includes(Address address) {
-      return address.compareTo(start) >= 0 && (end == null || address.compareTo(end) <= 0);
-    }
-
-    /**
      * Reports whether an address is strictly past {@link #end()}.
      *
      * @param address candidate address in the same address space

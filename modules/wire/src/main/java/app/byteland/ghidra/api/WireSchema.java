@@ -1,9 +1,13 @@
 package app.byteland.ghidra.api;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Builds JSON Schema maps and validates decoded JSON values against them.
@@ -12,6 +16,45 @@ public final class WireSchema {
   private static final int EXACT_UNION_MATCHES = 1;
 
   private WireSchema() {}
+
+  static Map<String, Object> snapshot(Map<?, ?> schema) {
+    Objects.requireNonNull(schema, "schema");
+    Map<String, Object> copy = new LinkedHashMap<>();
+    for (Map.Entry<?, ?> entry : schema.entrySet()) {
+      if (!(entry.getKey() instanceof String key)) {
+        throw new IllegalArgumentException("schema object keys must be strings");
+      }
+      copy.put(key, snapshotValue(entry.getValue()));
+    }
+    return Collections.unmodifiableMap(copy);
+  }
+
+  private static Object snapshotValue(Object value) {
+    if (value instanceof Map<?, ?> map) {
+      return snapshot(map);
+    }
+    if (value instanceof List<?> list) {
+      List<Object> copy = new ArrayList<>(list.size());
+      for (Object item : list) {
+        copy.add(snapshotValue(item));
+      }
+      return Collections.unmodifiableList(copy);
+    }
+    if (value == null
+        || value instanceof String
+        || value instanceof Boolean
+        || value instanceof Byte
+        || value instanceof Short
+        || value instanceof Integer
+        || value instanceof Long
+        || value instanceof Float
+        || value instanceof Double
+        || value instanceof BigInteger
+        || value instanceof BigDecimal) {
+      return value;
+    }
+    throw new IllegalArgumentException("unsupported schema value: " + value.getClass().getName());
+  }
 
   /**
    * Returns an unconstrained JSON Schema that accepts any value.
@@ -556,7 +599,8 @@ public final class WireSchema {
         cursor.pushKey(key);
         try {
           ValidationFailure failure =
-              findFailure(entry.getValue(), (Map<String, Object>) propertySchema, cursor, definitions);
+              findFailure(
+                  entry.getValue(), (Map<String, Object>) propertySchema, cursor, definitions);
           if (failure != null) {
             return failure;
           }
