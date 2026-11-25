@@ -53,15 +53,21 @@ final class DataTypeMutationSupport {
       try {
         component.setFieldName(newName);
       } catch (Exception exception) {
-        if (exception instanceof DuplicateNameException) {
-          throw new IllegalArgumentException("duplicate field name: " + newName, exception);
-        }
-        if (exception instanceof RuntimeException runtime) throw runtime;
-        throw new IllegalStateException("cannot rename data type field", exception);
+        throw mapFieldRenameFailure(newName, exception);
       }
     }
     if (!String.valueOf(component.getComment()).equals(String.valueOf(newComment))) {
       component.setComment(newComment);
     }
+  }
+
+  private static RuntimeException mapFieldRenameFailure(String newName, Exception exception) {
+    if (exception instanceof DuplicateNameException) {
+      return new IllegalArgumentException("duplicate field name: " + newName, exception);
+    }
+    if (exception instanceof RuntimeException runtime) {
+      return runtime;
+    }
+    return new IllegalStateException("cannot rename data type field", exception);
   }
 }

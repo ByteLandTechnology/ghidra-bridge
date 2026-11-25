@@ -92,11 +92,23 @@ bash .github/scripts/verify-repository-hygiene.sh
 On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
 
 The verification tasks check:
-- **Unit Tests**: `check` runs JUnit tests across all Java modules.
-- **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
+- **Compiler Lints**: `JavaCompile` tasks and `compileGeneratedScripts` compile Java 21 sources with `-Xlint:all,-path` and `-Werror` (`-path` is excluded because Ghidra JAR manifests reference external `Class-Path` entries).
+- **Javadoc**: `javadoc` runs across all 8 Java modules with `-Xdoclint:all` and `-Werror` as part of `check`.
+- **Static Analysis**: `pmdMain` and `pmdTest` analyze main and test sources against `config/pmd/ruleset.xml` (including `UnnecessaryWarningSuppression`) as part of `check`.
+- **Unit Tests**: `test` runs JUnit tests across all Java modules as part of `check`.
+- **Architecture**: `verifyArchitecture` verifies that only `adapter` and `launcher` import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
-- **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
-- **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+- **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile without warnings.
+- **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/` and ensures `ghidra-bridge.jar` bundles zero third-party runtime dependencies.
+
+`gradle.properties` sets `org.gradle.dependency.verification=strict`. When you update test or build tool dependencies (such as JUnit or PMD), regenerate SHA-256 checksums in `gradle/verification-metadata.xml` from a cold `GRADLE_USER_HOME` cache:
+
+```bash
+cold_gradle_home="$(mktemp -d)"
+GRADLE_USER_HOME="$cold_gradle_home" GHIDRA_INSTALL_DIR=/path/to/ghidra \
+  ./gradlew --no-daemon --write-verification-metadata sha256 clean verify
+rm -rf "$cold_gradle_home"
+```
 
 ## Releases
 

@@ -29,6 +29,14 @@ public final class Bootstrap {
 
   private Bootstrap() {}
 
+  /**
+   * Starts the JSON-RPC WebSocket bridge session for the active Ghidra script.
+   *
+   * @param script active Ghidra script context
+   * @param args startup {@code key=value} arguments passed to the script
+   * @param onShutdown optional callback invoked from the JVM shutdown hook
+   * @throws Exception if startup or transport execution fails
+   */
   public static void startFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
     if (script == null) {
@@ -111,6 +119,14 @@ public final class Bootstrap {
     }
   }
 
+  /**
+   * Starts the MCP Streamable HTTP service for the active Ghidra script.
+   *
+   * @param script active Ghidra script context
+   * @param args startup {@code key=value} arguments passed to the script
+   * @param onShutdown optional callback invoked from the JVM shutdown hook
+   * @throws Exception if startup or HTTP server execution fails
+   */
   public static void startMcpFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
     if (script == null) {

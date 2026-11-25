@@ -99,7 +99,7 @@ final class AgentClientChannels {
         abortAfter(failure);
         throw failure;
       } catch (ExecutionException failed) {
-        throw mapFailure(operationName, failed.getCause());
+        throw mapFailure(operationName, failed);
       }
     }
 
@@ -113,7 +113,8 @@ final class AgentClientChannels {
       }
     }
 
-    private static RuntimeException mapFailure(String operationName, Throwable failure) {
+    private static RuntimeException mapFailure(String operationName, ExecutionException failed) {
+      Throwable failure = failed.getCause() != null ? failed.getCause() : failed;
       if (failure instanceof IOException ioFailure) {
         return new UncheckedIOException("WebSocket " + operationName + " failed", ioFailure);
       }

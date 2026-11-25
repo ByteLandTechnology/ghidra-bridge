@@ -320,12 +320,13 @@ class AgentWebSocketServerTest {
         HttpClient httpClient = HttpClient.newHttpClient()) {
       int port = started.port();
 
-      try (Socket pending1 = openPartialHandshake(port);
-          Socket pending2 = openPartialHandshake(port)) {
-        waitForPendingSlotSaturation(port);
+      try (Socket pending2 = openPartialHandshake(port)) {
+        try (Socket pending1 = openPartialHandshake(port)) {
+          waitForPendingSlotSaturation(port);
+          assertNotNull(pending1);
+        }
 
         TestWebSocketListener listener = new TestWebSocketListener();
-        pending1.close();
 
         // Retry briefly if the freed handshake slot cleanup races on the connection thread.
         WebSocket ws = connectWithSlotReleaseRetry(httpClient, port, listener);

@@ -11,9 +11,17 @@ import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.symbol.Symbol;
 import java.util.Objects;
 
+/**
+ * Ghidra-backed implementation of {@link AddressService}.
+ */
 public final class AddressServiceImpl implements AddressService {
   private final GhidraSession context;
 
+  /**
+   * Creates an address service bound to {@code context}.
+   *
+   * @param context active Ghidra session
+   */
   public AddressServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
   }

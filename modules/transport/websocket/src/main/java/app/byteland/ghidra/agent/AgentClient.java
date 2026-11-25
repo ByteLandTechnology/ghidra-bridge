@@ -30,9 +30,14 @@ public final class AgentClient {
   /** The maximum time for the send of one keepalive ping. */
   private static final Duration KEEPALIVE_TIMEOUT = Duration.ofSeconds(10);
 
+  /**
+   * Receives transport readiness notifications for embedded server or outbound client mode.
+   */
   public interface LifecycleListener {
+    /** Invoked when the embedded WebSocket server starts listening for clients. */
     default void onListening() {}
 
+    /** Invoked when the outbound WebSocket client completes handshake and sends {@code ghidra.ready}. */
     default void onConnected() {}
   }
 
@@ -45,10 +50,23 @@ public final class AgentClient {
       new AtomicReference<>();
   private final AtomicReference<AgentWebSocketServer> serverRef = new AtomicReference<>();
 
+  /**
+   * Creates a WebSocket transport runner with no-op lifecycle callbacks.
+   *
+   * @param config bridge runtime configuration
+   * @param dispatcher API request dispatcher
+   */
   public AgentClient(AgentConfig config, AgentDispatcher dispatcher) {
     this(config, dispatcher, new LifecycleListener() {});
   }
 
+  /**
+   * Creates a WebSocket transport runner with a custom lifecycle listener.
+   *
+   * @param config bridge runtime configuration
+   * @param dispatcher API request dispatcher
+   * @param lifecycleListener listener notified when listening or connected
+   */
   public AgentClient(
       AgentConfig config, AgentDispatcher dispatcher, LifecycleListener lifecycleListener) {
     this(config, dispatcher, lifecycleListener, DEFAULT_CONNECT_TIMEOUT);
@@ -65,10 +83,21 @@ public final class AgentClient {
     this.connectTimeout = connectTimeout;
   }
 
+  /**
+   * Runs the configured WebSocket transport until the session disconnects.
+   *
+   * @throws Exception if connection setup or transport execution fails
+   */
   public void connect() throws Exception {
     connect(() -> false);
   }
 
+  /**
+   * Runs the configured WebSocket transport until disconnected or cancelled.
+   *
+   * @param cancellationRequested supplier polled to stop waiting when cancellation occurs
+   * @throws Exception if connection setup or transport execution fails
+   */
   public void connect(BooleanSupplier cancellationRequested) throws Exception {
     try {
       connectUntilDisconnected(cancellationRequested);
@@ -128,6 +157,9 @@ public final class AgentClient {
     LOGGER.log(System.Logger.Level.ERROR, message, error);
   }
 
+  /**
+   * Closes any active WebSocket channel or embedded server and unblocks waiting callers.
+   */
   public void disconnect() {
     RuntimeException failure = null;
     try {
@@ -231,10 +263,16 @@ public final class AgentClient {
           throw handshakeTimeout(wsUrl, timeout, timeoutException);
         }
       } catch (ExecutionException executionException) {
-        Throwable cause = executionException.getCause();
-        throw new IOException("Failed to connect to " + wsUrl, cause);
+        throw handshakeFailure(wsUrl, executionException);
       }
     }
+  }
+
+  private static IOException handshakeFailure(
+      String wsUrl, ExecutionException executionException) {
+    Throwable cause = executionException.getCause();
+    return new IOException(
+        "Failed to connect to " + wsUrl, cause != null ? cause : executionException);
   }
 
   private static IOException handshakeTimeout(

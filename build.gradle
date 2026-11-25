@@ -18,6 +18,7 @@ subprojects {
     }
 
     apply plugin: 'java-library'
+    apply plugin: 'pmd'
     java {
         toolchain {
             languageVersion = JavaLanguageVersion.of(21)
@@ -34,8 +35,27 @@ subprojects {
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
+        options.compilerArgs.addAll(['-Xlint:all,-path', '-Werror'])
     }
-    def subprojectCheck = tasks.named('check')
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+        def docletOptions = options as StandardJavadocDocletOptions
+        docletOptions.charSet = 'UTF-8'
+        docletOptions.docEncoding = 'UTF-8'
+        docletOptions.quiet()
+        docletOptions.addBooleanOption('Xdoclint:all', true)
+        docletOptions.addBooleanOption('Werror', true)
+    }
+    pmd {
+        toolVersion = '7.24.0'
+        consoleOutput = true
+        ignoreFailures = false
+        ruleSets = []
+        ruleSetFiles = rootProject.files('config/pmd/ruleset.xml')
+    }
+    def subprojectCheck = tasks.named('check') {
+        dependsOn tasks.named('javadoc')
+    }
     rootProject.tasks.named('check') {
         dependsOn subprojectCheck
     }
@@ -202,6 +222,7 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     sourceCompatibility = '21'
     targetCompatibility = '21'
     options.encoding = 'UTF-8'
+    options.compilerArgs.addAll(['-Xlint:all,-path', '-Werror'])
 }
 
 project(':launcher').tasks.named('test', Test) {

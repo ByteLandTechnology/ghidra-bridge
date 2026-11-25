@@ -10,9 +10,18 @@ import java.util.Map;
 import java.util.List;
 import java.util.TreeMap;
 
+/**
+ * Generates the canonical {@code docs/mcp-tools.json} contract snapshot for the MCP tool catalog.
+ */
 public final class McpContractGenerator {
   private McpContractGenerator() {}
 
+  /**
+   * Writes {@code docs/mcp-tools.json} under the target repository root directory.
+   *
+   * @param args optional single-element array containing the target repository root directory
+   * @throws IOException if creating directories or writing the contract file fails
+   */
   public static void main(String[] args) throws IOException {
     Path root = Path.of(args.length == 0 ? "." : args[0]).toAbsolutePath().normalize();
     Path output = root.resolve("docs/mcp-tools.json");

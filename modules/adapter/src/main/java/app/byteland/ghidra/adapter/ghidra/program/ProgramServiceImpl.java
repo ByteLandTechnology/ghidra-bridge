@@ -7,21 +7,26 @@ import app.byteland.ghidra.service.program.AddressSpaceResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
-import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.lang.CompilerSpec;
 import ghidra.program.model.lang.Language;
-import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
-import ghidra.program.model.symbol.Symbol;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Ghidra-backed implementation of {@link ProgramService}.
+ */
 public final class ProgramServiceImpl implements ProgramService {
   private final Program program;
   private final GhidraSession context;
 
+  /**
+   * Creates a program service bound to {@code context}.
+   *
+   * @param context active Ghidra session
+   */
   public ProgramServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
     this.program = context.currentProgram();

@@ -21,6 +21,12 @@ public interface TransactionRunner {
    */
   @FunctionalInterface
   interface Operation<T> {
+    /**
+     * Executes the transactional callback.
+     *
+     * @return callback result
+     * @throws Exception if execution fails and the transaction must roll back
+     */
     T execute() throws Exception;
   }
 }

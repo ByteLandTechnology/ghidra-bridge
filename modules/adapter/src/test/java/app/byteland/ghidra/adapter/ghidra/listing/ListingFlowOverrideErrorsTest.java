@@ -17,7 +17,7 @@ class ListingFlowOverrideErrorsTest {
   void testConflictError() {
     var ex = ListingFlowOverrideErrors.conflict("expected BRANCH but found CALL");
     assertTrue(ex instanceof DomainException);
-    var domain = (DomainException) ex;
+    DomainException domain = ex;
     assertEquals(409, domain.status());
     assertEquals("conflict", domain.code());
     assertNull(domain.target());

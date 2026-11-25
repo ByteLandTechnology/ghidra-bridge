@@ -35,14 +35,29 @@ public final class ApiCatalog {
     return new ApiCatalog(interfaceVersion, List.copyOf(ordered.values()));
   }
 
+  /**
+   * Returns the semantic version of the public bridge interface.
+   *
+   * @return non-blank interface version string
+   */
   public String interfaceVersion() {
     return apiInterfaceVersion;
   }
 
+  /**
+   * Returns all registered method descriptors in deterministic registration order.
+   *
+   * @return immutable list of method descriptors
+   */
   public List<MethodDescriptor> methods() {
     return methodDescriptors;
   }
 
+  /**
+   * Builds the wire payload returned by {@code interface.get}.
+   *
+   * @return map containing {@code interface_version} and serialized method descriptors
+   */
   public Map<String, Object> interfaceDescription() {
     return Map.of(
         "interface_version",
@@ -85,22 +100,47 @@ public final class ApiCatalog {
       return new MethodDescriptor(method);
     }
 
+    /**
+     * Returns the canonical dotted API method name.
+     *
+     * @return dotted method name
+     */
     public String name() {
       return methodName;
     }
 
+    /**
+     * Returns the human-readable method summary.
+     *
+     * @return method description text
+     */
     public String description() {
       return methodDescription;
     }
 
+    /**
+     * Returns the immutable JSON Schema for method request parameters.
+     *
+     * @return input JSON Schema map
+     */
     public Map<String, Object> inputSchema() {
       return requestSchema;
     }
 
+    /**
+     * Returns the immutable JSON Schema for method results.
+     *
+     * @return output JSON Schema map
+     */
     public Map<String, Object> outputSchema() {
       return responseSchema;
     }
 
+    /**
+     * Returns the contract metadata map without the method name key.
+     *
+     * @return unmodifiable map of description, schemas, and effect flags
+     */
     public Map<String, Object> contractValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put("description", methodDescription);
@@ -110,6 +150,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(descriptor);
     }
 
+    /**
+     * Returns the wire descriptor entry included in {@code interface.get}.
+     *
+     * @return unmodifiable map of method name, description, schemas, and effect flags
+     */
     public Map<String, Object> interfaceValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put(ApiVocabulary.NAME, methodName);
@@ -117,6 +162,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(descriptor);
     }
 
+    /**
+     * Summarizes the method's side-effect category for generated documentation.
+     *
+     * @return {@code "read-only"}, {@code "lifecycle"}, {@code "mutation"}, or {@code "destructive mutation"}
+     */
     public String effectSummary() {
       if (readOnly) return "read-only";
       if (!mutatesProgram) return "lifecycle";

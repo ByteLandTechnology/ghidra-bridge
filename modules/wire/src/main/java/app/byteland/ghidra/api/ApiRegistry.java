@@ -21,9 +21,13 @@ import java.util.function.Supplier;
  * Central registry that defines and dispatches all public API methods.
  */
 public final class ApiRegistry {
+  /** Semantic version of the public JSON-RPC and MCP tool interface. */
   public static final String INTERFACE_VERSION = "0.2.0";
+  /** Default page size for paginated list methods. */
   public static final int DEFAULT_LIMIT = 100;
+  /** Maximum page size allowed for paginated list methods. */
   public static final int MAX_LIMIT = Page.MAX_LIMIT;
+  /** Maximum number of operations allowed in a single {@code batch.execute} call. */
   public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
@@ -39,6 +43,14 @@ public final class ApiRegistry {
   private final ApiCatalog catalogSnapshot;
   private BatchMethod batchMethod;
 
+  /**
+   * Creates an {@link ApiRegistry} bound to {@code services} and registers all public API methods.
+   *
+   * @param services domain service bundle for the active program
+   * @param sessionId session identifier used to bind pagination cursors
+   * @param sessionSupplier supplier returning the current {@code session.get} status payload
+   * @param shutdownAction callback invoked when {@code session.close} requests shutdown
+   */
   public ApiRegistry(
       BridgeServices services,
       String sessionId,
@@ -53,7 +65,11 @@ public final class ApiRegistry {
     catalogSnapshot = ApiCatalog.from(INTERFACE_VERSION, methodsByName.values());
   }
 
-  /** Builds the method catalog without an open Ghidra program. */
+  /**
+   * Builds the method catalog without an open Ghidra program.
+   *
+   * @return static {@link ApiCatalog} snapshot of all public methods
+   */
   public static ApiCatalog catalog() {
     return new ApiRegistry(metadataServices(), "schema", Map::of, () -> {}).methodCatalog();
   }
@@ -120,22 +136,51 @@ public final class ApiRegistry {
     return bridgeServices;
   }
 
+  /**
+   * Returns the immutable catalog of registered API methods.
+   *
+   * @return method catalog snapshot
+   */
   public ApiCatalog methodCatalog() {
     return catalogSnapshot;
   }
 
+  /**
+   * Returns all registered {@link ApiMethod} definitions in registration order.
+   *
+   * @return immutable list of registered API methods
+   */
   public List<ApiMethod<Map<String, Object>, Object>> methods() {
     return List.copyOf(methodsByName.values());
   }
 
+  /**
+   * Returns the ordered set of registered dotted method names.
+   *
+   * @return unmodifiable set of method names
+   */
   public Set<String> methodNames() {
     return Collections.unmodifiableSet(methodsByName.keySet());
   }
 
+  /**
+   * Looks up a registered {@link ApiMethod} by its canonical dotted name.
+   *
+   * @param name canonical dotted method name
+   * @return registered method, or {@code null} when unknown
+   */
   public ApiMethod<Map<String, Object>, Object> method(String name) {
     return methodsByName.get(name);
   }
 
+  /**
+   * Validates and executes the API method named {@code name}, wrapping transactional mutations.
+   *
+   * @param name canonical dotted method name
+   * @param params decoded JSON request object, or {@code null}
+   * @return serialized-ready method result
+   * @throws Exception if validation, concurrency guards, or domain execution fails
+   */
   public Object dispatch(String name, Map<String, Object> params) throws Exception {
     ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
     if (method == null) {

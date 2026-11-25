@@ -82,10 +82,25 @@ public final class McpHttpServer implements AutoCloseable {
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, SseSession> sseSessions = new ConcurrentHashMap<>();
 
+  /**
+   * Creates an MCP HTTP server that discards per-request log lines.
+   *
+   * @param config MCP HTTP server configuration
+   * @param dispatcher bridge request dispatcher
+   * @throws IOException if binding the underlying HTTP socket fails
+   */
   public McpHttpServer(McpConfig config, AgentDispatcher dispatcher) throws IOException {
     this(config, dispatcher, McpHttpServer::discardRequestLog);
   }
 
+  /**
+   * Creates an MCP HTTP server with a custom request log sink.
+   *
+   * @param config MCP HTTP server configuration
+   * @param dispatcher bridge request dispatcher
+   * @param requestLogSink consumer that receives formatted request log messages
+   * @throws IOException if binding the underlying HTTP socket fails
+   */
   public McpHttpServer(
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
@@ -133,18 +148,38 @@ public final class McpHttpServer implements AutoCloseable {
     }
   }
 
+  /**
+   * Starts accepting HTTP requests on the bound socket.
+   */
   public void start() {
     server.start();
   }
 
+  /**
+   * Blocks until the server closes.
+   *
+   * @throws InterruptedException if the waiting thread is interrupted
+   */
   public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
 
+  /**
+   * Blocks until the server closes or {@code cancelRequested} returns {@code true}.
+   *
+   * @param cancelRequested supplier polled to detect external cancellation
+   * @return {@code true} if shutdown completed before cancellation, or {@code false} if cancelled
+   * @throws InterruptedException if the waiting thread is interrupted
+   */
   public boolean awaitShutdown(BooleanSupplier cancelRequested) throws InterruptedException {
     return awaitShutdown(shutdownLatch, cancelRequested, this::close, 250L);
   }
 
+  /**
+   * Returns the configured HTTP endpoint URL.
+   *
+   * @return HTTP endpoint URL string
+   */
   public String endpoint() {
     return config.endpoint();
   }
@@ -693,7 +728,7 @@ public final class McpHttpServer implements AutoCloseable {
         actual = new String(java.util.Base64.getDecoder().decode(
             actual.substring(9, actual.length() - 2)), StandardCharsets.UTF_8);
       } catch (IllegalArgumentException invalid) {
-        throw new JsonRpcError(400, id, HEADER_MISMATCH, "Invalid " + header + " encoding");
+        throw new JsonRpcError(400, id, HEADER_MISMATCH, "Invalid " + header + " encoding", invalid);
       }
     }
     if (!expected.equals(actual)) {
@@ -1051,7 +1086,7 @@ public final class McpHttpServer implements AutoCloseable {
         if (digits == 1 && value == 0) {
           return null;
         }
-        value = value * 10 + (ch - '0');
+        value = value * 10 + ch - '0';
         digits++;
         if (digits > 3 || value > 255) {
           return null;
@@ -1317,7 +1352,6 @@ public final class McpHttpServer implements AutoCloseable {
       }
     }
 
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void closeStream() {
       if (!streamClosed.compareAndSet(false, true)) {
         return;
@@ -1327,7 +1361,11 @@ public final class McpHttpServer implements AutoCloseable {
       } catch (IOException ignored) {}
       try {
         exchange.close();
-      } catch (Exception ignored) {}
+      } catch (RuntimeException ignored) {}
+    }
+
+    String id() {
+      return id;
     }
 
     boolean isActive() {

@@ -20,12 +20,24 @@ public final class AgentDispatcher implements AutoCloseable {
   private final Object sequenceLock = new Object();
   private volatile boolean shuttingDown;
 
+  /**
+   * Creates a dispatcher bound to the session identifier in {@code config}.
+   *
+   * @param services domain service bundle for the active program
+   * @param config bridge runtime configuration
+   */
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
     this(
         Objects.requireNonNull(services, "services"),
         Objects.requireNonNull(config, "config").sessionId());
   }
 
+  /**
+   * Creates a dispatcher for {@code services} and {@code sessionId}.
+   *
+   * @param services domain service bundle for the active program
+   * @param sessionId non-blank session identifier
+   */
   public AgentDispatcher(BridgeServices services, String sessionId) {
     this.services = Objects.requireNonNull(services, "services");
     String normalizedSessionId = AgentConfig.optionalText(sessionId);
@@ -44,6 +56,14 @@ public final class AgentDispatcher implements AutoCloseable {
     services.close();
   }
 
+  /**
+   * Dispatches one API method call sequentially through the underlying registry.
+   *
+   * @param method canonical dotted API method name
+   * @param params decoded request parameters, or {@code null}
+   * @return serialized-ready result object returned by the API method
+   * @throws Exception if validation, dispatch, or domain execution fails
+   */
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {
@@ -56,14 +76,29 @@ public final class AgentDispatcher implements AutoCloseable {
         });
   }
 
+  /**
+   * Returns the API catalog exposed by this dispatcher.
+   *
+   * @return method catalog for all registered API methods
+   */
   public ApiCatalog methodCatalog() {
     return apiRegistry.methodCatalog();
   }
 
+  /**
+   * Returns {@code true} after session shutdown has been requested.
+   *
+   * @return {@code true} if shutdown is in progress
+   */
   public boolean isShuttingDown() {
     return shuttingDown;
   }
 
+  /**
+   * Returns the name of the active Ghidra program.
+   *
+   * @return active program name
+   */
   public String getProgramName() {
     return programName;
   }

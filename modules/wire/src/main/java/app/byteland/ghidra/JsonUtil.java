@@ -10,14 +10,32 @@ import java.util.Objects;
 public final class JsonUtil {
   private JsonUtil() {}
 
+  /**
+   * Serializes {@code value} into a compact JSON string.
+   *
+   * @param value JSON-compatible object graph, or {@code null}
+   * @return compact JSON representation
+   */
   public static String toJson(Object value) {
     return JsonWriter.toJson(value);
   }
 
+  /**
+   * Wraps pre-serialized JSON text so {@link #toJson(Object)} writes it verbatim.
+   *
+   * @param json valid pre-serialized JSON fragment
+   * @return raw JSON marker object
+   */
   public static Object rawJson(String json) {
     return new JsonWriter.RawJson(Objects.requireNonNull(json, "json"));
   }
 
+  /**
+   * Parses a complete JSON document into Java maps, lists, strings, numbers, booleans, or {@code null}.
+   *
+   * @param json UTF-8 JSON document text
+   * @return decoded Java value
+   */
   public static Object parse(String json) {
     JsonParser parser = new JsonParser(json);
     Object value = parser.parseValue();
@@ -29,6 +47,12 @@ public final class JsonUtil {
     return value;
   }
 
+  /**
+   * Parses a JSON document and requires the root value to be a JSON object.
+   *
+   * @param json UTF-8 JSON object text
+   * @return ordered map of object properties
+   */
   public static Map<String, Object> parseObject(String json) {
     Object parsed = parse(json);
     if (!(parsed instanceof Map<?, ?> map)) {

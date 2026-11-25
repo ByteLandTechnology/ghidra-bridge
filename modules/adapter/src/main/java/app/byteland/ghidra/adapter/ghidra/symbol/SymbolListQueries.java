@@ -34,7 +34,7 @@ final class SymbolListQueries {
     String normalizedName =
         query.name() == null
             ? null
-            : (query.caseSensitive() ? query.name() : query.name().toLowerCase(Locale.ROOT));
+            : query.caseSensitive() ? query.name() : query.name().toLowerCase(Locale.ROOT);
     BoundedAddressScan<SymbolResource> scan =
         BoundedAddressScan.start(
             query.limit(), query.scan().timeoutMs(), range.startText(), range.endText());

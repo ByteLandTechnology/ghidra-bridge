@@ -17,12 +17,22 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Converts between domain {@link DataTypeReference} values and Ghidra {@link DataType} instances.
+ */
 public final class GhidraDataTypeReferences {
   private static final int UNAMBIGUOUS_MATCH_COUNT = 1;
   private static final int MAX_NESTING_DEPTH = 32;
 
   private GhidraDataTypeReferences() {}
 
+  /**
+   * Resolves a domain {@link DataTypeReference} against {@code programDataTypeManager} and built-in types.
+   *
+   * @param programDataTypeManager data type manager of the active program
+   * @param reference structured domain data type reference
+   * @return resolved Ghidra {@link DataType}
+   */
   public static DataType resolve(
       DataTypeManager programDataTypeManager, DataTypeReference reference) {
     if (programDataTypeManager == null) {
@@ -34,6 +44,12 @@ public final class GhidraDataTypeReferences {
     return resolve(programDataTypeManager, reference, 0);
   }
 
+  /**
+   * Converts a Ghidra {@link DataType} into a canonical domain {@link DataTypeReference}.
+   *
+   * @param dataType Ghidra data type to convert
+   * @return canonical domain {@link DataTypeReference}
+   */
   public static DataTypeReference toReference(DataType dataType) {
     if (dataType == null) throw new IllegalArgumentException("data type is required");
     return toReference(dataType, 0, new IdentityHashMap<>());
@@ -102,6 +118,13 @@ public final class GhidraDataTypeReferences {
     return pointer;
   }
 
+  /**
+   * Looks up a data type by absolute category path in the program manager, falling back to built-in types.
+   *
+   * @param programDataTypeManager data type manager of the active program
+   * @param path absolute Ghidra data type path
+   * @return matching {@link DataType}, or {@code null} when not found
+   */
   public static DataType findByPath(DataTypeManager programDataTypeManager, String path) {
     DataType selected = programDataTypeManager.getDataType(path);
     return selected != null
@@ -109,6 +132,13 @@ public final class GhidraDataTypeReferences {
         : BuiltInDataTypeManager.getDataTypeManager().getDataType(path);
   }
 
+  /**
+   * Finds all data types matching a simple name in the program manager, falling back to built-in types.
+   *
+   * @param programDataTypeManager data type manager of the active program
+   * @param name simple data type name
+   * @return list of matching {@link DataType} definitions
+   */
   public static List<DataType> findNamed(DataTypeManager programDataTypeManager, String name) {
     List<DataType> matches = new ArrayList<>();
     programDataTypeManager.findDataTypes(name, matches);
@@ -246,6 +276,12 @@ public final class GhidraDataTypeReferences {
     }
   }
 
+  /**
+   * Returns {@code true} when {@code dataType} unwraps through typedefs to a bare {@link FunctionDefinition}.
+   *
+   * @param dataType Ghidra data type to inspect
+   * @return {@code true} if {@code dataType} is a function definition or typedef to one
+   */
   public static boolean isBareFunctionDefinition(DataType dataType) {
     if (dataType == null) {
       throw new IllegalArgumentException("data type is required");

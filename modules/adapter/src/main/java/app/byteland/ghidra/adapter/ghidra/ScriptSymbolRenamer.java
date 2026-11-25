@@ -10,9 +10,20 @@ import ghidra.program.model.symbol.SymbolType;
 import ghidra.util.exception.DuplicateNameException;
 import ghidra.util.exception.InvalidInputException;
 
+/**
+ * Renames Ghidra function and label symbols while preserving symbol identity where supported.
+ */
 public final class ScriptSymbolRenamer {
   private ScriptSymbolRenamer() {}
 
+  /**
+   * Renames {@code symbol} to {@code newName} using the appropriate Ghidra symbol strategy.
+   *
+   * @param context active Ghidra session
+   * @param symbol target function or label symbol
+   * @param newName non-blank replacement symbol name
+   * @return updated or replacement Ghidra {@link Symbol}
+   */
   public static Symbol rename(GhidraSession context, Symbol symbol, String newName) {
     return renameBody(context, symbol, newName);
   }

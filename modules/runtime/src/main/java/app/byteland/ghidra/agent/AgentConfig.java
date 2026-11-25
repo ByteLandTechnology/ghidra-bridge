@@ -16,6 +16,14 @@ import java.util.Set;
 
 /**
  * Configuration values for a bridge runtime session.
+ *
+ * @param wsUrl outbound WebSocket endpoint URL, or {@code null} in server mode
+ * @param host listen host in server mode, or {@code null} in outbound mode
+ * @param port listen port in server mode, or {@code null} in outbound mode
+ * @param path WebSocket request path
+ * @param token optional bearer authentication token
+ * @param sessionId non-blank bridge session identifier
+ * @param exitDeadlineSeconds optional outbound shutdown deadline in seconds
  */
 public record AgentConfig(
     String wsUrl,
@@ -30,6 +38,9 @@ public record AgentConfig(
   private static final Set<String> ALLOWED =
       Set.of("ws_url", "host", "port", "path", "session_id", "token", "jar", "exit_deadline_sec");
 
+  /**
+   * Validates and normalizes bridge runtime configuration parameters.
+   */
   public AgentConfig {
     boolean pathWasProvided = optionalText(path) != null;
     wsUrl = optionalText(wsUrl);
@@ -58,10 +69,22 @@ public record AgentConfig(
     }
   }
 
+  /**
+   * Parses {@code key=value} startup arguments into an {@link AgentConfig}.
+   *
+   * @param args startup {@code key=value} arguments
+   * @return validated bridge configuration
+   */
   public static AgentConfig fromArgs(String... args) {
     return fromMap(parseArgs(args));
   }
 
+  /**
+   * Creates an {@link AgentConfig} from a map of startup key-value pairs.
+   *
+   * @param args map of startup configuration entries
+   * @return validated bridge configuration
+   */
   public static AgentConfig fromMap(Map<String, String> args) {
     Objects.requireNonNull(args, "args");
     rejectUnknown(args, ALLOWED);
@@ -75,6 +98,12 @@ public record AgentConfig(
         optionalInteger(args.get("exit_deadline_sec"), "exit_deadline_sec"));
   }
 
+  /**
+   * Splits {@code key=value} arguments into an ordered map and rejects duplicates.
+   *
+   * @param args raw {@code key=value} arguments, or {@code null}
+   * @return ordered map of parsed argument keys and values
+   */
   public static Map<String, String> parseArgs(String... args) {
     Map<String, String> parsed = new LinkedHashMap<>();
     if (args == null) return parsed;
@@ -93,18 +122,39 @@ public record AgentConfig(
     return parsed;
   }
 
+  /**
+   * Returns {@code true} when this configuration connects outbound to {@code ws_url}.
+   *
+   * @return {@code true} if {@code wsUrl} is configured
+   */
   public boolean isOutboundMode() {
     return wsUrl != null;
   }
 
+  /**
+   * Returns {@code true} when this configuration listens as an embedded WebSocket server.
+   *
+   * @return {@code true} if {@code port} is configured
+   */
   public boolean isServerMode() {
     return port != null;
   }
 
+  /**
+   * Returns the outbound WebSocket URL with userinfo, query, and fragment values redacted.
+   *
+   * @return redacted WebSocket URL, or {@code null} when {@code wsUrl} is unset
+   */
   public String redactedWsUrl() {
     return redactWsUrl(wsUrl);
   }
 
+  /**
+   * Redacts userinfo, query parameters, and fragments from a WebSocket URL for safe display.
+   *
+   * @param wsUrl raw WebSocket URL, or {@code null}
+   * @return redacted WebSocket URL, or {@code null} when blank or {@code null}
+   */
   public static String redactWsUrl(String wsUrl) {
     String normalized = optionalText(wsUrl);
     if (normalized == null) return null;
@@ -119,6 +169,12 @@ public record AgentConfig(
     return separator < 0 ? stripped : stripped + "?<redacted>";
   }
 
+  /**
+   * Parses and validates an outbound {@code ws://} or {@code wss://} endpoint URI.
+   *
+   * @param wsUrl raw WebSocket endpoint URL
+   * @return validated WebSocket {@link URI}
+   */
   @SuppressWarnings("PMD.PreserveStackTrace")
   public static URI parseWsUri(String wsUrl) {
     String normalized = optionalText(wsUrl);
@@ -261,6 +317,12 @@ public record AgentConfig(
     return -1;
   }
 
+  /**
+   * Throws an {@link IllegalArgumentException} if {@code args} contains any key outside {@code allowed}.
+   *
+   * @param args parsed startup arguments
+   * @param allowed set of permitted argument keys
+   */
   public static void rejectUnknown(Map<String, String> args, Set<String> allowed) {
     for (String key : args.keySet()) {
       if (!allowed.contains(key))
@@ -268,12 +330,24 @@ public record AgentConfig(
     }
   }
 
+  /**
+   * Validates that a TCP port number lies in the inclusive range {@code 1..65535}.
+   *
+   * @param port TCP port number to check
+   */
   public static void requireValidPort(int port) {
     if (port < 1 || port > 65535) {
       throw new IllegalArgumentException("port must be in 1..65535");
     }
   }
 
+  /**
+   * Parses an optional integer value or returns {@code null} when blank.
+   *
+   * @param value raw text value, or {@code null}
+   * @param field configuration field name used in error messages
+   * @return parsed integer, or {@code null} when {@code value} is blank
+   */
   public static Integer optionalInteger(String value, String field) {
     String normalized = optionalText(value);
     if (normalized == null) return null;
@@ -290,12 +364,25 @@ public record AgentConfig(
     return normalized;
   }
 
+  /**
+   * Trims {@code value} and returns {@code null} when empty or {@code null}.
+   *
+   * @param value raw text value, or {@code null}
+   * @return trimmed non-empty text, or {@code null}
+   */
   public static String optionalText(String value) {
     if (value == null) return null;
     String normalized = value.trim();
     return normalized.isEmpty() ? null : normalized;
   }
 
+  /**
+   * Normalizes an HTTP or WebSocket path so it starts with {@code /}, using {@code fallback} when blank.
+   *
+   * @param value raw path value, or {@code null}
+   * @param fallback default path when {@code value} is blank
+   * @return normalized path starting with {@code /}
+   */
   public static String normalizePath(String value, String fallback) {
     String normalized = optionalText(value);
     if (normalized == null) normalized = fallback;

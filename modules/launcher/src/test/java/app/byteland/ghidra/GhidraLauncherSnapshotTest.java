@@ -104,14 +104,18 @@ class GhidraLauncherSnapshotTest {
     try {
       return invokeSnapshotJarReflectively(launcherClassName, sourceJar);
     } catch (InvocationTargetException invocation) {
-      if (invocation.getTargetException() instanceof Exception targetException) {
-        throw targetException;
-      }
-      if (invocation.getTargetException() instanceof Error targetError) {
-        throw targetError;
-      }
-      throw invocation;
+      throw unwrapInvocation(invocation);
     }
+  }
+
+  private static Exception unwrapInvocation(InvocationTargetException invocation) {
+    if (invocation.getTargetException() instanceof Exception targetException) {
+      return targetException;
+    }
+    if (invocation.getTargetException() instanceof Error targetError) {
+      throw targetError;
+    }
+    return invocation;
   }
 
   private static Path invokeSnapshotJarReflectively(String launcherClassName, Path sourceJar)

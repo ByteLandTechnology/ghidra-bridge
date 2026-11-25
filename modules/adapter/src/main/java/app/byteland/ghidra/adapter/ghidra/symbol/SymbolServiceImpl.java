@@ -5,9 +5,17 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.symbol.SymbolResource;
 import app.byteland.ghidra.service.symbol.SymbolService;
 
+/**
+ * Ghidra-backed implementation of {@link SymbolService}.
+ */
 public final class SymbolServiceImpl implements SymbolService {
   private final GhidraSession context;
 
+  /**
+   * Creates a symbol service bound to {@code context}.
+   *
+   * @param context active Ghidra session
+   */
   public SymbolServiceImpl(GhidraSession context) {
     this.context = context;
   }

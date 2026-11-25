@@ -1,7 +1,6 @@
 package app.byteland.ghidra.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -159,6 +158,7 @@ class ApiFailuresAdversarialTest {
   @DisplayName("Adversarial: custom DomainException implementations map status and code")
   void testCustomDomainExceptions() {
     class CustomDomainException extends RuntimeException implements DomainException {
+      private static final long serialVersionUID = 1L;
       private final int status;
       private final String code;
       private final String target;

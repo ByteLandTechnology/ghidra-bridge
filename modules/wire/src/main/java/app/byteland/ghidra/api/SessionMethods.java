@@ -4,15 +4,16 @@ import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 final class SessionMethods implements ApiMethodProvider {
   private final ApiRegistry registry;
-  private final java.util.function.Supplier<java.util.Map<String, Object>> sessionSupplier;
+  private final Supplier<Map<String, Object>> sessionSupplier;
   private final Runnable shutdownAction;
 
   SessionMethods(
       ApiRegistry registry,
-      java.util.function.Supplier<java.util.Map<String, Object>> sessionSupplier,
+      Supplier<Map<String, Object>> sessionSupplier,
       Runnable shutdownAction) {
     this.registry = registry;
     this.sessionSupplier = sessionSupplier;

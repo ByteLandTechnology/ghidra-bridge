@@ -1,7 +1,6 @@
 package app.byteland.ghidra.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,7 +15,7 @@ import org.junit.jupiter.api.Test;
 class ApiFailuresTest {
   @Test
   void unexpectedFailuresKeepPathsAndCredentialsPrivate() {
-    var failure = ApiFailures.normalize(new java.io.IOException("/private/project Bearer TEST_SECRET"));
+    var failure = ApiFailures.normalize(new IOException("/private/project Bearer TEST_SECRET"));
     assertEquals(500, failure.status());
     assertEquals("Internal error", failure.error().message());
     assertEquals(Map.of(), failure.error().details());

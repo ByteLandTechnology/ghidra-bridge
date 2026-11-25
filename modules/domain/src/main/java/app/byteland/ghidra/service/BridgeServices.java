@@ -18,6 +18,21 @@ import java.util.Objects;
  * Holds domain services for an active Ghidra program session.
  *
  * <p>Close this container to release analysis and decompilation resources.
+ *
+ * @param programService program metadata and save operations
+ * @param addressService address parsing and summary lookup operations
+ * @param commentService listing comment read and write operations
+ * @param referenceService cross-reference query operations
+ * @param memoryService memory block and byte range operations
+ * @param listingService code unit, instruction, data, and flow override operations
+ * @param functionService function query and signature/variable mutation operations
+ * @param globalVariableService global variable query and mutation operations
+ * @param analysisService background auto-analysis lifecycle operations
+ * @param decompilationService function decompilation operations
+ * @param symbolService symbol query, rename, and demangle operations
+ * @param dataTypeService data type and category operations
+ * @param transactionRunner program transaction runner
+ * @param programName active Ghidra program name
  */
 public record BridgeServices(
     ProgramService programService,
@@ -36,6 +51,9 @@ public record BridgeServices(
     String programName)
     implements AutoCloseable {
 
+  /**
+   * Validates that every domain service reference and the program name are non-null.
+   */
   public BridgeServices {
     Objects.requireNonNull(programService, "programService");
     Objects.requireNonNull(addressService, "addressService");
@@ -53,6 +71,9 @@ public record BridgeServices(
     Objects.requireNonNull(programName, "programName");
   }
 
+  /**
+   * Closes the decompilation and analysis services held by this container.
+   */
   @Override
   @SuppressWarnings("try")
   public void close() {

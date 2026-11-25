@@ -30,17 +30,18 @@ Follow these repository rules when you change code:
 
 ### Module Checks and Unit Tests (`check`)
 
-Run JUnit Platform test suites and module checks across all 8 Java subprojects:
+Run JUnit Platform test suites, strict Javadoc checks, and PMD static analysis across all 8 Java subprojects:
 
 ```bash
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon check
 ```
 
-To run JUnit tests for a single subproject during iteration:
+To run targeted checks during iteration:
 
 ```bash
 ./gradlew --no-daemon :domain:test
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon javadoc pmdMain pmdTest
 ```
 
 ### Full Build and Verification (`clean verify`)
@@ -52,10 +53,21 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
 ```
 
 `verify` runs:
-- `check`: JUnit tests and checks across all 8 Java subprojects.
+- `check`: Runs JUnit tests (`test`), strict Javadoc generation (`javadoc` with `-Xdoclint:all` and `-Werror`), and PMD static analysis (`pmdMain` and `pmdTest` with `config/pmd/ruleset.xml`, including `UnnecessaryWarningSuppression`) across all 8 Java subprojects. All `JavaCompile` tasks and `compileGeneratedScripts` compile Java 21 sources with `-Xlint:all,-path` and `-Werror`.
 - `verifyApiContracts`: Checks that checked-in contracts match generated output.
-- `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra (`compileGeneratedScripts`).
+- `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`), verifies that `ghidra-bridge.jar` contains zero third-party runtime classes, and compiles generated scripts against Ghidra (`compileGeneratedScripts`).
 - `verifyArchitecture`: Verifies that no module outside `adapter` and `launcher` imports `ghidra.*`.
+
+### Dependency Checksum Verification
+
+`gradle.properties` sets `org.gradle.dependency.verification=strict`. When you update build, test, or static analysis dependencies, regenerate `gradle/verification-metadata.xml` from a cold `GRADLE_USER_HOME` directory so Gradle records SHA-256 checksums for every resolved artifact:
+
+```bash
+cold_gradle_home="$(mktemp -d)"
+GRADLE_USER_HOME="$cold_gradle_home" GHIDRA_INSTALL_DIR=/path/to/ghidra \
+  ./gradlew --no-daemon --write-verification-metadata sha256 clean verify
+rm -rf "$cold_gradle_home"
+```
 
 ### Repository Hygiene Check
 

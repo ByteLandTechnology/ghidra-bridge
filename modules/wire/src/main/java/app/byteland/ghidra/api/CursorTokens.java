@@ -12,6 +12,9 @@ import java.util.TreeMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+/**
+ * Encodes and verifies HMAC-signed pagination cursor tokens bound to a session and query.
+ */
 public final class CursorTokens {
   private static final int CURSOR_PART_COUNT = 5;
   private static final int SIGNING_KEY_LENGTH = 32;
@@ -21,6 +24,15 @@ public final class CursorTokens {
 
   private CursorTokens() {}
 
+  /**
+   * Encodes and signs a pagination cursor token for the given resource, session, and query.
+   *
+   * @param resource logical paginated resource identifier
+   * @param sessionId active bridge session identifier
+   * @param queryFingerprint SHA-256 fingerprint of query filter parameters
+   * @param compositeKey opaque domain pagination position key
+   * @return URL-safe Base64-encoded signed cursor token
+   */
   public static String encode(
       String resource, String sessionId, String queryFingerprint, String compositeKey) {
     String payload =
@@ -37,6 +49,16 @@ public final class CursorTokens {
         .encodeToString(wire.getBytes(StandardCharsets.UTF_8));
   }
 
+  /**
+   * Verifies and decodes a signed pagination cursor token, returning the domain position key.
+   *
+   * @param token signed Base64url cursor token, or {@code null}
+   * @param resource expected logical resource identifier
+   * @param sessionId expected bridge session identifier
+   * @param queryFingerprint expected SHA-256 fingerprint of query filter parameters
+   * @param target JSON Pointer reported if cursor validation fails
+   * @return decoded composite position key, or {@code null} when {@code token} is {@code null}
+   */
   public static String decode(
       String token, String resource, String sessionId, String queryFingerprint, String target) {
     if (token == null) return null;
@@ -67,6 +89,12 @@ public final class CursorTokens {
     }
   }
 
+  /**
+   * Computes a canonical SHA-256 fingerprint of query parameters excluding pagination controls.
+   *
+   * @param request decoded request parameter map
+   * @return Base64url-encoded SHA-256 query fingerprint
+   */
   public static String queryFingerprint(Map<String, Object> request) {
     Map<String, Object> query = new TreeMap<>();
     for (Map.Entry<String, Object> entry : request.entrySet()) {

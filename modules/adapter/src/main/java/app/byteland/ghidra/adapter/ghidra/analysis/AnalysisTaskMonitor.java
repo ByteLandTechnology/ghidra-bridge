@@ -14,7 +14,7 @@ final class AnalysisTaskMonitor implements TaskMonitor {
   private volatile boolean indeterminate = true;
   private volatile String message = "Analysis queued";
   private final AtomicLong progress = new AtomicLong();
-  private volatile long maximum = TaskMonitor.NO_PROGRESS_VALUE;
+  private volatile long maximum = NO_PROGRESS_VALUE;
 
   AnalysisTaskMonitor() {}
 
@@ -142,6 +142,6 @@ final class AnalysisTaskMonitor implements TaskMonitor {
     if (indeterminate || max <= 0) {
       return null;
     }
-    return Math.max(0.0, Math.min(100.0, (progress.get() * 100.0) / max));
+    return Math.max(0.0, Math.min(100.0, progress.get() * 100.0 / max));
   }
 }

@@ -18,6 +18,9 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.WeakHashMap;
 
+/**
+ * Ghidra-backed implementation of {@link DecompilationService} using a pooled {@link DecompInterface}.
+ */
 public final class DecompilationServiceImpl implements DecompilationService {
   private final GhidraSession context;
   private final LeasePool<DecompInterface> decompilerPool;
@@ -26,6 +29,11 @@ public final class DecompilationServiceImpl implements DecompilationService {
   private final Map<DecompInterface, Long> programModifications =
       Collections.synchronizedMap(new WeakHashMap<>());
 
+  /**
+   * Creates a decompilation service bound to {@code context}.
+   *
+   * @param context active Ghidra session
+   */
   public DecompilationServiceImpl(GhidraSession context) {
     this(
         Objects.requireNonNull(context, "context"),

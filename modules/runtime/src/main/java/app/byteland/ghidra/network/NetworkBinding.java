@@ -5,9 +5,18 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
+/**
+ * Validates loopback host bindings and constant-time bearer token headers.
+ */
 public final class NetworkBinding {
   private NetworkBinding() {}
 
+  /**
+   * Requires a non-blank authentication token whenever {@code host} resolves outside loopback.
+   *
+   * @param host target bind or endpoint host
+   * @param token configured authentication token, or {@code null}
+   */
   public static void requireTokenForNonLoopback(String host, String token) {
     if (isLoopback(host)) return;
     if (token == null || token.isBlank()) {
@@ -15,6 +24,13 @@ public final class NetworkBinding {
     }
   }
 
+  /**
+   * Compares an HTTP {@code Authorization} header against {@code Bearer <expectedToken>} in constant time.
+   *
+   * @param authorizationHeader raw {@code Authorization} header value, or {@code null}
+   * @param expectedToken expected bearer token secret
+   * @return {@code true} if the header matches the expected bearer token
+   */
   public static boolean bearerTokenMatches(String authorizationHeader, String expectedToken) {
     if (authorizationHeader == null) {
       return false;
@@ -24,6 +40,12 @@ public final class NetworkBinding {
         ("Bearer " + expectedToken).getBytes(StandardCharsets.UTF_8));
   }
 
+  /**
+   * Returns {@code true} when every resolved address for {@code host} is a loopback address.
+   *
+   * @param host host name or IP literal to resolve
+   * @return {@code true} if all resolved addresses are loopback addresses
+   */
   public static boolean isLoopback(String host) {
     if (host == null || host.isBlank()) {
       throw new IllegalArgumentException("host is required");
