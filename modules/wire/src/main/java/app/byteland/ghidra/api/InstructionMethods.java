@@ -56,13 +56,12 @@ final class InstructionMethods implements ApiMethodProvider {
                     flowScope(object(filter, ApiVocabulary.SELECTOR)),
                     scan,
                     page.limit(),
-                    "forward",
                     page.cursor());
           }
           return registry
               .services()
               .listingService()
-              .listInstructions(scan, page.limit(), "forward", page.cursor());
+              .listInstructions(scan, page.limit(), page.cursor());
         });
     Map<String, Object> flowFilter =
         WireSchema.object(

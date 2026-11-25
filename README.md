@@ -102,6 +102,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `token` | *(none)* | Shared secret token for bearer authentication. |
 | `ws_url` | *(none)* | Remote WebSocket URL in outbound client mode. |
 | `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra.program`. Use a different value for each server that one client connects to. |
+| `allowed_origins` | Loopback and `host` | MCP only. Comma-separated `scheme://host[:port]` browser origins, or `none` to reject all `Origin` headers. Overrides `GHIDRA_MCP_ALLOWED_ORIGINS`. Non-loopback origins require `token`. |
 | `jar` | *(auto)* | Path to `ghidra-bridge.jar` when the JAR is not beside the script file. |
 | `exit_deadline_sec` | *(none)* | Outbound only. Halt the JVM if Ghidra does not exit this many seconds after the session ends. An active save completes first. Use it only for a headless Ghidra that a host starts. |
 
@@ -110,7 +111,8 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 The bridge enforces strict security boundaries:
 
 - **Loopback Default**: Listeners bind to `127.0.0.1` by default.
-- **Mandatory Token**: A listener on a non-loopback interface requires `token`.
+- **Mandatory Token**: A non-loopback listener or a non-loopback origin in `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` requires `token`.
+- **Browser Origin Policy**: By default, MCP HTTP permits only loopback and `host` origins. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` to override, or `none` to reject all.
 - **Bearer Header**: Inbound requests must send `Authorization: Bearer <token>`.
 - **Query Token Rejection**: The server rejects tokens in URL query strings with HTTP 400.
 - **Log Privacy**: The server never writes secret tokens to log files or consoles.

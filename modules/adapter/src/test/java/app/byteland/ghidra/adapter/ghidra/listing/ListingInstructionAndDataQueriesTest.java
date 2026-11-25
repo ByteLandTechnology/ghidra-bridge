@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
 class ListingInstructionAndDataQueriesTest {
 
   @Test
-  void instructionQueriesStreamForwardAndBackwardAndResumeAtMaxAddress() {
+  void instructionQueriesStreamForwardAndResumeAtMaxAddress() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("instructions_test")) {
       holder.inTransaction(
           program -> {
@@ -88,7 +88,7 @@ class ListingInstructionAndDataQueriesTest {
       // Forward pagination with inclusive bounds
       Page<InstructionResource> page1 =
           queries.listInstructions(
-              AddressScanOptions.of("ram:00003000", "ram:00003006", 1000), 2, "forward", null);
+              AddressScanOptions.of("ram:00003000", "ram:00003006", 1000), 2, null);
       assertEquals(1, spy.instructionIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
       assertEquals(
@@ -102,7 +102,6 @@ class ListingInstructionAndDataQueriesTest {
           queries.listInstructions(
               AddressScanOptions.of("ram:00003000", "ram:00003006", 1000),
               2,
-              "forward",
               page1.nextCursor());
       assertEquals(1, spy.instructionIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
@@ -112,72 +111,38 @@ class ListingInstructionAndDataQueriesTest {
       assertTrue(page2.scanProgress().complete());
       assertNull(page2.nextCursor());
 
-      // Backward scan + cursor resumption + multi-byte start/end bounds
-      spy.reset();
-      Page<InstructionResource> backPage1 =
-          queries.listInstructions(
-              AddressScanOptions.of("ram:00003000", "ram:00003006", 1000), 2, "backward", null);
-      assertEquals(1, spy.instructionIterators.get());
-      assertEquals(0, spy.statelessAfterBeforeCalls.get());
-      assertEquals(
-          List.of("ram:00003006", "ram:00003005"),
-          backPage1.items().stream().map(InstructionResource::address).toList());
-      assertEquals("ram:00003006", backPage1.scanProgress().scannedStart());
-      assertEquals("ram:00003005", backPage1.scanProgress().scannedEnd());
-
-      Page<InstructionResource> backPage2 =
-          queries.listInstructions(
-              AddressScanOptions.of("ram:00003000", "ram:00003006", 1000),
-              2,
-              "backward",
-              backPage1.nextCursor());
-      assertEquals(
-          List.of("ram:00003000"),
-          backPage2.items().stream().map(InstructionResource::address).toList());
-      assertTrue(backPage2.scanProgress().complete());
-
       // Multi-byte boundary: start inside 5-byte instruction (0x3002) excludes 0x3000;
       // end inside 5-byte instruction (0x3003) includes 0x3000.
       Page<InstructionResource> startMid =
           queries.listInstructions(
-              AddressScanOptions.of("ram:00003002", "ram:00003006", 1000), 10, "forward", null);
+              AddressScanOptions.of("ram:00003002", "ram:00003006", 1000), 10, null);
       assertEquals(
           List.of("ram:00003005", "ram:00003006"),
           startMid.items().stream().map(InstructionResource::address).toList());
 
       Page<InstructionResource> endMid =
           queries.listInstructions(
-              AddressScanOptions.of("ram:00003000", "ram:00003003", 1000), 10, "backward", null);
+              AddressScanOptions.of("ram:00003000", "ram:00003003", 1000), 10, null);
       assertEquals(
           List.of("ram:00003000"),
           endMid.items().stream().map(InstructionResource::address).toList());
 
-      // Cursor resumption at maxAddress and minAddress with live instructions at those extremes
+      // Cursor resumption at maxAddress with a live instruction at that extreme
       spy.reset();
       Page<InstructionResource> resumeAtMax =
           queries.listInstructions(
               AddressScanOptions.of("ram:00003000", "ram:ffffffffffffffff", 1000),
               10,
-              "forward",
               "ram:ffffffffffffffff");
       assertEquals(1, spy.instructionIterators.get());
       assertTrue(resumeAtMax.items().isEmpty());
       assertTrue(resumeAtMax.scanProgress().complete());
       assertNull(resumeAtMax.nextCursor());
-
-      Page<InstructionResource> resumeAtMin =
-          queries.listInstructions(
-              AddressScanOptions.of("ram:0000000000000000", "ram:00003006", 1000),
-              10,
-              "backward",
-              "ram:0000000000000000");
-      assertTrue(resumeAtMin.items().isEmpty());
-      assertTrue(resumeAtMin.scanProgress().complete());
     }
   }
 
   @Test
-  void dataQueriesStreamForwardAndBackwardAndResumeAtMaxAddress() {
+  void dataQueriesStreamForwardAndResumeAtMaxAddress() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("data_units_test")) {
       holder.inTransaction(
           program -> {
@@ -235,7 +200,7 @@ class ListingInstructionAndDataQueriesTest {
       // Forward pagination
       Page<DataUnitResource> page1 =
           queries.listDataUnits(
-              AddressScanOptions.of("ram:00004000", "ram:00004010", 1000), 2, "forward", null);
+              AddressScanOptions.of("ram:00004000", "ram:00004010", 1000), 2, null);
       assertEquals(1, spy.definedDataIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
       assertEquals(
@@ -249,7 +214,6 @@ class ListingInstructionAndDataQueriesTest {
           queries.listDataUnits(
               AddressScanOptions.of("ram:00004000", "ram:00004010", 1000),
               2,
-              "forward",
               page1.nextCursor());
       assertEquals(1, spy.definedDataIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
@@ -258,56 +222,24 @@ class ListingInstructionAndDataQueriesTest {
           page2.items().stream().map(DataUnitResource::address).toList());
       assertTrue(page2.scanProgress().complete());
 
-      // Backward scan + cursor resumption
-      spy.reset();
-      Page<DataUnitResource> backward =
-          queries.listDataUnits(
-              AddressScanOptions.of("ram:00004000", "ram:00004010", 1000), 2, "backward", null);
-      assertEquals(1, spy.definedDataIterators.get());
-      assertEquals(0, spy.statelessAfterBeforeCalls.get());
-      assertEquals(
-          List.of("ram:00004010", "ram:00004008"),
-          backward.items().stream().map(DataUnitResource::address).toList());
-
-      Page<DataUnitResource> backward2 =
-          queries.listDataUnits(
-              AddressScanOptions.of("ram:00004000", "ram:00004010", 1000),
-              2,
-              "backward",
-              backward.nextCursor());
-      assertEquals(
-          List.of("ram:00004000"),
-          backward2.items().stream().map(DataUnitResource::address).toList());
-      assertTrue(backward2.scanProgress().complete());
-
       // Multi-byte start bound inside 4-byte dword (0x4002) skips 0x4000
       Page<DataUnitResource> midStart =
           queries.listDataUnits(
-              AddressScanOptions.of("ram:00004002", "ram:00004010", 1000), 10, "forward", null);
+              AddressScanOptions.of("ram:00004002", "ram:00004010", 1000), 10, null);
       assertEquals(
           List.of("ram:00004008", "ram:00004010"),
           midStart.items().stream().map(DataUnitResource::address).toList());
 
-      // Cursor resumption at maxAddress and minAddress
+      // Cursor resumption at maxAddress
       spy.reset();
       Page<DataUnitResource> resumeMax =
           queries.listDataUnits(
               AddressScanOptions.of("ram:00004000", "ram:ffffffffffffffff", 1000),
               10,
-              "forward",
               "ram:ffffffffffffffff");
       assertEquals(1, spy.definedDataIterators.get());
       assertTrue(resumeMax.items().isEmpty());
       assertTrue(resumeMax.scanProgress().complete());
-
-      Page<DataUnitResource> resumeMin =
-          queries.listDataUnits(
-              AddressScanOptions.of("ram:0000000000000000", "ram:00004010", 1000),
-              10,
-              "backward",
-              "ram:0000000000000000");
-      assertTrue(resumeMin.items().isEmpty());
-      assertTrue(resumeMin.scanProgress().complete());
     }
   }
 
@@ -344,15 +276,14 @@ class ListingInstructionAndDataQueriesTest {
       AddressScanOptions unbounded =
           new AddressScanOptions(null, null, AddressScanOptions.DEFAULT_TIMEOUT_MS);
 
-      Page<InstructionResource> page1 =
-          queries.listInstructions(scope, unbounded, 2, "forward", null);
+      Page<InstructionResource> page1 = queries.listInstructions(scope, unbounded, 2, null);
       assertEquals(
           List.of("ram:00005000", "ram:00005001"),
           page1.items().stream().map(InstructionResource::address).toList());
       assertEquals("ram:00005001", page1.nextCursor());
 
       Page<InstructionResource> page2 =
-          queries.listInstructions(scope, unbounded, 3, "forward", page1.nextCursor());
+          queries.listInstructions(scope, unbounded, 3, page1.nextCursor());
       assertEquals(
           List.of("ram:00005003", "ram:00005004"),
           page2.items().stream().map(InstructionResource::address).toList());
@@ -360,7 +291,7 @@ class ListingInstructionAndDataQueriesTest {
 
       Page<InstructionResource> clipped =
           queries.listInstructions(
-              scope, AddressScanOptions.of("ram:00005001", "ram:00005003", 1000), 10, "forward", null);
+              scope, AddressScanOptions.of("ram:00005001", "ram:00005003", 1000), 10, null);
       assertEquals(
           List.of("ram:00005001", "ram:00005003"),
           clipped.items().stream().map(InstructionResource::address).toList());
