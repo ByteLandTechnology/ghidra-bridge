@@ -191,11 +191,10 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   private static ExecutorService createBodyReaderExecutor() {
-    // jdk.httpserver synchronizes LeftOverInputStream.read and Request$ReadStream.read. On Java 21,
-    // blocking for unbuffered request-body bytes on a virtual thread pins its carrier thread
-    // without ForkJoinPool compensation. Offload unbuffered reads to a bounded daemon pool sized to
-    // MAX_CONCURRENT_REQUESTS so stalled POST bodies cannot starve virtual-thread carriers or
-    // head-of-line-block behind a smaller reader pool.
+    // `jdk.httpserver` synchronizes `LeftOverInputStream.read` and `Request$ReadStream.read`.
+    // On Java 21, an unbuffered body read on a virtual thread pins its carrier without
+    // `ForkJoinPool` compensation. Run unbuffered reads on a daemon pool of size
+    // `MAX_CONCURRENT_REQUESTS` so stalled `POST` bodies do not block carriers or later reads.
     AtomicInteger threadNumber = new AtomicInteger(1);
     ThreadPoolExecutor pool =
         new ThreadPoolExecutor(
@@ -497,7 +496,7 @@ public final class McpHttpServer implements AutoCloseable {
           closeExchange = false;
           throw abortedUnread;
         } catch (IOException ignored) {
-          // The connection closed before the error response could be sent.
+          // The connection closed before the server could send the error response.
         }
       } finally {
         if (requestPermitAcquired) {
@@ -1056,7 +1055,7 @@ public final class McpHttpServer implements AutoCloseable {
           readTimeoutScheduler.schedule(
               exchange::close, bodyReadTimeoutMillis, TimeUnit.MILLISECONDS);
     } catch (RejectedExecutionException ignored) {
-      // Server is closing; send a best-effort response and close.
+      // The server is stopping; send the response and close the exchange.
     }
     try {
       writeJson(exchange, HTTP_PAYLOAD_TOO_LARGE, payload);

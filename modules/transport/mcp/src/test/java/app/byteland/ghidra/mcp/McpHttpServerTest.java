@@ -133,8 +133,8 @@ class McpHttpServerTest {
         assertEquals(McpHttpServer.MAX_CONCURRENT_REQUESTS, stalledInFlight);
         assertEquals(100 - McpHttpServer.MAX_CONCURRENT_REQUESTS, rejectedPostBusy);
 
-        // Even while SSE and POST permits are saturated, non-blocking virtual-thread handlers
-        // respond immediately without carrier-thread pinning.
+        // When SSE and POST permits are full, virtual-thread handlers still respond fast
+        // without carrier-thread pinning.
         String headReq = "HEAD /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n";
         try (Socket headSocket = openRawSocket(port, headReq)) {
           assertEquals(200, readHttpStatusCode(headSocket));
@@ -176,7 +176,7 @@ class McpHttpServerTest {
               .build();
       URI baseUri = URI.create("http://127.0.0.1:" + handle.port() + "/mcp");
 
-      // Unsupported HTTP methods return 405 with Allow header.
+      // Unsupported HTTP methods return `405` with the `Allow` header.
       HttpResponse<String> deleteResponse =
           client.send(
               HttpRequest.newBuilder(baseUri).DELETE().build(),
@@ -197,7 +197,7 @@ class McpHttpServerTest {
           } else if (i > 2) {
             requestBuilder.header("Accept", "text/event-stream");
           }
-          // Index 0 sends GET /mcp with no Accept header to verify legacy client compatibility.
+          // Index 0 sends `GET /mcp` with no `Accept` header to check legacy client compatibility.
           HttpResponse<Stream<String>> sseResponse =
               client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofLines());
           assertEquals(200, sseResponse.statusCode());
@@ -210,7 +210,7 @@ class McpHttpServerTest {
           endpointPaths.add(endpointUri);
         }
 
-        // Next SSE stream past MAX_SSE_SESSIONS receives 503.
+        // The next SSE stream above `MAX_SSE_SESSIONS` receives `503`.
         HttpResponse<String> overflowSse =
             client.send(
                 HttpRequest.newBuilder(baseUri)
@@ -220,7 +220,7 @@ class McpHttpServerTest {
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(503, overflowSse.statusCode());
 
-        // POST to the first SSE session returns 202 and delivers a message event over SSE.
+        // `POST` to the first SSE session returns `202` and sends a `message` event over SSE.
         URI sessionUri = URI.create("http://127.0.0.1:" + handle.port() + endpointPaths.get(0));
         HttpResponse<String> pingPost =
             client.send(
@@ -239,7 +239,7 @@ class McpHttpServerTest {
         Map<String, Object> parsedMessage = (Map<String, Object>) JsonUtil.parse(messageData);
         assertEquals(7L, ((Number) parsedMessage.get("id")).longValue());
 
-        // Close one SSE client stream and wait for keepalive write to detect disconnect and release
+        // Close one SSE client stream. The next keepalive write detects the disconnect and frees
         // the permit.
         sseStreams.remove(0).close();
         sseIterators.remove(0);
@@ -299,7 +299,7 @@ class McpHttpServerTest {
           stalledSockets.add(socket);
         }
 
-        // Wait for the 250ms read deadline to close all stalled sockets.
+        // Wait for the 250 ms read time limit to close all stalled sockets.
         for (Socket socket : stalledSockets) {
           int readResult;
           try {
@@ -315,7 +315,7 @@ class McpHttpServerTest {
         }
       }
 
-      // Verify that all permits were released when you send MAX_CONCURRENT_REQUESTS valid POST requests.
+      // Send `MAX_CONCURRENT_REQUESTS` valid `POST` requests to check that all permits are free.
       HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
       URI uri = URI.create("http://127.0.0.1:" + port + "/mcp");
       for (int i = 0; i < McpHttpServer.MAX_CONCURRENT_REQUESTS; i++) {
@@ -372,7 +372,7 @@ class McpHttpServerTest {
           inFlightSockets.add(socket);
         }
 
-        // Wait briefly until all 32 virtual threads have entered JsonRpcHandler and acquired permits.
+        // Wait until all 32 virtual threads enter `JsonRpcHandler` and take permits.
         long waitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (handle.server().availableRequestPermits() > 0
             && System.nanoTime() < waitDeadline) {
@@ -398,8 +398,8 @@ class McpHttpServerTest {
             probe.statusCode(),
             "Expected 33rd concurrent POST request to receive HTTP 503");
 
-        // Keep the first 8 sockets stalled while completing sockets 8..31 first to verify that
-        // stalled reads do not head-of-line-block later concurrent POST requests.
+        // Keep the first 8 sockets stalled and complete sockets 8..31 first.
+        // Stalled reads must not block later `POST` requests.
         for (int i = 8; i < inFlightSockets.size(); i++) {
           OutputStream out = inFlightSockets.get(i).getOutputStream();
           out.write('}');
