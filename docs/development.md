@@ -117,7 +117,7 @@ release-please reads Conventional Commit messages to select the version:
 The `publish` job gets the release commit without persisted credentials.
 Before Gradle runs, it checks `HEAD`, the `v<version>` tag, the remote tag SHA, the draft state,
 `.release-please-manifest.json`, and `version.txt`.
-Next, it builds the release archive with `clean verify` (which runs all JUnit tests) and runs `tests/function_mutation_regression.py`.
+Next, it builds the release archive with `verify` (which runs all JUnit tests) and runs `tests/function_mutation_regression.py`.
 Then it verifies non-empty files and the SHA-256 checksum, uploads two assets, and makes the draft release public:
 
 - `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
@@ -136,8 +136,8 @@ bash .github/scripts/package-release.sh
 In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests".
 The workflow uses `GITHUB_TOKEN` by default.
 Pull requests created with this token do not start CI without a new event.
-For CI on release pull requests, set the `RELEASE_PLEASE_TOKEN` secret to a personal access token.
-Give that token Contents, Issues, and Pull requests write access to this repository.
+For CI on release pull requests, close and reopen the pull request, or set the `RELEASE_PLEASE_TOKEN` secret to a personal access token.
+Give that token Contents and Pull requests write access to this repository.
 See the [release-please Action documentation](https://github.com/googleapis/release-please-action).
 
 If the `publish` job fails, the GitHub release stays hidden as a draft.

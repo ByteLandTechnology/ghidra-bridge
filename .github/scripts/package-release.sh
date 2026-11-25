@@ -26,7 +26,11 @@ if [[ "$version" != "$release_manifest_version" ]]; then
   exit 1
 fi
 
-./gradlew --no-daemon -PreleaseVersion="$version" clean verify
+if [[ "${CI:-}" == "true" ]]; then
+  ./gradlew --no-daemon -PreleaseVersion="$version" verify
+else
+  ./gradlew --no-daemon -PreleaseVersion="$version" clean verify
+fi
 
 jar="build/ghidra-script/ghidra-bridge.jar"
 manifest_version="$(unzip -p "$jar" META-INF/MANIFEST.MF | tr -d '\r' | sed -n 's/^Implementation-Version: //p')"
