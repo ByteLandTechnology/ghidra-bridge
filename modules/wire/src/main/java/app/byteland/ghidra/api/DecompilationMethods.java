@@ -25,9 +25,11 @@ final class DecompilationMethods implements ApiMethodProvider {
     Map<String, Object> entrySelector = ApiRegistry.selectorSchema(ApiVocabulary.ENTRY);
     registry.read(
         "decompilation.get",
-        "Decompile the function at an entry point. Set scan.timeout_ms between 100 and 300000."
-            + " The default is 30000 milliseconds; Ghidra rounds up to whole seconds."
+        "Decompile the function at an entry point."
+            + " Set scan.timeout_ms between 100 and 300000;"
+            + " the default is 30000 milliseconds, rounded up to whole seconds."
             + " Format document returns GUI lines and cursor addresses from one decompilation."
+            + " Set include_locals to return decompiler local variables."
             + " By default, only pre comments and the plate comment at the entry show."
             + " Set include_comments to show all comments and to return repeatable comments;"
             + " then check comments_complete and warnings.",
@@ -38,6 +40,8 @@ final class DecompilationMethods implements ApiMethodProvider {
                 "format",
                 WireSchema.stringEnum(ApiVocabulary.TEXT, "tokens", "document"),
                 "include_comments",
+                WireSchema.bool(),
+                "include_locals",
                 WireSchema.bool(),
                 "timeout_ms",
                 ApiSchemaCatalog.integerWithDefault(
@@ -57,6 +61,7 @@ final class DecompilationMethods implements ApiMethodProvider {
             "lines",
             "comments",
             "comments_complete",
+            ApiVocabulary.LOCAL_VARIABLES,
             "warnings",
             "elapsed_ms"),
         List.of(ApiVocabulary.ENTRY),
@@ -72,6 +77,7 @@ final class DecompilationMethods implements ApiMethodProvider {
                       default -> DecompilationResource.Format.TEXT;
                     },
                     integer(request, "timeout_ms", DecompilationService.DEFAULT_TIMEOUT_MS),
-                    bool(request, "include_comments").orElse(false)));
+                    bool(request, "include_comments").orElse(false),
+                    bool(request, "include_locals").orElse(false)));
   }
 }

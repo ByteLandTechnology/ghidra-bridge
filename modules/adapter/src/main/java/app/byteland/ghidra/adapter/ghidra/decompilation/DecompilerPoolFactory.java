@@ -3,13 +3,20 @@ package app.byteland.ghidra.adapter.ghidra.decompilation;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileOptions;
 import ghidra.program.model.listing.Program;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 final class DecompilerPoolFactory {
   private DecompilerPoolFactory() {}
 
   static LeasePool<DecompInterface> create(Program program) {
+    return create(() -> program);
+  }
+
+  static LeasePool<DecompInterface> create(Supplier<Program> programSupplier) {
+    Objects.requireNonNull(programSupplier, "programSupplier");
     return new LeasePool<>(
-        1, () -> createDecompiler(program), DecompilerPoolFactory::destroyDecompiler);
+        1, () -> createDecompiler(programSupplier.get()), DecompilerPoolFactory::destroyDecompiler);
   }
 
   private static DecompInterface createDecompiler(Program program) {

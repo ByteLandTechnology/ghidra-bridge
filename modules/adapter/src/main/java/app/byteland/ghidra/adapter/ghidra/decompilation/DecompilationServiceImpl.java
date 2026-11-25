@@ -4,43 +4,40 @@ import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
+import app.byteland.ghidra.service.function.FunctionResource;
 import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.ClangTokenGroup;
 import ghidra.app.decompiler.DecompInterface;
-import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
-import ghidra.program.model.listing.Program;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.WeakHashMap;
 
 public final class DecompilationServiceImpl implements DecompilationService {
   private final GhidraSession context;
-  private final LeasePool<DecompInterface> decompilerPool;
-  private final Map<DecompInterface, Boolean> commentModes =
-      Collections.synchronizedMap(new WeakHashMap<>());
-  private final Map<DecompInterface, Long> programModifications =
-      Collections.synchronizedMap(new WeakHashMap<>());
+  private final DecompilerPool decompilerPool;
 
   public DecompilationServiceImpl(GhidraSession context) {
-    this(
-        Objects.requireNonNull(context, "context"),
-        DecompilerPoolFactory.create(context.currentProgram()));
+    this(Objects.requireNonNull(context, "context"), DecompilerPool.create(context));
   }
 
-  DecompilationServiceImpl(GhidraSession context, LeasePool<DecompInterface> decompilerPool) {
+  public DecompilationServiceImpl(GhidraSession context, DecompilerPool decompilerPool) {
     this.context = Objects.requireNonNull(context, "context");
     this.decompilerPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
   }
 
+  DecompilationServiceImpl(GhidraSession context, LeasePool<DecompInterface> decompilerPool) {
+    this(context, new DecompilerPool(context, decompilerPool));
+  }
+
   @Override
   public DecompilationResource decompileFunction(
-      String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
-      boolean includeComments) {
+      String rawAddress,
+      DecompilationResource.Format format,
+      Integer timeoutMs,
+      boolean includeComments,
+      boolean includeLocals) {
     int timeout = timeoutMs == null ? DEFAULT_TIMEOUT_MS : timeoutMs;
     if (timeout < MIN_TIMEOUT_MS || timeout > MAX_TIMEOUT_MS) {
       throw new IllegalArgumentException(
@@ -50,57 +47,69 @@ public final class DecompilationServiceImpl implements DecompilationService {
     if (function == null) {
       throw new NoSuchElementException("function not found");
     }
-    return decompile(function, timeout, format, includeComments);
+    return decompile(function, timeout, format, includeComments, includeLocals);
   }
 
   @Override
   public void close() {
-    if (decompilerPool != null) {
-      decompilerPool.close();
-    }
+    decompilerPool.close();
   }
 
   private DecompilationResource decompile(
-      Function function, int timeoutMs, DecompilationResource.Format format,
-      boolean includeComments) {
-    try (LeasePool.Lease<DecompInterface> lease = decompilerPool.acquire()) {
-      long startedAt = System.nanoTime();
-      int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
-      DecompInterface decompiler = lease.value();
-      applyCommentMode(decompiler, includeComments);
-      // The native process keeps program data. Clear it when program modifications occur.
-      flushCacheIfModified(decompiler, function.getProgram());
-      DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
-      boolean completed = results.decompileCompleted();
-      List<String> warnings = new ArrayList<>();
-      if (!completed && results.getErrorMessage() != null && !results.getErrorMessage().isBlank()) {
-        warnings.add(results.getErrorMessage());
-      }
-      DecompilationResource.Format effectiveFormat =
-          format == null ? DecompilationResource.Format.TEXT : format;
-      ClangTokenGroup markup = results.getCCodeMarkup();
-      String code = effectiveFormat == DecompilationResource.Format.TEXT
-          ? GuiDocument.renderText(function, results)
-          : null;
-      List<DecompilationResource.Token> tokens =
-          effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
-      List<DecompilationResource.Line> lines = null;
-      if (effectiveFormat == DecompilationResource.Format.DOCUMENT) {
-        GuiDocument document = GuiDocument.render(function, markup);
-        code = document.code();
-        lines = document.lines();
-      }
-      FunctionComments comments = includeComments
-          ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
-          : null;
-      return new DecompilationResource(
-          AddressUtil.canonicalAddress(function.getEntryPoint()),
-          function.getName(), effectiveFormat, completed,
-          (System.nanoTime() - startedAt) / 1_000_000L,
-          code, tokens, lines,
-          comments == null ? null : comments.items(),
-          comments == null ? null : comments.complete(), warnings);
-    }
+      Function function,
+      int timeoutMs,
+      DecompilationResource.Format format,
+      boolean includeComments,
+      boolean includeLocals) {
+    return decompilerPool.withDecompileResults(
+        function,
+        timeoutMs,
+        includeComments,
+        (results, startedAt) -> {
+          boolean completed = results.decompileCompleted();
+          List<String> warnings = new ArrayList<>();
+          if (!completed
+              && results.getErrorMessage() != null
+              && !results.getErrorMessage().isBlank()) {
+            warnings.add(results.getErrorMessage());
+          }
+          DecompilationResource.Format effectiveFormat =
+              format == null ? DecompilationResource.Format.TEXT : format;
+          ClangTokenGroup markup = results.getCCodeMarkup();
+          String code =
+              effectiveFormat == DecompilationResource.Format.TEXT
+                  ? GuiDocument.renderText(function, results)
+                  : null;
+          List<DecompilationResource.Token> tokens =
+              effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
+          List<DecompilationResource.Line> lines = null;
+          if (effectiveFormat == DecompilationResource.Format.DOCUMENT) {
+            GuiDocument document = GuiDocument.render(function, markup);
+            code = document.code();
+            lines = document.lines();
+          }
+          FunctionComments comments =
+              includeComments
+                  ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
+                  : null;
+          List<FunctionResource.LocalVariableResource> localVariables =
+              includeLocals
+                  ? DecompilerLocalSymbols.describeLocalVariables(results.getHighFunction())
+                  : null;
+          return new DecompilationResource(
+              AddressUtil.canonicalAddress(function.getEntryPoint()),
+              function.getName(),
+              effectiveFormat,
+              completed,
+              (System.nanoTime() - startedAt) / 1_000_000L,
+              code,
+              tokens,
+              lines,
+              comments == null ? null : comments.items(),
+              comments == null ? null : comments.complete(),
+              localVariables,
+              warnings);
+        });
   }
 
   private List<DecompilationResource.Token> renderTokens(ClangTokenGroup markup) {
@@ -118,32 +127,6 @@ public final class DecompilationServiceImpl implements DecompilationService {
                   : AddressUtil.canonicalAddress(token.getMinAddress())));
     }
     return List.copyOf(tokens);
-  }
-
-  /** Sends display options only when the comment mode of the pooled decompiler changes. */
-  private void applyCommentMode(DecompInterface decompiler, boolean includeComments) {
-    if (Boolean.valueOf(includeComments).equals(commentModes.get(decompiler))) return;
-    commentModes.remove(decompiler);
-    if (!decompiler.setOptions(DecompilerPoolFactory.options(includeComments))) {
-      throw new IllegalStateException("unable to set decompiler display options");
-    }
-    commentModes.put(decompiler, includeComments);
-  }
-
-  /** Flushes the native cache only when the modification number of the program changes. */
-  private void flushCacheIfModified(DecompInterface decompiler, Program program) {
-    Program target = program != null ? program : context.currentProgramOrNull();
-    if (target == null) {
-      programModifications.remove(decompiler);
-      decompiler.flushCache();
-      return;
-    }
-    long modificationNumber = target.getModificationNumber();
-    if (Long.valueOf(modificationNumber).equals(programModifications.get(decompiler))) return;
-    programModifications.remove(decompiler);
-    if (decompiler.flushCache() >= 0) {
-      programModifications.put(decompiler, modificationNumber);
-    }
   }
 
   static DecompilationResource.Token.Kind tokenKind(ClangToken token) {

@@ -7,7 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
+import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
+import app.byteland.ghidra.service.function.FunctionResource;
+import app.byteland.ghidra.service.function.VariableStorageReference;
 import ghidra.app.decompiler.ClangBreak;
 import ghidra.app.decompiler.ClangSyntaxToken;
 import ghidra.app.decompiler.ClangToken;
@@ -21,17 +25,31 @@ import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.address.AddressIterator;
+import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.DefaultAddressFactory;
 import ghidra.program.model.address.GenericAddressSpace;
+import ghidra.program.model.data.IntegerDataType;
+import ghidra.program.model.data.UnsignedIntegerDataType;
 import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.CommentType;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.listing.VariableStorage;
+import ghidra.program.model.mem.MemoryBlock;
+import ghidra.program.model.pcode.EquateSymbol;
+import ghidra.program.model.pcode.HighFunction;
+import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.pcode.LocalSymbolMap;
+import ghidra.program.model.pcode.PcodeDataTypeManager;
+import ghidra.program.model.symbol.IdentityNameTransformer;
+import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.Proxy;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -141,6 +159,54 @@ class DecompilationServiceImplTest {
     }
   }
 
+  @Test
+  void omitsLocalsByDefaultAndReturnsFilteredHighSymbolLocalsWhenRequested() throws Exception {
+    try (GhidraTestSupport.ProgramHolder holder =
+        GhidraTestSupport.createX64Program("decomp-locals")) {
+      AtomicLong modificationNumber = new AtomicLong(7L);
+      Fixture fixture = createFixture(modificationNumber);
+      FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
+      decompiler.highFunction = createHighFunctionWithLocals(holder);
+
+      try (DecompilationServiceImpl service =
+          new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> decompiler))) {
+        DecompilationResource omitted =
+            service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
+        assertNull(omitted.localVariables());
+
+        DecompilationResource explicitFalse =
+            service.decompileFunction(
+                "0x101000", DecompilationResource.Format.TEXT, 1_200, false, false);
+        assertNull(explicitFalse.localVariables());
+
+        DecompilationResource withLocals =
+            service.decompileFunction(
+                "0x101000", DecompilationResource.Format.TEXT, 1_200, false, true);
+        assertEquals(
+            List.of(
+                new FunctionResource.LocalVariableResource(
+                    "alpha_local",
+                    DataTypeReference.named("/int"),
+                    VariableStorageReference.serialization("Stack[-0x10]:4")),
+                new FunctionResource.LocalVariableResource(
+                    "temp_val",
+                    DataTypeReference.named("/uint"),
+                    VariableStorageReference.serialization("unique:00001000:4"))),
+            withLocals.localVariables());
+      }
+
+      FakeDecompiler timedOut = new FakeDecompiler(null, false, "Decompile timed out", () -> 0);
+      timedOut.fallbackFunction = new DecompiledFunction("const char *f(void);", "/* fallback */");
+      try (DecompilationServiceImpl service =
+          new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> timedOut))) {
+        DecompilationResource fallback =
+            service.decompileFunction(
+                "0x101000", DecompilationResource.Format.TEXT, 1_200, false, true);
+        assertEquals(List.of(), fallback.localVariables());
+      }
+    }
+  }
+
   private static Fixture createFixture(AtomicLong modificationNumber) {
     GenericAddressSpace ram = new GenericAddressSpace("ram", 64, AddressSpace.TYPE_RAM, 0);
     AddressFactory addressFactory = new DefaultAddressFactory(new AddressSpace[] {ram});
@@ -222,6 +288,79 @@ class DecompilationServiceImplTest {
 
   private record Fixture(GhidraSession session, ClangTokenGroup markup) {}
 
+  private static HighFunction createHighFunctionWithLocals(GhidraTestSupport.ProgramHolder holder)
+      throws Exception {
+    Program program = holder.program();
+    Address entry = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x00401000L);
+    holder.inTransaction(
+        db -> {
+          MemoryBlock block =
+              db.getMemory()
+                  .createInitializedBlock(
+                      ".text",
+                      entry,
+                      new ByteArrayInputStream(new byte[] {(byte) 0xc3}),
+                      1,
+                      TaskMonitor.DUMMY,
+                      false);
+          block.setExecute(true);
+          db.getFunctionManager()
+              .createFunction(
+                  "demo_fn", entry, new AddressSet(entry, entry), SourceType.USER_DEFINED);
+        });
+    Function fn = program.getFunctionManager().getFunctionAt(entry);
+    PcodeDataTypeManager dtm = new PcodeDataTypeManager(program, new IdentityNameTransformer());
+    HighFunction base = new HighFunction(fn, program.getLanguage(), program.getCompilerSpec(), dtm);
+    VariableStorage stackStorage = new VariableStorage(program, -0x10, 4);
+    VariableStorage uniqueStorage =
+        new VariableStorage(
+            program, program.getAddressFactory().getUniqueSpace().getAddress(0x1000L), 4);
+    VariableStorage paramStorage = new VariableStorage(program, program.getRegister("EDI"));
+
+    HighSymbol tempSymbol =
+        new HighSymbol(10L, "temp_val", UnsignedIntegerDataType.dataType, base) {
+          @Override
+          public VariableStorage getStorage() {
+            return uniqueStorage;
+          }
+        };
+    HighSymbol stackSymbol =
+        new HighSymbol(11L, "alpha_local", IntegerDataType.dataType, base) {
+          @Override
+          public VariableStorage getStorage() {
+            return stackStorage;
+          }
+        };
+    HighSymbol paramSymbol =
+        new HighSymbol(12L, "param_arg", IntegerDataType.dataType, base) {
+          @Override
+          public boolean isParameter() {
+            return true;
+          }
+
+          @Override
+          public VariableStorage getStorage() {
+            return paramStorage;
+          }
+        };
+    EquateSymbol equateSymbol = new EquateSymbol(13L, "CONST_EQ", 7L, base, entry, 0x99L);
+
+    List<HighSymbol> items = List.of(tempSymbol, paramSymbol, equateSymbol, stackSymbol);
+    LocalSymbolMap symbolMap =
+        new LocalSymbolMap(base, program.getAddressFactory().getStackSpace()) {
+          @Override
+          public Iterator<HighSymbol> getSymbols() {
+            return items.iterator();
+          }
+        };
+    return new HighFunction(fn, program.getLanguage(), program.getCompilerSpec(), dtm) {
+      @Override
+      public LocalSymbolMap getLocalSymbolMap() {
+        return symbolMap;
+      }
+    };
+  }
+
   private static final class FakeDecompiler extends DecompInterface {
     private final ClangTokenGroup markup;
     private final boolean completed;
@@ -229,6 +368,7 @@ class DecompilationServiceImplTest {
     private final IntSupplier flushAction;
     private final AtomicInteger flushCalls = new AtomicInteger();
     private DecompiledFunction fallbackFunction;
+    private HighFunction highFunction;
 
     private FakeDecompiler(
         ClangTokenGroup markup, boolean completed, String errorMessage, IntSupplier flushAction) {
@@ -266,6 +406,11 @@ class DecompilationServiceImplTest {
         @Override
         public DecompiledFunction getDecompiledFunction() {
           return fallbackFunction;
+        }
+
+        @Override
+        public HighFunction getHighFunction() {
+          return highFunction;
         }
       };
     }

@@ -117,6 +117,6 @@ public interface FunctionService {
   /**
    * Updates a local variable in a function.
    */
-  void patchLocalVariable(
+  FunctionResource.LocalVariableResource patchLocalVariable(
       String rawAddress, String variableName, String newName, DataTypeReference newDataType);
 }

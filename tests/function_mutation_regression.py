@@ -39,6 +39,27 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global local_helper
+local_helper:
+ mov (%rdi), %eax
+ add $1, %eax
+ ret
+.global local_ops
+local_ops:
+ push %rbx
+ sub $0x10, %rsp
+ add $5, %edi
+ mov %edi, 0xc(%rsp)
+ lea 0xc(%rsp), %rdi
+ call local_helper
+ mov %eax, %ebx
+ lea 0xc(%rsp), %rdi
+ call local_helper
+ xor $0x55, %ebx
+ add %ebx, %eax
+ add $0x10, %rsp
+ pop %rbx
+ ret
 """
 
 
@@ -348,6 +369,126 @@ def run_test(headless, root):
                 "__return_storage_ptr__",
                 "after_auto",
             ]
+
+            function(37, "create", {
+                "resource": {"entry": symbols["local_helper"], "name": "local_helper"},
+                "disassemble": True,
+            })
+            function(38, "patch", {
+                "selector": {"entry": symbols["local_helper"]},
+                "patch": {"return_type": {"kind": "named", "name": "/int"}},
+            })
+            function(39, "parameter.create", {
+                "selector": {"entry": symbols["local_helper"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "ptr",
+                    "data_type": {"kind": "pointer", "target": {"kind": "named", "name": "/int"}},
+                },
+            })
+            function(40, "create", {
+                "resource": {"entry": symbols["local_ops"], "name": "local_ops"},
+                "disassemble": True,
+            })
+            function(41, "patch", {
+                "selector": {"entry": symbols["local_ops"]},
+                "patch": {"return_type": {"kind": "named", "name": "/int"}},
+            })
+            function(42, "parameter.create", {
+                "selector": {"entry": symbols["local_ops"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "input",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })
+
+            assert function(43, "get", selector("local_ops"))["result"]["local_variables"] == []
+            decomp_default = tool(44, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["local_ops"]}},
+            })["result"]
+            assert "local_variables" not in decomp_default
+
+            decomp_locals = tool(45, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["local_ops"]}, "include_locals": True},
+            })["result"]
+            assert len(decomp_locals["local_variables"]) >= 2
+            stack_local = next(
+                v for v in decomp_locals["local_variables"]
+                if v["storage"]["serialization"].startswith("Stack[")
+            )
+
+            patched_stack = function(46, "local_variable.patch", {
+                "selector": {"entry": symbols["local_ops"], "name": stack_local["name"]},
+                "patch": {"name": "saved_slot"},
+            })["result"]
+            assert patched_stack["name"] == "saved_slot"
+            assert patched_stack["storage"]["serialization"].startswith("Stack[")
+
+            tool(47, "ghidra_data_type", {
+                "operation": "create",
+                "params": {
+                    "resource": {
+                        "category_path": "/cat_a",
+                        "kind": "struct",
+                        "name": "item",
+                        "size": 4,
+                    },
+                },
+            })
+            tool(48, "ghidra_data_type", {
+                "operation": "create",
+                "params": {
+                    "resource": {
+                        "category_path": "/cat_b",
+                        "kind": "struct",
+                        "name": "item",
+                        "size": 4,
+                    },
+                },
+            })
+            retyped_a = function(49, "local_variable.patch", {
+                "selector": {"entry": symbols["local_ops"], "name": "saved_slot"},
+                "patch": {"data_type": {"kind": "named", "name": "/cat_a/item"}},
+            })["result"]
+            assert retyped_a["data_type"] == {"kind": "named", "name": "/cat_a/item"}
+
+            retyped_b = function(50, "local_variable.patch", {
+                "selector": {"entry": symbols["local_ops"], "name": "saved_slot"},
+                "patch": {"data_type": {"kind": "named", "name": "/cat_b/item"}},
+            })["result"]
+            assert retyped_b["data_type"] == {"kind": "named", "name": "/cat_b/item"}
+
+            decomp_after_stack = tool(51, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["local_ops"]}, "include_locals": True},
+            })["result"]
+            temp_local = next(
+                v for v in decomp_after_stack["local_variables"]
+                if v["name"] != "saved_slot"
+            )
+            patched_temp = function(52, "local_variable.patch", {
+                "selector": {"entry": symbols["local_ops"], "name": temp_local["name"]},
+                "patch": {
+                    "name": "call_result",
+                    "data_type": {"kind": "named", "name": "/uint"},
+                },
+            })["result"]
+            assert patched_temp["name"] == "call_result"
+            assert patched_temp["data_type"] == {"kind": "named", "name": "/uint"}
+
+            refreshed_decomp = tool(53, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["local_ops"]}, "include_locals": True},
+            })["result"]
+            assert "saved_slot" in refreshed_decomp["c"]
+            assert "call_result" in refreshed_decomp["c"]
+            function(54, "local_variable.patch", {
+                "selector": {"entry": symbols["local_ops"], "name": "missing_local"},
+                "patch": {"name": "unused"},
+            }, success=False)
             print("Function mutation regression checks passed")
         finally:
             if ready:

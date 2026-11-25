@@ -286,7 +286,7 @@ final class FunctionMethods implements ApiMethodProvider {
           String entry = text(selector(request), ApiVocabulary.ENTRY);
           String oldName = text(selector(request), ApiVocabulary.NAME);
           String newName = optionalText(patch(request), ApiVocabulary.NAME);
-          registry
+          return registry
               .services()
               .functionService()
               .patchLocalVariable(
@@ -294,7 +294,6 @@ final class FunctionMethods implements ApiMethodProvider {
                   oldName,
                   newName,
                   dataType(patch(request).get(ApiVocabulary.DATA_TYPE), PATCH_DATA_TYPE_TARGET));
-          return functionLocalVariable(entry, newName == null ? oldName : newName);
         });
   }
 
@@ -322,25 +321,13 @@ final class FunctionMethods implements ApiMethodProvider {
   }
 
   private FunctionResource.ParameterResource functionParameter(String entry, int ordinal) {
-    app.byteland.ghidra.service.function.FunctionResource function =
+    FunctionResource function =
         registry.services().functionService().getFunction(entry, Set.of(ApiVocabulary.PARAMETERS));
     if (function.parameters() != null) {
-      for (app.byteland.ghidra.service.function.FunctionResource.ParameterResource parameter :
-          function.parameters()) {
+      for (FunctionResource.ParameterResource parameter : function.parameters()) {
         if (parameter.ordinal() == ordinal) return parameter;
       }
     }
     throw new NoSuchElementException("function parameter was not found after mutation");
-  }
-
-  private FunctionResource.LocalVariableResource functionLocalVariable(String entry, String name) {
-    FunctionResource function =
-        registry.services().functionService().getFunction(entry, Set.of(ApiVocabulary.LOCALS));
-    if (function.localVariables() != null) {
-      for (FunctionResource.LocalVariableResource variable : function.localVariables()) {
-        if (name.equals(variable.name())) return variable;
-      }
-    }
-    throw new NoSuchElementException("function local variable was not found after mutation");
   }
 }

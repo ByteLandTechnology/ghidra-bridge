@@ -67,13 +67,16 @@ final class FunctionDescriptions {
   static List<FunctionResource.LocalVariableResource> describeLocalVariables(Function function) {
     List<FunctionResource.LocalVariableResource> items = new ArrayList<>();
     for (Variable variable : function.getLocalVariables()) {
-      items.add(
-          new FunctionResource.LocalVariableResource(
-              variable.getName(),
-              GhidraDataTypeReferences.toReference(variable.getDataType()),
-              describeStorage(variable.getVariableStorage())));
+      items.add(describeLocalVariable(variable));
     }
     return List.copyOf(items);
+  }
+
+  static FunctionResource.LocalVariableResource describeLocalVariable(Variable variable) {
+    return new FunctionResource.LocalVariableResource(
+        variable.getName(),
+        GhidraDataTypeReferences.toReference(variable.getDataType()),
+        describeStorage(variable.getVariableStorage()));
   }
 
   private static VariableStorageReference describeStorage(VariableStorage storage) {

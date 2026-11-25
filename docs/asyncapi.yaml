@@ -4476,6 +4476,50 @@
                         "maxItems": !!int "2147483647"
                         "minItems": !!int "0"
                         "type": "array"
+                      "local_variables":
+                        "items":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "data_type":
+                              "$ref": "#/$defs/data_type_reference"
+                            "name":
+                              "type": "string"
+                            "storage":
+                              "oneOf":
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "serialization"
+                                    "type": "string"
+                                  "serialization":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "serialization"
+                                "type": "object"
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "register"
+                                    "type": "string"
+                                  "register":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "register"
+                                "type": "object"
+                          "required":
+                          - "name"
+                          - "data_type"
+                          - "storage"
+                          "type": "object"
+                        "maxItems": !!int "1000"
+                        "minItems": !!int "0"
+                        "type": "array"
                       "name":
                         "type": "string"
                       "tokens":
@@ -10770,6 +10814,8 @@
                     "type": "string"
                   "include_comments":
                     "type": "boolean"
+                  "include_locals":
+                    "type": "boolean"
                   "projection":
                     "additionalProperties": !!bool "false"
                     "properties":
@@ -10784,6 +10830,7 @@
                           - "entry"
                           - "format"
                           - "lines"
+                          - "local_variables"
                           - "name"
                           - "tokens"
                           - "warnings"
@@ -15067,6 +15114,8 @@
                                 "type": "string"
                               "include_comments":
                                 "type": "boolean"
+                              "include_locals":
+                                "type": "boolean"
                               "projection":
                                 "additionalProperties": !!bool "false"
                                 "properties":
@@ -15081,6 +15130,7 @@
                                       - "entry"
                                       - "format"
                                       - "lines"
+                                      - "local_variables"
                                       - "name"
                                       - "tokens"
                                       - "warnings"
@@ -19107,6 +19157,8 @@
                       "type": "string"
                     "include_comments":
                       "type": "boolean"
+                    "include_locals":
+                      "type": "boolean"
                     "projection":
                       "additionalProperties": !!bool "false"
                       "properties":
@@ -19121,6 +19173,7 @@
                             - "entry"
                             - "format"
                             - "lines"
+                            - "local_variables"
                             - "name"
                             - "tokens"
                             - "warnings"
@@ -24325,12 +24378,13 @@
       "type": "object"
   "decompilation.get":
     "description": "Decompile the function at an entry point. Set scan.timeout_ms\
-      \ between 100 and 300000. The default is 30000 milliseconds; Ghidra\
-      \ rounds up to whole seconds. Format document returns GUI lines and\
-      \ cursor addresses from one decompilation. By default, only pre comments\
-      \ and the plate comment at the entry show. Set include_comments to\
-      \ show all comments and to return repeatable comments; then check\
-      \ comments_complete and warnings."
+      \ between 100 and 300000; the default is 30000 milliseconds, rounded\
+      \ up to whole seconds. Format document returns GUI lines and cursor\
+      \ addresses from one decompilation. Set include_locals to return decompiler\
+      \ local variables. By default, only pre comments and the plate comment\
+      \ at the entry show. Set include_comments to show all comments and\
+      \ to return repeatable comments; then check comments_complete and\
+      \ warnings."
     "effects":
       "allowed_during_analysis": !!bool "true"
       "destructive": !!bool "false"
@@ -24403,6 +24457,8 @@
           "type": "string"
         "include_comments":
           "type": "boolean"
+        "include_locals":
+          "type": "boolean"
         "projection":
           "additionalProperties": !!bool "false"
           "properties":
@@ -24417,6 +24473,7 @@
                 - "entry"
                 - "format"
                 - "lines"
+                - "local_variables"
                 - "name"
                 - "tokens"
                 - "warnings"
@@ -24717,6 +24774,50 @@
             - "tokens"
             "type": "object"
           "maxItems": !!int "2147483647"
+          "minItems": !!int "0"
+          "type": "array"
+        "local_variables":
+          "items":
+            "additionalProperties": !!bool "false"
+            "properties":
+              "data_type":
+                "$ref": "#/$defs/data_type_reference"
+              "name":
+                "type": "string"
+              "storage":
+                "oneOf":
+                - "additionalProperties": !!bool "false"
+                  "properties":
+                    "kind":
+                      "enum":
+                      - "serialization"
+                      "type": "string"
+                    "serialization":
+                      "minLength": !!int "1"
+                      "type": "string"
+                  "required":
+                  - "kind"
+                  - "serialization"
+                  "type": "object"
+                - "additionalProperties": !!bool "false"
+                  "properties":
+                    "kind":
+                      "enum":
+                      - "register"
+                      "type": "string"
+                    "register":
+                      "minLength": !!int "1"
+                      "type": "string"
+                  "required":
+                  - "kind"
+                  - "register"
+                  "type": "object"
+            "required":
+            - "name"
+            - "data_type"
+            - "storage"
+            "type": "object"
+          "maxItems": !!int "1000"
           "minItems": !!int "0"
           "type": "array"
         "name":

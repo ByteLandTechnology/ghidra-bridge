@@ -1,6 +1,7 @@
 package app.byteland.ghidra.service.decompilation;
 
 import app.byteland.ghidra.service.comment.CommentResource;
+import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.symbol.SymbolResource;
 import java.util.List;
 import java.util.Objects;
@@ -16,7 +17,35 @@ public record DecompilationResource(
     List<Line> lines,
     List<CommentResource> comments,
     Boolean commentsComplete,
+    List<FunctionResource.LocalVariableResource> localVariables,
     List<String> warnings) {
+  public DecompilationResource(
+      String entry,
+      String name,
+      Format format,
+      boolean completed,
+      long elapsedMs,
+      String c,
+      List<Token> tokens,
+      List<Line> lines,
+      List<CommentResource> comments,
+      Boolean commentsComplete,
+      List<String> warnings) {
+    this(
+        entry,
+        name,
+        format,
+        completed,
+        elapsedMs,
+        c,
+        tokens,
+        lines,
+        comments,
+        commentsComplete,
+        null,
+        warnings);
+  }
+
   public DecompilationResource {
     Objects.requireNonNull(entry, "entry");
     Objects.requireNonNull(name, "name");
@@ -39,6 +68,7 @@ public record DecompilationResource(
     tokens = immutableCopyOrNull(tokens);
     lines = immutableCopyOrNull(lines);
     comments = immutableCopyOrNull(comments);
+    localVariables = immutableCopyOrNull(localVariables);
     Objects.requireNonNull(warnings, "warnings");
     warnings = List.copyOf(warnings);
   }
@@ -46,6 +76,11 @@ public record DecompilationResource(
   @Override
   public List<Token> tokens() {
     return immutableCopyOrNull(tokens);
+  }
+
+  @Override
+  public List<FunctionResource.LocalVariableResource> localVariables() {
+    return immutableCopyOrNull(localVariables);
   }
 
   private static <T> List<T> immutableCopyOrNull(List<T> values) {

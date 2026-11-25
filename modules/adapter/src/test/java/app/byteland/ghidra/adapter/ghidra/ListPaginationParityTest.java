@@ -498,7 +498,7 @@ class ListPaginationParityTest {
       }
 
       @Override
-      public void patchLocalVariable(
+      public FunctionResource.LocalVariableResource patchLocalVariable(
           String rawAddress, String currentName, String newName, DataTypeReference dataType) {
         throw new UnsupportedOperationException();
       }

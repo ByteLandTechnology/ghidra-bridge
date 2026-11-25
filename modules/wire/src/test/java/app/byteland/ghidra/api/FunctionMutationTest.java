@@ -212,6 +212,86 @@ class FunctionMutationTest {
     assertEquals(2, transactions.get());
   }
 
+  @Test
+  void localVariablePatchReturnsDirectResourceWithoutSecondaryFunctionRead() throws Exception {
+    AtomicReference<List<Object>> patchArgs = new AtomicReference<>();
+    AtomicBoolean inTransaction = new AtomicBoolean();
+    FunctionService functions =
+        proxy(
+            FunctionService.class,
+            (method, args) -> {
+              assertTrue(inTransaction.get());
+              assertEquals("patchLocalVariable", method);
+              patchArgs.set(Arrays.asList(args));
+              return new FunctionResource.LocalVariableResource(
+                  "hash_temp",
+                  DataTypeReference.named("/uint"),
+                  VariableStorageReference.serialization("HASH:5f309a1100:4"));
+            });
+    AnalysisService analysis =
+        proxy(
+            AnalysisService.class,
+            (method, args) ->
+                new AnalysisResource(
+                    AnalysisResource.Kind.GHIDRA,
+                    AnalysisResource.Status.IDLE,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null));
+    TransactionRunner transaction =
+        new TransactionRunner() {
+          @Override
+          public <T> T run(Operation<T> operation) {
+            inTransaction.set(true);
+            try {
+              return operation.execute();
+            } catch (Exception ex) {
+              throw new RuntimeException(ex);
+            } finally {
+              inTransaction.set(false);
+            }
+          }
+        };
+    BridgeServices services =
+        new BridgeServices(
+            unused(ProgramService.class),
+            unused(AddressService.class),
+            unused(CommentService.class),
+            unused(ReferenceService.class),
+            unused(MemoryService.class),
+            unused(ListingService.class),
+            functions,
+            unused(GlobalVariableService.class),
+            analysis,
+            unused(DecompilationService.class),
+            unused(SymbolService.class),
+            unused(DataTypeService.class),
+            transaction,
+            "test");
+    ApiRegistry registry = new ApiRegistry(services, "test", Map::of, () -> {});
+
+    Object response =
+        registry.dispatch(
+            "function_local_variable.patch",
+            Map.of(
+                "selector", Map.of("entry", "0x100000", "name", "uVar1"),
+                "patch",
+                    Map.of(
+                        "name", "hash_temp",
+                        "data_type", Map.of("kind", "named", "name", "/uint"))));
+    assertEquals(
+        List.of("0x100000", "uVar1", "hash_temp", DataTypeReference.named("/uint")),
+        patchArgs.get());
+    assertEquals(
+        Map.of(
+            "name", "hash_temp",
+            "data_type", Map.of("kind", "named", "name", "/uint"),
+            "storage", Map.of("kind", "serialization", "serialization", "HASH:5f309a1100:4")),
+        response);
+  }
+
   private interface Handler {
     Object invoke(String method, Object[] args);
   }

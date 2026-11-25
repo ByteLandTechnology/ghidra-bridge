@@ -4,6 +4,7 @@ import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Parameter;
 import ghidra.program.model.listing.Variable;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 final class FunctionVariableMutationSupport {
   private FunctionVariableMutationSupport() {}
@@ -16,12 +17,22 @@ final class FunctionVariableMutationSupport {
     return params[ordinal];
   }
 
-  static Variable requireLocalVariable(Function function, String variableName) {
+  static Optional<Variable> findLocalVariable(Function function, String variableName) {
+    Variable matched = null;
     for (Variable variable : function.getLocalVariables()) {
       if (variable.getName().equals(variableName)) {
-        return variable;
+        if (matched != null) {
+          throw new IllegalArgumentException("ambiguous local variable name: " + variableName);
+        }
+        matched = variable;
       }
     }
-    throw new NoSuchElementException("local variable not found: " + variableName);
+    return Optional.ofNullable(matched);
+  }
+
+  static Variable requireLocalVariable(Function function, String variableName) {
+    return findLocalVariable(function, variableName)
+        .orElseThrow(
+            () -> new NoSuchElementException("local variable not found: " + variableName));
   }
 }
