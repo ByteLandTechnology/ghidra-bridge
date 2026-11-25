@@ -12,14 +12,15 @@ import java.util.regex.Pattern;
  * Configuration parameters for the MCP Streamable HTTP server.
  *
  * <p>{@code toolPrefix} is the first part of every tool name. An example is {@code ghidra} in
- * {@code ghidra.program}. Give each server a different prefix. Then one client can connect to
+ * {@code ghidra_program_get}. Give each server a different prefix. Then one client can connect to
  * several servers without tool name conflicts.
  */
 public record McpConfig(
     String host, int port, String path, String token, String sessionId, String toolPrefix) {
   public static final int DEFAULT_PORT = 8766;
   public static final String DEFAULT_TOOL_PREFIX = "ghidra";
-  private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,63}");
+  public static final int MAX_TOOL_PREFIX_LENGTH = 34;
+  private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,33}");
   private static final String DEFAULT_LOOPBACK_HOST =
       InetAddress.getLoopbackAddress().getHostAddress();
   private static final Set<String> ALLOWED =
@@ -57,13 +58,13 @@ public record McpConfig(
   }
 
   /**
-   * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores,
-   * or hyphens. A dot is not permitted because it separates the prefix from the domain.
+   * Checks a tool prefix. It starts with a letter. It has 1 to 34 letters, digits, underscores,
+   * or hyphens so every underscored per-operation tool name stays within 64 characters.
    */
   public static String requireToolPrefix(String prefix) {
     if (prefix == null || !TOOL_PREFIX.matcher(prefix).matches()) {
       throw new IllegalArgumentException(
-          "tool_prefix must start with a letter and contain 1..64 letters, digits, '_', or '-'");
+          "tool_prefix must start with a letter and contain 1..34 letters, digits, '_', or '-'");
     }
     return prefix;
   }

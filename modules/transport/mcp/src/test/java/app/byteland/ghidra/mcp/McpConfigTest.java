@@ -81,6 +81,11 @@ class McpConfigTest {
         () -> McpConfig.fromMap(Map.of("tool_prefix", "ghidra.bad")));
     assertThrows(
         IllegalArgumentException.class, () -> McpConfig.fromMap(Map.of("tool_prefix", "1ghidra")));
+    String maxPrefix = "a" + "b".repeat(33);
+    assertEquals(maxPrefix, McpConfig.fromMap(Map.of("tool_prefix", maxPrefix)).toolPrefix());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> McpConfig.fromMap(Map.of("tool_prefix", maxPrefix + "c")));
 
     String externalHost = "external.validation.mcp-test.internal";
     assertThrows(

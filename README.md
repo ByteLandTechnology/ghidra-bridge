@@ -101,7 +101,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `session_id` | Program name | Unique identifier string for this active session. |
 | `token` | *(none)* | Shared secret token for bearer authentication. |
 | `ws_url` | *(none)* | Remote WebSocket URL in outbound client mode. |
-| `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra.program`. Use a different value for each server that one client connects to. |
+| `tool_prefix` | `ghidra` | MCP only. First part of every tool name (1 to 34 characters), such as `ghidra` in `ghidra_program_get`. Use a different value for each server that one client connects to. |
 | `jar` | *(auto)* | Path to `ghidra-bridge.jar` when the JAR is not beside the script file. |
 | `exit_deadline_sec` | *(none)* | Outbound only. Halt the JVM if Ghidra does not exit this many seconds after the session ends. An active save completes first. Use it only for a headless Ghidra that a host starts. |
 
@@ -131,22 +131,22 @@ Call `interface.get` to discover all methods and schemas that the server support
 
 ### Model Context Protocol (MCP)
 
-MCP exposes the same operations, except `interface.get`, through 15 tools over Streamable HTTP:
-- `ghidra.help`: Discover domains, list operations, or view schemas.
-- 14 Domain Tools: `ghidra.program`, `ghidra.memory`, `ghidra.function`, and other domain tools.
+MCP exposes the same operations, except `interface.get`, through 56 underscored tools over Streamable HTTP:
+- `ghidra_help`: Discover domains, list operations and schemas, or inspect one operation.
+- 55 Per-Operation Tools: `<prefix>_<domain>_<operation>` (with dots in operation names replaced by underscores), such as `ghidra_program_get`, `ghidra_memory_read`, `ghidra_decompilation_get`, and `ghidra_function_local_variable_patch`.
 
-Call a domain tool with an operation name and its parameters.
-For example, the `program.get` method is the `get` operation of `ghidra.program`:
+Each operation tool publishes its flattened parameter schema and safety hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`) directly in `tools/list`.
+For example, call `ghidra_program_get` with top-level operation parameters:
 
 ```json
 {
-  "name": "ghidra.program",
-  "arguments": {
-    "operation": "get",
-    "params": {}
-  }
+  "name": "ghidra_program_get",
+  "arguments": {}
 }
 ```
+
+For backward compatibility, `tools/call` also accepts unlisted grouped `<prefix>_<domain>` requests with `operation` and `params` (such as `ghidra_program` with `{"operation": "get", "params": {}}`).
+Note that each bridge publishes 56 tools; connecting three or more bridges at once exceeds 128 tools in strict MCP clients.
 
 Requests that use `2026-07-28` must also send MCP metadata and headers.
 The server supports `initialize` clients with versions `2025-06-18` and `2025-11-25`.

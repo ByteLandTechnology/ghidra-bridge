@@ -178,7 +178,7 @@ The server handles these MCP methods:
 - `server/discover`: Returns server identification and capabilities.
 - `ping`: Checks server health in initialization-based versions.
   The bridge keeps this compatibility method in `2026-07-28`.
-- `tools/list`: Returns tool schemas for all 15 bridge tools.
+- `tools/list`: Returns tool schemas for all 56 bridge tools (`ghidra_help` and 55 operation tools).
 - `tools/call`: Executes a tool operation and returns structured content.
 - `resources/list`: Lists available resources, such as `ghidra-bridge://contracts/mcp-tools`.
 - `resources/read`: Reads contract resource content.
@@ -196,32 +196,33 @@ The MCP error schema for that version cannot represent this case.
 
 ### Tool Call Convention
 
-MCP organizes operations into 15 tools:
-- `ghidra.help`: Finds domains, lists operations, and shows schemas.
-- 14 Domain Tools: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`.
+`tools/list` publishes 56 underscored tools:
+- `ghidra_help`: Finds domains, lists operations with schemas and effects, and shows single-operation contracts.
+- 55 Per-Operation Tools across 14 domains (`bridge`, `program`, `address`, `memory`, `listing`, `global_variable`, `function`, `analysis`, `decompilation`, `symbol`, `reference`, `comment`, `data_type`, `batch`), named `<prefix>_<domain>_<operation>` with dots in operation names replaced by underscores (for example, `ghidra_memory_read`, `ghidra_decompilation_get`, and `ghidra_function_local_variable_patch`).
 
-The domain tools expose 55 methods. `interface.get` is available only through WebSocket.
+Each per-operation tool publishes its flattened parameter schema (omitting `oneOf`, `anyOf`, `allOf`, `$ref`, `$defs`, and `additionalProperties`) and exact method safety hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`) in `tools/list`.
+`interface.get` is available only through WebSocket.
 
-### Tool Name Prefix
+### Tool Name Prefix and Multi-Server Tool Budgets
 
-Every tool name starts with a prefix and a dot. The default prefix is `ghidra`.
+Every listed tool name starts with a prefix and an underscore. The default prefix is `ghidra`.
 Set the `tool_prefix` startup argument to change it, for example `tool_prefix=sample`.
-Then the tool names include `sample.help` and `sample.program`.
+Then the tool names include `sample_help` and `sample_program_get`.
 Use a different prefix for each bridge when one MCP client connects to more than one bridge.
 
-The prefix starts with a letter and has 1 to 64 letters, digits, `_`, or `-`.
+The prefix starts with a letter and has 1 to 34 letters, digits, `_`, or `-`, keeping every tool name within the 64-character limit enforced by strict MCP providers.
+Because each bridge lists 56 tools, connecting two bridges publishes 112 tools and connecting three bridges publishes 168 tools, which exceeds the 128-tool cap enforced by strict MCP clients; keep multi-server sessions within your client's tool budget or route multiple binaries through `ghidra-mcp`.
 The server rejects a tool name with a different prefix.
-In `ghidra.help`, the `domain` argument accepts the full tool name or the domain name without the prefix, such as `memory`.
+In `ghidra_help`, the `domain` argument accepts the domain tool name (`ghidra_memory`) or the bare domain name (`memory`).
 The examples in this document use the default prefix.
 
-`ghidra.help` accepts optional `domain` and `operation` arguments:
-- No arguments: Returns the list of domain tools.
-- `domain`: Returns the operation names of one domain tool.
-- `domain` and `operation`: Returns the method name, description, effects, `inputSchema`, and `outputSchema` of one operation.
+`ghidra_help` accepts optional `domain` and `operation` arguments:
+- No arguments: Returns the list of domain names (`ghidra_bridge` through `ghidra_batch`).
+- `domain`: Returns the operations of one domain, each with its `name`, `tool`, `method`, `description`, `effects`, `inputSchema`, and `outputSchema`.
+- `domain` and `operation`: Returns the `tool`, `method`, `description`, `effects`, `inputSchema`, and `outputSchema` of one operation.
 
-To execute an operation, call its domain tool with `operation` and `params`.
-The `operation` value is the operation name in the domain tool, not the dotted method name.
-For example, the `memory.read` method is the `read` operation of `ghidra.memory`:
+To execute an operation directly, call its per-operation tool with the operation parameters at the top level of `arguments`.
+For example, call `ghidra_memory_read` for the `memory.read` method:
 
 ```json
 {
@@ -234,17 +235,16 @@ For example, the `memory.read` method is the `read` operation of `ghidra.memory`
       "io.modelcontextprotocol/clientInfo": {"name": "example-client", "version": "1.0.0"},
       "io.modelcontextprotocol/clientCapabilities": {}
     },
-    "name": "ghidra.memory",
+    "name": "ghidra_memory_read",
     "arguments": {
-      "operation": "read",
-      "params": {
-        "selector": {"address": "ram:00100000"},
-        "length": 4
-      }
+      "selector": {"address": "ram:00100000"},
+      "length": 4
     }
   }
 }
 ```
+
+For backward compatibility with existing integrations, `tools/call` also accepts unlisted grouped `<prefix>_<domain>` (and legacy `<prefix>.<domain>`) requests with `operation` and `params`, such as `"name": "ghidra_memory"` with `{"operation": "read", "params": {"selector": {"address": "ram:00100000"}, "length": 4}}`.
 
 The server returns both text and structured content:
 
@@ -275,7 +275,7 @@ The server returns both text and structured content:
 When an operation fails, the server returns HTTP `200` with `"isError": true`.
 The `structuredContent` object holds the bridge error with `status`, `code`, `message`, `target`, and `details`.
 An unknown tool name returns HTTP `400` with code `-32602`.
-An unknown operation, or an argument other than `operation` and `params`, returns a tool error.
+Invalid operation parameters, or an unknown operation or unexpected wrapper field on a legacy `<prefix>_<domain>` call, return a tool error.
 
 ## Authentication and Security
 

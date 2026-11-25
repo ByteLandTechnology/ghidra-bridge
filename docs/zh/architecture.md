@@ -71,7 +71,7 @@ modules/domain (领域服务接口与数据模型)
 
 该模块实现 Model Context Protocol 传输通道：
 - `McpHttpServer` 实现符合 `2026-07-28` 协议的 Streamable HTTP 服务。
-- `McpToolRegistry` 将 55 个点分方法映射为 14 个领域工具及 `ghidra.help`。
+- `McpToolRegistry` 将 14 个领域中的 55 个点分方法映射为 55 个下划线命名的按操作工具（`<prefix>_<domain>_<operation>`）及 `ghidra_help`，同时为 `tools/call` 保留旧版 `<prefix>_<domain>` 查找支持。
   它不发布 `interface.get`。
 - 在 `ghidra-bridge://contracts/mcp-tools` 提供静态工具契约资源。
 

@@ -506,16 +506,26 @@ public final class McpHttpServer implements AutoCloseable {
         log.ok().status(200);
         return toolResult(toolRegistry.help(arguments), false, statelessProtocol);
       }
-      if (!List.of("operation", "params").containsAll(arguments.keySet())) {
-        throw new IllegalArgumentException("Unknown domain tool argument");
+      McpToolRegistry.OperationTarget flatTool = toolRegistry.findOperationTool(name);
+      String operation;
+      MethodDescriptor tool;
+      Map<String, Object> operationParams;
+      if (flatTool != null) {
+        operation = flatTool.operation();
+        tool = flatTool.descriptor();
+        operationParams = arguments;
+      } else {
+        if (!List.of("operation", "params").containsAll(arguments.keySet())) {
+          throw new IllegalArgumentException("Unknown domain tool argument");
+        }
+        operation = requireString(arguments.get("operation"), "operation", id);
+        tool = toolRegistry.findTool(name, operation);
+        if (tool == null) {
+          throw new JsonRpcError(
+              400, id, JSONRPC_INVALID_PARAMS, "Unknown operation " + operation + " for " + name);
+        }
+        operationParams = requireArguments(arguments.get("params"), id);
       }
-      String operation = requireString(arguments.get("operation"), "operation", id);
-      MethodDescriptor tool = toolRegistry.findTool(name, operation);
-      if (tool == null) {
-        throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
-            "Unknown operation " + operation + " for " + name);
-      }
-      Map<String, Object> operationParams = requireArguments(arguments.get("params"), id);
       Object result = dispatcher.dispatch(tool.name(), operationParams);
       if (dispatcher.isShuttingDown()) {
         closeSoon();

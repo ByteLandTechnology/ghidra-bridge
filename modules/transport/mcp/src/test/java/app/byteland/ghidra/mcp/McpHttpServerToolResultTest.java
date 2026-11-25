@@ -191,6 +191,30 @@ class McpHttpServerToolResultTest {
               Map.of("operation", "list", "params", Map.of("page", Map.of("limit", 2))));
       assertDualContentParity(functionsHttp, false, true);
 
+      Map<String, Object> decompFlatHttp =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "http-decomp-flat",
+              "ghidra_decompilation_get",
+              Map.of("selector", Map.of("entry", "0x100000")));
+      assertDualContentParity(decompFlatHttp, false, true);
+      assertEquals(
+          resultMap(decompHttp).get("structuredContent"),
+          resultMap(decompFlatHttp).get("structuredContent"));
+
+      Map<String, Object> memoryFlatHttp =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "http-mem-flat",
+              "ghidra_memory_read",
+              Map.of("selector", Map.of("address", "ram:00100000"), "length", 16));
+      assertDualContentParity(memoryFlatHttp, false, true);
+      assertEquals(
+          resultMap(memoryHttp).get("structuredContent"),
+          resultMap(memoryFlatHttp).get("structuredContent"));
+
       Map<String, Object> helpHttp =
           postStatelessToolCall(client, harness.endpoint(), "http-help", "ghidra_help", Map.of());
       assertDualContentParity(helpHttp, false, true);

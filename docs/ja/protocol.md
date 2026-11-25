@@ -178,7 +178,7 @@ ASCII 以外のテキストには `=?base64?<base64 テキスト>?=` 形式の�
 - `server/discover`: サーバーの識別情報とサポート機能を返します。
 - `ping`: 初期化を使用するバージョンでサーバーの状態を確認します。
   ブリッジは `2026-07-28` でもこの互換メソッドを維持します。
-- `tools/list`: 全 15 個のツールのスキーマ定義を返します。
+- `tools/list`: 全 56 個のブリッジツール（`ghidra_help` と 55 個の操作ツール）のスキーマ定義を返します。
 - `tools/call`: 指定されたツール操作を実行し、構造化コンテンツを返します。
 - `resources/list`: `ghidra-bridge://contracts/mcp-tools` などの利用可能なリソース一覧を返します。
 - `resources/read`: リソースの内容を返します。
@@ -197,32 +197,33 @@ ASCII 以外のテキストには `=?base64?<base64 テキスト>?=` 形式の�
 
 ### ツール呼び出し規則
 
-MCP は操作を 15 個のツールに分類します:
-- `ghidra.help`: ドメインの検索、操作一覧の表示、スキーマの確認。
-- 14 個のドメインツール: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`。
+`tools/list` は 56 個のアンダースコア形式ツールを公開します:
+- `ghidra_help`: ドメインの検索、スキーマと副作用を含む操作一覧の表示、単一操作の定義確認。
+- 55 個の操作別ツール: 14 個のドメイン（`bridge`, `program`, `address`, `memory`, `listing`, `global_variable`, `function`, `analysis`, `decompilation`, `symbol`, `reference`, `comment`, `data_type`, `batch`）にわたり、操作名内のドットをアンダースコアに置換した `<prefix>_<domain>_<operation>` 形式で命名されます（例: `ghidra_memory_read`、`ghidra_decompilation_get`、`ghidra_function_local_variable_patch`）。
 
-ドメインツールは 55 個のメソッドを公開します。`interface.get` は WebSocket 専用です。
+各操作ツールは、フラット化されたパラメータスキーマ（`oneOf`、`anyOf`、`allOf`、`$ref`、`$defs`、`additionalProperties` を省略）と正確な安全ヒント（`readOnlyHint`、`destructiveHint`、`idempotentHint`）を `tools/list` で直接公開します。
+`interface.get` は WebSocket 専用です。
 
-### ツール名のプレフィックス
+### ツール名のプレフィックスと複数サーバー接続時のツール数上限
 
-すべてのツール名はプレフィックスとドットで始まります。デフォルトのプレフィックスは `ghidra` です。
+公開されるすべてのツール名はプレフィックスとアンダースコアで始まります。デフォルトのプレフィックスは `ghidra` です。
 起動引数 `tool_prefix` で変更できます（例: `tool_prefix=sample`）。
-この場合、ツール名には `sample.help` と `sample.program` があります。
+この場合、ツール名には `sample_help` と `sample_program_get` があります。
 1 つの MCP クライアントが複数のブリッジに接続する場合は、ブリッジごとに異なるプレフィックスを指定します。
 
-プレフィックスは英字で始まり、1 〜 64 文字の英数字、`_`、`-` で構成します。
+プレフィックスは英字で始まり、1 〜 34 文字の英数字、`_`、`-` で構成するため、すべてのツール名が厳格な MCP プロバイダーの 64 文字制限内に収まります。
+各ブリッジは 56 個のツールを公開するため、2 台接続すると 112 ツール、3 台接続すると 168 ツールとなり、厳格な MCP クライアントの 128 ツール上限を超えます。複数サーバー接続時はクライアントのツール数予算内に収めるか、`ghidra-mcp` を介して複数バイナリを統合してください。
 サーバーは異なるプレフィックスのツール名を拒否します。
-`ghidra.help` の `domain` 引数には、完全なツール名またはプレフィックスなしのドメイン名（`memory` など）を指定できます。
+`ghidra_help` の `domain` 引数には、ドメインツール名（`ghidra_memory` など）またはプレフィックスなしのドメイン名（`memory` など）を指定できます。
 このドキュメントの例はデフォルトのプレフィックスを使用します。
 
-`ghidra.help` は省略可能な `domain` と `operation` 引数を受け付けます:
-- 引数なし: ドメインツールの一覧を返します。
-- `domain` のみ: そのドメインツールの操作名一覧を返します。
-- `domain` と `operation`: その操作のメソッド名、説明、副作用、`inputSchema`、`outputSchema` を返します。
+`ghidra_help` は省略可能な `domain` と `operation` 引数を受け付けます:
+- 引数なし: ドメイン名の一覧（`ghidra_bridge` から `ghidra_batch`）を返します。
+- `domain` のみ: そのドメインの各操作について、`name`、`tool`、`method`、`description`、`effects`、`inputSchema`、`outputSchema` を返します。
+- `domain` と `operation`: 単一操作の `tool`、`method`、`description`、`effects`、`inputSchema`、`outputSchema` を返します。
 
-操作を呼び出すには、対象のドメインツールに対して `operation` と `params` を渡します。
-`operation` の値はドメインツール内の操作名であり、ドット記法のメソッド名ではありません。
-たとえば、`memory.read` メソッドは `ghidra.memory` の `read` 操作です:
+操作を直接実行するには、`arguments` のトップレベルに操作パラメータを指定して操作別ツールを呼び出します。
+たとえば、`memory.read` メソッドには `ghidra_memory_read` を呼び出します:
 
 ```json
 {
@@ -235,17 +236,16 @@ MCP は操作を 15 個のツールに分類します:
       "io.modelcontextprotocol/clientInfo": {"name": "example-client", "version": "1.0.0"},
       "io.modelcontextprotocol/clientCapabilities": {}
     },
-    "name": "ghidra.memory",
+    "name": "ghidra_memory_read",
     "arguments": {
-      "operation": "read",
-      "params": {
-        "selector": {"address": "ram:00100000"},
-        "length": 4
-      }
+      "selector": {"address": "ram:00100000"},
+      "length": 4
     }
   }
 }
 ```
+
+既存統合との後方互換性のため、`tools/call` は一覧に含まれない従来の `<prefix>_<domain>`（および `<prefix>.<domain>`）リクエストも受け付けます（例: `"name": "ghidra_memory"` に `{"operation": "read", "params": {"selector": {"address": "ram:00100000"}, "length": 4}}` を渡す形式）。
 
 サーバーはテキストと構造化データの双方を返します:
 
@@ -276,7 +276,7 @@ MCP は操作を 15 個のツールに分類します:
 操作が失敗した場合、サーバーは HTTP `200` と `"isError": true` を返します。
 `structuredContent` オブジェクトには `status`、`code`、`message`、`target`、`details` を持つブリッジエラーが格納されます。
 未知のツール名は HTTP `400`、コード `-32602` を返します。
-未知の操作、または `operation` と `params` 以外の引数はツールエラーを返します。
+不正な操作パラメータ、または従来の `<prefix>_<domain>` 呼び出しにおける未知の操作や余分なラッパー引数はツールエラーを返します。
 
 ## 認証とセキュリティ規定
 
