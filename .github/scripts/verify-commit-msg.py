@@ -58,7 +58,7 @@ ATTRIBUTION_RE = re.compile(r"^co-authored-by\s*:", re.IGNORECASE)
 
 
 def strip_git_comments(raw_text: str) -> list[str]:
-    """Remove Git cut-lines, comment lines, and trailing blank lines."""
+    """Remove Git cut-lines, comment lines, and final blank lines."""
     lines: list[str] = []
     for raw_line in raw_text.splitlines():
         if raw_line.strip() == CUT_LINE:
@@ -169,7 +169,7 @@ def validate_message(raw_text: str) -> list[str]:
 
         if summary != summary.strip():
             errors.append(
-                "line 1: summary must not have extra leading or trailing spaces"
+                "line 1: summary must not have extra spaces at the start or end"
             )
         elif not (summary[0].isascii() and summary[0].islower()):
             errors.append(

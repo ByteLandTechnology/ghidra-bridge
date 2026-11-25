@@ -82,6 +82,9 @@ jobs:
       - name: Install pre-commit
         run: python3 -m pip install pre-commit==4.7.0
 
+      - name: Run pre-commit checks
+        run: pre-commit run --all-files
+
       - name: Verify pull request commit messages
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
