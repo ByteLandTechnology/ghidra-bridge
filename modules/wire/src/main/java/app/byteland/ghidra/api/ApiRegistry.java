@@ -440,15 +440,7 @@ public final class ApiRegistry {
         effects,
         description,
         input,
-        WireSchema.withDefinitions(
-            WireSchema.object(
-                Map.of(
-                    ApiVocabulary.ITEMS,
-                    WireSchema.array(
-                        ApiSchemaCatalog.resourceSchema(fields, identityFields),
-                        0,
-                        Integer.MAX_VALUE)),
-                ApiVocabulary.ITEMS)),
+        ApiSchemaCatalog.itemsSchema(fields, identityFields),
         fields,
         identityFields,
         request -> {
@@ -467,26 +459,19 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Page<?>> handler) {
-    register(
+    writeItemsResult(
         name,
         effects,
         description,
         input,
-        WireSchema.withDefinitions(
-            WireSchema.object(
-                Map.of(
-                    ApiVocabulary.ITEMS,
-                    WireSchema.array(
-                        ApiSchemaCatalog.resourceSchema(fields, identityFields),
-                        0,
-                        Integer.MAX_VALUE)),
-                ApiVocabulary.ITEMS)),
         fields,
         identityFields,
         request -> {
-          Map<String, Object> normalizedList = WireValues.list(handler.handle(request));
-          return Map.of(
-              ApiVocabulary.ITEMS, restrictAndSortItems(normalizedList, fields, identityFields));
+          Page<?> page = handler.handle(request);
+          if (page == null) {
+            throw new IllegalArgumentException("list results must be a Page: null");
+          }
+          return page.items();
         });
   }
 

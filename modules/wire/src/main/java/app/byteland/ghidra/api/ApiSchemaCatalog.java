@@ -184,39 +184,35 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> addressOrRangeSelector() {
-    return WireSchema.oneOf(
-        WireSchema.object(
-            props(KIND, WireSchema.stringEnum(ADDRESS), ADDRESS, WireSchema.nonBlankString()),
-            KIND,
-            ADDRESS),
-        WireSchema.object(
-            props(
-                KIND, WireSchema.stringEnum("range"),
-                START, WireSchema.nonBlankString(),
-                END, WireSchema.nonBlankString()),
-            KIND,
-            START,
-            END));
+    return WireSchema.oneOf(addressSelectorBranch(), rangeSelectorBranch());
   }
 
   static Map<String, Object> flowSelector() {
     return WireSchema.oneOf(
-        WireSchema.object(
-            props(KIND, WireSchema.stringEnum(ADDRESS), ADDRESS, WireSchema.nonBlankString()),
-            KIND,
-            ADDRESS),
+        addressSelectorBranch(),
         WireSchema.object(
             props(KIND, WireSchema.stringEnum(FUNCTION), ENTRY, WireSchema.nonBlankString()),
             KIND,
             ENTRY),
-        WireSchema.object(
-            props(
-                KIND, WireSchema.stringEnum("range"),
-                START, WireSchema.nonBlankString(),
-                END, WireSchema.nonBlankString()),
-            KIND,
-            START,
-            END));
+        rangeSelectorBranch());
+  }
+
+  private static Map<String, Object> addressSelectorBranch() {
+    return WireSchema.object(
+        props(KIND, WireSchema.stringEnum(ADDRESS), ADDRESS, WireSchema.nonBlankString()),
+        KIND,
+        ADDRESS);
+  }
+
+  private static Map<String, Object> rangeSelectorBranch() {
+    return WireSchema.object(
+        props(
+            KIND, WireSchema.stringEnum("range"),
+            START, WireSchema.nonBlankString(),
+            END, WireSchema.nonBlankString()),
+        KIND,
+        START,
+        END);
   }
 
   static Map<String, Object> flowOverride() {
@@ -425,20 +421,29 @@ final class ApiSchemaCatalog {
         WireSchema.object(properties, identityFields.toArray(String[]::new)));
   }
 
+  static Map<String, Object> itemsSchema(Set<String> fields, List<String> identityFields) {
+    return listEnvelopeSchema(fields, identityFields, false, false);
+  }
+
   static Map<String, Object> listSchema(Set<String> fields, List<String> identityFields) {
-    return pagedListSchema(fields, identityFields, false);
+    return listEnvelopeSchema(fields, identityFields, true, false);
   }
 
   static Map<String, Object> scanListSchema(Set<String> fields, List<String> identityFields) {
-    return pagedListSchema(fields, identityFields, true);
+    return listEnvelopeSchema(fields, identityFields, true, true);
   }
 
-  private static Map<String, Object> pagedListSchema(
-      Set<String> fields, List<String> identityFields, boolean includeScan) {
+  private static Map<String, Object> listEnvelopeSchema(
+      Set<String> fields,
+      List<String> identityFields,
+      boolean includeCursor,
+      boolean includeScan) {
     Map<String, Map<String, Object>> properties = new LinkedHashMap<>();
     properties.put(
         ITEMS, WireSchema.array(resourceSchema(fields, identityFields), 0, Integer.MAX_VALUE));
-    properties.put(ApiVocabulary.NEXT_CURSOR, WireSchema.nonBlankString());
+    if (includeCursor) {
+      properties.put(ApiVocabulary.NEXT_CURSOR, WireSchema.nonBlankString());
+    }
     if (includeScan) {
       properties.put(ApiVocabulary.SCAN, SCAN_PROGRESS_SCHEMA);
     }
