@@ -1,6 +1,8 @@
 package app.byteland.ghidra.agent;
 
+import app.byteland.ghidra.network.NetworkBinding;
 import java.io.IOException;
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -18,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class AgentWebSocketServer implements AutoCloseable {
   public static final String DEFAULT_PATH = "/ws/agent";
   private static final int SERVER_SHUTDOWN_CLOSE_CODE = 1001;
+  static final int MAX_FALLBACK_PORT_ATTEMPTS = 100;
   static final Duration DEFAULT_HANDSHAKE_TIMEOUT = Duration.ofSeconds(10);
   static final int DEFAULT_MAX_PENDING_SOCKETS = 16;
 
@@ -27,6 +30,7 @@ public final class AgentWebSocketServer implements AutoCloseable {
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicReference<AgentServerConnection> activeConnection = new AtomicReference<>();
   private final PendingSockets pendingSockets;
+  private volatile int boundPort = -1;
   private ServerSocket serverSocket;
 
   public AgentWebSocketServer(AgentConfig config, Handler handler) {
@@ -48,16 +52,27 @@ public final class AgentWebSocketServer implements AutoCloseable {
     this.pendingSockets = new PendingSockets(running, maxPendingSockets);
   }
 
+  public int port() {
+    int current = boundPort;
+    if (current > 0) {
+      return current;
+    }
+    return config.port() == null ? -1 : config.port();
+  }
+
   public void start() throws IOException {
     if (!running.compareAndSet(false, true)) {
       return;
     }
-    ServerSocket socket = new ServerSocket();
+    ServerSocket socket = null;
     try {
-      socket.bind(new InetSocketAddress(config.host(), config.port()));
+      socket = bindServerSocket(config);
+      boundPort = socket.getLocalPort();
+      AgentConfig activeConfig =
+          boundPort == config.port() ? config : config.withPort(boundPort);
       AgentWebSocketConnectionRunner connectionRunner =
           new AgentWebSocketConnectionRunner(
-              config, handler, running, activeConnection, pendingSockets, handshakeTimeout);
+              activeConfig, handler, running, activeConnection, pendingSockets, handshakeTimeout);
       AgentWebSocketAcceptor acceptor =
           new AgentWebSocketAcceptor(socket, handler, running, pendingSockets, connectionRunner);
       Thread thread = new Thread(acceptor, "agent-ws-server");
@@ -66,8 +81,35 @@ public final class AgentWebSocketServer implements AutoCloseable {
       thread.start();
     } catch (IOException | RuntimeException startFailure) {
       running.set(false);
-      closeAfterFailedStart(socket, startFailure);
+      if (socket != null) {
+        closeAfterFailedStart(socket, startFailure);
+      }
       throw startFailure;
+    }
+  }
+
+  private static ServerSocket bindServerSocket(AgentConfig config) throws IOException {
+    ServerSocket initial = new ServerSocket();
+    try {
+      initial.bind(new InetSocketAddress(config.host(), config.port()));
+      return initial;
+    } catch (BindException firstError) {
+      closeAfterFailedStart(initial, firstError);
+      if (!config.portExplicit() && NetworkBinding.isLoopback(config.host())) {
+        int maxOffset = Math.min(MAX_FALLBACK_PORT_ATTEMPTS - 1, 65535 - config.port());
+        for (int offset = 1; offset <= maxOffset; offset++) {
+          int candidatePort = config.port() + offset;
+          ServerSocket candidate = new ServerSocket();
+          try {
+            candidate.bind(new InetSocketAddress(config.host(), candidatePort));
+            return candidate;
+          } catch (BindException busy) {
+            closeAfterFailedStart(candidate, busy);
+            firstError.addSuppressed(busy);
+          }
+        }
+      }
+      throw firstError;
     }
   }
 

@@ -45,7 +45,7 @@ ghidra-bridge.jar
 2. Script Manager（スクリプトマネージャ）ウィンドウを開きます。
 3. スクリプトパス一覧に `build/ghidra-script/` を追加します。
 4. `Bridge.java`（WebSocket）または `GhidraMcp.java`（MCP）を実行します。
-5. プロンプトウィンドウに設定引数を入力します。
+5. プロンプトウィンドウで事前入力された既定値を確認するか、設定引数を入力します。
 
 ### Ghidra ヘッドレスモードでの実行
 
@@ -96,7 +96,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | パラメータ | デフォルト値 | 説明 |
 |---|---|---|
 | `host` | `127.0.0.1` | リッスンするローカルネットワークインターフェースのアドレス。 |
-| `port` | `8765` (WS) / `8766` (MCP) | HTTP または WebSocket サーバーの TCP ポート番号。WebSocket は `ws_url` 未指定時のみデフォルト値を使用します。 |
+| `port` | `8765` (WS) / `8766` (MCP) | HTTP または WebSocket サーバーの TCP ポート番号。ループバックホストで `port` を省略し既定ポートが使用中の場合、サーバーは次の空きポートを自動選択します。WebSocket は `ws_url` 未指定時のみデフォルト値を使用します。 |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | リクエストディスパッチ用の URL パスエンドポイント。 |
 | `session_id` | プログラム名 | 現在のアクティブセッションを一意に識別する文字列。 |
 | `token` | *(なし)* | Bearer 認証用の共有シークレットトークン。 |

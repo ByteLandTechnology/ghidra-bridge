@@ -45,7 +45,7 @@ The loader scripts locate `ghidra-bridge.jar` relative to their file path.
 2. Open the Script Manager window.
 3. Add `build/ghidra-script/` to your script directories.
 4. Run `Bridge.java` for WebSocket or `GhidraMcp.java` for MCP.
-5. Enter configuration arguments in the prompt window.
+5. Review the pre-filled defaults in the prompt window, or enter configuration arguments.
 
 ### Run in Ghidra Headless Mode
 
@@ -96,7 +96,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | Parameter | Default | Description |
 |---|---|---|
 | `host` | `127.0.0.1` | Local network interface address to listen on. |
-| `port` | `8765` (WS) / `8766` (MCP) | TCP port number for the HTTP or WebSocket server. WebSocket uses the default only when `ws_url` is not set. |
+| `port` | `8765` (WS) / `8766` (MCP) | TCP port number for the HTTP or WebSocket server. When `port` is omitted on a loopback host and the default port is busy, the server selects the next free port. WebSocket uses the default only when `ws_url` is not set. |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | URL path endpoint for request dispatch. |
 | `session_id` | Program name | Unique identifier string for this active session. |
 | `token` | *(none)* | Shared secret token for bearer authentication. |

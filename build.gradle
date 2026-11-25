@@ -106,7 +106,7 @@ project(':launcher') {
             'Implementation-Version': rootProject.version }
     }
 
-    def generateScript = { String taskName, String className, String bootstrapMethod, String logPrefix ->
+    def generateScript = { String taskName, String className, String bootstrapMethod, String logPrefix, String defaultGuiArgs ->
         tasks.register(taskName, Copy) {
             from 'src/main/templates/GhidraLauncher.java.template'
             into layout.buildDirectory.dir('generated/scripts')
@@ -115,11 +115,12 @@ project(':launcher') {
                 line.replace('__CLASS__', className)
                     .replace('__BOOTSTRAP_METHOD__', bootstrapMethod)
                     .replace('__LOG_PREFIX__', logPrefix)
+                    .replace('__DEFAULT_GUI_ARGS__', defaultGuiArgs)
             }
         }
     }
-    generateScript('generateBridgeScript', 'Bridge', 'startFromScript', 'ghidra-bridge')
-    generateScript('generateMcpScript', 'GhidraMcp', 'startMcpFromScript', 'ghidra-mcp')
+    generateScript('generateBridgeScript', 'Bridge', 'startFromScript', 'ghidra-bridge', 'host=127.0.0.1 path=/ws/agent')
+    generateScript('generateMcpScript', 'GhidraMcp', 'startMcpFromScript', 'ghidra-mcp', 'host=127.0.0.1 path=/mcp tool_prefix=ghidra')
 
     tasks.register('buildGhidraScript', Sync) {
         dependsOn tasks.named('runtimeJar'), tasks.named('generateBridgeScript'), tasks.named('generateMcpScript')

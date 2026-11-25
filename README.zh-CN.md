@@ -45,7 +45,7 @@ ghidra-bridge.jar
 2. 打开 Script Manager（脚本管理器）窗口。
 3. 将 `build/ghidra-script/` 目录添加到脚本目录列表中。
 4. 运行 `Bridge.java`（WebSocket）或 `GhidraMcp.java`（MCP）。
-5. 在弹出的参数窗口中输入配置参数。
+5. 在弹出的参数窗口中确认预填默认值，或输入自定义配置参数。
 
 ### 在 Ghidra Headless 无头模式中运行
 
@@ -96,7 +96,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | 参数名 | 默认值 | 说明 |
 |---|---|---|
 | `host` | `127.0.0.1` | 服务端监听的本地网络接口地址。 |
-| `port` | `8765` (WS) / `8766` (MCP) | HTTP 或 WebSocket 服务的 TCP 端口号。WebSocket 仅在未设置 `ws_url` 时使用默认值。 |
+| `port` | `8765` (WS) / `8766` (MCP) | HTTP 或 WebSocket 服务的 TCP 端口号。当在回环主机上省略 `port` 且默认端口被占用时，服务端会自动选择下一个空闲端口。WebSocket 仅在未设置 `ws_url` 时使用默认值。 |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | 请求分发所使用的 URL 路径端点。 |
 | `session_id` | 程序名 | 当前活跃会话的唯一标识字符串。 |
 | `token` | *(无)* | Bearer 认证所需的共享密钥 Token。 |

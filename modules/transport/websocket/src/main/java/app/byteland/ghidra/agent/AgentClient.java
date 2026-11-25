@@ -33,6 +33,10 @@ public final class AgentClient {
   public interface LifecycleListener {
     default void onListening() {}
 
+    default void onListening(int port) {
+      onListening();
+    }
+
     default void onConnected() {}
   }
 
@@ -165,7 +169,7 @@ public final class AgentClient {
             config, new AgentClientServerHandler(channelRef, disconnectLatch, messageHandler));
     serverRef.set(server);
     server.start();
-    lifecycleListener.onListening();
+    lifecycleListener.onListening(server.port());
     awaitDisconnect(cancellationRequested);
   }
 

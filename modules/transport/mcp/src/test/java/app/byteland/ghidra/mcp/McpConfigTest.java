@@ -1,8 +1,10 @@
 package app.byteland.ghidra.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
 import app.byteland.ghidra.agent.AgentDispatcher;
@@ -22,7 +24,9 @@ import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
+import java.net.BindException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -47,6 +51,7 @@ class McpConfigTest {
     assertNull(defaults.token());
     assertEquals("ghidra-bridge", defaults.sessionId());
     assertEquals(McpConfig.DEFAULT_TOOL_PREFIX, defaults.toolPrefix());
+    assertFalse(defaults.portExplicit());
 
     McpConfig custom =
         McpConfig.fromMap(
@@ -64,7 +69,50 @@ class McpConfigTest {
     assertEquals("secret-token", custom.token());
     assertEquals("session-abc", custom.sessionId());
     assertEquals("custom_ghidra-1", custom.toolPrefix());
+    assertTrue(custom.portExplicit());
     assertEquals("http://127.0.0.1:9001/custom/mcp", custom.endpoint());
+  }
+
+  @Test
+  @DisplayName("Selects next free loopback port when port is omitted and fails fast when port is explicit")
+  void probesSequentialLoopbackPortsWhenOmittedAndFailsWhenExplicit() throws Exception {
+    try (ServerSocket occupied = new ServerSocket()) {
+      occupied.bind(new InetSocketAddress("127.0.0.1", 0));
+      int busyPort = occupied.getLocalPort();
+
+      McpConfig implicitPortConfig =
+          new McpConfig("127.0.0.1", busyPort, "/mcp", null, "fallback-mcp", "ghidra", false);
+      HttpClient httpClient = HttpClient.newHttpClient();
+      try (AgentDispatcher dispatcher =
+              new AgentDispatcher(stubServices("second.bin"), implicitPortConfig.sessionId());
+          McpHttpServer fallbackServer = new McpHttpServer(implicitPortConfig, dispatcher)) {
+        fallbackServer.start();
+        assertTrue(
+            fallbackServer.port() > busyPort,
+            "Expected fallback port above busy port " + busyPort + ", got " + fallbackServer.port());
+        assertEquals(
+            "http://127.0.0.1:" + fallbackServer.port() + "/mcp", fallbackServer.endpoint());
+
+        Map<String, Object> pingResponse =
+            postJsonRpc(
+                httpClient,
+                fallbackServer.endpoint(),
+                Map.of("jsonrpc", "2.0", "id", 1, "method", "ping", "params", Map.of()));
+        assertNull(pingResponse.get("error"));
+      }
+
+      McpConfig explicitPortConfig =
+          McpConfig.fromMap(
+              Map.of(
+                  "host", "127.0.0.1",
+                  "port", Integer.toString(busyPort),
+                  "session_id", "explicit-mcp"));
+      assertTrue(explicitPortConfig.portExplicit());
+      try (AgentDispatcher dispatcher =
+          new AgentDispatcher(stubServices("conflict.bin"), explicitPortConfig.sessionId())) {
+        assertThrows(BindException.class, () -> new McpHttpServer(explicitPortConfig, dispatcher));
+      }
+    }
   }
 
   @Test

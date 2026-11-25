@@ -577,6 +577,50 @@ class AgentWebSocketServerTest {
     }
   }
 
+  @Test
+  @DisplayName("Probes next free loopback port when port is implicit and fails fast when explicit")
+  void testSequentialPortFallbackAndExplicitBindException() throws Exception {
+    RecordingHandler handler = new RecordingHandler();
+    try (ServerSocket occupied = new ServerSocket()) {
+      occupied.bind(new InetSocketAddress("127.0.0.1", 0));
+      int busyPort = occupied.getLocalPort();
+
+      AgentConfig implicitConfig =
+          new AgentConfig(
+              null, "127.0.0.1", busyPort, "/ws/agent", TOKEN, "implicit-ws", null, false);
+      try (AgentWebSocketServer fallbackServer = new AgentWebSocketServer(implicitConfig, handler);
+          HttpClient httpClient = HttpClient.newHttpClient()) {
+        fallbackServer.start();
+        assertTrue(fallbackServer.port() > busyPort);
+
+        TestWebSocketListener listener = new TestWebSocketListener();
+        WebSocket ws =
+            httpClient
+                .newWebSocketBuilder()
+                .header("Authorization", "Bearer " + TOKEN)
+                .buildAsync(
+                    URI.create("ws://127.0.0.1:" + fallbackServer.port() + "/ws/agent"), listener)
+                .get(5, TimeUnit.SECONDS);
+        assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS));
+        ws.sendText("hello", true).get(5, TimeUnit.SECONDS);
+        assertEquals("echo:hello", listener.messages.poll(5, TimeUnit.SECONDS));
+        ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+      }
+
+      AgentConfig explicitConfig =
+          AgentConfig.fromArgs(
+              "host=127.0.0.1",
+              "port=" + busyPort,
+              "token=" + TOKEN,
+              "session_id=explicit-ws");
+      assertTrue(explicitConfig.portExplicit());
+      try (AgentWebSocketServer explicitServer =
+          new AgentWebSocketServer(explicitConfig, handler)) {
+        assertThrows(BindException.class, explicitServer::start);
+      }
+    }
+  }
+
   private record StartedServer(AgentWebSocketServer server, int port) implements AutoCloseable {
     @Override
     public void close() {

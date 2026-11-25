@@ -24,11 +24,24 @@ public record AgentConfig(
     String path,
     String token,
     String sessionId,
-    Integer exitDeadlineSeconds) {
+    Integer exitDeadlineSeconds,
+    boolean portExplicit) {
+  public static final int DEFAULT_PORT = 8765;
   private static final String DEFAULT_LOOPBACK_HOST =
       InetAddress.getLoopbackAddress().getHostAddress();
   private static final Set<String> ALLOWED =
       Set.of("ws_url", "host", "port", "path", "session_id", "token", "jar", "exit_deadline_sec");
+
+  public AgentConfig(
+      String wsUrl,
+      String host,
+      Integer port,
+      String path,
+      String token,
+      String sessionId,
+      Integer exitDeadlineSeconds) {
+    this(wsUrl, host, port, path, token, sessionId, exitDeadlineSeconds, port != null);
+  }
 
   public AgentConfig {
     boolean pathWasProvided = optionalText(path) != null;
@@ -46,6 +59,7 @@ public record AgentConfig(
     if (wsUrl != null) {
       URI uri = parseWsUri(wsUrl);
       NetworkBinding.requireTokenForNonLoopback(uri.getHost(), token);
+      portExplicit = false;
     }
     if (port != null) requireValidPort(port);
     if (port != null && host == null) host = DEFAULT_LOOPBACK_HOST;
@@ -56,6 +70,11 @@ public record AgentConfig(
     if (exitDeadlineSeconds != null && exitDeadlineSeconds < 1) {
       throw new IllegalArgumentException("exit_deadline_sec must be positive");
     }
+  }
+
+  public AgentConfig withPort(int boundPort) {
+    return new AgentConfig(
+        wsUrl, host, boundPort, path, token, sessionId, exitDeadlineSeconds, portExplicit);
   }
 
   public static AgentConfig fromArgs(String... args) {

@@ -16,7 +16,13 @@ import java.util.regex.Pattern;
  * several servers without tool name conflicts.
  */
 public record McpConfig(
-    String host, int port, String path, String token, String sessionId, String toolPrefix) {
+    String host,
+    int port,
+    String path,
+    String token,
+    String sessionId,
+    String toolPrefix,
+    boolean portExplicit) {
   public static final int DEFAULT_PORT = 8766;
   public static final String DEFAULT_TOOL_PREFIX = "ghidra";
   private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,63}");
@@ -24,6 +30,11 @@ public record McpConfig(
       InetAddress.getLoopbackAddress().getHostAddress();
   private static final Set<String> ALLOWED =
       Set.of("host", "port", "path", "session_id", "token", "tool_prefix", "jar");
+
+  public McpConfig(
+      String host, int port, String path, String token, String sessionId, String toolPrefix) {
+    this(host, port, path, token, sessionId, toolPrefix, true);
+  }
 
   public McpConfig {
     host = textOrDefault(host, DEFAULT_LOOPBACK_HOST);
@@ -38,22 +49,24 @@ public record McpConfig(
   public static McpConfig fromMap(Map<String, String> args) {
     Objects.requireNonNull(args, "args");
     AgentConfig.rejectUnknown(args, ALLOWED);
+    Integer parsedPort = AgentConfig.optionalInteger(args.get("port"), "port");
+    int port = parsedPort == null ? DEFAULT_PORT : parsedPort;
     return new McpConfig(
         args.get("host"),
-        portOrDefault(args.get("port")),
+        port,
         args.get("path"),
         args.get("token"),
         args.get("session_id"),
-        args.get("tool_prefix"));
+        args.get("tool_prefix"),
+        parsedPort != null);
+  }
+
+  public McpConfig withPort(int boundPort) {
+    return new McpConfig(host, boundPort, path, token, sessionId, toolPrefix, portExplicit);
   }
 
   public String endpoint() {
     return "http://" + host + ":" + port + path;
-  }
-
-  private static int portOrDefault(String value) {
-    Integer parsed = AgentConfig.optionalInteger(value, "port");
-    return parsed == null ? DEFAULT_PORT : parsed;
   }
 
   /**

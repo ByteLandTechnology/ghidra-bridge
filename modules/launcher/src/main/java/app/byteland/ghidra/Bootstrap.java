@@ -56,20 +56,15 @@ public final class Bootstrap {
       script.println("[ghidra-bridge]   WebSocket URL: " + config.redactedWsUrl());
       script.println(
           "[ghidra-bridge]   Auth Token: " + (config.token() == null ? "disabled" : "configured"));
+      script.println("[ghidra-bridge]   Session ID: " + config.sessionId());
       script.println("[ghidra-bridge] Connecting to remote bridge...");
     } else {
       script.println("[ghidra-bridge]   Mode: embedded WebSocket server");
       script.println(
-          "[ghidra-bridge]   Listen Address: ws://"
-              + config.host()
-              + ":"
-              + config.port()
-              + config.path());
-      script.println(
           "[ghidra-bridge]   Auth Token: " + (config.token() == null ? "disabled" : "configured"));
+      script.println("[ghidra-bridge]   Session ID: " + config.sessionId());
       script.println("[ghidra-bridge] Starting embedded bridge listener...");
     }
-    script.println("[ghidra-bridge]   Session ID: " + config.sessionId());
 
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
@@ -81,7 +76,20 @@ public final class Bootstrap {
                 dispatcher,
                 new AgentClient.LifecycleListener() {
                   @Override
-                  public void onListening() {
+                  public void onListening(int boundPort) {
+                    if (boundPort != config.port()) {
+                      script.println(
+                          "[ghidra-bridge]   Default port "
+                              + config.port()
+                              + " is busy; selected port "
+                              + boundPort);
+                    }
+                    script.println(
+                        "[ghidra-bridge]   Listen Address: ws://"
+                            + config.host()
+                            + ":"
+                            + boundPort
+                            + config.path());
                     script.println(
                         "[ghidra-bridge] Embedded bridge is listening for WebSocket clients.");
                   }
@@ -128,14 +136,6 @@ public final class Bootstrap {
 
     saveCheckpoint(script, program, "[ghidra-mcp]");
 
-    script.println("[ghidra-mcp] Starting MCP HTTP service");
-    script.println("[ghidra-mcp]   Program: " + program.getName());
-    script.println("[ghidra-mcp]   Endpoint: " + mcpConfig.endpoint());
-    script.println(
-        "[ghidra-mcp]   Auth Token: " + (mcpConfig.token() == null ? "disabled" : "configured"));
-    script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
-    script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
-
     BridgeServices services = GhidraServiceFactory.create(script);
     try (GracefulExit gracefulExit =
         gracefulExit(services.programService(), script, "[ghidra-mcp]")) {
@@ -144,6 +144,22 @@ public final class Bootstrap {
         if (onShutdown != null) {
           gracefulExit.installShutdownHook(server::close, onShutdown);
         }
+
+        script.println("[ghidra-mcp] Starting MCP HTTP service");
+        script.println("[ghidra-mcp]   Program: " + program.getName());
+        if (server.port() != mcpConfig.port()) {
+          script.println(
+              "[ghidra-mcp]   Default port "
+                  + mcpConfig.port()
+                  + " is busy; selected port "
+                  + server.port());
+        }
+        script.println("[ghidra-mcp]   Endpoint: " + server.endpoint());
+        script.println(
+            "[ghidra-mcp]   Auth Token: "
+                + (mcpConfig.token() == null ? "disabled" : "configured"));
+        script.println("[ghidra-mcp]   Session ID: " + mcpConfig.sessionId());
+        script.println("[ghidra-mcp]   Tool Prefix: " + mcpConfig.toolPrefix());
 
         server.start();
         script.println("[ghidra-mcp] MCP endpoint is listening for HTTP clients.");
@@ -236,14 +252,16 @@ public final class Bootstrap {
   private static EffectiveConfig resolveConfig(String[] args, Program program) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(AgentConfig.parseArgs(args));
     List<String> defaultMessages = new ArrayList<>();
+    boolean implicitServerPort = false;
 
     if (isBlank(parsedArgs.get("ws_url")) && isBlank(parsedArgs.get("port"))) {
       if (isBlank(parsedArgs.get("host"))) {
         parsedArgs.put("host", LOOPBACK_HOST);
         defaultMessages.add("host=" + LOOPBACK_HOST);
       }
-      parsedArgs.put("port", "8765");
-      defaultMessages.add("port=8765 (embedded server mode)");
+      parsedArgs.put("port", Integer.toString(AgentConfig.DEFAULT_PORT));
+      defaultMessages.add("port=" + AgentConfig.DEFAULT_PORT + " (embedded server mode)");
+      implicitServerPort = true;
     }
 
     if (isBlank(parsedArgs.get(SESSION_ID_ARGUMENT))) {
@@ -252,7 +270,20 @@ public final class Bootstrap {
       defaultMessages.add("session_id=" + defaultSessionId);
     }
 
-    return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages);
+    AgentConfig baseConfig = AgentConfig.fromMap(parsedArgs);
+    AgentConfig config =
+        implicitServerPort
+            ? new AgentConfig(
+                baseConfig.wsUrl(),
+                baseConfig.host(),
+                baseConfig.port(),
+                baseConfig.path(),
+                baseConfig.token(),
+                baseConfig.sessionId(),
+                baseConfig.exitDeadlineSeconds(),
+                false)
+            : baseConfig;
+    return new EffectiveConfig(config, defaultMessages);
   }
 
   private static String defaultSessionId(Program program) {

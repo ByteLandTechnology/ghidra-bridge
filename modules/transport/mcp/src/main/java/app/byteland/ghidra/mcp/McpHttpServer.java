@@ -43,6 +43,7 @@ import java.util.function.Consumer;
  */
 public final class McpHttpServer implements AutoCloseable {
   static final int MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
+  static final int MAX_FALLBACK_PORT_ATTEMPTS = 100;
   private static final int HTTP_PAYLOAD_TOO_LARGE = 413;
   private static final int JSONRPC_PARSE_ERROR = -32700;
   private static final int JSONRPC_INVALID_REQUEST = -32600;
@@ -101,7 +102,7 @@ public final class McpHttpServer implements AutoCloseable {
     if (sseKeepaliveMillis <= 0L) {
       throw new IllegalArgumentException("sseKeepaliveMillis must be positive");
     }
-    this.config = Objects.requireNonNull(config, "config");
+    Objects.requireNonNull(config, "config");
     this.normalizedConfiguredHost = normalizeHost(config.host());
     this.configuredHostLiteral = parseIpLiteral(this.normalizedConfiguredHost);
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
@@ -112,23 +113,37 @@ public final class McpHttpServer implements AutoCloseable {
     toolContract.put("protocol_version", MCP_PROTOCOL_VERSION);
     toolContract.put("tools", toolRegistry.listTools());
     this.toolContractJson = JsonUtil.toJson(toolContract);
-    this.server = createServer(config);
+    HttpServer boundServer = createServer(config);
+    int actualPort = boundServer.getAddress().getPort();
+    this.config = actualPort == config.port() ? config : config.withPort(actualPort);
+    this.server = boundServer;
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
     this.server.setExecutor(executor);
-    this.server.createContext(config.path(), new JsonRpcHandler());
+    this.server.createContext(this.config.path(), new JsonRpcHandler());
   }
 
   private static HttpServer createServer(McpConfig config) throws IOException {
     try {
       return HttpServer.create(new InetSocketAddress(config.host(), config.port()), 0);
-    } catch (BindException error) {
+    } catch (BindException firstError) {
+      if (!config.portExplicit() && NetworkBinding.isLoopback(config.host())) {
+        int maxOffset = Math.min(MAX_FALLBACK_PORT_ATTEMPTS - 1, 65535 - config.port());
+        for (int offset = 1; offset <= maxOffset; offset++) {
+          int candidatePort = config.port() + offset;
+          try {
+            return HttpServer.create(new InetSocketAddress(config.host(), candidatePort), 0);
+          } catch (BindException busy) {
+            firstError.addSuppressed(busy);
+          }
+        }
+      }
       BindException friendly =
           new BindException(
               "MCP endpoint "
                   + config.endpoint()
                   + " is already in use. Stop the existing Bridge/GhidraMcp script, close the old"
                   + " Ghidra session, or pass a different port value.");
-      friendly.addSuppressed(error);
+      friendly.addSuppressed(firstError);
       throw friendly;
     }
   }
@@ -143,6 +158,10 @@ public final class McpHttpServer implements AutoCloseable {
 
   public boolean awaitShutdown(BooleanSupplier cancelRequested) throws InterruptedException {
     return awaitShutdown(shutdownLatch, cancelRequested, this::close, 250L);
+  }
+
+  public int port() {
+    return config.port();
   }
 
   public String endpoint() {
