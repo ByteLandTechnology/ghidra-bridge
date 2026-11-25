@@ -438,6 +438,25 @@ class AgentWebSocketServerTest {
     }
   }
 
+  @Test
+  @DisplayName("Reports ws:// endpoint and preserves underlying BindException cause when port is busy")
+  void testBindFailureReportsWsEndpointAndCause() throws Exception {
+    RecordingHandler handler = new RecordingHandler();
+    try (ServerSocket occupied = new ServerSocket()) {
+      occupied.bind(new InetSocketAddress("127.0.0.1", 0));
+      int busyPort = occupied.getLocalPort();
+      AgentConfig config =
+          new AgentConfig(null, "127.0.0.1", busyPort, "/ws/agent", TOKEN, "test-session", null);
+      try (AgentWebSocketServer server = new AgentWebSocketServer(config, handler)) {
+        BindException thrown = assertThrows(BindException.class, server::start);
+        assertTrue(
+            thrown.getMessage().contains("ws://127.0.0.1:" + busyPort + "/ws/agent"),
+            () -> "Expected ws:// endpoint in message, got: " + thrown.getMessage());
+        assertInstanceOf(BindException.class, thrown.getCause());
+      }
+    }
+  }
+
   private static Socket openPartialHandshake(int port) throws IOException {
     Socket socket = new Socket("127.0.0.1", port);
     OutputStream out = socket.getOutputStream();
