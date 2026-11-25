@@ -51,6 +51,8 @@ Run the full Gradle verification gate used in pull requests and release archives
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
 ```
 
+`gradle.properties` sets `org.gradle.caching=true` so Gradle reuses cached `JavaCompile` and `Test` outputs across runs.
+
 `verify` runs:
 - `check`: JUnit tests and checks across all 8 Java subprojects.
 - `verifyApiContracts`: Checks that checked-in contracts match generated output.
@@ -75,10 +77,12 @@ python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analy
 
 ### Exact Local CI Sequence
 
-Run these three commands in order to match the `verify` job in `.github/workflows/ci.yml`:
+Run these three commands in order for local verification parity with `CONTRIBUTING.md` and `.github/workflows/ci.yml`:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
+
+Fresh CI checkouts run `./gradlew --no-daemon verify` with `gradle/actions/setup-gradle@v6` and skip `clean` when `CI=true`. Keep `clean verify` locally to clear stale `build/` outputs while `org.gradle.caching=true` reuses cached tasks.
