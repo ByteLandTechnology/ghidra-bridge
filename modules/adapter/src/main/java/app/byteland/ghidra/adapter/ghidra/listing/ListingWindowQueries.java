@@ -76,7 +76,7 @@ final class ListingWindowQueries {
     long timeoutNanos = Math.max(1L, options.timeoutMs()) * NANOS_PER_MILLISECOND;
 
     Page<CodeUnitResource> codeUnitPage =
-        codeUnitQueries.listCodeUnits(options, limit, kind, "forward", cursor);
+        codeUnitQueries.listCodeUnits(options, limit, kind, cursor);
     List<CodeUnitResource> units = new ArrayList<>(codeUnitPage.items());
     units.sort(CODE_UNIT_ORDER);
     ScanProgress baseScan = codeUnitPage.scanProgress();
@@ -109,7 +109,6 @@ final class ListingWindowQueries {
           dataQueries.listDataUnits(
               windowScan(firstAddress, lastAddress, startedNanos, timeoutNanos),
               ListingWindowResource.MAX_DATA_UNITS,
-              "forward",
               null);
       dataUnits.addAll(dataPage.items());
       dataUnits.sort(DATA_UNIT_ORDER);

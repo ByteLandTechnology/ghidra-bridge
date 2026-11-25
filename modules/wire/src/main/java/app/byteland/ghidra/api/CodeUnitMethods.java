@@ -6,7 +6,6 @@ import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 final class CodeUnitMethods implements ApiMethodProvider {
   private final ApiRegistry registry;
@@ -35,7 +34,6 @@ final class CodeUnitMethods implements ApiMethodProvider {
                     addressScan(request),
                     page.limit(),
                     optionalText(filter(request), ApiVocabulary.KIND, "all"),
-                    "forward",
                     page.cursor()));
     registry.scanList(
         "data_unit.list",
@@ -49,7 +47,6 @@ final class CodeUnitMethods implements ApiMethodProvider {
                 .listDataUnits(
                     addressScan(request),
                     page.limit(),
-                    "forward",
                     page.cursor()));
     registry.scanWindow(
         "listing_window.get",
