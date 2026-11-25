@@ -96,7 +96,8 @@ class FieldProjectionWireTest {
             req -> Map.of("id", "1", "name", "alpha", "type", "label"));
     assertEquals(
         Map.of("id", "1", "name", "alpha"),
-        customRead.invoke(Map.of("projection", Map.of("fields", List.of("name")))));
+        customRead.invokeDecoded(
+            customRead.decodeRequest(Map.of("projection", Map.of("fields", List.of("name"))))));
 
     // Non-list fields, invalid paths, duplicates, and unknown fields return 400 errors.
     ApiException nonArray =
@@ -168,7 +169,7 @@ class FieldProjectionWireTest {
     // Accessor calls: id(1) + nested(1) + nested.keep(1) + children(1) + 2 * label(2) = 6.
     assertEquals(6, selectedCalls.get());
 
-    // List pages reuse the per-record projection plan and keep scan and next_cursor intact.
+    // List pages reuse the per-record projection plan and keep scan and next_cursor unchanged.
     selectedCalls.set(0);
     ScanProgress progress =
         new ScanProgress(
@@ -192,7 +193,7 @@ class FieldProjectionWireTest {
     assertNotNull(projectedList.get("scan"));
     assertEquals(6, selectedCalls.get());
 
-    // Overlapping parent and child paths emit the full parent object at its first key slot.
+    // Parent and child paths together emit the full parent object at its first key slot.
     FunctionResource.Body body = new FunctionResource.Body("0x1000", "0x1020", 32L);
     Map<String, Object> bodyParentFirst =
         WireValues.resource(
@@ -208,7 +209,7 @@ class FieldProjectionWireTest {
     assertEquals(bodyParentFirst, bodyChildFirst);
     assertEquals(List.of("entry", "body", "name"), List.copyOf(bodyChildFirst.keySet()));
 
-    // Sealed DataTypeReference and VariableStorageReference support nested projections.
+    // Sealed DataTypeReference and VariableStorageReference allow nested projections.
     DataTypeReference pointerType =
         DataTypeReference.pointerTo(DataTypeReference.named("/uint32_t"));
     assertEquals(
@@ -247,7 +248,7 @@ class FieldProjectionWireTest {
                     "local_variables",
                     List.of(Map.of("storage", Map.of("kind", "register", "register", "RAX"))))));
 
-    // Confirm zero internal ApiException throws during projected schema validation.
+    // Check that projected schema validation throws zero internal ApiException instances.
     Path recordingPath = Files.createTempFile("projected-schema-test-", ".jfr");
     try {
       try (Recording recording = new Recording()) {
@@ -277,7 +278,7 @@ class FieldProjectionWireTest {
       Files.deleteIfExists(recordingPath);
     }
 
-    // Leaked unselected properties and invalid selected field types translate to 500 invalid_response.
+    // Unselected properties and invalid selected field types return 500 invalid_response.
     Map<String, Object> leakedSibling =
         Map.of(
             "items",
@@ -305,7 +306,7 @@ class FieldProjectionWireTest {
     assertEquals("invalid_response", typeError.error().code());
     assertEquals("/result/items/0/body/start", typeError.error().target());
 
-    // Multi-object union schemas validate projected branches even when discriminators are omitted.
+    // Multi-object union schemas validate projected branches when discriminators are absent.
     Map<String, Object> typeEnvelopeSchema =
         WireSchema.withDefinitions(
             WireSchema.object(Map.of("data_type", WireSchema.dataTypeReference()), "data_type"));
@@ -366,7 +367,7 @@ class FieldProjectionWireTest {
       assertEquals(expected, projected, "Mismatch on method " + testCase.method());
     }
 
-    // Verify requestedIncludes skips parameters and locals when omitted and loads them on dot-paths.
+    // Check that requestedIncludes skips omitted parameters and locals and loads dot-paths.
     fixture.lastIncludes.set(null);
     fixture.registry.dispatch(
         "function.get",
@@ -387,7 +388,7 @@ class FieldProjectionWireTest {
         Map.of("projection", Map.of("fields", List.of("local_variables.storage"))));
     assertEquals(Set.of("locals"), fixture.lastIncludes.get());
 
-    // Verify sorting on identityFields and cursor continuity across projected and unprojected pages.
+    // Check identityFields sort order and cursor continuity across projected pages.
     Map<String, Object> firstProjectedPage =
         (Map<String, Object>)
             fixture.registry.dispatch(
@@ -408,7 +409,7 @@ class FieldProjectionWireTest {
     assertNotNull(nextCursor);
     assertNotNull(firstProjectedPage.get("scan"));
 
-    // Next cursor from a projected call decodes on a subsequent page with different projection.
+    // Next cursor from a projected call decodes on the next page with a different projection.
     Map<String, Object> secondProjectedPage =
         (Map<String, Object>)
             fixture.registry.dispatch(
@@ -425,7 +426,7 @@ class FieldProjectionWireTest {
             Map.of("address", "ram:00401000", "id", "2", "type", "function")),
         secondProjectedPage.get("items"));
 
-    // Verify batch.execute supports projected read and list items.
+    // Check that batch.execute accepts projected read and list items.
     Map<String, Object> batchResult =
         (Map<String, Object>)
             fixture.registry.dispatch(
@@ -914,7 +915,7 @@ class FieldProjectionWireTest {
                     case "listSymbols" -> {
                       SymbolService.SymbolQuery query = (SymbolService.SymbolQuery) args[0];
                       lastSymbolCursor.set(query.cursor());
-                      // Return out-of-order ids at the same address to verify identity sorting.
+                      // Return out-of-order ids at the same address to check identity sort order.
                       yield Page.scanned(List.of(symTwo, symOne), 2, "ram:00401008", scan);
                     }
                     default -> throw new AssertionError(name);
