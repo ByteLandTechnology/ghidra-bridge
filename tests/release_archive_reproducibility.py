@@ -39,10 +39,15 @@ def run_package_script(
     args: list[str],
     timezone: str,
     umask_octal: str,
+    ci_mode: bool = False,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["TZ"] = timezone
+    if ci_mode:
+        env["CI"] = "true"
+    else:
+        env.pop("CI", None)
     command = f"umask {umask_octal} && exec bash .github/scripts/package-release.sh \"$@\""
     return subprocess.run(
         ["bash", "-c", command, "package-release", *args],
@@ -140,7 +145,9 @@ def main() -> None:
             f"Unexpected mismatch error output: {mismatch.stderr!r}"
         )
 
-        run_package_script(repo_root, [], timezone="EST5", umask_octal="0022")
+        run_package_script(
+            repo_root, [], timezone="EST5", umask_octal="0022", ci_mode=True
+        )
         release_dir = repo_root / "build" / "release"
         archive_path = release_dir / f"ghidra-bridge-{base_version}.zip"
         checksum_path = release_dir / f"ghidra-bridge-{base_version}.zip.sha256"
@@ -153,7 +160,11 @@ def main() -> None:
 
         version_file.write_bytes(f"{base_version}\n".encode("utf-8"))
         run_package_script(
-            repo_root, [base_version], timezone="JST-9", umask_octal="0077"
+            repo_root,
+            [base_version],
+            timezone="JST-9",
+            umask_octal="0077",
+            ci_mode=False,
         )
         second_bytes, second_digest, second_checksum = verify_archive(
             archive_path, checksum_path, base_version
