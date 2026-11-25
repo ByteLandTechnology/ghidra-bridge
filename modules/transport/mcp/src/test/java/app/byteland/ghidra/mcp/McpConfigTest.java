@@ -21,6 +21,7 @@ import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Proxy;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -30,7 +31,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -116,14 +119,31 @@ class McpConfigTest {
             .redirectErrorStream(true)
             .start();
 
-    String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-    boolean finished = process.waitFor(15, TimeUnit.SECONDS);
-    if (!finished) {
+    CompletableFuture<String> outputFuture = new CompletableFuture<>();
+    Thread.ofVirtual()
+        .start(
+            () -> {
+              try (InputStream stream = process.getInputStream()) {
+                outputFuture.complete(new String(stream.readAllBytes(), StandardCharsets.UTF_8));
+              } catch (IOException e) {
+                outputFuture.completeExceptionally(e);
+              }
+            });
+    try {
+      boolean finished = process.waitFor(15, TimeUnit.SECONDS);
+      if (!finished) {
+        process.destroyForcibly();
+        String partialOutput = outputFuture.completeOnTimeout("", 2, TimeUnit.SECONDS).join();
+        throw new AssertionError("SinglePassProbe timed out; output: " + partialOutput);
+      }
+      String output = outputFuture.get(5, TimeUnit.SECONDS);
+      assertEquals(0, process.exitValue(), "SinglePassProbe failed: " + output);
+      assertEquals("LOOKUPS=1 SESSION=probe-session", output.trim());
+    } finally {
+      process.descendants().forEach(ProcessHandle::destroyForcibly);
       process.destroyForcibly();
-      throw new AssertionError("SinglePassProbe timed out; output: " + output);
+      process.waitFor(5, TimeUnit.SECONDS);
     }
-    assertEquals(0, process.exitValue(), "SinglePassProbe failed: " + output);
-    assertEquals("LOOKUPS=1 SESSION=probe-session", output.trim());
   }
 
   @Test
@@ -139,8 +159,10 @@ class McpConfigTest {
                 "session_id", "mcp-http-session",
                 "tool_prefix", "custom"));
 
-    HttpClient httpClient = HttpClient.newHttpClient();
-    try (AgentDispatcher dispatcher = new AgentDispatcher(stubServices("firmware.bin"), config.sessionId());
+    try (HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        AgentDispatcher dispatcher =
+            new AgentDispatcher(stubServices("firmware.bin"), config.sessionId());
         McpHttpServer server = new McpHttpServer(config, dispatcher)) {
       server.start();
 
@@ -219,6 +241,7 @@ class McpConfigTest {
       throws IOException, InterruptedException {
     HttpRequest request =
         HttpRequest.newBuilder(URI.create(endpoint))
+            .timeout(Duration.ofSeconds(10))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
             .POST(HttpRequest.BodyPublishers.ofString(JsonUtil.toJson(payload)))

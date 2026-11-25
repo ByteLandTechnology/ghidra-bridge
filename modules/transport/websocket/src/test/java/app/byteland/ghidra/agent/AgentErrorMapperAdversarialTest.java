@@ -90,33 +90,37 @@ class AgentErrorMapperAdversarialTest {
     CountDownLatch startLatch = new CountDownLatch(1);
     List<Future<?>> futures = new ArrayList<>();
 
-    for (int t = 0; t < threads; t++) {
-      final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            Exception ex = (i % 2 == 0)
-                ? new TransactionExecutionException("tx failure " + i)
-                : new IllegalArgumentException("arg failure " + i);
-            var res = AgentErrorMapper.errorResponse("id-" + threadId + "-" + i, ex);
-            assertNotNull(res);
-            assertEquals("id-" + threadId + "-" + i, res.id());
-            assertEquals(-32000, res.error().code());
-            assertNotNull(res.error().data().get("status"));
-            assertNotNull(res.error().data().get("code"));
+    try {
+      for (int t = 0; t < threads; t++) {
+        final int threadId = t;
+        futures.add(executor.submit(() -> {
+          try {
+            assertTrue(startLatch.await(10, TimeUnit.SECONDS), "Timed out waiting for startLatch");
+            for (int i = 0; i < opsPerThread; i++) {
+              Exception ex = (i % 2 == 0)
+                  ? new TransactionExecutionException("tx failure " + i)
+                  : new IllegalArgumentException("arg failure " + i);
+              var res = AgentErrorMapper.errorResponse("id-" + threadId + "-" + i, ex);
+              assertNotNull(res);
+              assertEquals("id-" + threadId + "-" + i, res.id());
+              assertEquals(-32000, res.error().code());
+              assertNotNull(res.error().data().get("status"));
+              assertNotNull(res.error().data().get("code"));
+            }
+          } catch (Exception e) {
+            throw new RuntimeException(e);
           }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
-    }
+        }));
+      }
 
-    startLatch.countDown();
-    for (Future<?> f : futures) {
-      f.get(10, TimeUnit.SECONDS);
+      startLatch.countDown();
+      for (Future<?> f : futures) {
+        f.get(10, TimeUnit.SECONDS);
+      }
+      executor.shutdown();
+      assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+    } finally {
+      executor.shutdownNow();
     }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
   }
 }

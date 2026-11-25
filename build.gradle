@@ -2,6 +2,10 @@ plugins {
     id 'base'
 }
 
+import java.time.Duration
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
 group = 'app.byteland'
 // Release pull requests update version.txt. CI sets the same value with releaseVersion.
 version = providers.gradleProperty('releaseVersion').getOrElse(file('version.txt').text.trim())
@@ -30,7 +34,23 @@ subprojects {
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
     tasks.withType(Test).configureEach {
+        timeout = Duration.ofMinutes(5)
         useJUnitPlatform()
+        systemProperties(
+            'junit.jupiter.execution.timeout.default': '30s',
+            'junit.jupiter.execution.timeout.mode': 'disabled_on_debug',
+            'junit.jupiter.execution.timeout.thread.mode.default': 'SEPARATE_THREAD',
+            'junit.jupiter.execution.timeout.threaddump.enabled': 'true',
+        )
+        reports.junitXml.outputPerTestCase = true
+        testLogging {
+            events TestLogEvent.FAILED, TestLogEvent.SKIPPED
+            exceptionFormat = TestExceptionFormat.FULL
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
+            showStandardStreams = true
+        }
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'

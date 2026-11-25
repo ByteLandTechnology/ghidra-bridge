@@ -43,6 +43,12 @@ To run JUnit tests for a single subproject during iteration:
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
 ```
 
+### Test Timeouts and Thread Mode
+
+Root `build.gradle` sets a 5-minute timeout on each Gradle `Test` task and configures JUnit Jupiter to run tests in `SEPARATE_THREAD` mode with a 30-second default timeout, thread dumps on timeout, `disabled_on_debug` mode, and `FULL` exception stack traces.
+Keep tests in `:adapter` that verify thread-confined `GhidraSession` state on `@Timeout(value = 30, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SAME_THREAD)`.
+Give every child process, socket, HTTP stream, and latch wait an explicit timeout and clean up child processes in `finally` blocks.
+
 ### Full Build and Verification (`clean verify`)
 
 Run the full Gradle verification gate used in pull requests and release archives:
@@ -70,15 +76,29 @@ bash .github/scripts/verify-repository-hygiene.sh
 After `buildGhidraScript` or `clean verify` populates `build/ghidra-script/`, run the headless Ghidra function-mutation regression test on Linux x86-64 (requires `gcc` and `nm`):
 
 ```bash
-python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+python3 tests/function_mutation_regression.py \
+  --log-file build/reports/headless-regression/headless.log \
+  "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+```
+
+The script writes `analyzeHeadless` output to `--log-file` (default `build/reports/headless-regression/headless.log`) and prints the log tail to `stderr` if startup or assertions fail.
+
+### Failure Summary Inspection
+
+Generate a Markdown failure summary and GitHub Actions annotations from local `TEST-*.xml` reports and `build/reports/headless-regression/headless.log`:
+
+```bash
+python3 .github/scripts/summarize-test-failures.py
 ```
 
 ### Exact Local CI Sequence
 
-Run these three commands in order to match the `verify` job in `.github/workflows/ci.yml`:
+Run these commands in order to match the `verify` job in `.github/workflows/ci.yml`:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
-python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+python3 tests/function_mutation_regression.py \
+  --log-file build/reports/headless-regression/headless.log \
+  "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```

@@ -3,6 +3,7 @@
 """Check function mutations in an isolated headless Ghidra project."""
 
 import argparse
+import contextlib
 import json
 import os
 import pathlib
@@ -10,10 +11,23 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
 import urllib.request
+
+DEFAULT_LOG_FILE = (
+    pathlib.Path(__file__).resolve().parents[1]
+    / "build"
+    / "reports"
+    / "headless-regression"
+    / "headless.log"
+)
+STARTUP_TIMEOUT_SECONDS = 60.0
+SHUTDOWN_WAIT_SECONDS = 20
+SIGTERM_WAIT_SECONDS = 10
+SIGKILL_WAIT_SECONDS = 5
 
 
 FIXTURE = """
@@ -42,7 +56,53 @@ label_only: nop
 """
 
 
-def run_test(headless, root):
+def read_log_tail(log_path, max_lines=80, max_chars=8000):
+    if not log_path.is_file():
+        return ""
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    tail = "\n".join(text.splitlines()[-max_lines:])
+    if len(tail) > max_chars:
+        tail = tail[-max_chars:]
+    return tail
+
+
+def print_log_tail(log_path):
+    tail = read_log_tail(log_path).strip()
+    if tail:
+        print(f"--- headless.log ({log_path}) tail ---\n{tail}", file=sys.stderr, flush=True)
+    else:
+        print(f"--- headless.log ({log_path}) is empty ---", file=sys.stderr, flush=True)
+
+
+def terminate_process_group(process, graceful_wait):
+    if process.poll() is not None:
+        return
+    if graceful_wait > 0:
+        try:
+            process.wait(timeout=graceful_wait)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=SIGTERM_WAIT_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=SIGKILL_WAIT_SECONDS)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def run_test(headless, root, log_path):
     project = root / "project"
     project.mkdir()
     source = root / "fixture.s"
@@ -98,10 +158,12 @@ def run_test(headless, root):
         "-scriptPath", str(scripts), "-postScript", "GhidraMcp.java",
         "host=127.0.0.1", f"port={port}",
     ]
-    log_path = root / "headless.log"
-    with log_path.open("w") as log:
-        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                   start_new_session=True)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    failed = False
+    with log_path.open("w", encoding="utf-8") as log:
+        process = subprocess.Popen(
+            command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
+        )
         ready = False
         try:
             initialize = {
@@ -109,9 +171,10 @@ def run_test(headless, root):
                 "params": {"protocolVersion": "2025-03-26", "capabilities": {},
                            "clientInfo": {"name": "function-test", "version": "1"}},
             }
-            for _ in range(120):
+            deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
+            while time.monotonic() < deadline:
                 if process.poll() is not None:
-                    raise RuntimeError("Ghidra stopped: " + log_path.read_text()[-2000:])
+                    raise RuntimeError(f"Ghidra stopped (exit {process.returncode})")
                 try:
                     if call(initialize).get("result"):
                         ready = True
@@ -119,7 +182,11 @@ def run_test(headless, root):
                 except (OSError, TimeoutError, urllib.error.URLError):
                     time.sleep(0.5)
             if not ready:
-                raise RuntimeError("Ghidra did not start")
+                if process.poll() is not None:
+                    raise RuntimeError(f"Ghidra stopped (exit {process.returncode})")
+                raise RuntimeError(
+                    f"Ghidra did not start within {STARTUP_TIMEOUT_SECONDS:g} seconds"
+                )
             call({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
             first = function(2, "create", {
@@ -349,27 +416,42 @@ def run_test(headless, root):
                 "after_auto",
             ]
             print("Function mutation regression checks passed")
+        except BaseException:
+            failed = True
+            raise
         finally:
-            if ready:
-                try:
+            if ready and process.poll() is None:
+                with contextlib.suppress(
+                    OSError,
+                    TimeoutError,
+                    urllib.error.URLError,
+                    json.JSONDecodeError,
+                    KeyError,
+                    AssertionError,
+                ):
                     tool(20, "ghidra_bridge", {"operation": "shutdown"})
-                except (OSError, TimeoutError, urllib.error.URLError):
-                    pass
-            try:
-                process.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGTERM)
-                process.wait(timeout=10)
+            terminate_process_group(
+                process, graceful_wait=SHUTDOWN_WAIT_SECONDS if ready else 0
+            )
+            log.flush()
+            if failed:
+                print_log_tail(log_path)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("headless", type=pathlib.Path, help="path to analyzeHeadless")
+    parser.add_argument(
+        "--log-file",
+        type=pathlib.Path,
+        default=DEFAULT_LOG_FILE,
+        help="path to write analyzeHeadless log output",
+    )
     args = parser.parse_args()
     if shutil.which("gcc") is None or shutil.which("nm") is None:
         parser.error("gcc and nm are required")
     with tempfile.TemporaryDirectory(prefix="ghidra-function-test-") as directory:
-        run_test(args.headless.resolve(), pathlib.Path(directory))
+        run_test(args.headless.resolve(), pathlib.Path(directory), args.log_file.resolve())
 
 
 if __name__ == "__main__":

@@ -444,18 +444,20 @@ class McpHttpServerBodyLimitTest {
 
       // 3. Subsequent valid POST to the same SSE session still succeeds with 202 + SSE message.
       String ping = "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"ping\",\"params\":{}}";
-      HttpClient client = HttpClient.newHttpClient();
-      HttpResponse<String> validPost =
-          client.send(
-              HttpRequest.newBuilder(
-                      URI.create("http://" + LOOPBACK + ":" + running.port + sessionEndpoint))
-                  .timeout(Duration.ofSeconds(10))
-                  .header("Content-Type", "application/json")
-                  .header("MCP-Protocol-Version", "2025-11-25")
-                  .POST(HttpRequest.BodyPublishers.ofString(ping, StandardCharsets.UTF_8))
-                  .build(),
-              HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-      assertEquals(202, validPost.statusCode());
+      try (HttpClient client =
+          HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
+        HttpResponse<String> validPost =
+            client.send(
+                HttpRequest.newBuilder(
+                        URI.create("http://" + LOOPBACK + ":" + running.port + sessionEndpoint))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "application/json")
+                    .header("MCP-Protocol-Version", "2025-11-25")
+                    .POST(HttpRequest.BodyPublishers.ofString(ping, StandardCharsets.UTF_8))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertEquals(202, validPost.statusCode());
+      }
 
       SseEvent pingEvent = readSseEvent(sseReader);
       assertEquals("message", pingEvent.event);
@@ -488,17 +490,30 @@ class McpHttpServerBodyLimitTest {
               } catch (IOException e) {
                 return "STDERR_READ_ERROR: " + e;
               }
-            });
+            },
+            runnable -> Thread.ofVirtual().start(runnable));
 
     try {
       int port;
       BufferedReader stdout =
           new BufferedReader(
               new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
-      String readyLine = stdout.readLine();
+      String readyLine =
+          CompletableFuture.supplyAsync(
+                  () -> {
+                    try {
+                      return stdout.readLine();
+                    } catch (IOException e) {
+                      throw new RuntimeException(e);
+                    }
+                  },
+                  runnable -> Thread.ofVirtual().start(runnable))
+              .get(15, TimeUnit.SECONDS);
       assertNotNull(
           readyLine,
-          () -> "Bounded-heap server exited early; stderr=" + stderrFuture.join());
+          () ->
+              "Bounded-heap server exited early; stderr="
+                  + stderrFuture.completeOnTimeout("<stderr timed out>", 5, TimeUnit.SECONDS).join());
       assertTrue(readyLine.startsWith("READY "), "Unexpected stdout: " + readyLine);
       port = Integer.parseInt(readyLine.substring("READY ".length()).trim());
 
@@ -534,22 +549,24 @@ class McpHttpServerBodyLimitTest {
       assertEquals("close", chunkedResponse.headers.get("connection"));
 
       // Verify server remains healthy and responds HTTP 200 to subsequent ping.
-      HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-      HttpResponse<String> pingResponse =
-          client.send(
-              HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mcp"))
-                  .timeout(Duration.ofSeconds(10))
-                  .header("Content-Type", "application/json")
-                  .header("MCP-Protocol-Version", "2025-11-25")
-                  .POST(
-                      HttpRequest.BodyPublishers.ofString(
-                          "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"ping\",\"params\":{}}",
-                          StandardCharsets.UTF_8))
-                  .build(),
-              HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-      assertEquals(200, pingResponse.statusCode());
-      Map<?, ?> pingJson = (Map<?, ?>) JsonUtil.parse(pingResponse.body());
-      assertEquals(4, ((Number) pingJson.get("id")).intValue());
+      try (HttpClient client =
+          HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
+        HttpResponse<String> pingResponse =
+            client.send(
+                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mcp"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "application/json")
+                    .header("MCP-Protocol-Version", "2025-11-25")
+                    .POST(
+                        HttpRequest.BodyPublishers.ofString(
+                            "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"ping\",\"params\":{}}",
+                            StandardCharsets.UTF_8))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertEquals(200, pingResponse.statusCode());
+        Map<?, ?> pingJson = (Map<?, ?>) JsonUtil.parse(pingResponse.body());
+        assertEquals(4, ((Number) pingJson.get("id")).intValue());
+      }
 
       // Signal clean shutdown when you close child stdin.
       process.getOutputStream().close();
@@ -560,8 +577,10 @@ class McpHttpServerBodyLimitTest {
           "Unexpected OutOfMemoryError on server stderr:\n" + stderr);
       assertEquals(0, process.exitValue(), "Non-zero exit code; stderr:\n" + stderr);
     } finally {
+      process.descendants().forEach(ProcessHandle::destroyForcibly);
       if (process.isAlive()) {
         process.destroyForcibly();
+        process.waitFor(5, TimeUnit.SECONDS);
       }
     }
   }

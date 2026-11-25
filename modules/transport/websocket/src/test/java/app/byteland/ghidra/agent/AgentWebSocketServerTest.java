@@ -50,12 +50,14 @@ class AgentWebSocketServerTest {
   void testBearerClientReceives101WhileUnauthenticatedSocketTrickles() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started = startDefaultServer(TOKEN, handler);
-        HttpClient httpClient = HttpClient.newHttpClient()) {
+        HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
       int port = started.port();
       String token = TOKEN;
       TestWebSocketListener listener = new TestWebSocketListener();
 
       try (Socket unauthPartial = new Socket("127.0.0.1", port)) {
+        unauthPartial.setSoTimeout(5_000);
         OutputStream unauthOut = unauthPartial.getOutputStream();
         unauthOut.write(
             ("GET /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nX-Marker: ")
@@ -185,7 +187,8 @@ class AgentWebSocketServerTest {
   void testSingleClientExclusivityAndRecoveryAfterDisconnect() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started = startDefaultServer(TOKEN, handler);
-        HttpClient httpClient = HttpClient.newHttpClient()) {
+        HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
       int port = started.port();
       URI uri = URI.create("ws://127.0.0.1:" + port + "/ws/agent");
 
@@ -307,6 +310,7 @@ class AgentWebSocketServerTest {
           socket.close();
         }
         pool.shutdownNow();
+        pool.awaitTermination(5, TimeUnit.SECONDS);
       }
     }
   }
@@ -317,7 +321,8 @@ class AgentWebSocketServerTest {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started =
             startCustomServer(TOKEN, handler, Duration.ofSeconds(5), 2);
-        HttpClient httpClient = HttpClient.newHttpClient()) {
+        HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
       int port = started.port();
 
       try (Socket pending1 = openPartialHandshake(port);
@@ -399,7 +404,9 @@ class AgentWebSocketServerTest {
     AgentWebSocketServer.PendingSockets pendingSockets =
         new AgentWebSocketServer.PendingSockets(running, 4);
 
-    try (ServerSocket listener = new ServerSocket(0, 1, new InetSocketAddress("127.0.0.1", 0).getAddress())) {
+    try (ServerSocket listener =
+        new ServerSocket(0, 1, new InetSocketAddress("127.0.0.1", 0).getAddress())) {
+      listener.setSoTimeout(5_000);
       int port = listener.getLocalPort();
       AgentConfig config =
           new AgentConfig(null, "127.0.0.1", port, "/ws/agent", TOKEN, "test-session", null);
@@ -407,37 +414,43 @@ class AgentWebSocketServerTest {
           new AgentWebSocketConnectionRunner(
               config, handler, running, activeConnection, pendingSockets, Duration.ofSeconds(5));
 
-      try (Socket client = new Socket("127.0.0.1", port);
-          Socket serverSide = listener.accept()) {
-        String request =
-            "GET /ws/agent HTTP/1.1\r\n"
-                + "Host: 127.0.0.1:"
-                + port
-                + "\r\n"
-                + "Upgrade: websocket\r\n"
-                + "Connection: Upgrade\r\n"
-                + "Sec-WebSocket-Version: 13\r\n"
-                + "Sec-WebSocket-Key: "
-                + VALID_WS_KEY
-                + "\r\n"
-                + "Authorization: Bearer "
-                + TOKEN
-                + "\r\n\r\n";
-        client.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
-        client.getOutputStream().flush();
+      try (Socket client = new Socket()) {
+        client.connect(new InetSocketAddress("127.0.0.1", port), 5_000);
+        client.setSoTimeout(5_000);
+        try (Socket serverSide = listener.accept()) {
+          serverSide.setSoTimeout(5_000);
+          String request =
+              "GET /ws/agent HTTP/1.1\r\n"
+                  + "Host: 127.0.0.1:"
+                  + port
+                  + "\r\n"
+                  + "Upgrade: websocket\r\n"
+                  + "Connection: Upgrade\r\n"
+                  + "Sec-WebSocket-Version: 13\r\n"
+                  + "Sec-WebSocket-Key: "
+                  + VALID_WS_KEY
+                  + "\r\n"
+                  + "Authorization: Bearer "
+                  + TOKEN
+                  + "\r\n\r\n";
+          client.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
+          client.getOutputStream().flush();
 
-        runner.runConnection(serverSide);
+          runner.runConnection(serverSide);
 
-        assertNull(activeConnection.get());
-        assertEquals(0, handler.openCount.get());
-        assertEquals(0, handler.closeCount.get());
-        assertTrue(serverSide.isClosed());
+          assertNull(activeConnection.get());
+          assertEquals(0, handler.openCount.get());
+          assertEquals(0, handler.closeCount.get());
+          assertTrue(serverSide.isClosed());
+        }
       }
     }
   }
 
   private static Socket openPartialHandshake(int port) throws IOException {
-    Socket socket = new Socket("127.0.0.1", port);
+    Socket socket = new Socket();
+    socket.connect(new InetSocketAddress("127.0.0.1", port), 5_000);
+    socket.setSoTimeout(5_000);
     OutputStream out = socket.getOutputStream();
     out.write(
         ("GET /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nX-Partial: ")

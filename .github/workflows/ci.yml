@@ -43,7 +43,26 @@ jobs:
         run: ./gradlew --no-daemon clean verify
 
       - name: Test function mutations
-        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+        run: >-
+          python3 tests/function_mutation_regression.py
+          --log-file build/reports/headless-regression/headless.log
+          "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+
+      - name: Summarize test failures
+        if: failure()
+        run: python3 .github/scripts/summarize-test-failures.py
+
+      - name: Upload failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-failure-reports
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/test/TEST-*.xml
+            modules/**/build/reports/tests/test/**
+            build/reports/headless-regression/**
 
   release:
     # Update the release PR or create a release after main passes verification.
@@ -106,3 +125,18 @@ jobs:
             "build/release/ghidra-bridge-${RELEASE_VERSION}.zip" \
             "build/release/ghidra-bridge-${RELEASE_VERSION}.zip.sha256" \
             --clobber
+
+      - name: Summarize test failures
+        if: failure()
+        run: python3 .github/scripts/summarize-test-failures.py
+
+      - name: Upload failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-failure-reports
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/test/TEST-*.xml
+            modules/**/build/reports/tests/test/**

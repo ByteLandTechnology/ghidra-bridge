@@ -75,10 +75,13 @@ To test function mutations in an isolated Ghidra project on Linux x86-64, run:
 
 ```bash
 ./gradlew buildGhidraScript
-python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+python3 tests/function_mutation_regression.py \
+  --log-file build/reports/headless-regression/headless.log \
+  "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
 The test requires `gcc` and `nm`.
+It saves `analyzeHeadless` output to `--log-file` (default `build/reports/headless-regression/headless.log`) and prints the log tail when a check fails.
 
 ## Quality Checks
 
@@ -89,14 +92,20 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
+On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py --log-file build/reports/headless-regression/headless.log "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
 
 The verification tasks check:
-- **Unit Tests**: `check` runs JUnit tests across all Java modules.
+- **Unit Tests**: `check` runs JUnit tests across all Java modules with a 5-minute Gradle task timeout, a 30-second JUnit `SEPARATE_THREAD` timeout, thread dumps on timeout, and `FULL` failure stack traces. Use `@Timeout(value = 30, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SAME_THREAD)` in `:adapter` when a test checks thread-local `GhidraSession` state.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+
+When a JUnit or headless test fails, run the failure summary script to inspect failed test tables, assertion diffs, captured streams, and the `headless.log` tail locally:
+
+```bash
+python3 .github/scripts/summarize-test-failures.py
+```
 
 ## Releases
 

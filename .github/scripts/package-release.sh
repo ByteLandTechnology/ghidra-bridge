@@ -12,7 +12,7 @@ if [[ "$version" != "$file_version" ]]; then
   exit 1
 fi
 
-./gradlew --no-daemon -PreleaseVersion="$version" clean verify
+./gradlew --no-daemon --stacktrace -PreleaseVersion="$version" clean verify
 
 jar="build/ghidra-script/ghidra-bridge.jar"
 manifest_version="$(unzip -p "$jar" META-INF/MANIFEST.MF | tr -d '\r' | sed -n 's/^Implementation-Version: //p')"
