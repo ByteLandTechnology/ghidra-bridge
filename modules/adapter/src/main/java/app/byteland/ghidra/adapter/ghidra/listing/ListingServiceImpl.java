@@ -36,8 +36,8 @@ public final class ListingServiceImpl implements ListingService {
 
   @Override
   public Page<CodeUnitResource> listCodeUnits(
-      AddressScanOptions scan, int limit, String kind, String direction, String cursor) {
-    return codeUnitQueries.listCodeUnits(scan, limit, kind, direction, cursor);
+      AddressScanOptions scan, int limit, String kind, String cursor) {
+    return codeUnitQueries.listCodeUnits(scan, limit, kind, cursor);
   }
 
   @Override
@@ -47,8 +47,8 @@ public final class ListingServiceImpl implements ListingService {
 
   @Override
   public Page<InstructionResource> listInstructions(
-      AddressScanOptions scan, int limit, String direction, String cursor) {
-    return instructionQueries.listInstructions(scan, limit, direction, cursor);
+      AddressScanOptions scan, int limit, String cursor) {
+    return instructionQueries.listInstructions(scan, limit, cursor);
   }
 
   @Override
@@ -69,9 +69,8 @@ public final class ListingServiceImpl implements ListingService {
   }
 
   @Override
-  public Page<DataUnitResource> listDataUnits(
-      AddressScanOptions scan, int limit, String direction, String cursor) {
-    return dataQueries.listDataUnits(scan, limit, direction, cursor);
+  public Page<DataUnitResource> listDataUnits(AddressScanOptions scan, int limit, String cursor) {
+    return dataQueries.listDataUnits(scan, limit, cursor);
   }
 
   @Override

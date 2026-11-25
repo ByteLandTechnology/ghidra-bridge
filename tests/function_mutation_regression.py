@@ -39,6 +39,9 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global caller_entry
+caller_entry: call label_only
+ ret
 .global obfuscated_fn
 obfuscated_fn:
  push %rbp
@@ -366,14 +369,79 @@ def run_test(headless, root):
                 "after_auto",
             ]
 
-            listing_ops = tool(41, "ghidra_help", {"domain": "listing"})["operations"]
+            decomp_initial = tool(37, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a" in decomp_initial["c"]
+            decomp_repeat = tool(38, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert decomp_repeat["c"] == decomp_initial["c"]
+
+            sym_items = tool(39, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "func_a", "address": symbols["func_a"]}},
+            })["result"]["items"]
+            assert len(sym_items) == 1
+            renamed_sym = tool(40, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": sym_items[0]["id"]},
+                    "patch": {"name": "func_a_renamed"},
+                },
+            })["result"]
+            assert renamed_sym["name"] == "func_a_renamed"
+            decomp_after_rename = tool(41, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a_renamed" in decomp_after_rename["c"]
+
+            caller = function(42, "create", {
+                "resource": {"entry": symbols["caller_entry"], "name": "caller_entry"},
+                "disassemble": True,
+            })["result"]
+            assert caller["name"] == "caller_entry"
+            caller_before = tool(43, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_only(" in caller_before["c"]
+            caller_repeat = tool(44, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert caller_repeat["c"] == caller_before["c"]
+
+            callee_syms = tool(45, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "label_only", "address": symbols["label_only"]}},
+            })["result"]["items"]
+            assert len(callee_syms) == 1
+            tool(46, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": callee_syms[0]["id"]},
+                    "patch": {"name": "label_renamed"},
+                },
+            })
+            caller_after = tool(47, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_renamed(" in caller_after["c"]
+            assert "label_only(" not in caller_after["c"]
+
+            listing_ops = tool(48, "ghidra_help", {"domain": "listing"})["operations"]
             for expected_op in ("instruction.assemble", "instruction.disassemble", "code_unit.clear"):
                 assert expected_op in listing_ops, listing_ops
-            mem_write_help = tool(42, "ghidra_help", {"domain": "memory", "operation": "write"})
+            mem_write_help = tool(49, "ghidra_help", {"domain": "memory", "operation": "write"})
             mem_write_props = mem_write_help["inputSchema"]["properties"]
             assert "clear_existing" in mem_write_props and "disassemble" in mem_write_props
 
-            func_b_decoded = tool(43, "ghidra_listing", {
+            func_b_decoded = tool(50, "ghidra_listing", {
                 "operation": "instruction.disassemble",
                 "params": {
                     "selector": {"kind": "address", "address": symbols["func_b"]},
@@ -385,7 +453,7 @@ def run_test(headless, root):
             obf_base = int(symbols["obfuscated_fn"], 16)
             rogue_addr = hex(obf_base + 3)
             rogue_end = hex(obf_base + 7)
-            rogue = tool(44, "ghidra_listing", {
+            rogue = tool(51, "ghidra_listing", {
                 "operation": "instruction.disassemble",
                 "params": {
                     "selector": {"kind": "address", "address": rogue_addr},
@@ -394,7 +462,7 @@ def run_test(headless, root):
             })["result"]["items"]
             assert len(rogue) == 1 and rogue[0]["mnemonic"] == "CALL", rogue
 
-            batch_items = tool(45, "ghidra_batch", {
+            batch_items = tool(52, "ghidra_batch", {
                 "operation": "execute",
                 "params": {
                     "transaction_mode": "all_or_none",
@@ -435,14 +503,14 @@ def run_test(headless, root):
             assert batch_items[0]["result"]["cleared"] is True
             assert [item["mnemonic"] for item in batch_items[1]["result"]["items"]] == ["NOP"]
             assert batch_items[3]["result"]["name"] == "obfuscated_fn"
-            obf_list = tool(46, "ghidra_listing", {
+            obf_list = tool(53, "ghidra_listing", {
                 "operation": "instruction.list",
                 "params": {"scan": {"range": {"start": symbols["obfuscated_fn"], "end": rogue_end}}},
             })["result"]["items"]
             assert [item["mnemonic"] for item in obf_list] == ["PUSH", "JMP", "NOP", "XOR", "POP", "RET"], obf_list
 
             patch_base = int(symbols["patch_target"], 16)
-            patched_initial = tool(47, "ghidra_listing", {
+            patched_initial = tool(54, "ghidra_listing", {
                 "operation": "instruction.disassemble",
                 "params": {
                     "selector": {"kind": "address", "address": symbols["patch_target"]},
@@ -452,7 +520,7 @@ def run_test(headless, root):
             assert [item["mnemonic"] for item in patched_initial] == ["MOV", "RET"], patched_initial
 
             cached_start = time.monotonic()
-            padded = tool(48, "ghidra_listing", {
+            padded = tool(55, "ghidra_listing", {
                 "operation": "instruction.assemble",
                 "params": {
                     "selector": {"address": symbols["patch_target"]},
@@ -463,12 +531,12 @@ def run_test(headless, root):
             cached_elapsed = time.monotonic() - cached_start
             assert cached_elapsed < 2.0, f"Assembler was not cached ({cached_elapsed:.2f}s)"
             assert [item["mnemonic"] for item in padded] == ["XOR", "NOP", "NOP", "NOP"], padded
-            assert tool(49, "ghidra_listing", {
+            assert tool(56, "ghidra_listing", {
                 "operation": "instruction.get",
                 "params": {"selector": {"address": hex(patch_base + 5)}},
             })["result"]["mnemonic"] == "RET"
 
-            restored = tool(50, "ghidra_listing", {
+            restored = tool(57, "ghidra_listing", {
                 "operation": "instruction.assemble",
                 "params": {
                     "selector": {"address": symbols["patch_target"]},
@@ -477,7 +545,7 @@ def run_test(headless, root):
             })["result"]["items"]
             assert len(restored) == 1 and restored[0]["length"] == 5, restored
 
-            unpadded = tool(51, "ghidra_listing", {
+            unpadded = tool(58, "ghidra_listing", {
                 "operation": "instruction.assemble",
                 "params": {
                     "selector": {"address": symbols["patch_target"]},
@@ -486,12 +554,12 @@ def run_test(headless, root):
                 },
             })["result"]["items"]
             assert [item["mnemonic"] for item in unpadded] == ["XOR"], unpadded
-            tool(52, "ghidra_listing", {
+            tool(59, "ghidra_listing", {
                 "operation": "instruction.get",
                 "params": {"selector": {"address": hex(patch_base + 2)}},
             }, success=False)
 
-            bad_asm = tool(53, "ghidra_listing", {
+            bad_asm = tool(60, "ghidra_listing", {
                 "operation": "instruction.assemble",
                 "params": {
                     "selector": {"address": symbols["patch_target"]},
@@ -500,7 +568,7 @@ def run_test(headless, root):
             }, success=False)
             assert bad_asm.get("status") == 400 and bad_asm.get("code") == "invalid_request", bad_asm
 
-            tool(54, "ghidra_global_variable", {
+            tool(61, "ghidra_global_variable", {
                 "operation": "upsert",
                 "params": {
                     "resource": {
@@ -510,31 +578,31 @@ def run_test(headless, root):
                     }
                 },
             })
-            cleared_data = tool(55, "ghidra_listing", {
+            cleared_data = tool(62, "ghidra_listing", {
                 "operation": "code_unit.clear",
                 "params": {"selector": {"kind": "address", "address": symbols["data_slot"]}},
             })["result"]
             assert cleared_data["cleared"] is True
-            data_units = tool(56, "ghidra_listing", {
+            data_units = tool(63, "ghidra_listing", {
                 "operation": "data_unit.list",
                 "params": {"scan": {"range": {"start": symbols["data_slot"], "end": symbols["data_slot"]}}},
             })["result"]["items"]
             assert len(data_units) == 0, data_units
-            kept_symbols = tool(57, "ghidra_symbol", {
+            kept_symbols = tool(64, "ghidra_symbol", {
                 "operation": "list",
                 "params": {"scan": {"range": {"start": symbols["data_slot"], "end": symbols["data_slot"]}}},
             })["result"]["items"]
             assert any(sym["name"] == "data_slot" for sym in kept_symbols), kept_symbols
 
             raw_base = int(symbols["raw_code_buf"], 16)
-            tool(58, "ghidra_listing", {
+            tool(65, "ghidra_listing", {
                 "operation": "instruction.disassemble",
                 "params": {
                     "selector": {"kind": "address", "address": symbols["raw_code_buf"]},
                     "follow_flow": False,
                 },
             })
-            tool(59, "ghidra_memory", {
+            tool(66, "ghidra_memory", {
                 "operation": "write",
                 "params": {
                     "selector": {"address": symbols["raw_code_buf"]},
@@ -542,7 +610,7 @@ def run_test(headless, root):
                     "clear_existing": False,
                 },
             }, success=False)
-            tool(60, "ghidra_memory", {
+            tool(67, "ghidra_memory", {
                 "operation": "write",
                 "params": {
                     "selector": {"address": symbols["raw_code_buf"]},
@@ -551,11 +619,11 @@ def run_test(headless, root):
                     "disassemble": True,
                 },
             })
-            assert tool(61, "ghidra_listing", {
+            assert tool(68, "ghidra_listing", {
                 "operation": "instruction.get",
                 "params": {"selector": {"address": symbols["raw_code_buf"]}},
             })["result"]["mnemonic"] == "XOR"
-            assert tool(62, "ghidra_listing", {
+            assert tool(69, "ghidra_listing", {
                 "operation": "instruction.get",
                 "params": {"selector": {"address": hex(raw_base + 2)}},
             })["result"]["mnemonic"] == "RET"

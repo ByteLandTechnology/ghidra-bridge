@@ -52,7 +52,6 @@ final class InstructionMethods implements ApiMethodProvider {
                 .listInstructions(
                     addressScan(request),
                     page.limit(),
-                    "forward",
                     page.cursor()));
     registry.writeItemsResult(
         "instruction.assemble",

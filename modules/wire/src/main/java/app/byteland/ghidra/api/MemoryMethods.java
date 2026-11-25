@@ -70,6 +70,13 @@ final class MemoryMethods implements ApiMethodProvider {
                       optionalText(filter, ApiVocabulary.NAME)));
         });
 
+    Set<String> memoryFields =
+        Set.of(
+            ApiVocabulary.ADDRESS,
+            ApiVocabulary.BYTES,
+            "bytes.encoding",
+            "bytes.data",
+            "bytes.length");
     registry.readWith(
         "memory.read",
         ApiSchemaCatalog.input(
@@ -83,19 +90,8 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.FIELDS,
                 fields),
             ApiVocabulary.SELECTOR),
-        ApiSchemaCatalog.resourceSchema(
-            Set.of(
-                ApiVocabulary.ADDRESS,
-                ApiVocabulary.BYTES,
-                "bytes.encoding",
-                "bytes.data",
-                "bytes.length")),
-        Set.of(
-            ApiVocabulary.ADDRESS,
-            ApiVocabulary.BYTES,
-            "bytes.encoding",
-            "bytes.data",
-            "bytes.length"),
+        ApiSchemaCatalog.resourceSchema(memoryFields),
+        memoryFields,
         List.of(ApiVocabulary.ADDRESS),
         request ->
             WireValues.resource(
@@ -107,15 +103,6 @@ final class MemoryMethods implements ApiMethodProvider {
                         integer(request, ApiVocabulary.LENGTH, 256),
                         byteEncoding(
                             optionalText(request, ApiVocabulary.ENCODING, ApiVocabulary.HEX)))));
-    Map<String, Object> byteSequence =
-        WireSchema.object(
-            ApiSchemaCatalog.props(
-                ApiVocabulary.ENCODING, WireSchema.stringEnum(ApiVocabulary.HEX, "base64"),
-                ApiVocabulary.DATA, WireSchema.string(),
-                ApiVocabulary.LENGTH, WireSchema.integer(0, Integer.MAX_VALUE)),
-            ApiVocabulary.ENCODING,
-            ApiVocabulary.DATA,
-            ApiVocabulary.LENGTH);
     registry.writeResult(
         "memory.write",
         MethodEffects.mutation(true, true),
@@ -124,7 +111,9 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 addressSelector,
                 ApiVocabulary.PATCH,
-                WireSchema.object(Map.of(ApiVocabulary.BYTES, byteSequence), ApiVocabulary.BYTES),
+                WireSchema.object(
+                    Map.of(ApiVocabulary.BYTES, ApiSchemaCatalog.byteSequenceSchema()),
+                    ApiVocabulary.BYTES),
                 "clear_existing",
                 WireSchema.bool(),
                 "disassemble",
