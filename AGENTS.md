@@ -82,3 +82,21 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
+
+### Release Archive Check
+
+Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, then build the release archive and SHA-256 checksum in `build/release/`:
+
+```bash
+bash .github/scripts/package-release.sh
+```
+
+## Releases
+
+- CI keeps the `verify -> release -> publish` job sequence without cross-job workflow artifacts.
+- `release-please` creates a `v<version>` tag and a draft GitHub release (`"draft": true` and `"force-tag-creation": true` in `release-please-config.json`).
+- `publish` gets `needs.release.outputs.sha` with `persist-credentials: false` and checks `HEAD`, the `v<version>` tag, the remote tag SHA, `isDraft == true`, `.release-please-manifest.json`, and `version.txt`.
+- `publish` runs `package-release.sh` (which runs `verify` in CI and `clean verify` locally) and `tests/function_mutation_regression.py` before asset upload.
+- `publish` checks non-empty `.zip` and `.sha256` files, verifies `sha256sum -c`, and uploads both assets with `gh release upload --clobber`.
+- `publish` makes the draft release public last with `gh api --method PATCH` and `-F draft=false`.
+- If `publish` fails, the GitHub release stays hidden as a draft until you rerun the failed jobs.

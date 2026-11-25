@@ -381,7 +381,10 @@ class ApiMethodBuildersTest {
             globals,
             unused(DataTypeService.class));
 
-    List<String> names = List.copyOf(registry.methodNames());
+    List<String> names =
+        registry.methodCatalog().methods().stream()
+            .map(ApiCatalog.MethodDescriptor::name)
+            .toList();
     int gvCreateIndex = names.indexOf("global_variable.create");
     int gvPatchIndex = names.indexOf("global_variable.patch");
     int gvUpsertIndex = names.indexOf("global_variable.upsert");
