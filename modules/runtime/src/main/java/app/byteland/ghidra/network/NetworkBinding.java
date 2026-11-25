@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 public final class NetworkBinding {
@@ -60,6 +61,22 @@ public final class NetworkBinding {
     }
   }
 
+  public static void requireTokenForNonLoopbackOrigin(String host, String token) {
+    if (token != null && !token.isBlank()) {
+      return;
+    }
+    boolean loopback;
+    try {
+      loopback = isLoopback(host);
+    } catch (IllegalArgumentException unresolved) {
+      loopback = false;
+    }
+    if (!loopback) {
+      throw new IllegalArgumentException(
+          "token is required when allowed_origins includes a non-loopback origin");
+    }
+  }
+
   public static boolean bearerTokenMatches(String authorizationHeader, String expectedToken) {
     if (authorizationHeader == null) {
       return false;
@@ -72,6 +89,10 @@ public final class NetworkBinding {
   public static boolean isLoopback(String host) {
     if (host == null || host.isBlank()) {
       throw new IllegalArgumentException("host is required");
+    }
+    InetAddress literal = parseIpLiteral(host);
+    if (literal != null) {
+      return literal.isLoopbackAddress();
     }
     try {
       for (InetAddress address : InetAddress.getAllByName(host.trim())) {
@@ -203,15 +224,76 @@ public final class NetworkBinding {
   }
 
   /**
-   * Parses a canonical IPv4 or unbracketed IPv6 literal into an {@link InetAddress} without DNS
-   * resolution. Returns {@code null} when {@code literal} is invalid.
+   * Normalizes a host string by trimming ASCII whitespace, stripping surrounding IPv6 brackets when
+   * a colon is present, and lowercasing in {@link Locale#ROOT}.
    */
-  public static InetAddress parseIpLiteral(String literal) {
-    if (literal == null || literal.isEmpty()) {
+  public static String normalizeHost(String host) {
+    Objects.requireNonNull(host, "host");
+    String trimmed = host.trim();
+    if (trimmed.length() > 2
+        && trimmed.charAt(0) == '['
+        && trimmed.charAt(trimmed.length() - 1) == ']'
+        && trimmed.indexOf(':') >= 0) {
+      trimmed = trimmed.substring(1, trimmed.length() - 1);
+    }
+    return trimmed.toLowerCase(Locale.ROOT);
+  }
+
+  /**
+   * Returns {@code true} when {@code host} is {@code localhost} (case-insensitive) or parses
+   * syntactically as a literal IPv4/IPv6 loopback address ({@code 127.0.0.0/8}, {@code ::1}, or
+   * IPv4-mapped loopback {@code ::ffff:127.0.0.0/104}) without performing DNS lookups.
+   */
+  public static boolean isLiteralLoopbackHost(String host) {
+    if (host == null) {
+      return false;
+    }
+    String normalized = normalizeHost(host);
+    if ("localhost".equals(normalized)) {
+      return true;
+    }
+    InetAddress literal = parseIpLiteral(normalized);
+    return literal != null && literal.isLoopbackAddress();
+  }
+
+  /**
+   * Compares two host strings case-insensitively and across canonical IPv4/IPv6 literal
+   * representations without performing DNS lookups.
+   */
+  public static boolean hostsMatch(String firstHost, String secondHost) {
+    if (firstHost == null || secondHost == null) {
+      return false;
+    }
+    String normalizedFirst = normalizeHost(firstHost);
+    String normalizedSecond = normalizeHost(secondHost);
+    if (normalizedFirst.isEmpty() || normalizedSecond.isEmpty()) {
+      return false;
+    }
+    if (normalizedFirst.equals(normalizedSecond)) {
+      return true;
+    }
+    InetAddress firstLiteral = parseIpLiteral(normalizedFirst);
+    if (firstLiteral == null) {
+      return false;
+    }
+    InetAddress secondLiteral = parseIpLiteral(normalizedSecond);
+    return firstLiteral.equals(secondLiteral);
+  }
+
+  /**
+   * Parses a strict IPv4 or (optionally bracketed) IPv6 literal into an {@link InetAddress} without
+   * performing DNS resolution, or returns {@code null} if {@code host} is not a valid IP literal.
+   */
+  public static InetAddress parseIpLiteral(String host) {
+    if (host == null) {
+      return null;
+    }
+    String normalized = normalizeHost(host);
+    if (normalized.isEmpty()) {
       return null;
     }
     byte[] bytes =
-        literal.indexOf(':') >= 0 ? parseIpv6Literal(literal) : parseIpv4Literal(literal);
+        normalized.indexOf(':') >= 0 ? parseIpv6Literal(normalized) : parseIpv4Literal(normalized);
     if (bytes == null) {
       return null;
     }
@@ -238,12 +320,13 @@ public final class NetworkBinding {
   }
 
   private static Boolean classifyLoopbackWithoutDns(String configuredHost) {
-    String stripped = stripOptionalIpv6Brackets(configuredHost.trim());
-    if ("localhost".equalsIgnoreCase(stripped)) {
+    if (isLiteralLoopbackHost(configuredHost)) {
       return Boolean.TRUE;
     }
-    InetAddress literal = parseIpLiteral(stripped);
-    return literal == null ? null : literal.isLoopbackAddress();
+    if (parseIpLiteral(configuredHost) != null) {
+      return Boolean.FALSE;
+    }
+    return null;
   }
 
   private static byte[] parseHostHeaderLiteralIp(String authorityHost) {
@@ -256,20 +339,16 @@ public final class NetworkBinding {
   }
 
   private static byte[] parseConfiguredLiteralIp(String configuredHost) {
-    String stripped = stripOptionalIpv6Brackets(configuredHost.trim());
-    return stripped.indexOf(':') >= 0 ? parseIpv6Literal(stripped) : parseIpv4Literal(stripped);
+    String normalized = normalizeHost(configuredHost);
+    return normalized.indexOf(':') >= 0
+        ? parseIpv6Literal(normalized)
+        : parseIpv4Literal(normalized);
   }
 
-  private static String stripOptionalIpv6Brackets(String value) {
-    if (value.length() > 2
-        && value.charAt(0) == '['
-        && value.charAt(value.length() - 1) == ']'
-        && value.indexOf(':') >= 0) {
-      return value.substring(1, value.length() - 1);
-    }
-    return value;
-  }
-
+  /**
+   * Parses a strict dotted-quad decimal IPv4 literal (rejecting leading zeros, short forms, and
+   * non-ASCII digits) into a 4-byte array, or returns {@code null} if invalid.
+   */
   public static byte[] parseIpv4Literal(String literal) {
     if (literal == null || literal.isEmpty() || literal.length() > 15) {
       return null;
@@ -307,6 +386,11 @@ public final class NetworkBinding {
     return bytes;
   }
 
+  /**
+   * Parses a strict unbracketed IPv6 literal (supporting {@code ::} zero-compression and trailing
+   * dotted-quad IPv4, while rejecting {@code %} zone IDs) into a 16-byte array, or returns {@code
+   * null} if invalid.
+   */
   public static byte[] parseIpv6Literal(String literal) {
     if (literal == null
         || literal.length() < 2
@@ -392,7 +476,6 @@ public final class NetworkBinding {
     }
     return -1;
   }
-
   private static boolean isValidHostNameOrIpv4(String hostPart) {
     if (hostPart.isEmpty() || hostPart.length() > MAX_HOST_NAME_LENGTH) {
       return false;

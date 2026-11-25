@@ -236,7 +236,9 @@ class NetworkBindingHostTest {
     assertNull(NetworkBinding.parseIpLiteral("127.1"));
     assertNull(NetworkBinding.parseIpLiteral(":::1"));
     assertNull(NetworkBinding.parseIpLiteral("::1%lo0"));
-    assertNull(NetworkBinding.parseIpLiteral("[::1]"));
+    assertEquals(ipv6Loopback, NetworkBinding.parseIpLiteral("[::1]"));
+    assertNull(NetworkBinding.parseIpv6Literal("[::1]"));
+    assertNull(NetworkBinding.parseIpLiteral("[127.0.0.1]"));
     assertNull(NetworkBinding.parseIpLiteral("1:2:3:4:5:6::127.0.0.1"));
 
     org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(

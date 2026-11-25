@@ -106,7 +106,8 @@ class WebSocketHostValidationTest {
                 "connection", "Upgrade",
                 "sec-websocket-version", "13",
                 "sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ=="),
-            List.of("127.0.0.1:8765", "rebind.example.invalid:8765"));
+            List.of("127.0.0.1:8765", "rebind.example.invalid:8765"),
+            List.of());
     WebSocketHandshake.HttpHandshakeException badDuplicate =
         assertThrows(
             WebSocketHandshake.HttpHandshakeException.class,

@@ -107,6 +107,7 @@ final class WebSocketHandshake {
 
     Map<String, String> headers = new LinkedHashMap<>();
     List<String> hostHeaders = new ArrayList<>();
+    List<String> originHeaders = new ArrayList<>();
     for (int i = 1; i < lines.size(); i++) {
       String line = lines.get(i);
       if (line.isEmpty()) {
@@ -120,15 +121,21 @@ final class WebSocketHandshake {
       if (!isValidHeaderToken(rawName)) {
         throw new HttpHandshakeException(400, "Bad Request", "Malformed header name");
       }
-      String name = rawName.toLowerCase(Locale.ROOT);
-      String value = line.substring(idx + 1).trim();
-      if ("host".equals(name)) {
+      String headerName = rawName.toLowerCase(Locale.ROOT);
+      String headerValue = line.substring(idx + 1).trim();
+      if ("host".equals(headerName)) {
         if (!hostHeaders.isEmpty()) {
           throw new HttpHandshakeException(400, "Bad Request", "Duplicate Host header");
         }
-        hostHeaders.add(value);
+        hostHeaders.add(headerValue);
+      } else if ("origin".equals(headerName)) {
+        if (!originHeaders.isEmpty()) {
+          throw new HttpHandshakeException(
+              403, "Forbidden", "Multiple Origin headers are not allowed");
+        }
+        originHeaders.add(headerValue);
       }
-      headers.put(name, value);
+      headers.put(headerName, headerValue);
     }
     if (hostHeaders.isEmpty()) {
       throw new HttpHandshakeException(400, "Bad Request", "Missing Host header");
@@ -148,7 +155,7 @@ final class WebSocketHandshake {
     String path = queryIndex >= 0 ? target.substring(0, queryIndex) : target;
     String query = queryIndex >= 0 ? target.substring(queryIndex + 1) : "";
     return new HandshakeRequest(
-        requestLine.getFirst(), path, parseQuery(query), headers, hostHeaders);
+        requestLine.getFirst(), path, parseQuery(query), headers, hostHeaders, originHeaders);
   }
 
   private static void updateReadTimeout(Socket socket, long deadlineNanos) throws SocketException {
@@ -260,22 +267,55 @@ final class WebSocketHandshake {
       String path,
       Map<String, String> query,
       Map<String, String> headers,
-      List<String> hostHeaders) {
-    HandshakeRequest(
-        String method, String path, Map<String, String> query, Map<String, String> headers) {
-      this(method, path, query, headers, deriveHostHeaders(headers));
-    }
-
+      List<String> hostHeaders,
+      List<String> originHeaders) {
     HandshakeRequest {
       query = immutableOrderedCopy(query, "query");
       headers = immutableOrderedCopy(headers, "headers");
-      hostHeaders = List.copyOf(Objects.requireNonNull(hostHeaders, "hostHeaders"));
+      hostHeaders = sanitizeHeaderValues(hostHeaders, "hostHeaders");
+      originHeaders = sanitizeHeaderValues(originHeaders, "originHeaders");
     }
 
-    private static List<String> deriveHostHeaders(Map<String, String> headers) {
+    HandshakeRequest(
+        String method, String path, Map<String, String> query, Map<String, String> headers) {
+      this(
+          method,
+          path,
+          query,
+          headers,
+          extractHeaderValues(headers, "host"),
+          extractHeaderValues(headers, "origin"));
+    }
+
+    HandshakeRequest(
+        String method,
+        String path,
+        Map<String, String> query,
+        Map<String, String> headers,
+        List<String> originHeaders) {
+      this(method, path, query, headers, extractHeaderValues(headers, "host"), originHeaders);
+    }
+
+    private static List<String> sanitizeHeaderValues(List<String> values, String fieldName) {
+      Objects.requireNonNull(values, fieldName);
+      List<String> copy = new ArrayList<>(values.size());
+      for (String value : values) {
+        copy.add(value == null ? "" : value);
+      }
+      return Collections.unmodifiableList(copy);
+    }
+
+    private static List<String> extractHeaderValues(
+        Map<String, String> headers, String headerName) {
       Objects.requireNonNull(headers, "headers");
-      String host = headers.get("host");
-      return host == null ? List.of() : List.of(host);
+      List<String> extracted = new ArrayList<>();
+      for (Map.Entry<String, String> entry : headers.entrySet()) {
+        if (headerName.equalsIgnoreCase(entry.getKey())) {
+          String value = entry.getValue();
+          extracted.add(value == null ? "" : value);
+        }
+      }
+      return extracted;
     }
 
     private static Map<String, String> immutableOrderedCopy(

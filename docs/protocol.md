@@ -98,7 +98,7 @@ The server replies with an error envelope for a bad message and keeps the socket
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
 - `400`: Absent, blank, malformed, or duplicate `Host` header, absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
 - `401`: Absent or invalid bearer token.
-- `403`: On a loopback listener, a `Host` header that is not `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host` (or has another port).
+- `403`: Disallowed, malformed, or duplicate `Origin` header. On a loopback listener, a `Host` header that is not `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host` (or has another port).
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
@@ -123,7 +123,7 @@ The MCP HTTP server handles requests:
 - **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
 - **Other methods**: The server returns status `405`.
 - **Host**: Every request must send one well-formed `Host` header, or the server returns status `400`. On a loopback listener, a `Host` header must match `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host`. Any port must match the listener port, or the server returns status `403`.
-- **Origin**: A request with an `Origin` header that is not a loopback host or the configured `host` returns status `403`.
+- **Origin**: By default, an `Origin` header that is not loopback or the configured `host` returns status `403` with no CORS headers. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` to `scheme://host[:port]` entries to permit only listed origins. Set `none` to reject all `Origin` headers.
 - **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.
 
@@ -283,6 +283,7 @@ An unknown operation, or an argument other than `operation` and `params`, return
 
 - **Loopback Default**: Listeners bind to `127.0.0.1` by default. A loopback listener without `token` does not require authentication.
 - **External Listener**: A listener on an external network interface requires `token`.
+- **Browser Origin Policy**: MCP HTTP permits loopback and `host` origins by default. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` (`allowed_origins` wins) to override, or `none` to reject all `Origin` headers. Non-loopback origins require `token`.
 - **Authorization Header**: Send credentials through `Authorization: Bearer <token>`.
 - **Query Token Rejection**: The server rejects tokens in query strings with HTTP 400.
 - **Log Redaction**: Secret tokens never appear in server log files.

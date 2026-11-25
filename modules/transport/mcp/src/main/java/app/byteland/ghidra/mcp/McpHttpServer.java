@@ -22,9 +22,9 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -884,12 +884,12 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static void writePlain(HttpExchange exchange, int statusCode, String payload)
       throws IOException {
-    byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
     exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
     if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
-      exchange.sendResponseHeaders(statusCode, -1);
+      sendNoBody(exchange, statusCode);
       return;
     }
+    byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
     exchange.sendResponseHeaders(statusCode, bytes.length);
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
@@ -914,10 +914,10 @@ public final class McpHttpServer implements AutoCloseable {
     exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS");
     exchange
         .getResponseHeaders()
-        .set("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Accept");
-    exchange
-        .getResponseHeaders()
-        .set("Access-Control-Expose-Headers", "MCP-Protocol-Version");
+        .set(
+            "Access-Control-Allow-Headers",
+            "Authorization, Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Accept");
+    exchange.getResponseHeaders().set("Access-Control-Expose-Headers", "MCP-Protocol-Version");
   }
 
   private record OriginValidation(boolean allowed, String origin) {
@@ -929,7 +929,8 @@ public final class McpHttpServer implements AutoCloseable {
     return validateOriginHeaders(
         exchange.getRequestHeaders().get("Origin"),
         normalizedConfiguredHost,
-        configuredHostLiteral);
+        configuredHostLiteral,
+        config.allowedOrigins());
   }
 
   boolean isAllowedOrigin(HttpExchange exchange) {
@@ -937,14 +938,31 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   static boolean isAllowedOrigin(List<String> originHeaders, String configuredHost) {
-    String normalizedConfigHost = normalizeHost(Objects.requireNonNull(configuredHost, "configuredHost"));
+    return isAllowedOrigin(originHeaders, configuredHost, null);
+  }
+
+  static boolean isAllowedOrigin(List<String> originHeaders, Set<String> allowedOrigins) {
+    return isAllowedOrigin(
+        originHeaders, "127.0.0.1", Objects.requireNonNull(allowedOrigins, "allowedOrigins"));
+  }
+
+  static boolean isAllowedOrigin(
+      List<String> originHeaders, String configuredHost, Set<String> allowedOrigins) {
+    String normalizedConfigHost =
+        normalizeHost(Objects.requireNonNull(configuredHost, "configuredHost"));
     return validateOriginHeaders(
-            originHeaders, normalizedConfigHost, NetworkBinding.parseIpLiteral(normalizedConfigHost))
+            originHeaders,
+            normalizedConfigHost,
+            parseIpLiteral(normalizedConfigHost),
+            allowedOrigins)
         .allowed();
   }
 
   private static OriginValidation validateOriginHeaders(
-      List<String> values, String normalizedConfigHost, InetAddress configHostLiteral) {
+      List<String> values,
+      String normalizedConfigHost,
+      InetAddress configHostLiteral,
+      Set<String> allowedOriginsOverride) {
     if (values == null || values.isEmpty()) {
       return OriginValidation.ABSENT_ALLOWED;
     }
@@ -956,6 +974,17 @@ public final class McpHttpServer implements AutoCloseable {
       return OriginValidation.REJECTED;
     }
     String origin = rawOrigin.trim();
+    if (allowedOriginsOverride != null) {
+      if (allowedOriginsOverride.isEmpty()) {
+        return OriginValidation.REJECTED;
+      }
+      String normalized = McpConfig.tryNormalizeOrigin(origin);
+      if (normalized == null || !allowedOriginsOverride.contains(normalized)) {
+        return OriginValidation.REJECTED;
+      }
+      return new OriginValidation(true, origin);
+    }
+
     if (origin.isEmpty()
         || "null".equalsIgnoreCase(origin)
         || origin.indexOf(',') >= 0
@@ -1010,14 +1039,17 @@ public final class McpHttpServer implements AutoCloseable {
       return OriginValidation.REJECTED;
     }
 
-    if ("localhost".equals(normalizedOriginHost)
-        || normalizedOriginHost.equals(normalizedConfigHost)) {
-      return new OriginValidation(true, origin);
+    InetAddress originLiteral = parseIpLiteral(normalizedOriginHost);
+    if (originLiteral != null) {
+      if (!originLiteral.isAnyLocalAddress()
+          && (originLiteral.isLoopbackAddress() || originLiteral.equals(configHostLiteral))) {
+        return new OriginValidation(true, origin);
+      }
+      return OriginValidation.REJECTED;
     }
 
-    InetAddress originLiteral = NetworkBinding.parseIpLiteral(normalizedOriginHost);
-    if (originLiteral != null
-        && (originLiteral.isLoopbackAddress() || originLiteral.equals(configHostLiteral))) {
+    if ("localhost".equals(normalizedOriginHost)
+        || normalizedOriginHost.equals(normalizedConfigHost)) {
       return new OriginValidation(true, origin);
     }
 
@@ -1025,14 +1057,7 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   static String normalizeHost(String host) {
-    String trimmed = host.trim();
-    if (trimmed.length() > 2
-        && trimmed.charAt(0) == '['
-        && trimmed.charAt(trimmed.length() - 1) == ']'
-        && trimmed.indexOf(':') >= 0) {
-      trimmed = trimmed.substring(1, trimmed.length() - 1);
-    }
-    return trimmed.toLowerCase(Locale.ROOT);
+    return NetworkBinding.normalizeHost(host);
   }
 
   static InetAddress parseIpLiteral(String literal) {
