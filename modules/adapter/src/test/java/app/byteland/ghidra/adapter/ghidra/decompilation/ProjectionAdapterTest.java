@@ -480,7 +480,6 @@ class ProjectionAdapterTest {
             new AddressScanOptions("0x00200000", "0x00200003", 1_000),
             10,
             "all",
-            "forward",
             null,
             Set.of("address", "kind"));
     assertEquals(1, projectedCu.items().size());
@@ -513,7 +512,6 @@ class ProjectionAdapterTest {
         listingService.listDataUnits(
             new AddressScanOptions("0x00200000", "0x00200003", 1_000),
             10,
-            "forward",
             null,
             Set.of("address", "value", "representation"));
     assertEquals("42", dataPage.items().getFirst().value());

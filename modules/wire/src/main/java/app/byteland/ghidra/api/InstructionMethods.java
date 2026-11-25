@@ -32,26 +32,31 @@ final class InstructionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(addressSelector),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
-        (request, projectedFields) ->
-            registry
-                .services()
-                .listingService()
-                .getInstruction(text(selector(request), ApiVocabulary.ADDRESS), projectedFields));
+        (request, projectedFields) -> {
+          String address = text(selector(request), ApiVocabulary.ADDRESS);
+          return projectedFields == null
+              ? registry.services().listingService().getInstruction(address)
+              : registry.services().listingService().getInstruction(address, projectedFields);
+        });
     registry.scanList(
         "instruction.list",
         ApiSchemaCatalog.scanListInput(WireSchema.object(Map.of())),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
         (request, page, projectedFields) ->
-            registry
-                .services()
-                .listingService()
-                .listInstructions(
-                    addressScan(request),
-                    page.limit(),
-                    "forward",
-                    page.cursor(),
-                    projectedFields));
+            projectedFields == null
+                ? registry
+                    .services()
+                    .listingService()
+                    .listInstructions(addressScan(request), page.limit(), page.cursor())
+                : registry
+                    .services()
+                    .listingService()
+                    .listInstructions(
+                        addressScan(request),
+                        page.limit(),
+                        page.cursor(),
+                        projectedFields));
     Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
     Map<String, Object> flowFilter =
         WireSchema.object(
@@ -69,18 +74,26 @@ final class InstructionMethods implements ApiMethodProvider {
         List.of(ApiVocabulary.ADDRESS),
         (request, page, projectedFields) -> {
           Map<String, Object> selected = object(filter(request), ApiVocabulary.SELECTOR);
-          return registry
-              .services()
-              .listingService()
-              .getFlowOverrides(
-                  flowScope(selected),
-                  flowOverrides(
-                      filter(request).get("flow_overrides"),
-                      List.of("branch", "call", "call_return", "return")),
-                  addressScan(request),
-                  page.limit(),
-                  page.cursor(),
-                  projectedFields);
+          FlowOverrideScope scope = flowScope(selected);
+          List<FlowOverrideValue> overrides =
+              flowOverrides(
+                  filter(request).get("flow_overrides"),
+                  List.of("branch", "call", "call_return", "return"));
+          return projectedFields == null
+              ? registry
+                  .services()
+                  .listingService()
+                  .getFlowOverrides(scope, overrides, addressScan(request), page.limit(), page.cursor())
+              : registry
+                  .services()
+                  .listingService()
+                  .getFlowOverrides(
+                      scope,
+                      overrides,
+                      addressScan(request),
+                      page.limit(),
+                      page.cursor(),
+                      projectedFields);
         });
     registry.writeListResult(
         "flow_override.patch",

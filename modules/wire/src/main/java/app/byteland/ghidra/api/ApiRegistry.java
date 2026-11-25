@@ -24,7 +24,6 @@ public final class ApiRegistry {
   public static final String INTERFACE_VERSION = "0.2.0";
   public static final int DEFAULT_LIMIT = 100;
   public static final int MAX_LIMIT = Page.MAX_LIMIT;
-  public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
   static final String ANALYSIS_START_METHOD = "analysis.start";
@@ -124,14 +123,6 @@ public final class ApiRegistry {
     return catalogSnapshot;
   }
 
-  public List<ApiMethod<Map<String, Object>, Object>> methods() {
-    return List.copyOf(methodsByName.values());
-  }
-
-  public Set<String> methodNames() {
-    return Collections.unmodifiableSet(methodsByName.keySet());
-  }
-
   public ApiMethod<Map<String, Object>, Object> method(String name) {
     return methodsByName.get(name);
   }
@@ -143,14 +134,6 @@ public final class ApiRegistry {
     }
     Map<String, Object> decoded = method.decodeRequest(params);
     return invokeDecoded(method, decoded, true);
-  }
-
-  Object dispatchWithoutTransaction(String name, Map<String, Object> params) throws Exception {
-    ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
-    if (method == null) {
-      throw new ApiException(404, "unknown_operation", "No such operation: " + name, "/operation");
-    }
-    return invokeDecoded(method, method.decodeRequest(params), false);
   }
 
   <T> T inTransaction(app.byteland.ghidra.service.TransactionRunner.Operation<T> operation) {
@@ -228,9 +211,14 @@ public final class ApiRegistry {
   }
 
   @FunctionalInterface
-  interface ProjectedPagedHandler {
-    Page<?> handle(Map<String, Object> request, PageRequest page, Set<String> projectedFields)
-        throws Exception;
+  interface ProjectedPagedHandler extends PagedHandler {
+    Page<?> handleProjected(
+        Map<String, Object> request, PageRequest page, Set<String> selectedFields) throws Exception;
+
+    @Override
+    default Page<?> handle(Map<String, Object> request, PageRequest page) throws Exception {
+      return handleProjected(request, page, null);
+    }
   }
 
   void read(
@@ -247,7 +235,7 @@ public final class ApiRegistry {
       Map<String, Object> input,
       Set<String> fields,
       List<String> identityFields,
-      ApiMethod.ProjectedHandler<Map<String, Object>, Object> handler) {
+      ProjectedHandler<Map<String, Object>, Object> handler) {
     read(name, null, input, fields, identityFields, handler);
   }
 
@@ -258,13 +246,8 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
-    read(
-        name,
-        description,
-        input,
-        fields,
-        identityFields,
-        (request, projectedFields) -> handler.handle(request));
+    registerResource(
+        name, MethodEffects.readOnlyMethod(), description, input, fields, identityFields, handler);
   }
 
   void read(
@@ -273,20 +256,9 @@ public final class ApiRegistry {
       Map<String, Object> input,
       Set<String> fields,
       List<String> identityFields,
-      ApiMethod.ProjectedHandler<Map<String, Object>, Object> handler) {
-    register(
-        name,
-        MethodEffects.readOnlyMethod(),
-        description,
-        input,
-        ApiSchemaCatalog.resourceSchema(fields, identityFields),
-        fields,
-        identityFields,
-        (ApiMethod.ProjectedHandler<Map<String, Object>, Object>)
-            (request, projectedFields) ->
-                projectedFields != null
-                    ? WireValues.resource(handler.handle(request, projectedFields), projectedFields)
-                    : WireValues.resourceAllowed(handler.handle(request, null), fields));
+      ProjectedHandler<Map<String, Object>, Object> handler) {
+    registerResource(
+        name, MethodEffects.readOnlyMethod(), description, input, fields, identityFields, handler);
   }
 
   private static Map<String, Object> interfaceSchema(int methodCount) {
@@ -327,8 +299,25 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
+    Set<String> allowedRoots = WireValues.rootFields(fields);
     register(
-        name, MethodEffects.readOnlyMethod(), null, input, output, fields, identityFields, handler);
+        name,
+        MethodEffects.readOnlyMethod(),
+        null,
+        input,
+        output,
+        fields,
+        identityFields,
+        (ProjectedHandler<Map<String, Object>, Object>)
+            (request, selected) -> {
+              Object raw =
+                  handler instanceof ProjectedHandler<Map<String, Object>, Object> projectedHandler
+                      ? projectedHandler.handleProjected(request, selected)
+                      : handler.handle(request);
+              return selected != null
+                  ? WireValues.resource(raw, selected)
+                  : WireValues.resourceRestrictingRoots(raw, allowedRoots);
+            });
   }
 
   void readWith(
@@ -337,9 +326,14 @@ public final class ApiRegistry {
       Map<String, Object> output,
       Set<String> fields,
       List<String> identityFields,
-      ApiMethod.ProjectedHandler<Map<String, Object>, Object> handler) {
-    register(
-        name, MethodEffects.readOnlyMethod(), null, input, output, fields, identityFields, handler);
+      ProjectedHandler<Map<String, Object>, Object> handler) {
+    readWith(
+        name,
+        input,
+        output,
+        fields,
+        identityFields,
+        (ApiMethod.Handler<Map<String, Object>, Object>) handler);
   }
 
   void list(
@@ -357,7 +351,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ProjectedPagedHandler handler) {
-    list(name, null, input, fields, identityFields, handler);
+    list(name, null, input, fields, identityFields, (PagedHandler) handler);
   }
 
   void list(
@@ -367,13 +361,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
-    list(
-        name,
-        description,
-        input,
-        fields,
-        identityFields,
-        (request, page, projectedFields) -> handler.handle(request, page));
+    registerPagedList(name, description, input, fields, identityFields, false, handler);
   }
 
   void list(
@@ -383,27 +371,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ProjectedPagedHandler handler) {
-    register(
-        name,
-        MethodEffects.readOnlyMethod(),
-        description,
-        input,
-        ApiSchemaCatalog.listSchema(fields, identityFields),
-        fields,
-        identityFields,
-        (ApiMethod.ProjectedHandler<Map<String, Object>, Object>)
-            (request, projectedFields) -> {
-              String resource = name.substring(0, name.indexOf('.'));
-              PageRequest page = decodePage(request, resource);
-              return canonicalList(
-                  resource,
-                  request,
-                  handler.handle(request, page, projectedFields),
-                  page,
-                  projectedFields,
-                  fields,
-                  identityFields);
-            });
+    registerPagedList(name, description, input, fields, identityFields, false, handler);
   }
 
   void scanList(
@@ -421,7 +389,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ProjectedPagedHandler handler) {
-    scanList(name, scanDescription(name), input, fields, identityFields, handler);
+    scanList(name, scanDescription(name), input, fields, identityFields, (PagedHandler) handler);
   }
 
   private static String scanDescription(String name) {
@@ -438,13 +406,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       PagedHandler handler) {
-    scanList(
-        name,
-        description,
-        input,
-        fields,
-        identityFields,
-        (request, page, projectedFields) -> handler.handle(request, page));
+    registerPagedList(name, description, input, fields, identityFields, true, handler);
   }
 
   void scanList(
@@ -454,26 +416,38 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ProjectedPagedHandler handler) {
+    registerPagedList(name, description, input, fields, identityFields, true, handler);
+  }
+
+  private void registerPagedList(
+      String name,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      boolean includeScan,
+      PagedHandler handler) {
+    Set<String> allowedRoots = WireValues.rootFields(fields);
     register(
         name,
         MethodEffects.readOnlyMethod(),
         description,
         input,
-        ApiSchemaCatalog.scanListSchema(fields, identityFields),
+        includeScan
+            ? ApiSchemaCatalog.scanListSchema(fields, identityFields)
+            : ApiSchemaCatalog.listSchema(fields, identityFields),
         fields,
         identityFields,
-        (ApiMethod.ProjectedHandler<Map<String, Object>, Object>)
-            (request, projectedFields) -> {
+        (ProjectedHandler<Map<String, Object>, Object>)
+            (request, selected) -> {
               String resource = name.substring(0, name.indexOf('.'));
               PageRequest page = decodePage(request, resource);
+              Page<?> rawPage =
+                  handler instanceof ProjectedPagedHandler projectedHandler
+                      ? projectedHandler.handleProjected(request, page, selected)
+                      : handler.handle(request, page);
               return canonicalList(
-                  resource,
-                  request,
-                  handler.handle(request, page, projectedFields),
-                  page,
-                  projectedFields,
-                  fields,
-                  identityFields);
+                  resource, request, rawPage, page, selected, allowedRoots, identityFields);
             });
   }
 
@@ -522,6 +496,18 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
+    registerResource(name, effects, description, input, fields, identityFields, handler);
+  }
+
+  private void registerResource(
+      String name,
+      MethodEffects effects,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      ApiMethod.Handler<Map<String, Object>, Object> handler) {
+    Set<String> allowedRoots = WireValues.rootFields(fields);
     register(
         name,
         effects,
@@ -530,7 +516,16 @@ public final class ApiRegistry {
         ApiSchemaCatalog.resourceSchema(fields, identityFields),
         fields,
         identityFields,
-        request -> WireValues.resourceAllowed(handler.handle(request), fields));
+        (ProjectedHandler<Map<String, Object>, Object>)
+            (request, selected) -> {
+              Object raw =
+                  handler instanceof ProjectedHandler<Map<String, Object>, Object> projectedHandler
+                      ? projectedHandler.handleProjected(request, selected)
+                      : handler.handle(request);
+              return selected != null
+                  ? WireValues.resource(raw, selected)
+                  : WireValues.resourceRestrictingRoots(raw, allowedRoots);
+            });
   }
 
   void writeListResult(
@@ -541,6 +536,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Page<?>> handler) {
+    Set<String> allowedRoots = WireValues.rootFields(fields);
     register(
         name,
         effects,
@@ -557,11 +553,15 @@ public final class ApiRegistry {
                 ApiVocabulary.ITEMS)),
         fields,
         identityFields,
-        request -> {
-          Map<String, Object> normalizedList =
-              WireValues.list(handler.handle(request), null, fields);
-          return Map.of(ApiVocabulary.ITEMS, sortItems(normalizedList, identityFields));
-        });
+        (ProjectedHandler<Map<String, Object>, Object>)
+            (request, selected) -> {
+              Page<?> rawPage = handler.handle(request);
+              Map<String, Object> normalizedList =
+                  selected != null
+                      ? WireValues.list(rawPage, selected)
+                      : WireValues.listRestrictingRoots(rawPage, allowedRoots);
+              return Map.of(ApiVocabulary.ITEMS, sortItems(normalizedList, identityFields));
+            });
   }
 
   private void registerBatch() {
@@ -723,10 +723,13 @@ public final class ApiRegistry {
       Map<String, Object> request,
       Page<?> raw,
       PageRequest page,
-      Set<String> projectedFields,
-      Set<String> fields,
+      Set<String> selected,
+      Set<String> allowedRoots,
       List<String> identityFields) {
-    Map<String, Object> result = WireValues.list(raw, projectedFields, fields);
+    Map<String, Object> result =
+        selected != null
+            ? WireValues.list(raw, selected)
+            : WireValues.listRestrictingRoots(raw, allowedRoots);
     List<Map<String, Object>> normalizedItems = sortItems(result, identityFields);
     Optional<Object> next = Optional.ofNullable(result.get("next_cursor"));
     result.put(ApiVocabulary.ITEMS, normalizedItems);
@@ -749,9 +752,8 @@ public final class ApiRegistry {
       Map<String, Object> normalizedList, List<String> identityFields) {
     List<Map<String, Object>> items =
         (List<Map<String, Object>>) (List<?>) normalizedList.get(ApiVocabulary.ITEMS);
-    return items.stream()
-        .sorted((left, right) -> compareIdentity(left, right, identityFields))
-        .toList();
+    items.sort((left, right) -> compareIdentity(left, right, identityFields));
+    return Collections.unmodifiableList(items);
   }
 
   private static int compareIdentity(
@@ -963,12 +965,26 @@ public final class ApiRegistry {
     return list.stream().map(String.class::cast).toList();
   }
 
-  static Set<String> requestedIncludes(Set<String> projectedFields) {
-    if (projectedFields == null) {
+  static Set<String> requestedIncludes(Map<String, Object> request) {
+    Object raw = request.get(ApiVocabulary.FIELDS);
+    if (!(raw instanceof List<?> fields))
+      return Set.of(ApiVocabulary.PARAMETERS, ApiVocabulary.LOCALS);
+    Set<String> includes = new LinkedHashSet<>();
+    for (Object field : fields) {
+      String path = String.valueOf(field);
+      if (path.startsWith(ApiVocabulary.PARAMETERS)) includes.add(ApiVocabulary.PARAMETERS);
+      if (path.startsWith("local_variables")) includes.add(ApiVocabulary.LOCALS);
+      if (path.startsWith("calls")) includes.add("calls");
+    }
+    return includes;
+  }
+
+  static Set<String> requestedIncludes(Set<String> selectedFields) {
+    if (selectedFields == null) {
       return Set.of(ApiVocabulary.PARAMETERS, ApiVocabulary.LOCALS);
     }
     Set<String> includes = new LinkedHashSet<>();
-    for (String path : projectedFields) {
+    for (String path : selectedFields) {
       if (path.startsWith(ApiVocabulary.PARAMETERS)) includes.add(ApiVocabulary.PARAMETERS);
       if (path.startsWith("local_variables")) includes.add(ApiVocabulary.LOCALS);
       if (path.startsWith("calls")) includes.add("calls");

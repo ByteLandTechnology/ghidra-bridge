@@ -60,19 +60,25 @@ final class DecompilationMethods implements ApiMethodProvider {
             "warnings",
             "elapsed_ms"),
         List.of(ApiVocabulary.ENTRY),
-        (request, projectedFields) ->
-            registry
-                .services()
-                .decompilationService()
-                .decompileFunction(
-                    text(selector(request), ApiVocabulary.ENTRY),
-                    switch (optionalText(request, "format", ApiVocabulary.TEXT)) {
-                      case "tokens" -> DecompilationResource.Format.TOKENS;
-                      case "document" -> DecompilationResource.Format.DOCUMENT;
-                      default -> DecompilationResource.Format.TEXT;
-                    },
-                    integer(request, "timeout_ms", DecompilationService.DEFAULT_TIMEOUT_MS),
-                    bool(request, "include_comments").orElse(false),
-                    projectedFields));
+        (request, projectedFields) -> {
+          String entry = text(selector(request), ApiVocabulary.ENTRY);
+          DecompilationResource.Format format =
+              switch (optionalText(request, "format", ApiVocabulary.TEXT)) {
+                case "tokens" -> DecompilationResource.Format.TOKENS;
+                case "document" -> DecompilationResource.Format.DOCUMENT;
+                default -> DecompilationResource.Format.TEXT;
+              };
+          int timeoutMs = integer(request, "timeout_ms", DecompilationService.DEFAULT_TIMEOUT_MS);
+          boolean includeComments = bool(request, "include_comments").orElse(false);
+          return projectedFields == null
+              ? registry
+                  .services()
+                  .decompilationService()
+                  .decompileFunction(entry, format, timeoutMs, includeComments)
+              : registry
+                  .services()
+                  .decompilationService()
+                  .decompileFunction(entry, format, timeoutMs, includeComments, projectedFields);
+        });
   }
 }

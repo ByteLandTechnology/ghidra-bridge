@@ -36,16 +36,24 @@ final class CodeUnitMethods implements ApiMethodProvider {
             ApiVocabulary.DATA_TYPE),
         List.of(ApiVocabulary.ADDRESS),
         (request, page, projectedFields) ->
-            registry
-                .services()
-                .listingService()
-                .listCodeUnits(
-                    addressScan(request),
-                    page.limit(),
-                    optionalText(filter(request), ApiVocabulary.KIND, "all"),
-                    "forward",
-                    page.cursor(),
-                    projectedFields));
+            projectedFields == null
+                ? registry
+                    .services()
+                    .listingService()
+                    .listCodeUnits(
+                        addressScan(request),
+                        page.limit(),
+                        optionalText(filter(request), ApiVocabulary.KIND, "all"),
+                        page.cursor())
+                : registry
+                    .services()
+                    .listingService()
+                    .listCodeUnits(
+                        addressScan(request),
+                        page.limit(),
+                        optionalText(filter(request), ApiVocabulary.KIND, "all"),
+                        page.cursor(),
+                        projectedFields));
     registry.scanList(
         "data_unit.list",
         ApiSchemaCatalog.scanListInput(WireSchema.object(Map.of())),
@@ -58,14 +66,18 @@ final class CodeUnitMethods implements ApiMethodProvider {
             ApiVocabulary.BYTES),
         List.of(ApiVocabulary.ADDRESS),
         (request, page, projectedFields) ->
-            registry
-                .services()
-                .listingService()
-                .listDataUnits(
-                    addressScan(request),
-                    page.limit(),
-                    "forward",
-                    page.cursor(),
-                    projectedFields));
+            projectedFields == null
+                ? registry
+                    .services()
+                    .listingService()
+                    .listDataUnits(addressScan(request), page.limit(), page.cursor())
+                : registry
+                    .services()
+                    .listingService()
+                    .listDataUnits(
+                        addressScan(request),
+                        page.limit(),
+                        page.cursor(),
+                        projectedFields));
   }
 }

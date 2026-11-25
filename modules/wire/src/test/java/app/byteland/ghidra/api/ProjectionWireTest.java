@@ -1,10 +1,11 @@
 package app.byteland.ghidra.api;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.ByteSequence;
@@ -48,6 +49,8 @@ import app.byteland.ghidra.service.symbol.SymbolResource;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.AbstractList;
 import java.util.ArrayList;
@@ -58,6 +61,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import jdk.jfr.Recording;
+import jdk.jfr.consumer.RecordedClass;
+import jdk.jfr.consumer.RecordedEvent;
+import jdk.jfr.consumer.RecordingFile;
 import org.junit.jupiter.api.Test;
 
 class ProjectionWireTest {
@@ -108,7 +115,7 @@ class ProjectionWireTest {
             new JsonValueCodec(outputSchema),
             ApiSchemaCatalog.functionFields(),
             List.of(ApiVocabulary.ENTRY),
-            (ApiMethod.ProjectedHandler<Object, Object>)
+            (ProjectedHandler<Object, Object>)
                 (request, projectedFields) -> {
                   capturedFields.set(projectedFields);
                   return Map.of(
@@ -123,6 +130,23 @@ class ProjectionWireTest {
     assertEquals(
         Map.of("entry", "0x00101000", "body", Map.of("start", "0x00101000"), "name", "main"),
         encoded);
+
+    Map<String, Object> flatInput =
+        ApiSchemaCatalog.input(ApiSchemaCatalog.props("fields", ApiRegistry.fieldsSchema()));
+    ApiMethod<Map<String, Object>, Object> fallbackMethod =
+        new ApiMethod<>(
+            "custom.get",
+            "Read a custom record.",
+            ApiMethod.MethodEffects.readOnlyMethod(),
+            new StrictObjectCodec(StrictObjectCodec.canonicalSchema(flatInput), flatInput),
+            new JsonValueCodec(
+                ApiSchemaCatalog.resourceSchema(Set.of("id", "name", "type"), List.of("id"))),
+            Set.of("id", "name", "type"),
+            List.of("id"),
+            req -> Map.of("id", "1", "name", "alpha", "type", "label"));
+    assertEquals(
+        Map.of("id", "1", "name", "alpha"),
+        fallbackMethod.invoke(Map.of("projection", Map.of("fields", List.of("name")))));
 
     ApiException nonArray =
         assertThrows(ApiException.class, () -> method.invokeDecoded(Map.of("fields", "name")));
@@ -186,27 +210,28 @@ class ProjectionWireTest {
         normalized);
 
     Map<String, Object> allowedOnly =
-        WireValues.resourceAllowed(resource, new LinkedHashSet<>(List.of("selected", "id")));
+        WireValues.resourceRestrictingRoots(
+            resource, WireValues.rootFields(new LinkedHashSet<>(List.of("selected", "id"))));
     assertEquals(
         List.of("id", "selected"),
         List.copyOf(allowedOnly.keySet()),
-        "resourceAllowed must preserve RecordComponent declaration order");
+        "resourceRestrictingRoots must preserve RecordComponent declaration order");
     assertEquals(Map.of("id", "42", "selected", "kept"), allowedOnly);
 
     GuardedResource listSafeResource =
         new GuardedResource("42", "kept", "boom", null, List.of());
     Map<String, Object> allowedWithDotRoot =
-        WireValues.resourceAllowed(
-            listSafeResource, new LinkedHashSet<>(List.of("list.safe", "selected", "id")));
+        WireValues.resourceRestrictingRoots(
+            listSafeResource,
+            WireValues.rootFields(new LinkedHashSet<>(List.of("list.safe", "selected", "id"))));
     assertEquals(
         List.of("id", "selected", "list"),
         List.copyOf(allowedWithDotRoot.keySet()),
-        "resourceAllowed with dot-path knownFields must preserve RecordComponent declaration order");
+        "resourceRestrictingRoots with dot-path roots must preserve declaration order");
     Map<String, Object> unprojectedList =
-        WireValues.list(
+        WireValues.listRestrictingRoots(
             new Page<>(List.of(listSafeResource), 1, 10, null, null),
-            null,
-            new LinkedHashSet<>(List.of("list.safe", "selected", "id")));
+            WireValues.rootFields(new LinkedHashSet<>(List.of("list.safe", "selected", "id"))));
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> normalizedItems =
         (List<Map<String, Object>>) unprojectedList.get("items");
@@ -217,11 +242,19 @@ class ProjectionWireTest {
   }
 
   @Test
-  void projectedSchemaValidationAcceptsPartialNestedObjectsAndRejectsInvalidValues() {
+  void projectedSchemaValidationAcceptsPartialNestedObjectsAndRejectsInvalidValues()
+      throws Exception {
     Map<String, Object> functionSchema =
         ApiSchemaCatalog.resourceSchema(
             ApiSchemaCatalog.functionFields(), List.of(ApiVocabulary.ENTRY));
     JsonValueCodec codec = new JsonValueCodec(functionSchema);
+
+    Set<String> cachedKey =
+        new LinkedHashSet<>(
+            List.of("entry", "parameters.name", "local_variables.storage"));
+    assertSame(
+        codec.projectedSchema(cachedKey),
+        codec.projectedSchema(new LinkedHashSet<>(cachedKey)));
 
     Map<String, Object> partialBody =
         Map.of("entry", "0x00101000", "body", Map.of("start", "0x00101000"));
@@ -236,12 +269,34 @@ class ProjectionWireTest {
             List.of(Map.of("name", "argc")),
             "local_variables",
             List.of(Map.of("storage", Map.of("kind", "register", "register", "RAX"))));
-    assertEquals(
-        partialParamsAndLocals,
-        codec.encode(
-            partialParamsAndLocals,
-            new LinkedHashSet<>(
-                List.of("entry", "parameters.name", "local_variables.storage"))));
+    Path recordingPath = Files.createTempFile("projected-schema-test-", ".jfr");
+    try {
+      try (Recording recording = new Recording()) {
+        recording.enable("jdk.JavaExceptionThrow").withoutThreshold();
+        recording.start();
+        for (int index = 0; index < 20; index++) {
+          assertSame(partialParamsAndLocals, codec.encode(partialParamsAndLocals, cachedKey));
+        }
+        recording.stop();
+        recording.dump(recordingPath);
+      }
+      long thrownApiExceptions = 0;
+      try (RecordingFile file = new RecordingFile(recordingPath)) {
+        while (file.hasMoreEvents()) {
+          RecordedEvent event = file.readEvent();
+          if ("jdk.JavaExceptionThrow".equals(event.getEventType().getName())) {
+            RecordedClass thrownClass = event.getValue("thrownClass");
+            if (thrownClass != null
+                && ApiException.class.getName().equals(thrownClass.getName())) {
+              thrownApiExceptions++;
+            }
+          }
+        }
+      }
+      assertEquals(0L, thrownApiExceptions);
+    } finally {
+      Files.deleteIfExists(recordingPath);
+    }
 
     // Unprojected extra property in a projected response is rejected.
     ApiException unexpectedField =
@@ -280,48 +335,70 @@ class ProjectionWireTest {
     // Scalar union branch is rejected when only a nested subfield is projected.
     Map<String, Object> dataTypeSchema =
         ApiSchemaCatalog.resourceSchema(ApiSchemaCatalog.dataTypeFields(), List.of("path"));
+    Map<String, Object> projectedDataTypeSchema =
+        WireSchema.project(
+            dataTypeSchema, new LinkedHashSet<>(List.of("path", "signature.return_type")));
     ApiException scalarUnionForSubfield =
         assertThrows(
             ApiException.class,
             () ->
-                WireSchema.validateProjected(
+                WireSchema.validate(
                     Map.of("path", "/Callback", "signature", "int Callback(void)"),
-                    dataTypeSchema,
-                    "/result",
-                    new LinkedHashSet<>(List.of("path", "signature.return_type"))));
+                    projectedDataTypeSchema,
+                    "/result"));
     assertEquals("invalid_union", scalarUnionForSubfield.error().code());
     assertEquals("/result/signature", scalarUnionForSubfield.error().target());
 
-    // Open and untyped schemas enforce projected child keys and reject scalars on subfield paths.
+    // Multi-object union schemas validate projected branches when discriminators are omitted.
+    Map<String, Object> typeEnvelopeSchema =
+        WireSchema.withDefinitions(
+            WireSchema.object(Map.of("data_type", WireSchema.dataTypeReference()), "data_type"));
+    Map<String, Object> projectedTypeSchema =
+        WireSchema.project(typeEnvelopeSchema, Set.of("data_type.name"));
+    assertDoesNotThrow(
+        () ->
+            WireSchema.validate(
+                Map.of("data_type", Map.of("name", "int")), projectedTypeSchema, "/result"));
+    assertDoesNotThrow(
+        () -> WireSchema.validate(Map.of("data_type", Map.of()), projectedTypeSchema, "/result"));
+    ApiException invalidBlankName =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("data_type", Map.of("name", "")), projectedTypeSchema, "/result"));
+    assertEquals("invalid_union", invalidBlankName.error().code());
+
+    // Open and untyped schemas reject unprojected child keys and reject scalars on subfield paths.
     Map<String, Object> openSchema =
         WireSchema.object(
             Map.of("id", WireSchema.string(), "meta", WireSchema.any(), "bag", WireSchema.openObject()),
             "id");
-    WireSchema.validateProjected(
+    WireSchema.validate(
         Map.of("id", "1", "meta", Map.of("tag", "v1"), "bag", Map.of("nested", 7)),
-        openSchema,
-        "/result",
-        new LinkedHashSet<>(List.of("id", "meta.tag", "bag.nested")));
+        WireSchema.project(
+            openSchema, new LinkedHashSet<>(List.of("id", "meta.tag", "bag.nested"))),
+        "/result");
     ApiException unprojectedOpenChild =
         assertThrows(
             ApiException.class,
             () ->
-                WireSchema.validateProjected(
+                WireSchema.validate(
                     Map.of("id", "1", "bag", Map.of("nested", 7, "extra", 8)),
-                    openSchema,
-                    "/result",
-                    new LinkedHashSet<>(List.of("id", "bag.nested"))));
+                    WireSchema.project(
+                        openSchema, new LinkedHashSet<>(List.of("id", "bag.nested"))),
+                    "/result"));
     assertEquals("unknown_field", unprojectedOpenChild.error().code());
     assertEquals("/result/bag/extra", unprojectedOpenChild.error().target());
     ApiException scalarOnAnySubfield =
         assertThrows(
             ApiException.class,
             () ->
-                WireSchema.validateProjected(
+                WireSchema.validate(
                     Map.of("id", "1", "meta", "raw-string"),
-                    openSchema,
-                    "/result",
-                    new LinkedHashSet<>(List.of("id", "meta.tag"))));
+                    WireSchema.project(
+                        openSchema, new LinkedHashSet<>(List.of("id", "meta.tag"))),
+                    "/result"));
     assertEquals("invalid_type", scalarOnAnySubfield.error().code());
     assertEquals("/result/meta", scalarOnAnySubfield.error().target());
 
@@ -333,11 +410,10 @@ class ProjectionWireTest {
                 "items", WireSchema.array(WireSchema.string(), 0, 10)),
             "id",
             "items");
-    WireSchema.validateProjected(
+    WireSchema.validate(
         Map.of("id", "bundle-1"),
-        resourceWithItems,
-        "/result",
-        new LinkedHashSet<>(List.of("id")));
+        WireSchema.project(resourceWithItems, new LinkedHashSet<>(List.of("id"))),
+        "/result");
   }
 
   @Test
@@ -346,7 +422,10 @@ class ProjectionWireTest {
       throws Exception {
     ApiRegistry registry = buildTestRegistry();
     List<ApiMethod<Map<String, Object>, Object>> projectedMethods =
-        registry.methods().stream().filter(m -> !m.fields().isEmpty() && isReadOnly(m)).toList();
+        registry.methodCatalog().methods().stream()
+            .map(descriptor -> registry.method(descriptor.name()))
+            .filter(m -> !m.fields().isEmpty() && isReadOnly(m))
+            .toList();
     assertEquals(28, projectedMethods.size(), "expected all 28 projection-enabled read/list methods");
 
     Map<String, Map<String, Object>> baseParams = sampleRequests();

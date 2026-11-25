@@ -30,35 +30,26 @@ public final class ListingServiceImpl implements ListingService {
 
   @Override
   public Page<CodeUnitResource> listCodeUnits(
-      AddressScanOptions scan, int limit, String kind, String direction, String cursor) {
-    return listCodeUnits(scan, limit, kind, direction, cursor, null);
+      AddressScanOptions scan, int limit, String kind, String cursor) {
+    return listCodeUnits(scan, limit, kind, cursor, null);
   }
 
   @Override
   public Page<CodeUnitResource> listCodeUnits(
-      AddressScanOptions scan,
-      int limit,
-      String kind,
-      String direction,
-      String cursor,
-      Set<String> fields) {
-    return codeUnitQueries.listCodeUnits(scan, limit, kind, direction, cursor, fields);
+      AddressScanOptions scan, int limit, String kind, String cursor, Set<String> fields) {
+    return codeUnitQueries.listCodeUnits(scan, limit, kind, cursor, fields);
   }
 
   @Override
   public Page<InstructionResource> listInstructions(
-      AddressScanOptions scan, int limit, String direction, String cursor) {
-    return listInstructions(scan, limit, direction, cursor, null);
+      AddressScanOptions scan, int limit, String cursor) {
+    return listInstructions(scan, limit, cursor, null);
   }
 
   @Override
   public Page<InstructionResource> listInstructions(
-      AddressScanOptions scan,
-      int limit,
-      String direction,
-      String cursor,
-      Set<String> fields) {
-    return instructionQueries.listInstructions(scan, limit, direction, cursor, fields);
+      AddressScanOptions scan, int limit, String cursor, Set<String> fields) {
+    return instructionQueries.listInstructions(scan, limit, cursor, fields);
   }
 
   @Override
@@ -72,19 +63,14 @@ public final class ListingServiceImpl implements ListingService {
   }
 
   @Override
-  public Page<DataUnitResource> listDataUnits(
-      AddressScanOptions scan, int limit, String direction, String cursor) {
-    return listDataUnits(scan, limit, direction, cursor, null);
+  public Page<DataUnitResource> listDataUnits(AddressScanOptions scan, int limit, String cursor) {
+    return listDataUnits(scan, limit, cursor, null);
   }
 
   @Override
   public Page<DataUnitResource> listDataUnits(
-      AddressScanOptions scan,
-      int limit,
-      String direction,
-      String cursor,
-      Set<String> fields) {
-    return dataQueries.listDataUnits(scan, limit, direction, cursor, fields);
+      AddressScanOptions scan, int limit, String cursor, Set<String> fields) {
+    return dataQueries.listDataUnits(scan, limit, cursor, fields);
   }
 
   @Override

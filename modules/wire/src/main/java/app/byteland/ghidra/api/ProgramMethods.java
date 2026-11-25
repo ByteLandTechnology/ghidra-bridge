@@ -22,7 +22,9 @@ final class ProgramMethods implements ApiMethodProvider {
         ApiSchemaCatalog.programFields(),
         List.of(ApiVocabulary.NAME),
         (request, projectedFields) ->
-            registry.services().programService().getProgram(projectedFields));
+            projectedFields == null
+                ? registry.services().programService().getProgram()
+                : registry.services().programService().getProgram(projectedFields));
     registry.writeResult(
         "program.save",
         MethodEffects.mutationWithoutTransaction(false, true),
@@ -38,7 +40,9 @@ final class ProgramMethods implements ApiMethodProvider {
         Set.of("language_id", "compiler_spec_id", "processor", "endian", "address_size"),
         List.of("language_id"),
         (request, projectedFields) ->
-            registry.services().programService().getLanguageInfo(projectedFields));
+            projectedFields == null
+                ? registry.services().programService().getLanguageInfo()
+                : registry.services().programService().getLanguageInfo(projectedFields));
     registry.list(
         "address_space.list",
         ApiSchemaCatalog.listInput(WireSchema.object(Map.of())),
@@ -51,9 +55,11 @@ final class ProgramMethods implements ApiMethodProvider {
             "default"),
         List.of(ApiVocabulary.NAME),
         (request, page, projectedFields) ->
-            registry
-                .services()
-                .programService()
-                .getAddressSpaces(page.limit(), page.cursor(), projectedFields));
+            projectedFields == null
+                ? registry.services().programService().getAddressSpaces(page.limit(), page.cursor())
+                : registry
+                    .services()
+                    .programService()
+                    .getAddressSpaces(page.limit(), page.cursor(), projectedFields));
   }
 }

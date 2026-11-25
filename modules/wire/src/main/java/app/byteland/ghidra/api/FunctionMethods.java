@@ -41,14 +41,16 @@ final class FunctionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(entrySelector),
         ApiSchemaCatalog.functionFields(),
         List.of(ApiVocabulary.ENTRY),
-        (request, projectedFields) ->
-            registry
-                .services()
-                .functionService()
-                .getFunction(
-                    text(selector(request), ApiVocabulary.ENTRY),
-                    requestedIncludes(projectedFields),
-                    projectedFields));
+        (request, projectedFields) -> {
+          String entry = text(selector(request), ApiVocabulary.ENTRY);
+          Set<String> includes = requestedIncludes(projectedFields);
+          return projectedFields == null
+              ? registry.services().functionService().getFunction(entry, includes)
+              : registry
+                  .services()
+                  .functionService()
+                  .getFunction(entry, includes, projectedFields);
+        });
     Map<String, Object> functionFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
@@ -69,22 +71,21 @@ final class FunctionMethods implements ApiMethodProvider {
         List.of(ApiVocabulary.ENTRY),
         (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
-          return registry
-              .services()
-              .functionService()
-              .listFunctions(
-                  new FunctionQuery(
-                      addressScan(request),
-                      page.limit(),
-                      page.cursor(),
-                      optionalText(filter, ApiVocabulary.NAME),
-                      optionalText(filter, ApiVocabulary.ENTRY),
-                      optionalText(filter, "contains"),
-                      bool(filter, "external").orElse(null),
-                      bool(filter, "thunk").orElse(null),
-                      requestedIncludes(projectedFields),
-                      projectedFields),
+          FunctionQuery query =
+              new FunctionQuery(
+                  addressScan(request),
+                  page.limit(),
+                  page.cursor(),
+                  optionalText(filter, ApiVocabulary.NAME),
+                  optionalText(filter, ApiVocabulary.ENTRY),
+                  optionalText(filter, "contains"),
+                  bool(filter, "external").orElse(null),
+                  bool(filter, "thunk").orElse(null),
+                  requestedIncludes(projectedFields),
                   projectedFields);
+          return projectedFields == null
+              ? registry.services().functionService().listFunctions(query)
+              : registry.services().functionService().listFunctions(query, projectedFields);
         });
     Map<String, Object> functionResource =
         WireSchema.object(
@@ -157,11 +158,16 @@ final class FunctionMethods implements ApiMethodProvider {
         (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
           String entry = text(filter, ApiVocabulary.ENTRY);
-          return "callers".equals(optionalText(filter, ApiVocabulary.DIRECTION, "callees"))
-              ? registry
-                  .services()
-                  .functionService()
-                  .getCallers(entry, page.limit(), page.cursor(), projectedFields)
+          if ("callers".equals(optionalText(filter, ApiVocabulary.DIRECTION, "callees"))) {
+            return projectedFields == null
+                ? registry.services().functionService().getCallers(entry, page.limit(), page.cursor())
+                : registry
+                    .services()
+                    .functionService()
+                    .getCallers(entry, page.limit(), page.cursor(), projectedFields);
+          }
+          return projectedFields == null
+              ? registry.services().functionService().getCallees(entry, page.limit(), page.cursor())
               : registry
                   .services()
                   .functionService()

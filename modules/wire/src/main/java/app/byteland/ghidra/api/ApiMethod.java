@@ -51,34 +51,29 @@ public record ApiMethod<Request, Response>(
   }
 
   public Object invokeDecoded(Request request) throws Exception {
-    Set<String> projectedFields = FieldProjection.validate(request, fields, identityFields);
-    Response response =
-        handler instanceof ProjectedHandler<Request, Response> projectedHandler
-            ? projectedHandler.handle(request, projectedFields)
-            : handler.handle(request);
-    if (projectedFields == null) {
+    Set<String> selected = FieldProjection.validate(request, fields, identityFields);
+    if (selected == null) {
+      Response response =
+          handler instanceof ProjectedHandler<Request, Response> projectedHandler
+              ? projectedHandler.handleProjected(request, null)
+              : handler.handle(request);
       return responseCodec.encode(response);
     }
-    if (handler instanceof ProjectedHandler<?, ?>) {
-      return responseCodec.encode(response, projectedFields);
+    Object projectedResponse =
+      handler instanceof ProjectedHandler<Request, Response> projectedHandler
+          ? projectedHandler.handleProjected(request, selected)
+          : FieldProjection.projectFallback(handler.handle(request), selected);
+    if (responseCodec instanceof JsonValueCodec valueCodec) {
+      return valueCodec.encode(projectedResponse, selected);
     }
-    Object encoded = responseCodec.encode(response);
-    return ProjectionNode.fromFields(projectedFields).projectResponse(encoded);
+    @SuppressWarnings("unchecked")
+    Response typed = (Response) projectedResponse;
+    return responseCodec.encode(typed);
   }
 
   @FunctionalInterface
   public interface Handler<Request, Response> {
     Response handle(Request request) throws Exception;
-  }
-
-  @FunctionalInterface
-  interface ProjectedHandler<Request, Response> extends Handler<Request, Response> {
-    Response handle(Request request, Set<String> projectedFields) throws Exception;
-
-    @Override
-    default Response handle(Request request) throws Exception {
-      return handle(request, null);
-    }
   }
 
   /**
@@ -145,9 +140,16 @@ public record ApiMethod<Request, Response>(
         throw ApiException.badRequest(
             "invalid_fields", "/projection/fields must be an array", "/projection/fields");
       }
-      Set<String> selected = new java.util.LinkedHashSet<>(identityFields);
-      Set<String> explicitlyRequested = new java.util.LinkedHashSet<>();
-      for (int index = 0; index < requested.size(); index++) {
+      int size = requested.size();
+      if (knownFields.isEmpty() && size == 0) {
+        throw ApiException.badRequest(
+            "invalid_fields", "/projection/fields is not supported", "/projection/fields");
+      }
+      Set<String> selected =
+          java.util.LinkedHashSet.newLinkedHashSet(identityFields.size() + size);
+      selected.addAll(identityFields);
+      Set<String> explicitlyRequested = java.util.LinkedHashSet.newLinkedHashSet(size);
+      for (int index = 0; index < size; index++) {
         Object item = requested.get(index);
         String target = "/projection/fields/" + index;
         if (!(item instanceof String path)
@@ -167,9 +169,43 @@ public record ApiMethod<Request, Response>(
       return java.util.Collections.unmodifiableSet(selected);
     }
 
+    static Object projectFallback(Object response, Set<String> selected) {
+      FieldSelection selection = FieldSelection.from(selected);
+      if (response instanceof Map<?, ?> map
+          && map.get(ApiVocabulary.ITEMS) instanceof List<?> items
+          && !selection.containsKey(ApiVocabulary.ITEMS)) {
+        Map<String, Object> copy = java.util.LinkedHashMap.newLinkedHashMap(map.size());
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+          copy.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        copy.put(ApiVocabulary.ITEMS, WireValues.normalize(items, selection));
+        return copy;
+      }
+      return WireValues.normalize(response, selection);
+    }
+
     private static boolean hasNumericSegment(String path) {
-      for (String segment : path.split("\\.", -1)) {
-        if (segment.isEmpty() || segment.chars().allMatch(Character::isDigit)) return true;
+      int start = 0;
+      while (start <= path.length()) {
+        int dot = path.indexOf('.', start);
+        int end = dot < 0 ? path.length() : dot;
+        if (end == start) {
+          return true;
+        }
+        boolean allDigits = true;
+        for (int index = start; index < end; index++) {
+          if (!Character.isDigit(path.charAt(index))) {
+            allDigits = false;
+            break;
+          }
+        }
+        if (allDigits) {
+          return true;
+        }
+        if (dot < 0) {
+          break;
+        }
+        start = dot + 1;
       }
       return false;
     }

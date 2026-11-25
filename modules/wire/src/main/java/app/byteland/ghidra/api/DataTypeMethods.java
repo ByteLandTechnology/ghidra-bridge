@@ -40,25 +40,26 @@ final class DataTypeMethods implements ApiMethodProvider {
             WireSchema.object(ApiSchemaCatalog.props(ApiVocabulary.PATH, WireSchema.string()))),
         Set.of(ApiVocabulary.PATH, ApiVocabulary.NAME, "category_count", "data_type_count"),
         List.of(ApiVocabulary.PATH),
-        (request, page, projectedFields) ->
-            registry
-                .services()
-                .dataTypeService()
-                .listCategories(
-                    optionalText(filter(request), ApiVocabulary.PATH, "/"),
-                    page.limit(),
-                    page.cursor(),
-                    projectedFields));
+        (request, page, projectedFields) -> {
+          String path = optionalText(filter(request), ApiVocabulary.PATH, "/");
+          return projectedFields == null
+              ? registry.services().dataTypeService().listCategories(path, page.limit(), page.cursor())
+              : registry
+                  .services()
+                  .dataTypeService()
+                  .listCategories(path, page.limit(), page.cursor(), projectedFields);
+        });
     registry.read(
         "data_type.get",
         ApiSchemaCatalog.selectorInput(pathSelector),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
-        (request, projectedFields) ->
-            registry
-                .services()
-                .dataTypeService()
-                .getDataType(text(selector(request), ApiVocabulary.PATH), projectedFields));
+        (request, projectedFields) -> {
+          String path = text(selector(request), ApiVocabulary.PATH);
+          return projectedFields == null
+              ? registry.services().dataTypeService().getDataType(path)
+              : registry.services().dataTypeService().getDataType(path, projectedFields);
+        });
     registry.list(
         "data_type.list",
         ApiSchemaCatalog.listInput(
@@ -74,16 +75,19 @@ final class DataTypeMethods implements ApiMethodProvider {
         List.of(ApiVocabulary.PATH),
         (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
-          return registry
-              .services()
-              .dataTypeService()
-              .searchDataTypes(
-                  optionalText(filter, "query", ""),
-                  optionalText(filter, ApiVocabulary.CATEGORY_PATH),
-                  optionalText(filter, ApiVocabulary.KIND),
-                  page.limit(),
-                  page.cursor(),
-                  projectedFields);
+          String query = optionalText(filter, "query", "");
+          String categoryPath = optionalText(filter, ApiVocabulary.CATEGORY_PATH);
+          String kind = optionalText(filter, ApiVocabulary.KIND);
+          return projectedFields == null
+              ? registry
+                  .services()
+                  .dataTypeService()
+                  .searchDataTypes(query, categoryPath, kind, page.limit(), page.cursor())
+              : registry
+                  .services()
+                  .dataTypeService()
+                  .searchDataTypes(
+                      query, categoryPath, kind, page.limit(), page.cursor(), projectedFields);
         });
     registry.writeResource(
         "data_type.create",
@@ -187,18 +191,7 @@ final class DataTypeMethods implements ApiMethodProvider {
     String kind = text(patch, ApiVocabulary.KIND);
     DataTypePatch typedPatch =
         switch (kind) {
-          case "struct" ->
-              new DataTypePatch.Struct(
-                  convertedDataTypeFields(patch.get("add_fields"), "/patch/add_fields"),
-                  convertedDataTypeFields(patch.get("rename_fields"), "/patch/rename_fields"),
-                  convertedDataTypeFields(patch.get("update_fields"), "/patch/update_fields"),
-                  convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields"));
-          case "union" ->
-              new DataTypePatch.Union(
-                  convertedDataTypeFields(patch.get("add_fields"), "/patch/add_fields"),
-                  convertedDataTypeFields(patch.get("rename_fields"), "/patch/rename_fields"),
-                  convertedDataTypeFields(patch.get("update_fields"), "/patch/update_fields"),
-                  convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields"));
+          case "struct", "union" -> compositePatch(kind, patch);
           case "enum" ->
               new DataTypePatch.EnumPatch(
                   convertedEnumValues(patch.get("add_values")),
@@ -208,6 +201,20 @@ final class DataTypeMethods implements ApiMethodProvider {
           default -> throw new AssertionError(kind);
         };
     registry.services().dataTypeService().patchDataType(path, typedPatch);
+  }
+
+  private DataTypePatch compositePatch(String kind, Map<String, Object> patch) {
+    List<DataTypePatch.CompositeField> addFields =
+        convertedDataTypeFields(patch.get("add_fields"), "/patch/add_fields");
+    List<DataTypePatch.CompositeField> renameFields =
+        convertedDataTypeFields(patch.get("rename_fields"), "/patch/rename_fields");
+    List<DataTypePatch.CompositeField> updateFields =
+        convertedDataTypeFields(patch.get("update_fields"), "/patch/update_fields");
+    List<DataTypePatch.CompositeField> removeFields =
+        convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields");
+    return "struct".equals(kind)
+        ? new DataTypePatch.Struct(addFields, renameFields, updateFields, removeFields)
+        : new DataTypePatch.Union(addFields, renameFields, updateFields, removeFields);
   }
 
   private List<DataTypePatch.CompositeField> convertedDataTypeFields(Object raw, String target) {

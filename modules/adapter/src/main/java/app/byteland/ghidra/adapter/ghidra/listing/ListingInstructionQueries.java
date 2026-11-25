@@ -21,35 +21,30 @@ final class ListingInstructionQueries {
   }
 
   Page<InstructionResource> listInstructions(
-      AddressScanOptions options, int limit, String direction, String cursorRaw) {
-    return listInstructions(options, limit, direction, cursorRaw, null);
+      AddressScanOptions options, int limit, String cursorRaw) {
+    return listInstructions(options, limit, cursorRaw, null);
   }
 
   Page<InstructionResource> listInstructions(
-      AddressScanOptions options,
-      int limit,
-      String direction,
-      String cursorRaw,
-      Set<String> fields) {
+      AddressScanOptions options, int limit, String cursorRaw, Set<String> fields) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
-    boolean forward = !"backward".equalsIgnoreCase(direction);
-    Address iterationStart = iterationStart(range, cursor, forward);
+    Address iterationStart = iterationStart(range, cursor);
 
     BoundedAddressScan<InstructionResource> scan =
         BoundedAddressScan.start(
             normalizedLimit, options.timeoutMs(), range.startText(), range.endText());
-    if (outOfRange(iterationStart, range, forward)) {
+    if (range.afterEnd(iterationStart)) {
       return scan.finish();
     }
     InstructionIterator instructions =
-        context.currentProgram().getListing().getInstructions(iterationStart, forward);
+        context.currentProgram().getListing().getInstructions(iterationStart, true);
     while (instructions.hasNext()) {
       Instruction instruction = instructions.next();
       Address address = instruction.getAddress();
-      if (atOrBeforeCursor(address, cursor, forward)) continue;
-      if (outOfRange(address, range, forward)) break;
+      if (atOrBeforeCursor(address, cursor)) continue;
+      if (range.afterEnd(address)) break;
       String canonical = AddressUtil.canonicalAddress(address);
       scan.visit(
           canonical, canonical, ListingDescriptions.toInstructionItem(instruction, context, fields));
@@ -76,19 +71,11 @@ final class ListingInstructionQueries {
     return context.parseAddress(rawAddress);
   }
 
-  static Address iterationStart(AddressScanRanges.Resolved range, Address cursor, boolean forward) {
-    if (forward) {
-      return cursor != null && cursor.compareTo(range.start()) > 0 ? cursor : range.start();
-    }
-    return cursor != null && cursor.compareTo(range.end()) < 0 ? cursor : range.end();
+  static Address iterationStart(AddressScanRanges.Resolved range, Address cursor) {
+    return cursor != null && cursor.compareTo(range.start()) > 0 ? cursor : range.start();
   }
 
-  static boolean atOrBeforeCursor(Address address, Address cursor, boolean forward) {
-    if (cursor == null) return false;
-    return forward ? address.compareTo(cursor) <= 0 : address.compareTo(cursor) >= 0;
-  }
-
-  static boolean outOfRange(Address address, AddressScanRanges.Resolved range, boolean forward) {
-    return forward ? range.afterEnd(address) : address.compareTo(range.start()) < 0;
+  static boolean atOrBeforeCursor(Address address, Address cursor) {
+    return cursor != null && address.compareTo(cursor) <= 0;
   }
 }

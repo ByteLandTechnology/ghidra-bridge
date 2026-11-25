@@ -20,35 +20,30 @@ final class ListingDataQueries {
   }
 
   Page<DataUnitResource> listDataUnits(
-      AddressScanOptions options, int limit, String direction, String cursorRaw) {
-    return listDataUnits(options, limit, direction, cursorRaw, null);
+      AddressScanOptions options, int limit, String cursorRaw) {
+    return listDataUnits(options, limit, cursorRaw, null);
   }
 
   Page<DataUnitResource> listDataUnits(
-      AddressScanOptions options,
-      int limit,
-      String direction,
-      String cursorRaw,
-      Set<String> fields) {
+      AddressScanOptions options, int limit, String cursorRaw, Set<String> fields) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
-    boolean forward = !"backward".equalsIgnoreCase(direction);
-    Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor, forward);
+    Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor);
 
     BoundedAddressScan<DataUnitResource> scan =
         BoundedAddressScan.start(
             normalizedLimit, options.timeoutMs(), range.startText(), range.endText());
-    if (ListingInstructionQueries.outOfRange(iterationStart, range, forward)) {
+    if (range.afterEnd(iterationStart)) {
       return scan.finish();
     }
     DataIterator dataUnits =
-        context.currentProgram().getListing().getDefinedData(iterationStart, forward);
+        context.currentProgram().getListing().getDefinedData(iterationStart, true);
     while (dataUnits.hasNext()) {
       Data data = dataUnits.next();
       Address address = data.getAddress();
-      if (ListingInstructionQueries.atOrBeforeCursor(address, cursor, forward)) continue;
-      if (ListingInstructionQueries.outOfRange(address, range, forward)) break;
+      if (ListingInstructionQueries.atOrBeforeCursor(address, cursor)) continue;
+      if (range.afterEnd(address)) break;
       String canonical = AddressUtil.canonicalAddress(address);
       scan.visit(canonical, canonical, ListingDescriptions.toDataItem(data, context, fields));
       if (scan.stopped()) break;
