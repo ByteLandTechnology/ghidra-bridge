@@ -29,8 +29,10 @@ final class UnionMutations {
         union.add(
             dataType,
             DataTypeMutationSupport.fieldLength(dataType, field.length(), null),
-            field.name() == null ? "field" : field.name(),
-            null);
+            field.name() == null
+                ? "field"
+                : DataTypeMutationSupport.normalizedFieldName(field.name()),
+            DataTypeMutationSupport.normalizedComment(field.comment()));
       }
     }
   }

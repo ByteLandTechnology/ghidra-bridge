@@ -1,10 +1,12 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.dataTypePath;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.functionSignature;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
+import static app.byteland.ghidra.api.ApiRegistry.nullableText;
 import static app.byteland.ghidra.api.ApiRegistry.objectAt;
 import static app.byteland.ghidra.api.ApiRegistry.optionalInteger;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
@@ -121,12 +123,12 @@ final class DataTypeMethods implements ApiMethodProvider {
         MethodEffects.mutation(true, true),
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
-                ApiVocabulary.RESOURCE, ApiSchemaCatalog.functionDataTypeResourceSchema()),
+                ApiVocabulary.RESOURCE, ApiSchemaCatalog.dataTypeResourceSchema()),
             ApiVocabulary.RESOURCE),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
         request -> {
-          upsertFunctionDataType(request);
+          upsertDataType(request);
           return registry.services().dataTypeService().getDataType(dataTypePath(resource(request)));
         });
     registry.writeResult(
@@ -156,7 +158,7 @@ final class DataTypeMethods implements ApiMethodProvider {
     createDataTypeResource(resource);
   }
 
-  private void upsertFunctionDataType(Map<String, Object> request) {
+  private void upsertDataType(Map<String, Object> request) {
     createDataTypeResource(resource(request));
   }
 
@@ -164,9 +166,14 @@ final class DataTypeMethods implements ApiMethodProvider {
     String kind = text(resource, ApiVocabulary.KIND);
     FunctionSignature signature = null;
     if (ApiVocabulary.FUNCTION.equals(kind)) {
-      signature = functionSignature(resource.get("signature"), "/resource/signature");
+      signature = functionSignature(resource.get(ApiVocabulary.SIGNATURE), "/resource/signature");
     }
-    DataTypeReference baseType = dataType(resource.get("base_type"), "/resource/base_type");
+    DataTypeReference baseType =
+        dataType(resource.get(ApiVocabulary.BASE_TYPE), "/resource/base_type");
+    List<DataTypePatch.CompositeField> fields =
+        convertedDataTypeFields(resource.get(ApiVocabulary.FIELDS), "/resource/fields");
+    List<DataTypePatch.EnumValue> values =
+        convertedEnumValues(resource.get(ApiVocabulary.VALUES), "/resource/values");
     registry
         .services()
         .dataTypeService()
@@ -175,7 +182,9 @@ final class DataTypeMethods implements ApiMethodProvider {
             DataTypeResource.Kind.valueOf(kind.toUpperCase(java.util.Locale.ROOT)),
             text(resource, ApiVocabulary.NAME),
             baseType,
-            integer(resource, "size", 0),
+            integer(resource, ApiVocabulary.SIZE, 0),
+            fields,
+            values,
             signature);
   }
 
@@ -190,7 +199,8 @@ final class DataTypeMethods implements ApiMethodProvider {
                   convertedDataTypeFields(patch.get("add_fields"), "/patch/add_fields"),
                   convertedDataTypeFields(patch.get("rename_fields"), "/patch/rename_fields"),
                   convertedDataTypeFields(patch.get("update_fields"), "/patch/update_fields"),
-                  convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields"));
+                  convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields"),
+                  bool(patch, "preserve_offsets").orElse(true));
           case "union" ->
               new DataTypePatch.Union(
                   convertedDataTypeFields(patch.get("add_fields"), "/patch/add_fields"),
@@ -199,10 +209,13 @@ final class DataTypeMethods implements ApiMethodProvider {
                   convertedDataTypeFields(patch.get("remove_fields"), "/patch/remove_fields"));
           case "enum" ->
               new DataTypePatch.EnumPatch(
-                  convertedEnumValues(patch.get("add_values")),
-                  convertedEnumValues(patch.get("remove_values")),
-                  convertedEnumValues(patch.get("rename_values")),
-                  convertedEnumValues(patch.get("update_values")));
+                  convertedEnumValues(patch.get("add_values"), "/patch/add_values"),
+                  convertedEnumValues(patch.get("remove_values"), "/patch/remove_values"),
+                  convertedEnumValues(patch.get("rename_values"), "/patch/rename_values"),
+                  convertedEnumValues(patch.get("update_values"), "/patch/update_values"));
+          case "typedef" ->
+              new DataTypePatch.Typedef(
+                  dataType(patch.get(ApiVocabulary.BASE_TYPE), "/patch/base_type"));
           default -> throw new AssertionError(kind);
         };
     registry.services().dataTypeService().patchDataType(path, typedPatch);
@@ -219,21 +232,25 @@ final class DataTypeMethods implements ApiMethodProvider {
               optionalText(field, "new_name"),
               optionalInteger(field, "offset"),
               optionalInteger(field, ApiVocabulary.LENGTH),
-              dataType(field.get(ApiVocabulary.DATA_TYPE), target + "/" + index + "/data_type")));
+              dataType(field.get(ApiVocabulary.DATA_TYPE), target + "/" + index + "/data_type"),
+              nullableText(field, ApiVocabulary.COMMENT),
+              field.containsKey(ApiVocabulary.COMMENT)));
     }
     return List.copyOf(result);
   }
 
-  private List<DataTypePatch.EnumValue> convertedEnumValues(Object raw) {
+  private List<DataTypePatch.EnumValue> convertedEnumValues(Object raw, String target) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.EnumValue> result = new ArrayList<>();
     for (int index = 0; index < list.size(); index++) {
-      Map<String, Object> value = objectAt(list.get(index), "/patch/values/" + index);
+      Map<String, Object> value = objectAt(list.get(index), target + "/" + index);
       result.add(
           new DataTypePatch.EnumValue(
               optionalText(value, ApiVocabulary.NAME),
               optionalText(value, "new_name"),
-              value.get("value") instanceof Number number ? number.longValue() : null));
+              value.get("value") instanceof Number number ? number.longValue() : null,
+              nullableText(value, ApiVocabulary.COMMENT),
+              value.containsKey(ApiVocabulary.COMMENT)));
     }
     return List.copyOf(result);
   }

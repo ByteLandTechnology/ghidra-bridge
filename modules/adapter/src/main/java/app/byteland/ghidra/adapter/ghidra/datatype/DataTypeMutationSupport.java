@@ -1,11 +1,14 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
+import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import ghidra.program.model.data.Array;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
+import ghidra.program.model.data.Structure;
 import ghidra.util.exception.DuplicateNameException;
+import java.util.Objects;
 import java.util.function.Function;
 
 final class DataTypeMutationSupport {
@@ -41,6 +44,57 @@ final class DataTypeMutationSupport {
     return dataType.getLength() > 0 ? dataType.getLength() : 1;
   }
 
+  static String normalizedComment(String comment) {
+    return comment == null || comment.isBlank() ? null : comment;
+  }
+
+  static String normalizedFieldName(String name) {
+    return name == null || name.isBlank() ? null : name;
+  }
+
+  static void ensureNoDefinedOverlap(
+      Structure structure,
+      int offset,
+      int length,
+      DataTypeComponent ignored,
+      String validationTarget) {
+    if (offset < 0) {
+      throw new DataTypeMutationValidationException(
+          validationTarget, "field offset must be non-negative: " + offset);
+    }
+    if (length <= 0) {
+      throw new DataTypeMutationValidationException(validationTarget, "length must be positive");
+    }
+    long endExclusive = (long) offset + length;
+    if (endExclusive > Integer.MAX_VALUE) {
+      throw new DataTypeMutationValidationException(
+          validationTarget, "field layout exceeds maximum structure size");
+    }
+    for (DataTypeComponent existing : structure.getDefinedComponents()) {
+      if (existing == ignored || existing.isUndefined()) continue;
+      int existingStart = existing.getOffset();
+      long existingEnd = (long) existingStart + Math.max(existing.getLength(), 1);
+      if (existingStart < endExclusive && offset < existingEnd) {
+        throw new DataTypeMutationValidationException(
+            validationTarget,
+            "field at offset 0x"
+                + Integer.toHexString(offset)
+                + " (length "
+                + length
+                + ") overlaps defined field at offset 0x"
+                + Integer.toHexString(existingStart));
+      }
+    }
+  }
+
+  static void growToFit(Structure structure, int requiredLength) {
+    if (structure.isPackingEnabled() || requiredLength <= 0) return;
+    int currentLength = structure.isZeroLength() ? 0 : structure.getLength();
+    if (requiredLength > currentLength) {
+      structure.growStructure(requiredLength - currentLength);
+    }
+  }
+
   private static void requireCompositeValueType(DataType dataType, String target) {
     if (GhidraDataTypeReferences.isBareFunctionDefinition(dataType)) {
       throw new IllegalArgumentException(
@@ -49,7 +103,7 @@ final class DataTypeMutationSupport {
   }
 
   static void applyMetadataPatch(DataTypeComponent component, String newName, String newComment) {
-    if (newName != null && !newName.equals(component.getFieldName())) {
+    if (!Objects.equals(component.getFieldName(), newName)) {
       try {
         component.setFieldName(newName);
       } catch (Exception exception) {
@@ -60,7 +114,7 @@ final class DataTypeMutationSupport {
         throw new IllegalStateException("cannot rename data type field", exception);
       }
     }
-    if (!String.valueOf(component.getComment()).equals(String.valueOf(newComment))) {
+    if (!Objects.equals(component.getComment(), newComment)) {
       component.setComment(newComment);
     }
   }

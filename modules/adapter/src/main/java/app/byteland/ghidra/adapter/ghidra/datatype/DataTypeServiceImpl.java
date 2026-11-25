@@ -12,7 +12,9 @@ import app.byteland.ghidra.service.datatype.FunctionSignature;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.Structure;
+import ghidra.program.model.data.TypeDef;
 import ghidra.program.model.data.Union;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 public final class DataTypeServiceImpl implements DataTypeService {
@@ -48,6 +50,19 @@ public final class DataTypeServiceImpl implements DataTypeService {
       DataTypeReference baseType,
       int size,
       FunctionSignature signature) {
+    createDataType(categoryPath, kind, name, baseType, size, null, null, signature);
+  }
+
+  @Override
+  public void createDataType(
+      String categoryPath,
+      DataTypeResource.Kind kind,
+      String name,
+      DataTypeReference baseType,
+      int size,
+      List<DataTypePatch.CompositeField> fields,
+      List<DataTypePatch.EnumValue> values,
+      FunctionSignature signature) {
     DataTypeMutations.createDataType(
         dataTypeManager(),
         categoryPath,
@@ -55,6 +70,8 @@ public final class DataTypeServiceImpl implements DataTypeService {
         name,
         baseType,
         size,
+        fields,
+        values,
         signature,
         this::resolveDataTypeReference);
   }
@@ -80,6 +97,16 @@ public final class DataTypeServiceImpl implements DataTypeService {
           throw new IllegalArgumentException("not an enum: " + dataType.getName());
         }
         EnumMutations.edit(enumType, enumPatch);
+      }
+      case DataTypePatch.Typedef typedefPatch -> {
+        if (!(dataType instanceof TypeDef existingTypedef)) {
+          throw new IllegalArgumentException("not a typedef: " + dataType.getName());
+        }
+        DataTypeMutations.replaceTypedef(
+            dataTypeManager(),
+            existingTypedef,
+            typedefPatch.baseType(),
+            this::resolveDataTypeReference);
       }
     }
   }

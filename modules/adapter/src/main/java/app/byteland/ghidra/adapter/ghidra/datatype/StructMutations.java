@@ -17,44 +17,83 @@ final class StructMutations {
       Structure structure,
       DataTypePatch.Struct patch,
       Function<DataTypeReference, DataType> resolver) {
-    StructureAccess access = new StructureAccess(structure);
-    remove(structure, patch.removeFields());
+    boolean preserveOffsets = patch.preserveOffsets();
+    StructureAccess access = new StructureAccess(structure, preserveOffsets);
+    remove(structure, patch.removeFields(), preserveOffsets);
     CompositeFieldMutations.renameFields(access, patch.renameFields(), resolver);
     CompositeFieldMutations.updateFields(access, patch.updateFields(), resolver);
     if (patch.addFields() != null) {
-      for (DataTypePatch.CompositeField field : patch.addFields()) add(structure, field, resolver);
+      for (DataTypePatch.CompositeField field : patch.addFields()) {
+        add(structure, field, preserveOffsets, resolver);
+      }
     }
   }
 
   private static void add(
       Structure structure,
       DataTypePatch.CompositeField field,
+      boolean preserveOffsets,
       Function<DataTypeReference, DataType> resolver) {
-    String name = field.name() == null ? "field" : field.name();
+    String name =
+        field.name() == null
+            ? "field"
+            : DataTypeMutationSupport.normalizedFieldName(field.name());
+    String comment = DataTypeMutationSupport.normalizedComment(field.comment());
     DataType dataType = DataTypeMutationSupport.resolveFieldDataType(field.dataType(), resolver);
     int length = DataTypeMutationSupport.fieldLength(dataType, field.length(), null);
-    if (field.offset() == null) structure.add(dataType, length, name, null);
-    else structure.insertAtOffset(field.offset(), dataType, length, name, null);
+    if (field.offset() == null) {
+      structure.add(dataType, length, name, comment);
+    } else if (preserveOffsets && !structure.isPackingEnabled()) {
+      int offset = field.offset();
+      DataTypeMutationSupport.ensureNoDefinedOverlap(
+          structure, offset, length, null, "patch.addFields");
+      DataTypeMutationSupport.growToFit(structure, offset + length);
+      structure.replaceAtOffset(offset, dataType, length, name, comment);
+    } else {
+      structure.insertAtOffset(field.offset(), dataType, length, name, comment);
+    }
   }
 
-  private static void remove(Structure structure, List<DataTypePatch.CompositeField> selectors) {
+  private static void remove(
+      Structure structure,
+      List<DataTypePatch.CompositeField> selectors,
+      boolean preserveOffsets) {
     if (selectors == null) return;
     List<Integer> ordinals = new ArrayList<>();
     for (DataTypePatch.CompositeField selector : selectors) {
-      ordinals.addAll(resolveOrdinals(structure, selector));
+      ordinals.addAll(resolveOrdinals(structure, selector, preserveOffsets));
     }
     ordinals = ordinals.stream().distinct().sorted(Collections.reverseOrder()).toList();
     for (int ordinal : ordinals) {
-      if (ordinal >= 0 && ordinal < structure.getNumComponents()) structure.delete(ordinal);
+      if (ordinal < 0 || ordinal >= structure.getNumComponents()) continue;
+      if (preserveOffsets) {
+        DataTypeComponent component = structure.getComponent(ordinal);
+        if (!component.isUndefined() || structure.isPackingEnabled()) {
+          structure.clearComponent(ordinal);
+        }
+      } else {
+        structure.delete(ordinal);
+      }
     }
   }
 
   private static List<Integer> resolveOrdinals(
-      Structure structure, DataTypePatch.CompositeField selector) {
+      Structure structure, DataTypePatch.CompositeField selector, boolean preserveOffsets) {
     if (selector.offset() != null) {
-      DataTypeComponent component = structure.getDefinedComponentAtOrAfterOffset(selector.offset());
-      return component != null && component.getOffset() == selector.offset()
-          ? List.of(component.getOrdinal())
+      int offset = selector.offset();
+      if (preserveOffsets) {
+        DataTypeComponent component = structure.getComponentAt(offset);
+        return component != null && component.getOffset() == offset
+            ? List.of(component.getOrdinal())
+            : List.of();
+      }
+      DataTypeComponent defined = structure.getDefinedComponentAtOrAfterOffset(offset);
+      if (defined != null && defined.getOffset() == offset) {
+        return List.of(defined.getOrdinal());
+      }
+      DataTypeComponent slot = structure.getComponentAt(offset);
+      return slot != null && slot.isUndefined() && slot.getOffset() == offset
+          ? List.of(slot.getOrdinal())
           : List.of();
     }
     if (selector.name() == null) {
@@ -68,7 +107,7 @@ final class StructMutations {
     return matches;
   }
 
-  private record StructureAccess(Structure structure)
+  private record StructureAccess(Structure structure, boolean preserveOffsets)
       implements CompositeFieldMutations.CompositeAccess {
     @Override
     public CompositeFieldMutations.CompositeKind kind() {
@@ -77,7 +116,7 @@ final class StructMutations {
 
     @Override
     public List<Integer> locate(DataTypePatch.CompositeField selector) {
-      return resolveOrdinals(structure, selector);
+      return resolveOrdinals(structure, selector, preserveOffsets);
     }
 
     @Override
@@ -93,12 +132,25 @@ final class StructMutations {
     @Override
     public void replace(
         DataTypeComponent component, CompositeFieldMutations.Replacement replacement) {
-      structure.replace(
-          component.getOrdinal(),
-          replacement.dataType(),
-          replacement.length(),
-          replacement.name(),
-          replacement.comment());
+      if (preserveOffsets && !structure.isPackingEnabled()) {
+        int offset = component.getOffset();
+        DataTypeMutationSupport.ensureNoDefinedOverlap(
+            structure, offset, replacement.length(), component, "patch.updateFields");
+        DataTypeMutationSupport.growToFit(structure, offset + replacement.length());
+        structure.replaceAtOffset(
+            offset,
+            replacement.dataType(),
+            replacement.length(),
+            replacement.name(),
+            replacement.comment());
+      } else {
+        structure.replace(
+            component.getOrdinal(),
+            replacement.dataType(),
+            replacement.length(),
+            replacement.name(),
+            replacement.comment());
+      }
     }
   }
 }

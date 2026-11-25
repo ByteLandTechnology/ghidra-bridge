@@ -1,6 +1,7 @@
 package app.byteland.ghidra.service.datatype;
 
 import app.byteland.ghidra.service.Page;
+import java.util.List;
 
 /**
  * Manages data types, structures, and category hierarchies.
@@ -38,12 +39,11 @@ public interface DataTypeService {
       String query, String categoryPath, String kind, int limit, String cursor);
 
   /**
-   * Creates a data type in the program data manager.
-   * The operation replaces a function definition at the same path.
+   * Creates or replaces a data type in the program data manager.
    *
    * @param categoryPath destination category folder
    * @param kind data type classification kind
-   * @param name name of the new data type
+   * @param name name of the data type
    * @param baseType referenced base type
    * @param size initial struct length or enum byte width. A value of 0 or less selects the default
    * @param signature optional function signature definition
@@ -55,6 +55,30 @@ public interface DataTypeService {
       DataTypeReference baseType,
       int size,
       FunctionSignature signature);
+
+  /**
+   * Creates or replaces a data type with optional member definitions in the program data manager.
+   *
+   * @param categoryPath destination category folder
+   * @param kind data type classification kind
+   * @param name name of the data type
+   * @param baseType referenced base type
+   * @param size initial struct length or enum byte width. A value of 0 or less selects the default
+   * @param fields optional composite member definitions for struct or union
+   * @param values optional constant definitions for enum
+   * @param signature optional function signature definition
+   */
+  default void createDataType(
+      String categoryPath,
+      DataTypeResource.Kind kind,
+      String name,
+      DataTypeReference baseType,
+      int size,
+      List<DataTypePatch.CompositeField> fields,
+      List<DataTypePatch.EnumValue> values,
+      FunctionSignature signature) {
+    createDataType(categoryPath, kind, name, baseType, size, signature);
+  }
 
   /**
    * Updates a data type definition that exists.

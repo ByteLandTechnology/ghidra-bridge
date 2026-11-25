@@ -265,14 +265,58 @@ final class ApiSchemaCatalog {
             "register"));
   }
 
+  static Map<String, Object> boolWithDefault(boolean defaultValue) {
+    Map<String, Object> schema = new LinkedHashMap<>(WireSchema.bool());
+    schema.put(ApiVocabulary.DEFAULT, defaultValue);
+    return schema;
+  }
+
   static Map<String, Object> dataTypeResourceSchema() {
+    Map<String, Object> structField =
+        WireSchema.object(
+            props(
+                NAME,
+                WireSchema.string(),
+                "offset",
+                WireSchema.integer(0, Integer.MAX_VALUE),
+                LENGTH,
+                WireSchema.integer(1, Integer.MAX_VALUE),
+                DATA_TYPE,
+                WireSchema.dataTypeReference(),
+                COMMENT,
+                WireSchema.nullable(WireSchema.string())),
+            DATA_TYPE);
+    Map<String, Object> unionField =
+        WireSchema.object(
+            props(
+                NAME,
+                WireSchema.string(),
+                LENGTH,
+                WireSchema.integer(1, Integer.MAX_VALUE),
+                DATA_TYPE,
+                WireSchema.dataTypeReference(),
+                COMMENT,
+                WireSchema.nullable(WireSchema.string())),
+            DATA_TYPE);
+    Map<String, Object> enumValue =
+        WireSchema.object(
+            props(
+                NAME,
+                WireSchema.nonBlankString(),
+                "value",
+                WireSchema.integer(Long.MIN_VALUE, Long.MAX_VALUE),
+                COMMENT,
+                WireSchema.nullable(WireSchema.string())),
+            NAME,
+            "value");
     Map<String, Object> struct =
         WireSchema.object(
             props(
                 KIND, WireSchema.stringEnum("struct"),
                 CATEGORY_PATH, WireSchema.string(),
                 NAME, WireSchema.nonBlankString(),
-                SIZE, WireSchema.integer(0, Integer.MAX_VALUE)),
+                SIZE, WireSchema.integer(0, Integer.MAX_VALUE),
+                FIELDS, WireSchema.array(structField, 0, MAX_NESTED_ITEMS)),
             KIND,
             NAME);
     Map<String, Object> union =
@@ -280,7 +324,8 @@ final class ApiSchemaCatalog {
             props(
                 KIND, WireSchema.stringEnum("union"),
                 CATEGORY_PATH, WireSchema.string(),
-                NAME, WireSchema.nonBlankString()),
+                NAME, WireSchema.nonBlankString(),
+                FIELDS, WireSchema.array(unionField, 0, MAX_NESTED_ITEMS)),
             KIND,
             NAME);
     Map<String, Object> enumType =
@@ -289,7 +334,8 @@ final class ApiSchemaCatalog {
                 KIND, WireSchema.stringEnum("enum"),
                 CATEGORY_PATH, WireSchema.string(),
                 NAME, WireSchema.nonBlankString(),
-                SIZE, WireSchema.integer(1, 8)),
+                SIZE, WireSchema.integer(1, 8),
+                VALUES, WireSchema.array(enumValue, 0, MAX_NESTED_ITEMS)),
             KIND,
             NAME);
     Map<String, Object> typedef =
@@ -351,7 +397,9 @@ final class ApiSchemaCatalog {
                 LENGTH,
                 WireSchema.integer(1, Integer.MAX_VALUE),
                 DATA_TYPE,
-                WireSchema.dataTypeReference()));
+                WireSchema.dataTypeReference(),
+                COMMENT,
+                WireSchema.nullable(WireSchema.string())));
     Map<String, Object> value =
         WireSchema.object(
             props(
@@ -360,9 +408,11 @@ final class ApiSchemaCatalog {
                 "new_name",
                 WireSchema.string(),
                 "value",
-                WireSchema.integer(Long.MIN_VALUE, Long.MAX_VALUE)));
+                WireSchema.integer(Long.MIN_VALUE, Long.MAX_VALUE),
+                COMMENT,
+                WireSchema.nullable(WireSchema.string())));
     return WireSchema.oneOf(
-        compositePatch("struct", field),
+        structPatchSchema(field),
         compositePatch("union", field),
         WireSchema.object(
             props(
@@ -376,7 +426,33 @@ final class ApiSchemaCatalog {
                 WireSchema.array(value, 1, MAX_NESTED_ITEMS),
                 "update_values",
                 WireSchema.array(value, 1, MAX_NESTED_ITEMS)),
-            KIND));
+            KIND),
+        WireSchema.object(
+            props(
+                KIND,
+                WireSchema.stringEnum("typedef"),
+                BASE_TYPE,
+                WireSchema.dataTypeReference()),
+            KIND,
+            BASE_TYPE));
+  }
+
+  static Map<String, Object> structPatchSchema(Map<String, Object> field) {
+    return WireSchema.object(
+        props(
+            KIND,
+            WireSchema.stringEnum("struct"),
+            "preserve_offsets",
+            boolWithDefault(true),
+            "add_fields",
+            WireSchema.array(field, 1, MAX_NESTED_ITEMS),
+            "rename_fields",
+            WireSchema.array(field, 1, MAX_NESTED_ITEMS),
+            "update_fields",
+            WireSchema.array(field, 1, MAX_NESTED_ITEMS),
+            "remove_fields",
+            WireSchema.array(field, 1, MAX_NESTED_ITEMS)),
+        KIND);
   }
 
   static Map<String, Object> compositePatch(String kind, Map<String, Object> field) {

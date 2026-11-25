@@ -3,6 +3,7 @@ package app.byteland.ghidra.adapter.ghidra.datatype;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 
 final class EnumMutations {
   private EnumMutations() {}
@@ -13,9 +14,14 @@ final class EnumMutations {
     patch(enumType, patch.updateValues(), false);
     if (patch.addValues() != null) {
       for (DataTypePatch.EnumValue value : patch.addValues()) {
-        enumType.add(
-            value.name() == null ? "VALUE" : value.name(),
-            value.value() == null ? 0 : value.value());
+        String name = value.name() == null ? "VALUE" : value.name();
+        long numericValue = value.value() == null ? 0 : value.value();
+        String comment = DataTypeMutationSupport.normalizedComment(value.comment());
+        if (comment == null) {
+          enumType.add(name, numericValue);
+        } else {
+          enumType.add(name, numericValue, comment);
+        }
       }
     }
   }
@@ -54,8 +60,17 @@ final class EnumMutations {
       String name = update.newName() == null ? update.name() : update.newName();
       long value =
           renameOnly || update.value() == null ? enumType.getValue(update.name()) : update.value();
-      String comment = enumType.getComment(update.name());
-      if (update.name().equals(name) && enumType.getValue(update.name()) == value) continue;
+      String previousComment =
+          DataTypeMutationSupport.normalizedComment(enumType.getComment(update.name()));
+      String comment =
+          update.hasComment()
+              ? DataTypeMutationSupport.normalizedComment(update.comment())
+              : previousComment;
+      if (update.name().equals(name)
+          && enumType.getValue(update.name()) == value
+          && Objects.equals(previousComment, comment)) {
+        continue;
+      }
       enumType.remove(update.name());
       if (comment == null) enumType.add(name, value);
       else enumType.add(name, value, comment);
