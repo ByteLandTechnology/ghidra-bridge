@@ -34,6 +34,7 @@ subprojects {
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
+        options.compilerArgs.addAll(['-Xlint:serial,deprecation,removal,try', '-Werror'])
     }
     def subprojectCheck = tasks.named('check')
     rootProject.tasks.named('check') {
@@ -202,6 +203,7 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     sourceCompatibility = '21'
     targetCompatibility = '21'
     options.encoding = 'UTF-8'
+    options.compilerArgs.addAll(['-Xlint:serial,deprecation,removal,try', '-Werror'])
 }
 
 project(':launcher').tasks.named('test', Test) {

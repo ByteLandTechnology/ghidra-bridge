@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.listing;
 
 import app.byteland.ghidra.service.DomainException;
 import app.byteland.ghidra.service.TransactionExecutionException;
+import java.io.Serial;
 
 final class ListingFlowOverrideErrors {
   private ListingFlowOverrideErrors() {}
@@ -19,6 +20,7 @@ final class ListingFlowOverrideErrors {
   }
 
   static final class Conflict extends RuntimeException implements DomainException {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private Conflict(String message) {
@@ -42,6 +44,7 @@ final class ListingFlowOverrideErrors {
   }
 
   static final class UpdateFailed extends TransactionExecutionException {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private UpdateFailed(String message) {
