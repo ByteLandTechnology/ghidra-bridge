@@ -39,6 +39,9 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global caller_entry
+caller_entry: call label_only
+ ret
 """
 
 
@@ -349,7 +352,72 @@ def run_test(headless, root):
                 "after_auto",
             ]
 
-            sram = tool(40, "ghidra_memory", {
+            decomp_initial = tool(37, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a" in decomp_initial["c"]
+            decomp_repeat = tool(38, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert decomp_repeat["c"] == decomp_initial["c"]
+
+            sym_items = tool(39, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "func_a", "address": symbols["func_a"]}},
+            })["result"]["items"]
+            assert len(sym_items) == 1
+            renamed_sym = tool(40, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": sym_items[0]["id"]},
+                    "patch": {"name": "func_a_renamed"},
+                },
+            })["result"]
+            assert renamed_sym["name"] == "func_a_renamed"
+            decomp_after_rename = tool(41, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a_renamed" in decomp_after_rename["c"]
+
+            caller = function(42, "create", {
+                "resource": {"entry": symbols["caller_entry"], "name": "caller_entry"},
+                "disassemble": True,
+            })["result"]
+            assert caller["name"] == "caller_entry"
+            caller_before = tool(43, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_only(" in caller_before["c"]
+            caller_repeat = tool(44, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert caller_repeat["c"] == caller_before["c"]
+
+            callee_syms = tool(45, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "label_only", "address": symbols["label_only"]}},
+            })["result"]["items"]
+            assert len(callee_syms) == 1
+            tool(46, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": callee_syms[0]["id"]},
+                    "patch": {"name": "label_renamed"},
+                },
+            })
+            caller_after = tool(47, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_renamed(" in caller_after["c"]
+            assert "label_only(" not in caller_after["c"]
+
+            sram = tool(48, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -369,7 +437,7 @@ def run_test(headless, root):
             assert sram["initialized"] is False
             assert sram["length"] == 4096
 
-            mmio = tool(41, "ghidra_memory", {
+            mmio = tool(49, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -388,7 +456,7 @@ def run_test(headless, root):
             assert mmio["volatile"] is True
             assert mmio["comment"] == "Peripheral registers"
 
-            rom = tool(42, "ghidra_memory", {
+            rom = tool(50, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -406,13 +474,13 @@ def run_test(headless, root):
             })["result"]
             assert rom["initialized"] is True
             assert rom["execute"] is True
-            rom_bytes = tool(43, "ghidra_memory", {
+            rom_bytes = tool(51, "ghidra_memory", {
                 "operation": "read",
                 "params": {"selector": {"address": "0x10000000"}, "length": 8},
             })["result"]
             assert rom_bytes["bytes"]["data"] == "909090c3ffffffff"
 
-            tool(44, "ghidra_memory", {
+            tool(52, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -424,7 +492,7 @@ def run_test(headless, root):
                 },
             }, success=False)
 
-            tool(45, "ghidra_memory", {
+            tool(53, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -435,7 +503,7 @@ def run_test(headless, root):
                 },
             }, success=False)
 
-            overlay = tool(46, "ghidra_memory", {
+            overlay = tool(54, "ghidra_memory", {
                 "operation": "block.create",
                 "params": {
                     "resource": {
@@ -450,29 +518,29 @@ def run_test(headless, root):
             })["result"]
             assert overlay["overlay"] is True
 
-            before_program = tool(47, "ghidra_program", {"operation": "get"})["result"]
+            before_program = tool(55, "ghidra_program", {"operation": "get"})["result"]
             old_base = int(before_program["image_base"].split(":")[-1], 16)
             new_base = old_base + 0x100000
-            rebased = tool(48, "ghidra_program", {
+            rebased = tool(56, "ghidra_program", {
                 "operation": "rebase",
                 "params": {"image_base": hex(new_base)},
             })["result"]
             assert int(rebased["image_base"].split(":")[-1], 16) == new_base
             shifted_label = hex(int(symbols["label_only"], 16) + 0x100000)
-            assert function(49, "get", {"selector": {"entry": shifted_label}})["result"]["name"] == "label_only"
+            assert function(57, "get", {"selector": {"entry": shifted_label}})["result"]["name"] == "label_renamed"
 
-            tool(50, "ghidra_program", {
+            tool(58, "ghidra_program", {
                 "operation": "rebase",
                 "params": {"image_base": "0xfffffffffffffff0"},
             }, success=False)
 
-            restored = tool(51, "ghidra_program", {
+            restored = tool(59, "ghidra_program", {
                 "operation": "rebase",
                 "params": {"image_base": hex(old_base)},
             })["result"]
             assert int(restored["image_base"].split(":")[-1], 16) == old_base
 
-            tool(52, "ghidra_batch", {
+            tool(60, "ghidra_batch", {
                 "operation": "execute",
                 "params": {
                     "transaction_mode": "all_or_none",
@@ -502,10 +570,10 @@ def run_test(headless, root):
                     ],
                 },
             }, success=False)
-            blocks = tool(53, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
+            blocks = tool(61, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
             assert all(item["name"] != "ROLLED_BACK" for item in blocks)
 
-            per_item = tool(54, "ghidra_batch", {
+            per_item = tool(62, "ghidra_batch", {
                 "operation": "execute",
                 "params": {
                     "transaction_mode": "per_item",
@@ -537,7 +605,7 @@ def run_test(headless, root):
             })["result"]["items"]
             assert "result" in per_item[0]
             assert "error" in per_item[1]
-            blocks_after = tool(55, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
+            blocks_after = tool(63, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
             assert any(item["name"] == "KEPT_BLOCK" for item in blocks_after)
             print("Function, program rebase, and memory block regression checks passed")
         finally:

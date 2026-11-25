@@ -33,15 +33,6 @@ final class MemoryMethods implements ApiMethodProvider {
     Map<String, Object> fields = ApiRegistry.fieldsSchema();
     Map<String, Object> addressSelector = ApiRegistry.addressSelector();
     Map<String, Object> nameSelector = ApiRegistry.selectorSchema(ApiVocabulary.NAME);
-    Map<String, Object> byteSequence =
-        WireSchema.object(
-            ApiSchemaCatalog.props(
-                ApiVocabulary.ENCODING, WireSchema.stringEnum(ApiVocabulary.HEX, "base64"),
-                ApiVocabulary.DATA, WireSchema.string(),
-                ApiVocabulary.LENGTH, WireSchema.integer(0, Integer.MAX_VALUE)),
-            ApiVocabulary.ENCODING,
-            ApiVocabulary.DATA,
-            ApiVocabulary.LENGTH);
     registry.read(
         "memory_block.get",
         ApiSchemaCatalog.selectorInput(nameSelector),
@@ -95,7 +86,7 @@ final class MemoryMethods implements ApiMethodProvider {
                 "fill_byte",
                 WireSchema.integer(0, 255),
                 ApiVocabulary.BYTES,
-                byteSequence,
+                ApiSchemaCatalog.byteSequenceSchema(),
                 "read",
                 WireSchema.bool(),
                 "write",
@@ -126,6 +117,13 @@ final class MemoryMethods implements ApiMethodProvider {
                 .memoryService()
                 .createMemoryBlock(decodeMemoryBlockCreate(resource(request))));
 
+    Set<String> memoryFields =
+        Set.of(
+            ApiVocabulary.ADDRESS,
+            ApiVocabulary.BYTES,
+            "bytes.encoding",
+            "bytes.data",
+            "bytes.length");
     registry.readWith(
         "memory.read",
         ApiSchemaCatalog.input(
@@ -139,19 +137,8 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.FIELDS,
                 fields),
             ApiVocabulary.SELECTOR),
-        ApiSchemaCatalog.resourceSchema(
-            Set.of(
-                ApiVocabulary.ADDRESS,
-                ApiVocabulary.BYTES,
-                "bytes.encoding",
-                "bytes.data",
-                "bytes.length")),
-        Set.of(
-            ApiVocabulary.ADDRESS,
-            ApiVocabulary.BYTES,
-            "bytes.encoding",
-            "bytes.data",
-            "bytes.length"),
+        ApiSchemaCatalog.resourceSchema(memoryFields),
+        memoryFields,
         List.of(ApiVocabulary.ADDRESS),
         request ->
             WireValues.resource(
@@ -171,7 +158,9 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 addressSelector,
                 ApiVocabulary.PATCH,
-                WireSchema.object(Map.of(ApiVocabulary.BYTES, byteSequence), ApiVocabulary.BYTES)),
+                WireSchema.object(
+                    Map.of(ApiVocabulary.BYTES, ApiSchemaCatalog.byteSequenceSchema()),
+                    ApiVocabulary.BYTES)),
             ApiVocabulary.SELECTOR,
             ApiVocabulary.PATCH),
         ApiSchemaCatalog.MEMORY_WRITE_RECEIPT_SCHEMA,
