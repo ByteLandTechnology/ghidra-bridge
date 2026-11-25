@@ -1,6 +1,7 @@
 package app.byteland.ghidra;
 
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,16 +128,33 @@ final class JsonParser {
 
   private String parseString() {
     expect(STRING_QUOTE);
-    StringBuilder builder = new StringBuilder();
-    while (!isAtEnd()) {
+    int start = index;
+    int runStart = start;
+    StringBuilder builder = null;
+    int length = input.length();
+    while (index < length) {
       char ch = input.charAt(index);
       index++;
       if (ch == STRING_QUOTE) {
+        int quoteIndex = index - 1;
+        if (builder == null) {
+          return input.substring(start, quoteIndex);
+        }
+        if (quoteIndex > runStart) {
+          builder.append(input, runStart, quoteIndex);
+        }
         return builder.toString();
       }
       if (ch == ESCAPE_PREFIX) {
+        int escapeIndex = index - 1;
         if (isAtEnd()) {
           throw new IllegalArgumentException("Invalid escape at end of input");
+        }
+        if (builder == null) {
+          builder = new StringBuilder(estimateStringCapacity(start, escapeIndex));
+        }
+        if (escapeIndex > runStart) {
+          builder.append(input, runStart, escapeIndex);
         }
         char escaped = input.charAt(index);
         index++;
@@ -148,23 +166,42 @@ final class JsonParser {
           case 'r' -> builder.append('\r');
           case 't' -> builder.append('\t');
           case 'u' -> {
-            if (index + 4 > input.length()) {
+            if (index + 4 > length) {
               throw new IllegalArgumentException("Invalid unicode escape");
             }
-            String hex = input.substring(index, index + 4);
-            builder.append((char) Integer.parseInt(hex, 16));
+            builder.append((char) HexFormat.fromHexDigits(input, index, index + 4));
             index += 4;
           }
           default -> throw new IllegalArgumentException("Unsupported escape: \\" + escaped);
         }
+        runStart = index;
         continue;
       }
       if (ch < FIRST_NON_CONTROL_CHARACTER) {
         throw new IllegalArgumentException("Unescaped control character in string");
       }
-      builder.append(ch);
     }
     throw new IllegalArgumentException("Unterminated string");
+  }
+
+  private int estimateStringCapacity(int start, int firstEscape) {
+    int searchFrom = Math.min(firstEscape + 2, input.length());
+    int quote = input.indexOf(STRING_QUOTE, searchFrom);
+    for (int hops = 0; quote >= 0 && hops < 8 && isEscapedQuote(start, quote); hops++) {
+      quote = input.indexOf(STRING_QUOTE, quote + 1);
+    }
+    if (quote < 0) {
+      return Math.max(16, input.length() - start);
+    }
+    return Math.max(16, quote - start);
+  }
+
+  private boolean isEscapedQuote(int start, int quoteIndex) {
+    int backslashes = 0;
+    for (int i = quoteIndex - 1; i >= start && input.charAt(i) == ESCAPE_PREFIX; i--) {
+      backslashes++;
+    }
+    return (backslashes & 1) == 1;
   }
 
   private Object parseNumber() {
