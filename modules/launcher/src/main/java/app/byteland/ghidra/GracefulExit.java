@@ -13,10 +13,15 @@ final class GracefulExit implements AutoCloseable {
     void run() throws Exception;
   }
 
+  @FunctionalInterface
+  interface ConditionalSaveAction {
+    boolean runIfNeeded() throws Exception;
+  }
+
   /** The time that the JVM gets to exit after a save that ran at the deadline. */
   private static final Duration AFTER_SAVE_GRACE = Duration.ofSeconds(30);
 
-  private final CheckedAction saveAction;
+  private final ConditionalSaveAction saveAction;
   private final Runnable saveSucceeded;
   private final java.util.function.Consumer<Exception> saveFailed;
   private final AtomicBoolean closeStarted = new AtomicBoolean(false);
@@ -28,9 +33,26 @@ final class GracefulExit implements AutoCloseable {
       CheckedAction saveAction,
       Runnable saveSucceeded,
       java.util.function.Consumer<Exception> saveFailed) {
+    this(
+        () -> {
+          Objects.requireNonNull(saveAction, "saveAction").run();
+          return true;
+        },
+        saveSucceeded,
+        saveFailed);
+  }
+
+  GracefulExit(
+      ConditionalSaveAction saveAction,
+      Runnable saveSucceeded,
+      java.util.function.Consumer<Exception> saveFailed) {
     this.saveAction = Objects.requireNonNull(saveAction, "saveAction");
     this.saveSucceeded = Objects.requireNonNull(saveSucceeded, "saveSucceeded");
     this.saveFailed = Objects.requireNonNull(saveFailed, "saveFailed");
+  }
+
+  static GracefulExit disabled() {
+    return new GracefulExit(() -> false, () -> {}, ignored -> {});
   }
 
   synchronized void installShutdownHook(Runnable stopAction, Runnable onShutdown) {
@@ -92,8 +114,9 @@ final class GracefulExit implements AutoCloseable {
     }
 
     try {
-      saveAction.run();
-      saveSucceeded.run();
+      if (saveAction.runIfNeeded()) {
+        saveSucceeded.run();
+      }
     } catch (Exception failure) {
       saveFailed.accept(failure);
       throw failure;

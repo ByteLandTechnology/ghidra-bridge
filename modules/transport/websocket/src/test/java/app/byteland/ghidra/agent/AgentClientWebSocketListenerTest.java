@@ -154,7 +154,7 @@ class AgentClientWebSocketListenerTest {
     assertEquals(0, demangleCalls.get());
     assertTrue(harness.sentMessages().isEmpty());
 
-    // Stray trailing callback after close must be ignored
+    // Stray late callback after close must be ignored
     harness
         .listener()
         .onText(
