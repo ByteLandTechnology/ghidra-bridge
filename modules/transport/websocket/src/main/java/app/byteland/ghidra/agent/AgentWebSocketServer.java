@@ -6,12 +6,19 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.time.Duration;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * Embedded WebSocket server for inbound JSON-RPC 2.0 connections.
@@ -19,6 +26,9 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class AgentWebSocketServer implements AutoCloseable {
   public static final String DEFAULT_PATH = "/ws/agent";
   private static final int SERVER_SHUTDOWN_CLOSE_CODE = 1001;
+  private static final int PENDING_CLOSE_DRAIN_TIMEOUT_MILLIS = 50;
+  private static final int MAX_PENDING_DRAIN_BYTES = 64 * 1024;
+  private static final long RUNNER_DRAIN_WAIT_NANOS = TimeUnit.MILLISECONDS.toNanos(500);
   static final Duration DEFAULT_HANDSHAKE_TIMEOUT = Duration.ofSeconds(10);
   static final int DEFAULT_MAX_PENDING_SOCKETS = 16;
 
@@ -101,28 +111,87 @@ public final class AgentWebSocketServer implements AutoCloseable {
         handler.onConnectionError(connection, failure);
       }
     }
-    for (Socket pending : pendingSockets.drain()) {
-      closePendingSocket(pending);
+    List<Socket> runnerOwned = new ArrayList<>();
+    for (DrainedSocket drained : pendingSockets.drain()) {
+      if (drained.claimedByRunner()) {
+        runnerOwned.add(drained.socket());
+      } else {
+        drainUnclaimedAndClose(drained.socket());
+      }
     }
+    awaitRunnerDrainAndClose(runnerOwned);
   }
 
-  private void closePendingSocket(Socket pending) {
+  private void drainUnclaimedAndClose(Socket pending) {
     if (pending.isClosed()) {
       return;
     }
     try {
       if (!pending.isInputShutdown()) {
+        pending.setSoTimeout(PENDING_CLOSE_DRAIN_TIMEOUT_MILLIS);
         InputStream input = pending.getInputStream();
         byte[] discard = new byte[1024];
-        while (input.available() > 0) {
-          int step = Math.min(discard.length, input.available());
-          if (input.read(discard, 0, step) <= 0) {
+        int drained = 0;
+        int available = input.available();
+        while (available > 0 && drained < MAX_PENDING_DRAIN_BYTES) {
+          int step =
+              Math.min(discard.length, Math.min(available, MAX_PENDING_DRAIN_BYTES - drained));
+          int read = input.read(discard, 0, step);
+          if (read <= 0) {
             break;
           }
+          drained += read;
+          available = input.available();
         }
       }
     } catch (IOException ignored) {
       // Ignore read errors when the server closes a socket.
+    }
+    closePendingSocketQuietly(pending);
+  }
+
+  private void awaitRunnerDrainAndClose(List<Socket> runnerSockets) {
+    if (runnerSockets.isEmpty()) {
+      return;
+    }
+    List<Socket> remaining = new ArrayList<>(runnerSockets);
+    long deadlineNanos = System.nanoTime() + RUNNER_DRAIN_WAIT_NANOS;
+    while (!remaining.isEmpty()) {
+      Iterator<Socket> iterator = remaining.iterator();
+      while (iterator.hasNext()) {
+        Socket pending = iterator.next();
+        if (isReadyToCloseWithoutReset(pending)) {
+          closePendingSocketQuietly(pending);
+          iterator.remove();
+        }
+      }
+      if (remaining.isEmpty() || System.nanoTime() - deadlineNanos >= 0) {
+        break;
+      }
+      LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(1));
+      if (Thread.currentThread().isInterrupted()) {
+        break;
+      }
+    }
+    for (Socket pending : remaining) {
+      closePendingSocketQuietly(pending);
+    }
+  }
+
+  private static boolean isReadyToCloseWithoutReset(Socket pending) {
+    if (pending.isClosed() || pending.isInputShutdown()) {
+      return true;
+    }
+    try {
+      return pending.getInputStream().available() == 0;
+    } catch (IOException ignored) {
+      return true;
+    }
+  }
+
+  private void closePendingSocketQuietly(Socket pending) {
+    if (pending.isClosed()) {
+      return;
     }
     try {
       pending.close();
@@ -131,11 +200,15 @@ public final class AgentWebSocketServer implements AutoCloseable {
     }
   }
 
+  record DrainedSocket(Socket socket, boolean claimedByRunner) {}
+
   static final class PendingSockets {
     private final Object lock = new Object();
     private final AtomicBoolean running;
     private final int maxSockets;
-    private final Set<Socket> sockets = new LinkedHashSet<>();
+    private final Map<Socket, Boolean> sockets = new LinkedHashMap<>();
+    private final Set<Socket> closedBeforeRead =
+        Collections.newSetFromMap(new IdentityHashMap<>());
 
     PendingSockets(AtomicBoolean running, int maxSockets) {
       this.running = running;
@@ -144,10 +217,25 @@ public final class AgentWebSocketServer implements AutoCloseable {
 
     boolean tryAdd(Socket socket) {
       synchronized (lock) {
-        if (!running.get() || sockets.size() >= maxSockets) {
+        if (!running.get() || sockets.size() >= maxSockets || sockets.containsKey(socket)) {
           return false;
         }
-        return sockets.add(socket);
+        sockets.put(socket, Boolean.FALSE);
+        return true;
+      }
+    }
+
+    boolean claimForRead(Socket socket) {
+      synchronized (lock) {
+        Boolean reading = sockets.get(socket);
+        if (reading != null) {
+          if (!running.get()) {
+            return false;
+          }
+          sockets.put(socket, Boolean.TRUE);
+          return true;
+        }
+        return !closedBeforeRead.remove(socket);
       }
     }
 
@@ -157,11 +245,17 @@ public final class AgentWebSocketServer implements AutoCloseable {
       }
     }
 
-    List<Socket> drain() {
+    List<DrainedSocket> drain() {
       synchronized (lock) {
-        List<Socket> snapshot = List.copyOf(sockets);
+        List<DrainedSocket> snapshot = new ArrayList<>(sockets.size());
+        for (Map.Entry<Socket, Boolean> entry : sockets.entrySet()) {
+          if (!entry.getValue()) {
+            closedBeforeRead.add(entry.getKey());
+          }
+          snapshot.add(new DrainedSocket(entry.getKey(), entry.getValue()));
+        }
         sockets.clear();
-        return snapshot;
+        return List.copyOf(snapshot);
       }
     }
   }

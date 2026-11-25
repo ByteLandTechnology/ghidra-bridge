@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -363,6 +364,34 @@ class AgentWebSocketServerTest {
       assertEquals(-1, pending3.getInputStream().read());
     } finally {
       started.close();
+    }
+  }
+
+  @Test
+  @DisplayName("Closing server while partial handshakes are arriving never blocks on read lock or emits 408")
+  void testServerCloseRacesWithConcurrentPartialHandshakesPromptly() throws Exception {
+    for (int round = 0; round < 15; round++) {
+      RecordingHandler handler = new RecordingHandler();
+      StartedServer started = startCustomServer(TOKEN, handler, Duration.ofSeconds(15), 6);
+      int port = started.port();
+      List<Socket> pending = new ArrayList<>(6);
+      try {
+        for (int i = 0; i < 6; i++) {
+          Socket socket = openPartialHandshake(port);
+          socket.setSoTimeout(3_000);
+          pending.add(socket);
+        }
+        waitForPendingSlotSaturation(port);
+        assertTimeoutPreemptively(Duration.ofSeconds(2), started::close);
+        for (Socket socket : pending) {
+          assertEquals(-1, socket.getInputStream().read());
+        }
+      } finally {
+        started.close();
+        for (Socket socket : pending) {
+          socket.close();
+        }
+      }
     }
   }
 

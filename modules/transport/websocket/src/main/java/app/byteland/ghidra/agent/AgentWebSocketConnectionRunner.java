@@ -37,6 +37,9 @@ final class AgentWebSocketConnectionRunner {
   }
 
   void runConnection(Socket socket) {
+    if (!pendingSockets.claimForRead(socket)) {
+      return;
+    }
     AgentServerConnection connection = null;
     boolean opened = false;
     CloseState closeState = new CloseState(NORMAL_CLOSE_CODE, NORMAL_CLOSE_REASON);
@@ -51,7 +54,9 @@ final class AgentWebSocketConnectionRunner {
         } catch (WebSocketHandshake.HttpHandshakeException e) {
           closeState.reason = e.getMessage();
           pendingSockets.remove(socket);
-          writeHandshakeFailure(socket, e);
+          if (running.get()) {
+            writeHandshakeFailure(socket, e);
+          }
           return;
         }
         if (!running.get()) {
