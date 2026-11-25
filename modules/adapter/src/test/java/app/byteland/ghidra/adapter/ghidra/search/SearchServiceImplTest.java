@@ -478,7 +478,7 @@ class SearchServiceImplTest {
                 rodata.length,
                 TaskMonitor.DUMMY,
                 false);
-            // Simulate Ghidra ElfLoader importing an STT_OBJECT symbol as undefined1[N].
+            // Create an undefined1[N] array like Ghidra ElfLoader creates for an STT_OBJECT symbol.
             ArrayDataType undefinedArray =
                 new ArrayDataType(Undefined1DataType.dataType, wideLe.length + 2, 1);
             DataUtilities.createData(
