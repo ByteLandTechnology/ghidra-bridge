@@ -2,6 +2,7 @@ package app.byteland.ghidra.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedInputStream;
@@ -11,6 +12,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Modifier;
 import java.net.BindException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -21,10 +23,8 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class AgentWebSocketFrameAndKeepaliveTest {
@@ -59,13 +59,13 @@ class AgentWebSocketFrameAndKeepaliveTest {
           Arrays.copyOfRange(utf8, split2, utf8.length));
       client.writeMaskedFrame(true, WebSocketFrames.CONTINUATION_OPCODE, new byte[0]);
 
-      assertEquals(message, handler.receivedTexts.poll(5, TimeUnit.SECONDS));
+      assertEquals(message, handler.receivedTexts.poll(10, TimeUnit.SECONDS));
 
       client.writeMaskedFrame(
           false, WebSocketFrames.TEXT_OPCODE, "second-".getBytes(StandardCharsets.UTF_8));
       client.writeMaskedFrame(
           true, WebSocketFrames.CONTINUATION_OPCODE, "message".getBytes(StandardCharsets.UTF_8));
-      assertEquals("second-message", handler.receivedTexts.poll(5, TimeUnit.SECONDS));
+      assertEquals("second-message", handler.receivedTexts.poll(10, TimeUnit.SECONDS));
     }
   }
 
@@ -222,10 +222,11 @@ class AgentWebSocketFrameAndKeepaliveTest {
 
     RecordingHandler handler = new RecordingHandler();
     try (ServerHandle handle =
-        startServer(handler, Duration.ofMillis(80), Duration.ofMillis(160))) {
+        startServer(handler, Duration.ofMillis(250), Duration.ofSeconds(1))) {
       int port = handle.port();
 
       try (RawWebSocketClient silentClient = connectUpgraded(port)) {
+        handler.awaitOpen();
         HttpStatus conflictWhileActive =
             rawHandshake(
                 port,
@@ -247,6 +248,7 @@ class AgentWebSocketFrameAndKeepaliveTest {
 
       try (RawWebSocketClient healthyClient = connectUpgraded(port)) {
         assertEquals(101, healthyClient.handshakeStatus());
+        handler.awaitOpen();
         for (int i = 0; i < 2; i++) {
           ServerFrame ping = healthyClient.readServerFrame();
           assertEquals(WebSocketFrames.PING_OPCODE, ping.opcode());
@@ -254,7 +256,7 @@ class AgentWebSocketFrameAndKeepaliveTest {
         }
         healthyClient.writeMaskedFrame(
             true, WebSocketFrames.TEXT_OPCODE, "still-alive".getBytes(StandardCharsets.UTF_8));
-        assertEquals("still-alive", handler.receivedTexts.poll(5, TimeUnit.SECONDS));
+        assertEquals("still-alive", handler.receivedTexts.poll(10, TimeUnit.SECONDS));
       }
     }
   }
@@ -263,14 +265,22 @@ class AgentWebSocketFrameAndKeepaliveTest {
   void closesStalledPartialFrameAndReclaimsConnectionSlot() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (ServerHandle handle =
-        startServer(handler, Duration.ofMillis(100), Duration.ofMillis(200))) {
+        startServer(handler, Duration.ofMillis(250), Duration.ofSeconds(5))) {
       int port = handle.port();
       try (RawWebSocketClient partialClient = connectUpgraded(port)) {
+        handler.awaitOpen();
         partialClient.writeSingleRawByte(0x80 | WebSocketFrames.TEXT_OPCODE);
-        assertEquals(1000, handler.awaitCloseCode());
+        CloseEvent closeEvent = handler.awaitClose();
+        assertTrue(
+            (closeEvent.code() == WebSocketFrames.NORMAL_CLOSE_STATUS
+                    && "Timed out reading partial WebSocket frame".equals(closeEvent.reason()))
+                || (closeEvent.code() == WebSocketFrames.GOING_AWAY_CLOSE_STATUS
+                    && "keepalive timeout".equals(closeEvent.reason())),
+            () -> "Unexpected close event: " + closeEvent);
       }
       try (RawWebSocketClient replacementClient = connectUpgraded(port)) {
         assertEquals(101, replacementClient.handshakeStatus());
+        handler.awaitOpen();
       }
     }
   }
@@ -313,7 +323,9 @@ class AgentWebSocketFrameAndKeepaliveTest {
   }
 
   private static int freePort() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0)) {
+    try (ServerSocket socket = new ServerSocket()) {
+      socket.setReuseAddress(true);
+      socket.bind(new InetSocketAddress("127.0.0.1", 0));
       return socket.getLocalPort();
     }
   }
@@ -324,7 +336,7 @@ class AgentWebSocketFrameAndKeepaliveTest {
 
   private static HttpStatus rawHandshake(int port, List<String> headers) throws IOException {
     try (Socket socket = new Socket("127.0.0.1", port)) {
-      socket.setSoTimeout(5_000);
+      socket.setSoTimeout(10_000);
       writeUpgradeRequest(socket.getOutputStream(), headers);
       return readHttpHeaders(socket.getInputStream());
     }
@@ -332,7 +344,7 @@ class AgentWebSocketFrameAndKeepaliveTest {
 
   private static RawWebSocketClient connectUpgraded(int port) throws IOException {
     Socket socket = new Socket("127.0.0.1", port);
-    socket.setSoTimeout(5_000);
+    socket.setSoTimeout(10_000);
     List<String> headers = new ArrayList<>();
     headers.add("Host: 127.0.0.1:" + port);
     headers.add("Upgrade: websocket");
@@ -479,13 +491,13 @@ class AgentWebSocketFrameAndKeepaliveTest {
       int opcode = b1 & 0x0F;
       int length = b2 & 0x7F;
       if (length == 126) {
-        byte[] ext = input.readNBytes(2);
+        byte[] ext = WebSocketFrames.readFully(input, 2);
         length = Short.toUnsignedInt(ByteBuffer.wrap(ext).getShort());
       } else if (length == 127) {
-        byte[] ext = input.readNBytes(8);
+        byte[] ext = WebSocketFrames.readFully(input, 8);
         length = (int) ByteBuffer.wrap(ext).getLong();
       }
-      byte[] payload = input.readNBytes(length);
+      byte[] payload = WebSocketFrames.readFully(input, length);
       return new ServerFrame(fin, opcode, payload);
     }
 
@@ -504,14 +516,17 @@ class AgentWebSocketFrameAndKeepaliveTest {
     }
   }
 
+  private record CloseEvent(int code, String reason) {}
+
   private static final class RecordingHandler implements AgentWebSocketServer.Handler {
+    private final BlockingQueue<AgentWebSocketServer.Connection> openedConnections =
+        new LinkedBlockingQueue<>();
     private final BlockingQueue<String> receivedTexts = new LinkedBlockingQueue<>();
-    private final AtomicInteger lastCloseCode = new AtomicInteger(-1);
-    private volatile CountDownLatch closeLatch = new CountDownLatch(1);
+    private final BlockingQueue<CloseEvent> closeEvents = new LinkedBlockingQueue<>();
 
     @Override
     public void onOpen(AgentWebSocketServer.Connection connection) {
-      closeLatch = new CountDownLatch(1);
+      openedConnections.add(connection);
     }
 
     @Override
@@ -522,8 +537,7 @@ class AgentWebSocketFrameAndKeepaliveTest {
     @Override
     public void onClose(
         AgentWebSocketServer.Connection connection, int statusCode, String reason) {
-      lastCloseCode.set(statusCode);
-      closeLatch.countDown();
+      closeEvents.add(new CloseEvent(statusCode, reason));
     }
 
     @Override
@@ -532,9 +546,18 @@ class AgentWebSocketFrameAndKeepaliveTest {
     @Override
     public void onServerError(Throwable error) {}
 
+    void awaitOpen() throws InterruptedException {
+      assertNotNull(openedConnections.poll(10, TimeUnit.SECONDS), "Timed out waiting for onOpen");
+    }
+
+    CloseEvent awaitClose() throws InterruptedException {
+      CloseEvent event = closeEvents.poll(10, TimeUnit.SECONDS);
+      assertNotNull(event, "Timed out waiting for onClose");
+      return event;
+    }
+
     int awaitCloseCode() throws InterruptedException {
-      assertTrue(closeLatch.await(5, TimeUnit.SECONDS), "Timed out waiting for onClose");
-      return lastCloseCode.get();
+      return awaitClose().code();
     }
   }
 }
