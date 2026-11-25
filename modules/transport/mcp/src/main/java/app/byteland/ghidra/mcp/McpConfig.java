@@ -223,6 +223,82 @@ public record McpConfig(
     return prefix;
   }
 
+  /** Derives a valid MCP tool prefix from a program name for a fallback port session. */
+  public static String deriveFallbackToolPrefix(String programName, int port) {
+    AgentConfig.requireValidPort(port);
+    String fallback = DEFAULT_TOOL_PREFIX + "_" + port;
+    String sanitized = sanitizeProgramIdentifier(programName);
+    if (sanitized.isEmpty() || DEFAULT_TOOL_PREFIX.equalsIgnoreCase(sanitized)) {
+      return requireToolPrefix(fallback);
+    }
+    if (!isAsciiLetter(sanitized.charAt(0))) {
+      sanitized = DEFAULT_TOOL_PREFIX + "_" + sanitized;
+    }
+    if (sanitized.length() > 64) {
+      sanitized = trimEdgeSeparators(sanitized.substring(0, 64));
+    }
+    if (sanitized.isEmpty()
+        || !isAsciiLetter(sanitized.charAt(0))
+        || DEFAULT_TOOL_PREFIX.equalsIgnoreCase(sanitized)) {
+      return requireToolPrefix(fallback);
+    }
+    return requireToolPrefix(sanitized);
+  }
+
+  /** Derives a sanitized session identifier from a program name and bound fallback port. */
+  public static String deriveFallbackSessionId(String programName, int port) {
+    AgentConfig.requireValidPort(port);
+    String suffix = "-" + port;
+    String sanitized = sanitizeProgramIdentifier(programName);
+    if (sanitized.isEmpty()) {
+      sanitized = DEFAULT_TOOL_PREFIX;
+    }
+    int maxBaseLength = 64 - suffix.length();
+    if (sanitized.length() > maxBaseLength) {
+      sanitized = trimEdgeSeparators(sanitized.substring(0, maxBaseLength));
+      if (sanitized.isEmpty()) {
+        sanitized = DEFAULT_TOOL_PREFIX;
+      }
+    }
+    return sanitized + suffix;
+  }
+
+  public static String sanitizeProgramIdentifier(String rawName) {
+    if (rawName == null) {
+      return "";
+    }
+    String lower = rawName.trim().toLowerCase(Locale.ROOT);
+    StringBuilder builder = new StringBuilder(lower.length());
+    boolean lastUnderscore = false;
+    for (int i = 0; i < lower.length(); i++) {
+      char ch = lower.charAt(i);
+      if (isAsciiLetter(ch) || (ch >= '0' && ch <= '9') || ch == '-') {
+        builder.append(ch);
+        lastUnderscore = false;
+      } else if (!lastUnderscore && builder.length() > 0) {
+        builder.append('_');
+        lastUnderscore = true;
+      }
+    }
+    return trimEdgeSeparators(builder.toString());
+  }
+
+  private static String trimEdgeSeparators(String value) {
+    int start = 0;
+    int end = value.length();
+    while (start < end && (value.charAt(start) == '_' || value.charAt(start) == '-')) {
+      start++;
+    }
+    while (end > start && (value.charAt(end - 1) == '_' || value.charAt(end - 1) == '-')) {
+      end--;
+    }
+    return value.substring(start, end);
+  }
+
+  private static boolean isAsciiLetter(char ch) {
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
+  }
+
   private static String textOrDefault(String value, String fallback) {
     String normalized = AgentConfig.optionalText(value);
     return normalized == null ? fallback : normalized;

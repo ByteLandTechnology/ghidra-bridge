@@ -102,7 +102,7 @@ class McpOriginSecurityTest {
         Set.of("https://trusted.example", "https://app.trusted.example:8443"),
         fromEnvWithToken.allowedOrigins());
 
-    // Startup argument overrides GHIDRA_MCP_ALLOWED_ORIGINS.
+    // Startup argument overrides `GHIDRA_MCP_ALLOWED_ORIGINS`.
     McpConfig argOverridesEnv =
         McpConfig.fromMap(
             Map.of("allowed_origins", INSPECTOR_ORIGIN),

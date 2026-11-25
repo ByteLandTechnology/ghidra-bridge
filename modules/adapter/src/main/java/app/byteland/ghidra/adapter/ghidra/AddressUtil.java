@@ -44,20 +44,6 @@ public final class AddressUtil {
     return addressSpace + ":" + normalizeOffset(offsetHex);
   }
 
-  public static String addressSpace(Address address) {
-    if (address == null) {
-      return null;
-    }
-    return address.getAddressSpace().getName();
-  }
-
-  public static String offset(Address address) {
-    if (address == null) {
-      return null;
-    }
-    return "0x" + address.toString();
-  }
-
   private static String normalizeOffset(String offset) {
     if (offset == null) {
       return null;

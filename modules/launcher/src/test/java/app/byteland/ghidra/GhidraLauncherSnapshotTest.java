@@ -1,14 +1,21 @@
 package app.byteland.ghidra;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import generic.jar.ResourceFile;
+import ghidra.app.script.GhidraScriptProvider;
+import ghidra.app.script.JavaScriptProvider;
+import ghidra.app.script.ScriptInfo;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.BindException;
+import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -97,6 +104,77 @@ class GhidraLauncherSnapshotTest {
             .filter(candidate -> !beforeSnapshots.contains(candidate))
             .collect(Collectors.toSet());
     assertEquals(Set.of(), leakedSnapshots, "Failed snapshot attempts must clean up temp files");
+  }
+
+  @Test
+  void generatedScriptsDeclareGhidraBridgeCategoryAndDescriptions() throws Exception {
+    Path generatedDir = Path.of("build", "generated", "scripts").toAbsolutePath().normalize();
+    JavaScriptProvider provider = new JavaScriptProvider();
+    var scriptInfoCtor =
+        ScriptInfo.class.getDeclaredConstructor(GhidraScriptProvider.class, ResourceFile.class);
+    scriptInfoCtor.setAccessible(true);
+
+    ScriptInfo bridgeInfo =
+        scriptInfoCtor.newInstance(
+            provider, new ResourceFile(generatedDir.resolve("Bridge.java").toFile()));
+    assertArrayEquals(new String[] {"Ghidra Bridge"}, bridgeInfo.getCategory());
+    assertEquals(
+        "Starts the Ghidra Bridge WebSocket service for the active program.",
+        bridgeInfo.getDescription().trim());
+
+    ScriptInfo mcpInfo =
+        scriptInfoCtor.newInstance(
+            provider, new ResourceFile(generatedDir.resolve("GhidraMcp.java").toFile()));
+    assertArrayEquals(new String[] {"Ghidra Bridge"}, mcpInfo.getCategory());
+    assertEquals(
+        "Starts the Ghidra Bridge MCP HTTP service for the active program.",
+        mcpInfo.getDescription().trim());
+  }
+
+  @Test
+  void rootMessageIncludesEndpointAndNestedCausesAcrossInvocationTargetException()
+      throws Exception {
+    for (String launcherClassName : new String[] {"Bridge", "GhidraMcp"}) {
+      Throwable http401Chain =
+          new InvocationTargetException(
+              new IOException(
+                  "Failed to connect to ws://127.0.0.1:8765/ws/agent",
+                  new IOException(
+                      null,
+                      new IllegalStateException("Unexpected HTTP response status code 401"))));
+      String formatted401 = invokeRootMessage(launcherClassName, http401Chain);
+      assertEquals(
+          "Failed to connect to ws://127.0.0.1:8765/ws/agent:"
+              + " Unexpected HTTP response status code 401",
+          formatted401);
+
+      BindException osBind = new BindException("Address already in use");
+      BindException endpointBind =
+          new BindException("WebSocket endpoint ws://127.0.0.1:8765/ws/agent is already in use.");
+      endpointBind.initCause(osBind);
+      String formattedBind =
+          invokeRootMessage(launcherClassName, new InvocationTargetException(endpointBind));
+      assertTrue(formattedBind.contains("ws://127.0.0.1:8765/ws/agent"));
+      assertTrue(formattedBind.contains("Address already in use"));
+
+      Throwable unnamedConnect =
+          new InvocationTargetException(
+              new IOException(
+                  "Failed to connect to ws://127.0.0.1:9999/ws/agent", new ConnectException()));
+      String formattedRefused = invokeRootMessage(launcherClassName, unnamedConnect);
+      assertEquals(
+          "Failed to connect to ws://127.0.0.1:9999/ws/agent: java.net.ConnectException",
+          formattedRefused);
+    }
+  }
+
+  private static String invokeRootMessage(String launcherClassName, Throwable error)
+      throws Exception {
+    Class<?> launcherClass = Class.forName(launcherClassName);
+    Object launcher = launcherClass.getDeclaredConstructor().newInstance();
+    Method rootMessage = launcherClass.getDeclaredMethod("rootMessage", Throwable.class);
+    rootMessage.setAccessible(true);
+    return (String) rootMessage.invoke(launcher, error);
   }
 
   private static Path invokeSnapshotJar(String launcherClassName, Path sourceJar) throws Exception {

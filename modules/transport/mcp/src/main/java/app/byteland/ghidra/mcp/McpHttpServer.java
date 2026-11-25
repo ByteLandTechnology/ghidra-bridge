@@ -15,6 +15,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Serial;
 import java.net.BindException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -70,6 +71,7 @@ public final class McpHttpServer implements AutoCloseable {
   private static final long DEFAULT_SSE_KEEPALIVE_MILLIS = TimeUnit.SECONDS.toMillis(15);
 
   private final McpConfig config;
+  private final boolean loopbackListener;
   private final String normalizedConfiguredHost;
   private final InetAddress configuredHostLiteral;
   private final AgentDispatcher dispatcher;
@@ -103,8 +105,9 @@ public final class McpHttpServer implements AutoCloseable {
       throw new IllegalArgumentException("sseKeepaliveMillis must be positive");
     }
     this.config = Objects.requireNonNull(config, "config");
+    this.loopbackListener = NetworkBinding.isLoopback(config.host());
     this.normalizedConfiguredHost = normalizeHost(config.host());
-    this.configuredHostLiteral = parseIpLiteral(this.normalizedConfiguredHost);
+    this.configuredHostLiteral = NetworkBinding.parseIpLiteral(this.normalizedConfiguredHost);
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
     this.sseKeepaliveMillis = sseKeepaliveMillis;
@@ -138,16 +141,16 @@ public final class McpHttpServer implements AutoCloseable {
     server.start();
   }
 
-  public void awaitShutdown() throws InterruptedException {
-    shutdownLatch.await();
-  }
-
   public boolean awaitShutdown(BooleanSupplier cancelRequested) throws InterruptedException {
     return awaitShutdown(shutdownLatch, cancelRequested, this::close, 250L);
   }
 
   public String endpoint() {
     return config.endpoint();
+  }
+
+  int activeSseSessionCount() {
+    return sseSessions.size();
   }
 
   @Override
@@ -192,6 +195,13 @@ public final class McpHttpServer implements AutoCloseable {
       RequestLog log = new RequestLog(requestLogSink);
       try (exchange) {
         try {
+          NetworkBinding.HostValidationResult hostValidation = validateHost(exchange);
+          if (!hostValidation.isValid()) {
+            int status = hostValidation.httpStatus();
+            log.method(exchange.getRequestMethod()).error().status(status);
+            writePlain(exchange, status, hostValidation.message());
+            return;
+          }
           OriginValidation originValidation = validateOrigin(exchange);
           if (!originValidation.allowed()) {
             log.method(exchange.getRequestMethod()).error().status(403);
@@ -338,7 +348,7 @@ public final class McpHttpServer implements AutoCloseable {
       String sessionId = UUID.randomUUID().toString();
       SseSession session;
       try {
-        session = new SseSession(sessionId, exchange);
+        session = new SseSession(exchange);
       } catch (IOException error) {
         log.method(HTTP_GET_METHOD).error().status(500);
         return;
@@ -925,6 +935,12 @@ public final class McpHttpServer implements AutoCloseable {
     }
   }
 
+  private NetworkBinding.HostValidationResult validateHost(HttpExchange exchange) {
+    List<String> hostHeaders = exchange.getRequestHeaders().get("Host");
+    return NetworkBinding.validateHostHeader(
+        hostHeaders, config.host(), server.getAddress().getPort(), loopbackListener);
+  }
+
   private static void sendNoBody(HttpExchange exchange, int statusCode) throws IOException {
     exchange.sendResponseHeaders(statusCode, -1);
   }
@@ -954,10 +970,6 @@ public final class McpHttpServer implements AutoCloseable {
         normalizedConfiguredHost,
         configuredHostLiteral,
         config.allowedOrigins());
-  }
-
-  boolean isAllowedOrigin(HttpExchange exchange) {
-    return validateOrigin(exchange).allowed();
   }
 
   static boolean isAllowedOrigin(List<String> originHeaders, String configuredHost) {
@@ -1107,7 +1119,7 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   static final class JsonRpcError extends RuntimeException {
-    private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
     private final int statusCode;
     private final transient Object requestId;
     private final int errorCode;
@@ -1168,7 +1180,6 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   static final class SseSession implements AutoCloseable {
-    private final String id;
     private final HttpExchange exchange;
     private final OutputStream output;
     private final AtomicBoolean active = new AtomicBoolean(true);
@@ -1176,8 +1187,7 @@ public final class McpHttpServer implements AutoCloseable {
     private final CountDownLatch closeLatch = new CountDownLatch(1);
     private final ReentrantLock writeLock = new ReentrantLock();
 
-    SseSession(String id, HttpExchange exchange) throws IOException {
-      this.id = id;
+    SseSession(HttpExchange exchange) throws IOException {
       this.exchange = exchange;
       exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
       exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-transform");

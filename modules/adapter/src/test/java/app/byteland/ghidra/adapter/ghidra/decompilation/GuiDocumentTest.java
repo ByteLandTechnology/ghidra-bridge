@@ -186,8 +186,8 @@ class GuiDocumentTest {
     line3.addToken(callToken("unresolved_fn", missingEntry, callSiteB, callSiteB));
     line3.addToken(token("();", ClangToken.DEFAULT_COLOR, null, null));
 
-    // Line 4: non-adjacent revisit of callSiteA (via distinct equal Address instance) and second
-    // call to helper_alpha.
+    // Line 4: non-adjacent revisit of callSiteA (with a distinct equal Address) and second call to
+    // helper_alpha.
     Address duplicateCallSiteA = countedAddress(0x1012L, canonicalCounts);
     ClangLine line4 = new ClangLine(4, 1);
     line4.addToken(callToken("helper_alpha", helperEntry, duplicateCallSiteA, callSiteAMax));
@@ -251,12 +251,12 @@ class GuiDocumentTest {
     Program program = program(listing, functionManager(Map.of()), new AtomicInteger());
     Function owner = ownerFunction(program, entry, new AtomicInteger(), new AtomicInteger());
 
-    // Line 1: two adjacent tokens resolving to unmapped (0x9000 -> null CodeUnit).
+    // Line 1: two adjacent tokens map to unmapped (0x9000 -> null CodeUnit).
     ClangLine line1 = new ClangLine(1, 0);
     line1.addToken(token("ext", ClangToken.GLOBAL_COLOR, unmapped, unmapped));
     line1.addToken(token(" + 1", ClangToken.DEFAULT_COLOR, null, null));
 
-    // Line 2: intervening mapped address (0x1010) breaks adjacent-token fast path.
+    // Line 2: a middle mapped address (0x1010) breaks the adjacent-token fast path.
     ClangLine line2 = new ClangLine(2, 0);
     line2.addToken(token("ok", ClangToken.VARIABLE_COLOR, mapped, mapped));
 
@@ -293,7 +293,7 @@ class GuiDocumentTest {
     Program program = program(listing, functionManager(Map.of()), new AtomicInteger());
     Function owner = ownerFunction(program, entry, new AtomicInteger(), new AtomicInteger());
 
-    // Line 1: unaddressed opening brace before any addressed token -> falls back to entry (0x1000).
+    // Line 1: unaddressed open brace before any addressed token falls back to entry (0x1000).
     ClangLine line1 = new ClangLine(1, 0);
     line1.addToken(token("{", ClangToken.DEFAULT_COLOR, null, null));
 
@@ -303,8 +303,9 @@ class GuiDocumentTest {
     line2.addToken(token(" = ", ClangToken.DEFAULT_COLOR, null, null));
     line2.addToken(token("b", ClangToken.VARIABLE_COLOR, secondOnLine2, secondOnLine2));
 
-    // Line 3: leading token whose getClosestAddress returns null followed by 0x1020 on same line.
-    // Because previous updates only after the line finishes, the leading token inherits 0x1010.
+    // Line 3: first token returns null from getClosestAddress, then 0x1020 appears on the same
+    // line.
+    // Because previous updates only after the line finishes, the first token inherits 0x1010.
     ClangLine detachedEmptyParent = new ClangLine(99, 0);
     ClangLine line3 = new ClangLine(3, 1);
     ClangToken detachedLeading =
