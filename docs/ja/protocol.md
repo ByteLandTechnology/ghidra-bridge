@@ -197,32 +197,34 @@ ASCII 以外のテキストには `=?base64?<base64 テキスト>?=` 形式の�
 
 ### ツール呼び出し規則
 
-MCP は操作を 15 個のツールに分類します:
-- `ghidra.help`: ドメインの検索、操作一覧の表示、スキーマの確認。
-- 14 個のドメインツール: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`。
+MCP は操作を 25 個のツールに分類します:
+- `ghidra_help`: ドメインの検索、操作一覧の表示、スキーマの確認。
+- 13 個の読み取り専用ドメインツール: `ghidra_bridge`, `ghidra_program`, `ghidra_address`, `ghidra_memory`, `ghidra_listing`, `ghidra_global_variable`, `ghidra_function`, `ghidra_analysis`, `ghidra_decompilation`, `ghidra_symbol`, `ghidra_reference`, `ghidra_comment`, `ghidra_data_type`。
+- 11 個の書き込みドメインツール: `ghidra_bridge_write`, `ghidra_program_write`, `ghidra_memory_write`, `ghidra_listing_write`, `ghidra_global_variable_write`, `ghidra_function_write`, `ghidra_analysis_write`, `ghidra_symbol_write`, `ghidra_comment_write`, `ghidra_data_type_write`, `ghidra_batch`。
 
 ドメインツールは 55 個のメソッドを公開します。`interface.get` は WebSocket 専用です。
+`tools/call` では、既存クライアントとの互換性のため `<prefix>_<domain>` でも書き込み操作を呼び出せます。
 
 ### ツール名のプレフィックス
 
-すべてのツール名はプレフィックスとドットで始まります。デフォルトのプレフィックスは `ghidra` です。
+すべてのツール名はプレフィックスとアンダースコアで始まります。デフォルトのプレフィックスは `ghidra` です。
 起動引数 `tool_prefix` で変更できます（例: `tool_prefix=sample`）。
-この場合、ツール名には `sample.help` と `sample.program` があります。
+この場合、ツール名には `sample_help` と `sample_program` があります。
 1 つの MCP クライアントが複数のブリッジに接続する場合は、ブリッジごとに異なるプレフィックスを指定します。
 
-プレフィックスは英字で始まり、1 〜 64 文字の英数字、`_`、`-` で構成します。
+プレフィックスは英字で始まり、1 〜 42 文字の英数字、`_`、`-` で構成します。これによりすべてのツール名が 64 文字以内に収まります。
 サーバーは異なるプレフィックスのツール名を拒否します。
-`ghidra.help` の `domain` 引数には、完全なツール名またはプレフィックスなしのドメイン名（`memory` など）を指定できます。
+`ghidra_help` の `domain` 引数には、完全なツール名またはプレフィックスなしのドメイン名（`memory` など）を指定できます。
 このドキュメントの例はデフォルトのプレフィックスを使用します。
 
-`ghidra.help` は省略可能な `domain` と `operation` 引数を受け付けます:
+`ghidra_help` は省略可能な `domain` と `operation` 引数を受け付けます:
 - 引数なし: ドメインツールの一覧を返します。
-- `domain` のみ: そのドメインツールの操作名一覧を返します。
+- `domain` のみ: そのドメイン内の各操作の名前、メソッド名、説明、`inputSchema`、`outputSchema`、`effects` を返します。
 - `domain` と `operation`: その操作のメソッド名、説明、副作用、`inputSchema`、`outputSchema` を返します。
 
 操作を呼び出すには、対象のドメインツールに対して `operation` と `params` を渡します。
 `operation` の値はドメインツール内の操作名であり、ドット記法のメソッド名ではありません。
-たとえば、`memory.read` メソッドは `ghidra.memory` の `read` 操作です:
+たとえば、`memory.read` メソッドは `ghidra_memory` の `read` 操作です:
 
 ```json
 {
@@ -235,7 +237,7 @@ MCP は操作を 15 個のツールに分類します:
       "io.modelcontextprotocol/clientInfo": {"name": "example-client", "version": "1.0.0"},
       "io.modelcontextprotocol/clientCapabilities": {}
     },
-    "name": "ghidra.memory",
+    "name": "ghidra_memory",
     "arguments": {
       "operation": "read",
       "params": {

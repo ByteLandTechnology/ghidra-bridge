@@ -16,6 +16,7 @@ import app.byteland.ghidra.service.ScanProgress;
 import app.byteland.ghidra.service.TransactionExecutionException;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
+import app.byteland.ghidra.service.analysis.AnalysisResource;
 import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
@@ -194,6 +195,60 @@ class McpHttpServerToolResultTest {
       Map<String, Object> helpHttp =
           postStatelessToolCall(client, harness.endpoint(), "http-help", "ghidra_help", Map.of());
       assertDualContentParity(helpHttp, false, true);
+
+      Map<String, Object> domainHelpHttp =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "http-help-fn",
+              "ghidra_help",
+              Map.of("domain", "function"));
+      assertDualContentParity(domainHelpHttp, false, true);
+      List<?> domainHelpOps =
+          (List<?>) ((Map<?, ?>) resultMap(domainHelpHttp).get("structuredContent")).get("operations");
+      assertEquals(10, domainHelpOps.size());
+      for (Object opObj : domainHelpOps) {
+        Map<?, ?> opEntry = (Map<?, ?>) opObj;
+        assertTrue(opEntry.get("inputSchema") instanceof Map<?, ?>);
+        assertTrue(opEntry.get("outputSchema") instanceof Map<?, ?>);
+        assertTrue(opEntry.get("effects") instanceof Map<?, ?>);
+      }
+
+      Map<String, Object> legacyPatchHttp =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "http-fn-legacy-patch",
+              "ghidra_function",
+              Map.of(
+                  "operation",
+                  "patch",
+                  "params",
+                  Map.of(
+                      "selector", Map.of("entry", "ram:00100000"),
+                      "patch", Map.of("name", "renamed_fn"))));
+      assertDualContentParity(legacyPatchHttp, false, true);
+      assertEquals(
+          "patch",
+          ((Map<?, ?>) resultMap(legacyPatchHttp).get("structuredContent")).get("operation"));
+
+      Map<String, Object> splitPatchHttp =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "http-fn-split-patch",
+              "ghidra_function_write",
+              Map.of(
+                  "operation",
+                  "patch",
+                  "params",
+                  Map.of(
+                      "selector", Map.of("entry", "ram:00100000"),
+                      "patch", Map.of("name", "renamed_fn"))));
+      assertDualContentParity(splitPatchHttp, false, true);
+      assertEquals(
+          "patch",
+          ((Map<?, ?>) resultMap(splitPatchHttp).get("structuredContent")).get("operation"));
 
       Map<String, Object> errorHttp =
           postStatelessToolCall(
@@ -550,6 +605,36 @@ class McpHttpServerToolResultTest {
           proxy(
               FunctionService.class,
               (method, args) -> {
+                if ("patchFunction".equals(method)) {
+                  assertEquals("ram:00100000", args[0]);
+                  assertEquals("renamed_fn", args[1]);
+                  return null;
+                }
+                if ("getFunction".equals(method)) {
+                  return new FunctionResource(
+                      "ram:00100000",
+                      "renamed_fn",
+                      "Global",
+                      new FunctionResource.Body("ram:00100000", "ram:0010001f", 32L),
+                      "int renamed_fn(int arg0)",
+                      new DataTypeReference.Named("int"),
+                      new VariableStorageReference.Register("EAX"),
+                      1,
+                      "__stdcall",
+                      null,
+                      null,
+                      "Entry function",
+                      false,
+                      false,
+                      false,
+                      false,
+                      null,
+                      false,
+                      false,
+                      null,
+                      List.of("entry"),
+                      null);
+                }
                 assertEquals("listFunctions", method);
                 List<FunctionResource> list =
                     List.of(
@@ -618,6 +703,16 @@ class McpHttpServerToolResultTest {
               AnalysisService.class,
               (method, args) -> {
                 if ("close".equals(method)) return null;
+                if ("getStatus".equals(method)) {
+                  return new AnalysisResource(
+                      AnalysisResource.Kind.BRIDGE,
+                      AnalysisResource.Status.IDLE,
+                      true,
+                      null,
+                      null,
+                      null,
+                      null);
+                }
                 throw new AssertionError(method);
               });
       TransactionRunner tx =

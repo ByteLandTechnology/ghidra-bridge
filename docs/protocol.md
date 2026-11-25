@@ -196,32 +196,35 @@ The MCP error schema for that version cannot represent this case.
 
 ### Tool Call Convention
 
-MCP organizes operations into 15 tools:
-- `ghidra.help`: Finds domains, lists operations, and shows schemas.
-- 14 Domain Tools: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`.
+MCP organizes operations into 25 tools:
+- `ghidra_help`: Finds domains, lists operations, and shows schemas.
+- 13 Read-Only Domain Tools: `ghidra_bridge`, `ghidra_program`, `ghidra_address`, `ghidra_memory`, `ghidra_listing`, `ghidra_global_variable`, `ghidra_function`, `ghidra_analysis`, `ghidra_decompilation`, `ghidra_symbol`, `ghidra_reference`, `ghidra_comment`, `ghidra_data_type`.
+- 11 Write Domain Tools: `ghidra_bridge_write`, `ghidra_program_write`, `ghidra_memory_write`, `ghidra_listing_write`, `ghidra_global_variable_write`, `ghidra_function_write`, `ghidra_analysis_write`, `ghidra_symbol_write`, `ghidra_comment_write`, `ghidra_data_type_write`, `ghidra_batch`.
 
 The domain tools expose 55 methods. `interface.get` is available only through WebSocket.
+In `tools/call`, `<prefix>_<domain>` also dispatches write operations for legacy clients.
 
 ### Tool Name Prefix
 
-Every tool name starts with a prefix and a dot. The default prefix is `ghidra`.
+Every tool name starts with a prefix and an underscore. The default prefix is `ghidra`.
 Set the `tool_prefix` startup argument to change it, for example `tool_prefix=sample`.
-Then the tool names include `sample.help` and `sample.program`.
+Then the tool names include `sample_help` and `sample_program`.
 Use a different prefix for each bridge when one MCP client connects to more than one bridge.
 
-The prefix starts with a letter and has 1 to 64 letters, digits, `_`, or `-`.
+The prefix starts with a letter and has 1 to 42 letters, digits, `_`, or `-`.
+This limit keeps every tool name within 64 characters.
 The server rejects a tool name with a different prefix.
-In `ghidra.help`, the `domain` argument accepts the full tool name or the domain name without the prefix, such as `memory`.
+In `ghidra_help`, the `domain` argument accepts the full tool name or the domain name without the prefix, such as `memory`.
 The examples in this document use the default prefix.
 
-`ghidra.help` accepts optional `domain` and `operation` arguments:
+`ghidra_help` accepts optional `domain` and `operation` arguments:
 - No arguments: Returns the list of domain tools.
-- `domain`: Returns the operation names of one domain tool.
+- `domain`: Returns the name, method, description, `inputSchema`, `outputSchema`, and `effects` of each operation in one domain.
 - `domain` and `operation`: Returns the method name, description, effects, `inputSchema`, and `outputSchema` of one operation.
 
 To execute an operation, call its domain tool with `operation` and `params`.
 The `operation` value is the operation name in the domain tool, not the dotted method name.
-For example, the `memory.read` method is the `read` operation of `ghidra.memory`:
+For example, the `memory.read` method is the `read` operation of `ghidra_memory`:
 
 ```json
 {
@@ -234,7 +237,7 @@ For example, the `memory.read` method is the `read` operation of `ghidra.memory`
       "io.modelcontextprotocol/clientInfo": {"name": "example-client", "version": "1.0.0"},
       "io.modelcontextprotocol/clientCapabilities": {}
     },
-    "name": "ghidra.memory",
+    "name": "ghidra_memory",
     "arguments": {
       "operation": "read",
       "params": {

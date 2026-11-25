@@ -101,7 +101,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `session_id` | 程序名 | 当前活跃会话的唯一标识字符串。 |
 | `token` | *(无)* | Bearer 认证所需的共享密钥 Token。 |
 | `ws_url` | *(无)* | 出站客户端模式中的远程 WebSocket URL。 |
-| `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra.program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
+| `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra_program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
 | `jar` | *(自动)* | 当 `ghidra-bridge.jar` 不在脚本文件旁边时使用的路径。 |
 | `exit_deadline_sec` | *(无)* | 仅出站模式。会话结束后若 Ghidra 在该秒数内仍未退出，则强制停止 JVM。活动保存会先完成。仅用于由宿主启动的 headless Ghidra。 |
 
@@ -131,16 +131,17 @@ WebSocket 采用标准的 JSON-RPC 2.0 格式进行请求交互：
 
 ### Model Context Protocol (MCP)
 
-MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映射为 15 个工具：
-- `ghidra.help`：发现领域、列出操作或查看操作 Schema。
-- 14 个领域工具：`ghidra.program`、`ghidra.memory`、`ghidra.function` 和其他领域工具。
+MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映射为 25 个工具：
+- `ghidra_help`：发现领域、列出操作或查看操作 Schema。
+- 13 个只读领域工具：`ghidra_program`、`ghidra_memory`、`ghidra_function` 和其他查询工具。
+- 11 个写入领域工具：`ghidra_program_write`、`ghidra_memory_write`、`ghidra_function_write`、`ghidra_batch` 和其他修改工具。
 
 使用操作名及其参数调用领域工具。
-例如，`program.get` 方法对应 `ghidra.program` 的 `get` 操作：
+例如，`program.get` 方法对应 `ghidra_program` 的 `get` 操作：
 
 ```json
 {
-  "name": "ghidra.program",
+  "name": "ghidra_program",
   "arguments": {
     "operation": "get",
     "params": {}

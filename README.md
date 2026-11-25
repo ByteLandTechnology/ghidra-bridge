@@ -101,7 +101,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `session_id` | Program name | Unique identifier string for this active session. |
 | `token` | *(none)* | Shared secret token for bearer authentication. |
 | `ws_url` | *(none)* | Remote WebSocket URL in outbound client mode. |
-| `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra.program`. Use a different value for each server that one client connects to. |
+| `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra_program`. Use a different value for each server that one client connects to. |
 | `jar` | *(auto)* | Path to `ghidra-bridge.jar` when the JAR is not beside the script file. |
 | `exit_deadline_sec` | *(none)* | Outbound only. Halt the JVM if Ghidra does not exit this many seconds after the session ends. An active save completes first. Use it only for a headless Ghidra that a host starts. |
 
@@ -131,16 +131,17 @@ Call `interface.get` to discover all methods and schemas that the server support
 
 ### Model Context Protocol (MCP)
 
-MCP exposes the same operations, except `interface.get`, through 15 tools over Streamable HTTP:
-- `ghidra.help`: Discover domains, list operations, or view schemas.
-- 14 Domain Tools: `ghidra.program`, `ghidra.memory`, `ghidra.function`, and other domain tools.
+MCP exposes the same operations, except `interface.get`, through 25 tools over Streamable HTTP:
+- `ghidra_help`: Discover domains, list operations, or view schemas.
+- 13 Read-Only Tools: `ghidra_program`, `ghidra_memory`, `ghidra_function`, and other query tools.
+- 11 Write Tools: `ghidra_program_write`, `ghidra_memory_write`, `ghidra_function_write`, `ghidra_batch`, and other mutation tools.
 
 Call a domain tool with an operation name and its parameters.
-For example, the `program.get` method is the `get` operation of `ghidra.program`:
+For example, the `program.get` method is the `get` operation of `ghidra_program`:
 
 ```json
 {
-  "name": "ghidra.program",
+  "name": "ghidra_program",
   "arguments": {
     "operation": "get",
     "params": {}
