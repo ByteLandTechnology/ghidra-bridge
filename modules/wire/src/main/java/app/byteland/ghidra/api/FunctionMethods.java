@@ -17,7 +17,9 @@ import static app.byteland.ghidra.api.ApiRegistry.storage;
 import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
+import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import app.byteland.ghidra.service.function.ControlFlowGraphResource;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
@@ -159,6 +161,48 @@ final class FunctionMethods implements ApiMethodProvider {
                   .services()
                   .functionService()
                   .getCallees(entry, page.limit(), page.cursor());
+        });
+    Map<String, Object> graphSelector =
+        WireSchema.oneOf(
+            entrySelector,
+            ApiRegistry.selectorSchema(ApiVocabulary.ADDRESS));
+    registry.readWith(
+        "control_flow_graph.get",
+        "Get basic blocks and branch edges for the function at an entry point or address."
+            + " Set max_instructions or scan.timeout_ms to limit large functions.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.SELECTOR,
+                graphSelector,
+                "max_instructions",
+                ApiSchemaCatalog.integerWithDefault(
+                    ControlFlowGraphResource.MIN_MAX_INSTRUCTIONS,
+                    ControlFlowGraphResource.MAX_MAX_INSTRUCTIONS,
+                    ControlFlowGraphResource.DEFAULT_MAX_INSTRUCTIONS),
+                "timeout_ms",
+                ApiSchemaCatalog.scanTimeoutSchema(),
+                ApiVocabulary.FIELDS,
+                ApiRegistry.fieldsSchema()),
+            ApiVocabulary.SELECTOR),
+        ApiSchemaCatalog.controlFlowGraphOutputSchema(),
+        ApiSchemaCatalog.controlFlowGraphFields(),
+        List.of(ApiVocabulary.ENTRY),
+        request -> {
+          Map<String, Object> selected = selector(request);
+          return WireValues.restrict(
+              WireValues.resource(
+                  registry
+                      .services()
+                      .functionService()
+                      .getControlFlowGraph(
+                          optionalText(selected, ApiVocabulary.ENTRY),
+                          optionalText(selected, ApiVocabulary.ADDRESS),
+                          integer(
+                              request,
+                              "max_instructions",
+                              ControlFlowGraphResource.DEFAULT_MAX_INSTRUCTIONS),
+                          integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS))),
+              ApiSchemaCatalog.controlFlowGraphFields());
         });
   }
 

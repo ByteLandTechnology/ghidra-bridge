@@ -42,6 +42,8 @@ import static app.byteland.ghidra.api.ApiVocabulary.TYPE;
 import static app.byteland.ghidra.api.ApiVocabulary.VALUES;
 
 import app.byteland.ghidra.service.AddressScanOptions;
+import app.byteland.ghidra.service.function.ControlFlowGraphResource;
+import app.byteland.ghidra.service.listing.ListingWindowResource;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -135,6 +137,21 @@ final class ApiSchemaCatalog {
             ApiRegistry.cursorSchema(),
             FIELDS,
             ApiRegistry.fieldsSchema()));
+  }
+
+  static Map<String, Object> scanWindowInput(Map<String, Object> filter) {
+    return input(
+        props(
+            FILTER,
+            filter,
+            "range",
+            ADDRESS_RANGE_SCHEMA,
+            "timeout_ms",
+            scanTimeoutSchema(),
+            LIMIT,
+            ApiRegistry.limitSchema(),
+            CURSOR,
+            ApiRegistry.cursorSchema()));
   }
 
   static Map<String, Object> requiredListInput(Map<String, Object> filter) {
@@ -416,13 +433,16 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> resourceSchema(Set<String> fields, List<String> identityFields) {
+    return WireSchema.withDefinitions(objectSchema(fields, identityFields));
+  }
+
+  static Map<String, Object> objectSchema(Set<String> fields, List<String> identityFields) {
     Map<String, Map<String, Object>> properties = new LinkedHashMap<>();
     for (String path : fields) {
       String root = path.substring(0, path.indexOf('.') < 0 ? path.length() : path.indexOf('.'));
       properties.putIfAbsent(root, outputFieldSchema(root));
     }
-    return WireSchema.withDefinitions(
-        WireSchema.object(properties, identityFields.toArray(String[]::new)));
+    return WireSchema.object(properties, identityFields.toArray(String[]::new));
   }
 
   static Map<String, Object> listSchema(Set<String> fields, List<String> identityFields) {
@@ -462,6 +482,7 @@ final class ApiSchemaCatalog {
             "category_count",
             "data_type_count",
             ORDINAL,
+            "unresolved_jumps",
             "elapsed_ms")
         .contains(field)) {
       return WireSchema.integer(0, Long.MAX_VALUE);
@@ -481,6 +502,7 @@ final class ApiSchemaCatalog {
             HAS_NO_RETURN,
             HAS_VAR_ARGS,
             "has_custom_variable_storage",
+            "has_body",
             "external",
             "thunk",
             "primary",
@@ -627,6 +649,18 @@ final class ApiSchemaCatalog {
     if (MEMORY_BLOCK.equals(field)) return memoryBlockSummarySchema();
     if (FUNCTION.equals(field)) return functionSummarySchema();
     if (SYMBOL.equals(field)) return symbolSummarySchema();
+    if ("caller".equals(field)) return callerSummarySchema();
+    if ("blocks".equals(field)) {
+      return WireSchema.array(
+          controlFlowBlockSchema(), 0, ControlFlowGraphResource.MAX_MAX_INSTRUCTIONS);
+    }
+    if ("nodes".equals(field)) {
+      return WireSchema.array(controlFlowNodeSchema(), 0, Integer.MAX_VALUE);
+    }
+    if ("edges".equals(field)) {
+      return WireSchema.array(controlFlowEdgeSchema(), 0, Integer.MAX_VALUE);
+    }
+    if (ApiVocabulary.SCAN.equals(field)) return SCAN_PROGRESS_SCHEMA;
     return WireSchema.string();
   }
 
@@ -791,5 +825,185 @@ final class ApiSchemaCatalog {
 
   static Map<String, Object> commentTypeSchema() {
     return WireSchema.stringEnum("plate", "pre", "eol", "repeatable", "post");
+  }
+
+  static Set<String> codeUnitFields() {
+    return Set.of(
+        ADDRESS, KIND, LENGTH, BYTES, ApiVocabulary.TEXT, "mnemonic", "operands", DATA_TYPE);
+  }
+
+  static Set<String> dataUnitFields() {
+    return Set.of(ADDRESS, LENGTH, DATA_TYPE, "value", "representation", BYTES);
+  }
+
+  static Map<String, Object> listingWindowOutputSchema() {
+    return WireSchema.withDefinitions(
+        WireSchema.object(
+            props(
+                ITEMS,
+                WireSchema.array(
+                    objectSchema(codeUnitFields(), List.of(ADDRESS)), 0, ApiRegistry.MAX_LIMIT),
+                "data_units",
+                WireSchema.array(
+                    objectSchema(dataUnitFields(), List.of(ADDRESS)),
+                    0,
+                    ListingWindowResource.MAX_DATA_UNITS),
+                "symbols",
+                WireSchema.array(
+                    objectSchema(symbolFields(), List.of("id")),
+                    0,
+                    ListingWindowResource.MAX_SYMBOLS),
+                "functions",
+                WireSchema.array(
+                    objectSchema(functionFields(), List.of(ENTRY)),
+                    0,
+                    ListingWindowResource.MAX_FUNCTIONS),
+                "comments",
+                WireSchema.array(
+                    objectSchema(commentFields(), List.of(ADDRESS, TYPE)),
+                    0,
+                    ListingWindowResource.MAX_COMMENTS),
+                "incoming_references",
+                WireSchema.array(
+                    referenceResourceSchema(),
+                    0,
+                    ListingWindowResource.MAX_INCOMING_REFERENCES),
+                "outgoing_references",
+                WireSchema.array(
+                    referenceResourceSchema(),
+                    0,
+                    ListingWindowResource.MAX_OUTGOING_REFERENCES),
+                ApiVocabulary.NEXT_CURSOR,
+                WireSchema.nonBlankString(),
+                ApiVocabulary.SCAN,
+                SCAN_PROGRESS_SCHEMA),
+            ITEMS,
+            "data_units",
+            "symbols",
+            "functions",
+            "comments",
+            "incoming_references",
+            "outgoing_references",
+            ApiVocabulary.SCAN));
+  }
+
+  static Set<String> controlFlowGraphFields() {
+    return Set.of(
+        ENTRY,
+        NAME,
+        NAMESPACE,
+        "demangled_name",
+        BODY,
+        "body.start",
+        "body.end",
+        "body.num_addresses",
+        "has_body",
+        "unresolved_jumps",
+        "blocks",
+        "nodes",
+        "edges",
+        ApiVocabulary.SCAN);
+  }
+
+  static Map<String, Object> controlFlowGraphOutputSchema() {
+    return WireSchema.withDefinitions(
+        objectSchema(
+            controlFlowGraphFields(),
+            List.of(
+                ENTRY,
+                NAME,
+                "has_body",
+                "unresolved_jumps",
+                "blocks",
+                "nodes",
+                "edges")));
+  }
+
+  static Set<String> referenceContextFields() {
+    return Set.of(
+        ApiVocabulary.FROM,
+        "to",
+        TYPE,
+        SOURCE_TYPE,
+        OPERAND_INDEX,
+        "primary",
+        "call_site",
+        "caller",
+        "caller.entry",
+        "caller.name",
+        "caller.namespace",
+        "caller.demangled_name");
+  }
+
+  static Map<String, Object> callerSummarySchema() {
+    return WireSchema.object(
+        props(
+            ENTRY,
+            WireSchema.nonBlankString(),
+            NAME,
+            WireSchema.nonBlankString(),
+            NAMESPACE,
+            WireSchema.string(),
+            "demangled_name",
+            WireSchema.string()),
+        ENTRY,
+        NAME);
+  }
+
+  private static Map<String, Object> controlFlowBlockSchema() {
+    Map<String, Object> blockInstruction =
+        WireSchema.object(
+            props(
+                ADDRESS,
+                WireSchema.nonBlankString(),
+                LENGTH,
+                WireSchema.integer(1, Integer.MAX_VALUE)),
+            ADDRESS,
+            LENGTH);
+    return WireSchema.object(
+        props(
+            ADDRESS,
+            WireSchema.nonBlankString(),
+            "instructions",
+            WireSchema.array(
+                blockInstruction, 1, ControlFlowGraphResource.MAX_MAX_INSTRUCTIONS)),
+        ADDRESS,
+        "instructions");
+  }
+
+  private static Map<String, Object> controlFlowNodeSchema() {
+    return WireSchema.object(
+        props(
+            "id",
+            WireSchema.nonBlankString(),
+            KIND,
+            WireSchema.stringEnum("block", "external"),
+            ADDRESS,
+            WireSchema.nonBlankString(),
+            ENTRY,
+            WireSchema.nonBlankString(),
+            "lines",
+            WireSchema.array(
+                WireSchema.string(), 0, ControlFlowGraphResource.MAX_MAX_INSTRUCTIONS)),
+        "id",
+        KIND,
+        ADDRESS);
+  }
+
+  private static Map<String, Object> controlFlowEdgeSchema() {
+    return WireSchema.object(
+        props(
+            ApiVocabulary.FROM,
+            WireSchema.nonBlankString(),
+            "to",
+            WireSchema.nonBlankString(),
+            "label",
+            WireSchema.string(),
+            KIND,
+            WireSchema.stringEnum("taken", "fallthrough", "flow")),
+        ApiVocabulary.FROM,
+        "to",
+        "label",
+        KIND);
   }
 }

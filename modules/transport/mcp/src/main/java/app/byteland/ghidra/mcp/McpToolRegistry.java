@@ -50,9 +50,12 @@ final class McpToolRegistry {
       case "memory_block" -> new String[] {"memory", "block." + operation};
       case "code_unit", "data_unit", "instruction", "flow_override" ->
           new String[] {"listing", prefix + "." + operation};
+      case "listing_window" -> new String[] {"listing", "window." + operation};
       case "function_call" -> new String[] {"function", "call." + operation};
       case "function_parameter" -> new String[] {"function", "parameter." + operation};
       case "function_local_variable" -> new String[] {"function", "local_variable." + operation};
+      case "control_flow_graph" -> new String[] {"function", "control_flow_graph." + operation};
+      case "reference_context" -> new String[] {"reference", "context." + operation};
       case "data_type_category" -> new String[] {"data_type", "category." + operation};
       default -> new String[] {prefix, operation};
     };
@@ -75,7 +78,8 @@ final class McpToolRegistry {
         "required", List.of("operation"));
 
     String purpose = "listing".equals(domain)
-        ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
+        ? "for code units, data units, instructions, flow overrides, and address windows"
+        : "for " + domain + " data";
     return Map.of("name", toolName(domain),
         "description", "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",

@@ -9,12 +9,14 @@ import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import app.byteland.ghidra.service.listing.InstructionResource;
 import app.byteland.ghidra.service.listing.ListingService;
+import app.byteland.ghidra.service.listing.ListingWindowResource;
 import java.util.List;
 
 public final class ListingServiceImpl implements ListingService {
   private final ListingCodeUnitQueries codeUnitQueries;
   private final ListingInstructionQueries instructionQueries;
   private final ListingDataQueries dataQueries;
+  private final ListingWindowQueries windowQueries;
   private final ListingFlowOverrideQueries flowOverrideQueries;
   private final ListingFlowOverrideMutations flowOverrideMutations;
 
@@ -22,6 +24,7 @@ public final class ListingServiceImpl implements ListingService {
     this.codeUnitQueries = new ListingCodeUnitQueries(context);
     this.instructionQueries = new ListingInstructionQueries(context);
     this.dataQueries = new ListingDataQueries(context);
+    this.windowQueries = new ListingWindowQueries(context, codeUnitQueries, dataQueries);
     ListingFlowOverrideScopes flowOverrideScopes = new ListingFlowOverrideScopes(context);
     this.flowOverrideQueries = new ListingFlowOverrideQueries(context, flowOverrideScopes);
     this.flowOverrideMutations = new ListingFlowOverrideMutations(context, flowOverrideScopes);
@@ -58,6 +61,12 @@ public final class ListingServiceImpl implements ListingService {
       int limit,
       String cursor) {
     return flowOverrideQueries.getFlowOverrides(scope, flowOverrides, scan, limit, cursor);
+  }
+
+  @Override
+  public ListingWindowResource getListingWindow(
+      AddressScanOptions scan, int limit, String kind, String cursor) {
+    return windowQueries.getListingWindow(scan, limit, kind, cursor);
   }
 
   @Override

@@ -115,6 +115,14 @@ public interface FunctionService {
   void removeParameter(String rawAddress, int ordinal);
 
   /**
+   * Returns basic blocks and branch edges for the function at an entry or address.
+   */
+  default ControlFlowGraphResource getControlFlowGraph(
+      String rawEntry, String rawAddress, int maxInstructions, int timeoutMs) {
+    throw new UnsupportedOperationException("getControlFlowGraph");
+  }
+
+  /**
    * Updates a local variable in a function.
    */
   void patchLocalVariable(

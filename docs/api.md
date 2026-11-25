@@ -18,6 +18,7 @@
 | `memory.write` | `destructive mutation` | Write hex or base64 bytes at an address. |
 | `code_unit.list` | `read-only` | List each code unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `data_unit.list` | `read-only` | List each data unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
+| `listing_window.get` | `read-only` | Get code units, data units, symbols, functions, comments, and references for one address window. Use next_cursor to get the next window. |
 | `global_variable.get` | `read-only` | Get the global variable at one address. |
 | `global_variable.list` | `read-only` | List global variables in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `global_variable.create` | `mutation` | Create typed data and a primary global variable label at an unused address. |
@@ -38,6 +39,7 @@
 | `function_parameter.delete` | `destructive mutation` | Delete function parameter data from the active program. |
 | `function_local_variable.patch` | `destructive mutation` | Change function local variable data in the active program. |
 | `function_call.list` | `read-only` | List the callers or callees of a function. The default direction is callees. |
+| `control_flow_graph.get` | `read-only` | Get basic blocks and branch edges for the function at an entry point or address. Set max_instructions or scan.timeout_ms to limit large functions. |
 | `analysis.get` | `read-only` | Get analysis data from the active program. |
 | `analysis.start` | `mutation` | Start automatic analysis of the active program. |
 | `decompilation.get` | `read-only` | Decompile the function at an entry point. Set scan.timeout_ms between 100 and 300000. The default is 30000 milliseconds; Ghidra rounds up to whole seconds. Format document returns GUI lines and cursor addresses from one decompilation. By default, only pre comments and the plate comment at the entry show. Set include_comments to show all comments and to return repeatable comments; then check comments_complete and warnings. |
@@ -46,6 +48,7 @@
 | `symbol.list` | `read-only` | List each symbol in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `symbol.patch` | `destructive mutation` | Change symbol data in the active program. |
 | `reference.list` | `read-only` | List references from or to an address. Set filter.direction. |
+| `reference_context.list` | `read-only` | List references to a symbol, function entry, or address with caller summaries and call sites. Use next_cursor to get the next page. |
 | `comment.get` | `read-only` | Get comment data from the active program. |
 | `comment.list` | `read-only` | List each comment in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `comment.create` | `mutation` | Create comment data in the active program. |

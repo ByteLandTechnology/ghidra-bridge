@@ -1,5 +1,6 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.addressScan;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 import static app.byteland.ghidra.api.ApiRegistry.text;
@@ -51,6 +52,47 @@ final class ReferenceMethods implements ApiMethodProvider {
                   optionalText(filter, "to"),
                   optionalText(filter, ApiVocabulary.TYPE),
                   referenceDirection(filter),
+                  page.limit(),
+                  page.cursor());
+        });
+    Map<String, Object> referenceContextFilter =
+        ApiSchemaCatalog.nonEmptyObject(
+            ApiSchemaCatalog.props(
+                "to",
+                WireSchema.nonBlankString(),
+                ApiVocabulary.ENTRY,
+                WireSchema.nonBlankString(),
+                "symbol_id",
+                WireSchema.nonBlankString(),
+                ApiVocabulary.TYPE,
+                WireSchema.string()));
+    registry.scanList(
+        "reference_context.list",
+        "List references to a symbol, function entry, or address with caller summaries and call"
+            + " sites. Use next_cursor to get the next page.",
+        ApiSchemaCatalog.requiredScanListInput(referenceContextFilter),
+        ApiSchemaCatalog.referenceContextFields(),
+        List.of(ApiVocabulary.FROM, "to", ApiVocabulary.TYPE, ApiVocabulary.OPERAND_INDEX),
+        (request, page) -> {
+          Map<String, Object> filter = filter(request);
+          String to = optionalText(filter, "to");
+          String entry = optionalText(filter, ApiVocabulary.ENTRY);
+          String symbolId = optionalText(filter, "symbol_id");
+          if (to == null && entry == null && symbolId == null) {
+            throw ApiException.badRequest(
+                "missing_target",
+                "filter requires at least one of to, entry, or symbol_id",
+                "/filter");
+          }
+          return registry
+              .services()
+              .referenceService()
+              .listReferenceContext(
+                  to,
+                  entry,
+                  symbolId,
+                  optionalText(filter, ApiVocabulary.TYPE),
+                  addressScan(request),
                   page.limit(),
                   page.cursor());
         });
