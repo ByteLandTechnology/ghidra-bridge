@@ -68,6 +68,7 @@ public final class McpHttpServer implements AutoCloseable {
   private static final long DEFAULT_SSE_KEEPALIVE_MILLIS = TimeUnit.SECONDS.toMillis(15);
 
   private final McpConfig config;
+  private final boolean loopbackListener;
   private final String normalizedConfiguredHost;
   private final InetAddress configuredHostLiteral;
   private final AgentDispatcher dispatcher;
@@ -101,8 +102,9 @@ public final class McpHttpServer implements AutoCloseable {
       throw new IllegalArgumentException("sseKeepaliveMillis must be positive");
     }
     this.config = Objects.requireNonNull(config, "config");
+    this.loopbackListener = NetworkBinding.isLoopback(config.host());
     this.normalizedConfiguredHost = normalizeHost(config.host());
-    this.configuredHostLiteral = parseIpLiteral(this.normalizedConfiguredHost);
+    this.configuredHostLiteral = NetworkBinding.parseIpLiteral(this.normalizedConfiguredHost);
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
     this.sseKeepaliveMillis = sseKeepaliveMillis;
@@ -142,6 +144,10 @@ public final class McpHttpServer implements AutoCloseable {
 
   public String endpoint() {
     return config.endpoint();
+  }
+
+  int activeSseSessionCount() {
+    return sseSessions.size();
   }
 
   @Override
@@ -186,6 +192,13 @@ public final class McpHttpServer implements AutoCloseable {
       RequestLog log = new RequestLog(requestLogSink);
       try (exchange) {
         try {
+          NetworkBinding.HostValidationResult hostValidation = validateHost(exchange);
+          if (!hostValidation.isValid()) {
+            int status = hostValidation.httpStatus();
+            log.method(exchange.getRequestMethod()).error().status(status);
+            writePlain(exchange, status, hostValidation.message());
+            return;
+          }
           OriginValidation originValidation = validateOrigin(exchange);
           if (!originValidation.allowed()) {
             log.method(exchange.getRequestMethod()).error().status(403);
@@ -878,6 +891,12 @@ public final class McpHttpServer implements AutoCloseable {
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
     }
+  }
+
+  private NetworkBinding.HostValidationResult validateHost(HttpExchange exchange) {
+    List<String> hostHeaders = exchange.getRequestHeaders().get("Host");
+    return NetworkBinding.validateHostHeader(
+        hostHeaders, config.host(), server.getAddress().getPort(), loopbackListener);
   }
 
   private static void sendNoBody(HttpExchange exchange, int statusCode) throws IOException {
