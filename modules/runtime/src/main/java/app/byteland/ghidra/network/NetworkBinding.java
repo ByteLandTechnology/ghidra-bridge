@@ -476,6 +476,7 @@ public final class NetworkBinding {
     }
     return -1;
   }
+
   private static boolean isValidHostNameOrIpv4(String hostPart) {
     if (hostPart.isEmpty() || hostPart.length() > MAX_HOST_NAME_LENGTH) {
       return false;

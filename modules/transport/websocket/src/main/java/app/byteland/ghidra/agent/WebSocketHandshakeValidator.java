@@ -19,7 +19,7 @@ final class WebSocketHandshakeValidator {
   static void validate(AgentConfig config, WebSocketHandshake.HandshakeRequest request) {
     NetworkBinding.HostValidationResult hostValidation =
         NetworkBinding.validateHostHeader(request.hostHeaders(), config.host(), config.port());
-    validateWithHostResult(config, request, hostValidation);
+    validateWithHostResult(config, null, request, hostValidation);
   }
 
   static void validate(
@@ -27,11 +27,12 @@ final class WebSocketHandshakeValidator {
     NetworkBinding.HostValidationResult hostValidation =
         NetworkBinding.validateHostHeader(
             request.hostHeaders(), config.host(), config.port(), loopbackListener);
-    validateWithHostResult(config, request, hostValidation);
+    validateWithHostResult(config, loopbackListener, request, hostValidation);
   }
 
   private static void validateWithHostResult(
       AgentConfig config,
+      Boolean loopbackListener,
       WebSocketHandshake.HandshakeRequest request,
       NetworkBinding.HostValidationResult hostValidation) {
     if (!hostValidation.isValid()) {
@@ -68,7 +69,7 @@ final class WebSocketHandshakeValidator {
       throw new WebSocketHandshake.HttpHandshakeException(
           400, BAD_REQUEST_REASON, "Missing Sec-WebSocket-Key");
     }
-    validateOrigin(config, request);
+    validateOrigin(config, loopbackListener, request);
     if (request.query().containsKey("token")) {
       throw new WebSocketHandshake.HttpHandshakeException(
           400, BAD_REQUEST_REASON, "Query-string tokens are not supported");
@@ -81,7 +82,7 @@ final class WebSocketHandshakeValidator {
   }
 
   private static void validateOrigin(
-      AgentConfig config, WebSocketHandshake.HandshakeRequest request) {
+      AgentConfig config, Boolean loopbackListener, WebSocketHandshake.HandshakeRequest request) {
     List<String> origins = request.originHeaders();
     if (origins.isEmpty()) {
       return;
@@ -99,7 +100,7 @@ final class WebSocketHandshakeValidator {
     }
     URI uri = parseOriginUri(trimmedOrigin);
     String originHost = uri.getHost();
-    if (!isAllowedOriginHost(config.host(), originHost)) {
+    if (!isAllowedOriginHost(config.host(), loopbackListener, originHost)) {
       throw forbidden("Disallowed Origin header");
     }
   }
@@ -142,7 +143,8 @@ final class WebSocketHandshakeValidator {
     return uri;
   }
 
-  private static boolean isAllowedOriginHost(String configHost, String originHost) {
+  private static boolean isAllowedOriginHost(
+      String configHost, Boolean loopbackListener, String originHost) {
     if (configHost == null || configHost.isBlank()) {
       return false;
     }
@@ -153,7 +155,9 @@ final class WebSocketHandshakeValidator {
     if (NetworkBinding.hostsMatch(configHost, originHost)) {
       return true;
     }
-    return NetworkBinding.isLiteralLoopbackHost(originHost) && isLoopbackListener(configHost);
+    boolean listenerIsLoopback =
+        loopbackListener != null ? loopbackListener : isLoopbackListener(configHost);
+    return NetworkBinding.isLiteralLoopbackHost(originHost) && listenerIsLoopback;
   }
 
   private static boolean isLoopbackListener(String configHost) {

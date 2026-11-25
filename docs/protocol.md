@@ -98,7 +98,7 @@ The server replies with an error envelope for a bad message and keeps the socket
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
 - `400`: Absent, blank, malformed, or duplicate `Host` header, absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
 - `401`: Absent or invalid bearer token.
-- `403`: Disallowed, malformed, or duplicate `Origin` header. On a loopback listener, a `Host` header that is not `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host` (or has another port).
+- `403`: Disallowed, malformed, or duplicate `Origin` header. On a loopback listener, `Host` must match `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host`, with no other port.
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
