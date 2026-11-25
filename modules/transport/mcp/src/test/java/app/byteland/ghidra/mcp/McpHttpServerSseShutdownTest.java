@@ -491,7 +491,7 @@ class McpHttpServerSseShutdownTest {
               }
               writeEntered.countDown();
               try {
-                unblockWrite.await();
+                unblockWrite.await(10, TimeUnit.SECONDS);
               } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Interrupted write", interrupted);

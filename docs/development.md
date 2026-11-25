@@ -98,6 +98,17 @@ The verification tasks check:
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
 
+### Test Timeouts, Debugging, and Failure Reports
+
+Every Gradle `Test` task configures:
+- **Task deadline**: 5 minutes (`Duration.ofMinutes(5)`).
+- **Method and lifecycle deadlines**: 30-second cooperative (`SAME_THREAD`) JUnit Jupiter timeouts (`junit.jupiter.execution.timeout.default=30s`, `junit.jupiter.execution.timeout.testable.method.default=30s`, and `junit.jupiter.execution.timeout.lifecycle.method.default=30s`) with live thread dumps (`junit.jupiter.execution.timeout.threaddump.enabled=true`).
+- **Debugger mode**: `junit.jupiter.execution.timeout.mode=disabled_on_debug` disables JUnit timeouts automatically when you attach a debugger with `--debug-jvm` (for example `./gradlew --no-daemon :adapter:test --debug-jvm`), or when you pass `-Djunit.jupiter.execution.timeout.mode=disabled`.
+- **Failure-only output and archives**: Gradle prints `FULL` exception stack traces, causes, and buffered `stdout`/`stderr` streams only when a test fails. On failure, inspect:
+  - JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
+  - JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
+  - Headless Ghidra regression log: `build/reports/headless-regression/headless.log` (tailed to `stderr` and saved on failure; uploaded in CI under `verify-test-diagnostics` and `publish-test-diagnostics`)
+
 ## Releases
 
 The CI workflow uses release-please to manage versions and release notes.

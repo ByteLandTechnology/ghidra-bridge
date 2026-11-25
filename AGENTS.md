@@ -57,6 +57,30 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
 - `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra (`compileGeneratedScripts`).
 - `verifyArchitecture`: Verifies that no module outside `adapter` and `launcher` imports `ghidra.*`.
 
+### Test Timeouts, Debugging, and Failure Reports
+
+Every Gradle `Test` task enforces:
+- A **5-minute** Gradle task timeout (`Duration.ofMinutes(5)`).
+- **30-second** cooperative (`SAME_THREAD`) JUnit Jupiter timeouts for test and lifecycle methods (`junit.jupiter.execution.timeout.default=30s`, `junit.jupiter.execution.timeout.testable.method.default=30s`, `junit.jupiter.execution.timeout.lifecycle.method.default=30s`) with live thread dumps (`junit.jupiter.execution.timeout.threaddump.enabled=true`).
+- `FULL` exception formatting with causes and stack traces, printing buffered standard streams (`stdout` and `stderr`) only for failed tests.
+
+`junit.jupiter.execution.timeout.mode` defaults to `disabled_on_debug`, so attaching a debugger automatically disables JUnit timeouts:
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test --debug-jvm
+```
+
+To disable JUnit timeouts explicitly without attaching a debugger:
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon -Djunit.jupiter.execution.timeout.mode=disabled :adapter:test
+```
+
+Failure diagnostics and reports are written to:
+- JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
+- JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
+- Headless regression failure log: `build/reports/headless-regression/headless.log` (printed to `stderr` and archived on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
+
 ### Repository Hygiene Check
 
 Check tracked files for build artifacts, stale paths, zero-byte files, duplicate files, and API method counts:
@@ -71,6 +95,14 @@ After `buildGhidraScript` or `clean verify` populates `build/ghidra-script/`, ru
 
 ```bash
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+```
+
+### Release Packaging Verification
+
+Build and verify the release archive locally with full Gradle stack traces (`--stacktrace`):
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra bash .github/scripts/package-release.sh
 ```
 
 ### Exact Local CI Sequence

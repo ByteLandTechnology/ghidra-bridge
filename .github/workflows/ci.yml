@@ -45,6 +45,18 @@ jobs:
       - name: Test function mutations
         run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/**/*.xml
+            modules/**/build/reports/tests/**
+            build/reports/headless-regression/**
+
   release:
     # Update the release PR or create a release after main passes verification.
     needs: verify
@@ -106,3 +118,15 @@ jobs:
             "build/release/ghidra-bridge-${RELEASE_VERSION}.zip" \
             "build/release/ghidra-bridge-${RELEASE_VERSION}.zip.sha256" \
             --clobber
+
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/**/*.xml
+            modules/**/build/reports/tests/**
+            build/reports/headless-regression/**

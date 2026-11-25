@@ -223,41 +223,45 @@ class ApiFailuresAdversarialTest {
     int threadCount = 100;
     int opsPerThread = 100;
     ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-    CountDownLatch startLatch = new CountDownLatch(1);
-    List<Future<?>> futures = new ArrayList<>();
+    try {
+      CountDownLatch startLatch = new CountDownLatch(1);
+      List<Future<?>> futures = new ArrayList<>();
 
-    for (int t = 0; t < threadCount; t++) {
-      final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            Throwable ex;
-            switch ((threadId + i) % 6) {
-              case 0 -> ex = new IllegalArgumentException("arg error " + i);
-              case 1 -> ex = new TransactionExecutionException("tx error " + i, "target." + i);
-              case 2 -> ex = new IllegalStateException("state error " + i);
-              case 3 -> ex = new NoSuchElementException("not found " + i);
-              case 4 -> ex = new TimeoutException("timeout " + i);
-              default -> ex = new RuntimeException("generic " + i);
+      for (int t = 0; t < threadCount; t++) {
+        final int threadId = t;
+        futures.add(executor.submit(() -> {
+          try {
+            assertTrue(startLatch.await(10, TimeUnit.SECONDS), "Timed out waiting for startLatch");
+            for (int i = 0; i < opsPerThread; i++) {
+              Throwable ex;
+              switch ((threadId + i) % 6) {
+                case 0 -> ex = new IllegalArgumentException("arg error " + i);
+                case 1 -> ex = new TransactionExecutionException("tx error " + i, "target." + i);
+                case 2 -> ex = new IllegalStateException("state error " + i);
+                case 3 -> ex = new NoSuchElementException("not found " + i);
+                case 4 -> ex = new TimeoutException("timeout " + i);
+                default -> ex = new RuntimeException("generic " + i);
+              }
+              var failure = ApiFailures.normalize(ex);
+              assertNotNull(failure);
+              assertTrue(failure.status() >= 400 && failure.status() <= 500);
+              assertNotNull(failure.error().code());
+              assertNotNull(failure.error().message());
             }
-            var failure = ApiFailures.normalize(ex);
-            assertNotNull(failure);
-            assertTrue(failure.status() >= 400 && failure.status() <= 500);
-            assertNotNull(failure.error().code());
-            assertNotNull(failure.error().message());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
           }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
-    }
+        }));
+      }
 
-    startLatch.countDown();
-    for (Future<?> f : futures) {
-      f.get(10, TimeUnit.SECONDS);
+      startLatch.countDown();
+      for (Future<?> f : futures) {
+        f.get(10, TimeUnit.SECONDS);
+      }
+      executor.shutdown();
+      assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+    } finally {
+      executor.shutdownNow();
     }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
   }
 }
