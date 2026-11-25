@@ -29,20 +29,33 @@ class AgentWebSocketAuthTest {
   private static final String SAMPLE_WS_ACCEPT = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
 
   @Test
-  @DisplayName("Validator rejects unauthenticated cross-origin upgrade on loopback with HTTP 401")
+  @DisplayName("Validator rejects unauthenticated upgrade on loopback with HTTP 401")
   void testValidatorRejectsUnauthenticatedLoopbackUpgrade() {
     AgentConfig config =
         new AgentConfig(null, "127.0.0.1", 8765, "/ws/agent", CONFIGURED_TOKEN, "demo", null);
-    WebSocketHandshake.HandshakeRequest request =
+    WebSocketHandshake.HandshakeRequest originlessRequest =
         new WebSocketHandshake.HandshakeRequest(
             "GET", "/ws/agent", Map.of(), upgradeHeaders(null));
 
     WebSocketHandshake.HttpHandshakeException ex =
         assertThrows(
             WebSocketHandshake.HttpHandshakeException.class,
-            () -> WebSocketHandshakeValidator.validate(config, request));
+            () -> WebSocketHandshakeValidator.validate(config, originlessRequest));
     assertEquals(401, ex.status());
     assertEquals("Unauthorized", ex.reason());
+
+    Map<String, String> loopbackOriginHeaders = upgradeHeaders(null);
+    loopbackOriginHeaders.put("origin", "http://localhost:3000");
+    WebSocketHandshake.HandshakeRequest loopbackOriginRequest =
+        new WebSocketHandshake.HandshakeRequest(
+            "GET", "/ws/agent", Map.of(), loopbackOriginHeaders);
+
+    WebSocketHandshake.HttpHandshakeException loopbackOriginEx =
+        assertThrows(
+            WebSocketHandshake.HttpHandshakeException.class,
+            () -> WebSocketHandshakeValidator.validate(config, loopbackOriginRequest));
+    assertEquals(401, loopbackOriginEx.status());
+    assertEquals("Unauthorized", loopbackOriginEx.reason());
   }
 
   @Test
@@ -118,31 +131,39 @@ class AgentWebSocketAuthTest {
   }
 
   @Test
-  @DisplayName("Live AgentWebSocketServer on 127.0.0.1 returns 401 without bearer token, 400 for query token, and 101 with valid bearer token")
+  @DisplayName("Live AgentWebSocketServer on 127.0.0.1 returns 401 without bearer token, 403 for untrusted Origin, 400 for query token, and 101 with valid bearer token")
   void testLiveLoopbackServerUpgradeResponses() throws Exception {
     CountDownLatch openedLatch = new CountDownLatch(1);
     StartedServer started = startServerOnEphemeralPort(CONFIGURED_TOKEN, openedLatch);
     try (AgentWebSocketServer ignored = started.server()) {
       int port = started.port();
 
-      // 1. Unauthenticated cross-origin upgrade must receive HTTP/1.1 401 Unauthorized.
-      List<String> unauthResponse =
-          sendRawHttpUpgrade(
-              port,
-              "/ws/agent",
-              "Origin: https://untrusted-origin.example\r\n");
+      // 1. Unauthenticated upgrade without Origin or from another local port must receive 401.
+      List<String> unauthResponse = sendRawHttpUpgrade(port, "/ws/agent", "");
       assertEquals("HTTP/1.1 401 Unauthorized", unauthResponse.getFirst());
       assertTrue(unauthResponse.contains("WWW-Authenticate: Bearer"));
 
-      // 2. Query token upgrade must receive HTTP/1.1 400 Bad Request.
-      List<String> queryTokenResponse =
+      List<String> localOriginUnauthResponse =
+          sendRawHttpUpgrade(port, "/ws/agent", "Origin: http://localhost:3000\r\n");
+      assertEquals("HTTP/1.1 401 Unauthorized", localOriginUnauthResponse.getFirst());
+      assertTrue(localOriginUnauthResponse.contains("WWW-Authenticate: Bearer"));
+
+      // 2. Untrusted cross-origin upgrade must receive HTTP/1.1 403 Forbidden even with token.
+      List<String> crossOriginResponse =
           sendRawHttpUpgrade(
               port,
-              "/ws/agent?token=" + CONFIGURED_TOKEN,
-              "Origin: https://untrusted-origin.example\r\n");
+              "/ws/agent",
+              "Origin: https://untrusted-origin.example\r\nAuthorization: Bearer "
+                  + CONFIGURED_TOKEN
+                  + "\r\n");
+      assertEquals("HTTP/1.1 403 Forbidden", crossOriginResponse.getFirst());
+
+      // 3. Query token upgrade must receive HTTP/1.1 400 Bad Request.
+      List<String> queryTokenResponse =
+          sendRawHttpUpgrade(port, "/ws/agent?token=" + CONFIGURED_TOKEN, "");
       assertEquals("HTTP/1.1 400 Bad Request", queryTokenResponse.getFirst());
 
-      // 3. Authenticated upgrade with Authorization: Bearer <token> must receive HTTP/1.1 101.
+      // 4. Authenticated upgrade with Authorization: Bearer <token> must receive HTTP/1.1 101.
       try (Socket authSocket = new Socket("127.0.0.1", port)) {
         authSocket.setSoTimeout(5_000);
         String request =
@@ -150,7 +171,9 @@ class AgentWebSocketAuthTest {
                 + "Host: 127.0.0.1:"
                 + port
                 + "\r\n"
-                + "Origin: https://untrusted-origin.example\r\n"
+                + "Origin: http://127.0.0.1:"
+                + port
+                + "\r\n"
                 + "Authorization: Bearer "
                 + CONFIGURED_TOKEN
                 + "\r\n"
@@ -175,7 +198,6 @@ class AgentWebSocketAuthTest {
   private static Map<String, String> upgradeHeaders(String authorization) {
     Map<String, String> headers = new LinkedHashMap<>();
     headers.put("host", "127.0.0.1:8765");
-    headers.put("origin", "https://untrusted-origin.example");
     headers.put("upgrade", "websocket");
     headers.put("connection", "Upgrade");
     headers.put("sec-websocket-key", SAMPLE_WS_KEY);
