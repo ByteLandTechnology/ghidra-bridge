@@ -31,9 +31,12 @@ import app.byteland.ghidra.service.search.StringSearchResult;
 import app.byteland.ghidra.service.symbol.SymbolResource;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressSpace;
+import ghidra.program.model.data.ArrayDataType;
 import ghidra.program.model.data.DataUtilities;
 import ghidra.program.model.data.TerminatedStringDataType;
 import ghidra.program.model.data.TerminatedUnicodeDataType;
+import ghidra.program.model.data.Undefined1DataType;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.Memory;
@@ -453,6 +456,63 @@ class SearchServiceImplTest {
               searchService.searchBytes(
                   new ByteSearchQuery(
                       AddressScanOptions.of(null, null, 1000), 10, null, List.of("48 8"))));
+    }
+  }
+
+  @Test
+  void scansStringsInsideUndefinedSymbolArraysAndExcludesNonLoadedOverlaysByDefault()
+      throws Exception {
+    try (ProgramHolder holder = GhidraTestSupport.createX64Program("elf-symbol-array-test")) {
+      holder.inTransaction(
+          program -> {
+            Memory memory = program.getMemory();
+            byte[] rodata = new byte[128];
+            byte[] wideLe = "WideElfSymbolPayload".getBytes(StandardCharsets.UTF_16LE);
+            writeNullTerminated(rodata, 0x10, wideLe, 2);
+            Address base =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x402000L);
+            memory.createInitializedBlock(
+                ".rodata",
+                base,
+                new ByteArrayInputStream(rodata),
+                rodata.length,
+                TaskMonitor.DUMMY,
+                false);
+            // Simulate Ghidra ElfLoader importing an STT_OBJECT symbol as undefined1[N].
+            ArrayDataType undefinedArray =
+                new ArrayDataType(Undefined1DataType.dataType, wideLe.length + 2, 1);
+            DataUtilities.createData(
+                program,
+                base.add(0x10L),
+                undefinedArray,
+                -1,
+                DataUtilities.ClearDataMode.CLEAR_ALL_CONFLICT_DATA);
+
+            // Non-loaded OTHER overlay section (such as .strtab or .comment).
+            byte[] commentBytes = new byte[64];
+            writeNullTerminated(
+                commentBytes, 0x00, "GCC: non-loaded comment".getBytes(StandardCharsets.US_ASCII), 1);
+            memory.createInitializedBlock(
+                ".comment",
+                AddressSpace.OTHER_SPACE.getAddress(0L),
+                new ByteArrayInputStream(commentBytes),
+                commentBytes.length,
+                TaskMonitor.DUMMY,
+                true);
+          });
+
+      GhidraSession session = GhidraTestSupport.sessionFor(holder.program());
+      SearchServiceImpl searchService =
+          new SearchServiceImpl(session, new StubAnalysisService(), new MemoryServiceImpl(session));
+
+      StringSearchResult defaultResult = searchService.searchStrings(allStringsQuery(null, null));
+      assertTrue(defaultResult.indexComplete());
+      assertEquals(1, defaultResult.totalIndexed());
+      assertEquals(1, defaultResult.page().items().size());
+      StringMatchResource match = defaultResult.page().items().getFirst();
+      assertEquals("WideElfSymbolPayload", match.value());
+      assertEquals(StringMatchResource.Encoding.UTF16LE, match.encoding());
+      assertFalse(match.defined());
     }
   }
 

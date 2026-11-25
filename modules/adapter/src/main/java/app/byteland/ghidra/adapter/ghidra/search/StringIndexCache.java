@@ -17,6 +17,7 @@ import ghidra.program.model.address.AddressRange;
 import ghidra.program.model.address.AddressRangeIterator;
 import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSetView;
+import ghidra.program.model.data.Undefined;
 import ghidra.program.model.listing.Data;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
@@ -98,12 +99,14 @@ public final class StringIndexCache {
   public StringSearchResult search(StringSearchQuery query) {
     Objects.requireNonNull(query, "query");
     Pattern compiledRegex = compileRegex(query.regex(), query.caseSensitive());
-    AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, query.scan(), true);
+    boolean hasExplicitRange = query.scan().start() != null || query.scan().end() != null;
+    AddressScanRanges.Resolved range =
+        hasExplicitRange ? AddressScanRanges.resolve(context, query.scan(), true) : null;
     long deadlineNanos = computeDeadlineNanos(query.scan().timeoutMs());
 
     Snapshot snapshot = obtainSnapshot(range, deadlineNanos);
     List<StringMatchResource> candidates =
-        snapshot.rangeAlreadyApplied()
+        snapshot.rangeAlreadyApplied() || range == null
             ? snapshot.entries()
             : sliceByRange(snapshot.entries(), range);
     List<StringMatchResource> matched = filterCandidates(candidates, query, compiledRegex);
@@ -116,13 +119,15 @@ public final class StringIndexCache {
   private Snapshot obtainSnapshot(AddressScanRanges.Resolved range, long deadlineNanos) {
     synchronized (cacheLock) {
       Program program = context.currentProgram();
+      Memory memory = program.getMemory();
+      AddressSetView indexableSet = indexableAddressSet(memory);
       long modNumber = program.getModificationNumber();
 
       if (isAnalysisRunning()) {
         dirtyFull = true;
         dirtyAddresses.clear();
         cachedEntries = null;
-        AddressSet targetSet = toAddressSet(program, range);
+        AddressSetView targetSet = range != null ? toAddressSet(program, range) : indexableSet;
         StringScanner.ScanOutcome partial =
             StringScanner.scan(program, targetSet, maxEntries, maxStringBytes, deadlineNanos);
         return new Snapshot(partial.entries(), false, partial.entries().size(), modNumber, true);
@@ -132,52 +137,68 @@ public final class StringIndexCache {
           || dirtyFull
           || (dirtyAddresses.isEmpty() && cachedModificationNumber != modNumber)) {
         StringScanner.ScanOutcome full =
-            StringScanner.scan(
-                program,
-                program.getMemory().getAllInitializedAddressSet(),
-                maxEntries,
-                maxStringBytes,
-                deadlineNanos);
+            StringScanner.scan(program, indexableSet, maxEntries, maxStringBytes, deadlineNanos);
         if (full.timedOut()) {
-          return new Snapshot(full.entries(), false, full.entries().size(), modNumber, false);
+          return new Snapshot(full.entries(), false, full.entries().size(), modNumber, range == null);
         }
         cachedEntries = full.entries();
         cachedModificationNumber = program.getModificationNumber();
         dirtyFull = false;
         dirtyAddresses.clear();
-        return new Snapshot(
-            cachedEntries, true, cachedEntries.size(), cachedModificationNumber, false);
-      }
-
-      if (!dirtyAddresses.isEmpty()) {
+      } else if (!dirtyAddresses.isEmpty()) {
         AddressSet rescanWindows = computeRescanWindows(program, dirtyAddresses);
-        StringScanner.ScanOutcome updated =
-            StringScanner.scan(program, rescanWindows, maxEntries, maxStringBytes, deadlineNanos);
-        if (updated.timedOut()) {
-          dirtyFull = true;
-          dirtyAddresses.clear();
-          cachedEntries = null;
-          return new Snapshot(updated.entries(), false, updated.entries().size(), modNumber, false);
+        if (!rescanWindows.isEmpty()) {
+          StringScanner.ScanOutcome updated =
+              StringScanner.scan(program, rescanWindows, maxEntries, maxStringBytes, deadlineNanos);
+          if (updated.timedOut()) {
+            dirtyFull = true;
+            dirtyAddresses.clear();
+            cachedEntries = null;
+            return new Snapshot(
+                updated.entries(), false, updated.entries().size(), modNumber, range == null);
+          }
+          cachedEntries = mergeRescannedEntries(rescanWindows, cachedEntries, updated.entries());
         }
-        cachedEntries = mergeRescannedEntries(rescanWindows, cachedEntries, updated.entries());
         cachedModificationNumber = program.getModificationNumber();
         dirtyAddresses.clear();
       }
 
+      if (range != null) {
+        AddressSet targetSet = toAddressSet(program, range);
+        AddressSet unindexedTarget =
+            memory.getAllInitializedAddressSet().intersect(targetSet).subtract(indexableSet);
+        if (!unindexedTarget.isEmpty()) {
+          StringScanner.ScanOutcome onDemand =
+              StringScanner.scan(program, targetSet, maxEntries, maxStringBytes, deadlineNanos);
+          return new Snapshot(
+              onDemand.entries(),
+              !onDemand.timedOut(),
+              cachedEntries.size(),
+              cachedModificationNumber,
+              true);
+        }
+      }
+
       return new Snapshot(
-          cachedEntries, true, cachedEntries.size(), cachedModificationNumber, false);
+          cachedEntries, true, cachedEntries.size(), cachedModificationNumber, range == null);
     }
+  }
+
+  private static AddressSetView indexableAddressSet(Memory memory) {
+    AddressSetView loaded = memory.getLoadedAndInitializedAddressSet();
+    return loaded.isEmpty() ? memory.getAllInitializedAddressSet() : loaded;
   }
 
   private AddressSet computeRescanWindows(Program program, AddressSet dirty) {
     Memory memory = program.getMemory();
+    boolean loadedOnly = !memory.getLoadedAndInitializedAddressSet().isEmpty();
     Listing listing = program.getListing();
     AddressSet windows = new AddressSet();
     AddressRangeIterator iter = dirty.getAddressRanges(true);
     while (iter.hasNext()) {
       AddressRange dirtyRange = iter.next();
       for (MemoryBlock block : memory.getBlocks()) {
-        if (!block.isInitialized()) continue;
+        if (!block.isInitialized() || (loadedOnly && !block.isLoaded())) continue;
         if (!block.getStart().getAddressSpace().equals(dirtyRange.getAddressSpace())) continue;
         if (block.getEnd().compareTo(dirtyRange.getMinAddress()) < 0) continue;
         if (block.getStart().compareTo(dirtyRange.getMaxAddress()) > 0) continue;
@@ -209,7 +230,7 @@ public final class StringIndexCache {
       Memory memory, Listing listing, MemoryBlock block, Address candidate) {
     Address current = candidate;
     Data containing = listing.getDefinedDataContaining(current);
-    if (containing != null && containing.getMinAddress().compareTo(current) < 0) {
+    if (isDefinedNonUndefined(containing) && containing.getMinAddress().compareTo(current) < 0) {
       current =
           containing.getMinAddress().compareTo(block.getStart()) > 0
               ? containing.getMinAddress()
@@ -224,7 +245,7 @@ public final class StringIndexCache {
             && !StringScanner.isPrintableAsciiByte(pair[1] & 0xFF)
             && pair[0] == 0
             && pair[1] == 0
-            && listing.getDefinedDataContaining(current) == null) {
+            && !isDefinedNonUndefined(listing.getDefinedDataContaining(current))) {
           return current;
         }
       } catch (MemoryAccessException ignored) {
@@ -244,7 +265,7 @@ public final class StringIndexCache {
       Memory memory, Listing listing, MemoryBlock block, Address candidate) {
     Address current = candidate;
     Data containing = listing.getDefinedDataContaining(current);
-    if (containing != null && containing.getMaxAddress().compareTo(current) > 0) {
+    if (isDefinedNonUndefined(containing) && containing.getMaxAddress().compareTo(current) > 0) {
       current =
           containing.getMaxAddress().compareTo(block.getEnd()) < 0
               ? containing.getMaxAddress()
@@ -257,7 +278,7 @@ public final class StringIndexCache {
         if (memory.getBytes(current, pair, 0, 2) == 2
             && pair[0] == 0
             && pair[1] == 0
-            && listing.getDefinedDataContaining(current) == null) {
+            && !isDefinedNonUndefined(listing.getDefinedDataContaining(current))) {
           return current;
         }
       } catch (MemoryAccessException ignored) {
@@ -271,6 +292,10 @@ public final class StringIndexCache {
       steps++;
     }
     return block.getEnd();
+  }
+
+  private static boolean isDefinedNonUndefined(Data data) {
+    return data != null && !Undefined.isUndefined(data.getDataType());
   }
 
   private List<StringMatchResource> mergeRescannedEntries(
@@ -346,8 +371,8 @@ public final class StringIndexCache {
   }
 
   private static int compareCanonicalAddress(String left, String right) {
-    int leftColon = left.indexOf(':');
-    int rightColon = right.indexOf(':');
+    int leftColon = left.lastIndexOf(':');
+    int rightColon = right.lastIndexOf(':');
     if (leftColon > 0 && rightColon > 0) {
       int bySpace =
           CharSequence.compare(left.subSequence(0, leftColon), right.subSequence(0, rightColon));

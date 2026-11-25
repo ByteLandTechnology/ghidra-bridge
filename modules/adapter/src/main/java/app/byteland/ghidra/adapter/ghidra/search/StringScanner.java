@@ -11,7 +11,9 @@ import ghidra.program.model.address.AddressRangeIterator;
 import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.data.StringDataInstance;
+import ghidra.program.model.data.Undefined;
 import ghidra.program.model.listing.Data;
+import ghidra.program.model.listing.DataIterator;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.Memory;
 import ghidra.program.model.mem.MemoryAccessException;
@@ -111,10 +113,34 @@ final class StringScanner {
     } catch (CancelledException cancelled) {
       return finish(byAddress, true, false);
     }
-    if (!undefinedSet.isEmpty()) {
+    AddressSet rawScanSet = new AddressSet(undefinedSet);
+    AddressRangeIterator targetRanges = initializedTarget.getAddressRanges(true);
+    while (targetRanges.hasNext()) {
+      AddressRange targetRange = targetRanges.next();
+      Data spanning = program.getListing().getDefinedDataContaining(targetRange.getMinAddress());
+      if (spanning != null && Undefined.isUndefined(spanning.getDataType())) {
+        rawScanSet.add(
+            new AddressSet(spanning.getMinAddress(), spanning.getMaxAddress())
+                .intersect(initializedTarget));
+      }
+    }
+    DataIterator definedData = program.getListing().getDefinedData(initializedTarget, true);
+    int dataVisited = 0;
+    while (definedData.hasNext()) {
+      if ((dataVisited++ & 0xFF) == 0 && System.nanoTime() >= deadlineNanos) {
+        return finish(byAddress, true, false);
+      }
+      Data data = definedData.next();
+      if (data != null && Undefined.isUndefined(data.getDataType())) {
+        rawScanSet.add(
+            new AddressSet(data.getMinAddress(), data.getMaxAddress())
+                .intersect(initializedTarget));
+      }
+    }
+    if (!rawScanSet.isEmpty()) {
       int bufferCapacity = Math.max(CHUNK_BYTES, maxStringBytes * 2 + 16);
       byte[] buffer = new byte[bufferCapacity];
-      AddressRangeIterator ranges = undefinedSet.getAddressRanges(true);
+      AddressRangeIterator ranges = rawScanSet.getAddressRanges(true);
       while (ranges.hasNext()) {
         if (System.nanoTime() >= deadlineNanos) {
           return finish(byAddress, true, false);
