@@ -96,9 +96,9 @@ The server replies with an error envelope for a bad message and keeps the socket
 ### Handshake Errors
 
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
-- `400`: Absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
+- `400`: Absent, blank, malformed, or duplicate `Host` header, absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
 - `401`: Absent or invalid bearer token.
-- `403`: Disallowed, malformed, or duplicate `Origin` header.
+- `403`: Disallowed, malformed, or duplicate `Origin` header. On a loopback listener, `Host` must match `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host`, with no other port.
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
@@ -124,6 +124,7 @@ The MCP HTTP server handles requests:
 - **HEAD**: Returns status `200` with no body.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
 - **Other methods**: The server returns status `405` with `Allow: POST, GET, OPTIONS`.
+- **Host**: Every request must send one well-formed `Host` header, or the server returns status `400`. On a loopback listener, a `Host` header must match `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host`. Any port must match the listener port, or the server returns status `403`.
 - **Origin**: By default, an `Origin` header that is not loopback or the configured `host` returns status `403` with no CORS headers. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` to `scheme://host[:port]` entries to permit only listed origins. Set `none` to reject all `Origin` headers.
 - **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.

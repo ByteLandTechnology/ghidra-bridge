@@ -42,10 +42,6 @@ public record ApiMethod<Request, Response>(
     Objects.requireNonNull(handler, "handler");
   }
 
-  public Object invoke(Object params) throws Exception {
-    return invokeDecoded(decodeRequest(params));
-  }
-
   public Request decodeRequest(Object params) {
     return requestCodec.decode(params, "");
   }
