@@ -34,6 +34,7 @@ subprojects {
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
+        options.compilerArgs.addAll(['-Xlint:serial,deprecation,removal,try', '-Werror'])
     }
     def subprojectCheck = tasks.named('check')
     rootProject.tasks.named('check') {
@@ -106,7 +107,7 @@ project(':launcher') {
             'Implementation-Version': rootProject.version }
     }
 
-    def generateScript = { String taskName, String className, String bootstrapMethod, String logPrefix ->
+    def generateScript = { String taskName, String className, String bootstrapMethod, String logPrefix, String description ->
         tasks.register(taskName, Copy) {
             from 'src/main/templates/GhidraLauncher.java.template'
             into layout.buildDirectory.dir('generated/scripts')
@@ -115,11 +116,22 @@ project(':launcher') {
                 line.replace('__CLASS__', className)
                     .replace('__BOOTSTRAP_METHOD__', bootstrapMethod)
                     .replace('__LOG_PREFIX__', logPrefix)
+                    .replace('__DESCRIPTION__', description)
             }
         }
     }
-    generateScript('generateBridgeScript', 'Bridge', 'startFromScript', 'ghidra-bridge')
-    generateScript('generateMcpScript', 'GhidraMcp', 'startMcpFromScript', 'ghidra-mcp')
+    generateScript(
+        'generateBridgeScript',
+        'Bridge',
+        'startFromScript',
+        'ghidra-bridge',
+        'Starts the Ghidra Bridge WebSocket service for the active program.')
+    generateScript(
+        'generateMcpScript',
+        'GhidraMcp',
+        'startMcpFromScript',
+        'ghidra-mcp',
+        'Starts the Ghidra Bridge MCP HTTP service for the active program.')
 
     tasks.register('buildGhidraScript', Sync) {
         dependsOn tasks.named('runtimeJar'), tasks.named('generateBridgeScript'), tasks.named('generateMcpScript')
@@ -182,6 +194,22 @@ tasks.register('verifyDistribution') {
         if (names != ['Bridge.java', 'GhidraMcp.java', 'ghidra-bridge.jar']) {
             throw new GradleException("Unexpected distribution contents: ${names}")
         }
+        [
+            'Bridge.java': 'Starts the Ghidra Bridge WebSocket service for the active program.',
+            'GhidraMcp.java': 'Starts the Ghidra Bridge MCP HTTP service for the active program.'
+        ].each { scriptName, expectedDescription ->
+            def scriptFile = new File(output, scriptName)
+            def lines = scriptFile.readLines('UTF-8')
+            if (lines.any { it.contains('__') && it ==~ /.*__[A-Z_]+__.*/ }) {
+                throw new GradleException("Unreplaced template placeholder in ${scriptName}")
+            }
+            if (lines.size() < 2 || lines[0] != "// ${expectedDescription}") {
+                throw new GradleException("Missing or unexpected Script Manager description header in ${scriptName}")
+            }
+            if (lines[1] != '// @category Ghidra Bridge') {
+                throw new GradleException("Missing or unexpected @category header in ${scriptName}")
+            }
+        }
         new java.util.jar.JarFile(new File(output, 'ghidra-bridge.jar')).withCloseable { jar ->
             if (jar.getJarEntry('app/byteland/ghidra/Bootstrap.class') == null) {
                 throw new GradleException('Runtime jar is missing Bootstrap.class')
@@ -202,6 +230,7 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     sourceCompatibility = '21'
     targetCompatibility = '21'
     options.encoding = 'UTF-8'
+    options.compilerArgs.addAll(['-Xlint:serial,deprecation,removal,try', '-Werror'])
 }
 
 project(':launcher').tasks.named('test', Test) {
