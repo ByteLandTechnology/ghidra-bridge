@@ -383,7 +383,9 @@ class WireSchemaPaginationAndFilterTest {
     ApiException error =
         assertThrows(
             ApiException.class,
-            () -> method.invoke(Map.of("projection", Map.of("fields", List.of("id")))));
+            () ->
+                method.invokeDecoded(
+                    method.decodeRequest(Map.of("projection", Map.of("fields", List.of("id"))))));
     assertEquals(500, error.status());
     assertEquals("invalid_response", error.error().code());
     assertEquals("handler returned a value that violates its output schema", error.getMessage());
