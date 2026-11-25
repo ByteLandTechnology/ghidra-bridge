@@ -56,6 +56,7 @@ final class DecompilerPoolFactory {
     }
   }
 
+  @SuppressWarnings("ReferenceEquality")
   private static void addDistinctSuppressed(
       RuntimeException failure, RuntimeException suppressedFailure) {
     if (failure != suppressedFailure) {

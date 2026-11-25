@@ -206,7 +206,11 @@ class AgentClientOutboundUrlTest {
 
   private static boolean isIpv6LoopbackAvailable() {
     try (ServerSocket socket = new ServerSocket()) {
-      socket.bind(new InetSocketAddress(InetAddress.getByName("::1"), 0));
+      socket.bind(
+          new InetSocketAddress(
+              InetAddress.getByAddress(
+                  new byte[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}),
+              0));
       return true;
     } catch (IOException unavailable) {
       return false;

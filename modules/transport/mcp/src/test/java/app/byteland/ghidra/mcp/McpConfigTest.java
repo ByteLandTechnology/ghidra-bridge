@@ -184,7 +184,7 @@ class McpConfigTest {
                       Map.of("operation", "get", "params", Map.of()))));
       @SuppressWarnings("unchecked")
       Map<String, Object> toolResult = (Map<String, Object>) callResponse.get("result");
-      assertEquals(Boolean.FALSE, toolResult.get("isError"));
+      assertEquals(false, toolResult.get("isError"));
       @SuppressWarnings("unchecked")
       Map<String, Object> structured =
           (Map<String, Object>) toolResult.get("structuredContent");

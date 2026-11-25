@@ -1,6 +1,7 @@
 package app.byteland.ghidra.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -25,7 +26,7 @@ class TransactionExecutionExceptionTest {
     assertNull(ex.target());
     assertNull(ex.getCause());
     assertTrue(ex.details().isEmpty());
-    assertTrue(ex instanceof DomainException);
+    assertInstanceOf(DomainException.class, ex);
   }
 
   @Test

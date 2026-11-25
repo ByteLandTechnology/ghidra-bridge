@@ -9,6 +9,7 @@ package app.byteland.ghidra.service.address;
  * @param memoryBlock summary of the memory block that contains the address
  * @param function summary of the function that contains the address
  * @param symbol summary of the primary symbol at this address
+ * @param codeUnit summary of the code unit containing the address
  */
 public record AddressResource(
     String address,
@@ -18,9 +19,24 @@ public record AddressResource(
     FunctionSummary function,
     SymbolSummary symbol,
     CodeUnitSummary codeUnit) {
+  /**
+   * Summarizes the code unit span containing an address.
+   *
+   * @param address canonical start address of the code unit
+   * @param end canonical end address of the code unit
+   */
   public record CodeUnitSummary(String address, String end) {}
+
   /**
    * Summarizes memory block attributes for an address.
+   *
+   * @param name memory block name
+   * @param start canonical start address of the block
+   * @param end canonical end address of the block
+   * @param length byte length of the block
+   * @param read {@code true} if the block is readable
+   * @param write {@code true} if the block is writable
+   * @param execute {@code true} if the block is executable
    */
   public record MemoryBlockSummary(
       String name,
@@ -33,11 +49,18 @@ public record AddressResource(
 
   /**
    * Summarizes the function that contains an address.
+   *
+   * @param entry canonical function entry address
+   * @param name function name
    */
   public record FunctionSummary(String entry, String name) {}
 
   /**
    * Summarizes the primary symbol for an address.
+   *
+   * @param id symbol identifier string
+   * @param name symbol name
+   * @param type Ghidra symbol type label
    */
   public record SymbolSummary(String id, String name, String type) {}
 }

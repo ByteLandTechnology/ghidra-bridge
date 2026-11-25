@@ -6,6 +6,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.LongSupplier;
 
+/**
+ * Collects paginated items over an address range while enforcing item count and time budgets.
+ *
+ * @param <T> collected resource item type
+ */
 public final class BoundedAddressScan<T> {
   private static final int MIN_RESULT_LIMIT = 1;
   private static final int MAX_RESULT_LIMIT = Page.MAX_LIMIT;
@@ -25,6 +30,16 @@ public final class BoundedAddressScan<T> {
   private String lastCursor;
   private ScanProgress.StopReason stopReason;
 
+  /**
+   * Starts a bounded scan using {@link System#nanoTime()} to track elapsed wall-clock time.
+   *
+   * @param <T> collected item type
+   * @param limit maximum number of matching items to collect
+   * @param timeoutMs scan timeout budget in milliseconds
+   * @param requestedStart canonical requested start address
+   * @param requestedEnd canonical requested end address, or {@code null}
+   * @return active bounded scan tracker
+   */
   public static <T> BoundedAddressScan<T> start(
       int limit, int timeoutMs, String requestedStart, String requestedEnd) {
     return new BoundedAddressScan<>(
@@ -48,6 +63,13 @@ public final class BoundedAddressScan<T> {
     this.startedNanos = nanoTime.getAsLong();
   }
 
+  /**
+   * Records a visited address and optional matching item, updating stop conditions.
+   *
+   * @param address canonical visited address
+   * @param cursor resume cursor key for {@code address}
+   * @param matchingItem matched item at {@code address}, or {@code null} when filtered out
+   */
   public void visit(String address, String cursor, T matchingItem) {
     if (stopped()) throw new IllegalStateException("scan is already stopped");
     if (address == null || cursor == null) {
@@ -65,6 +87,11 @@ public final class BoundedAddressScan<T> {
     }
   }
 
+  /**
+   * Records the initial scanned start address before visiting candidate positions.
+   *
+   * @param address canonical start anchor address
+   */
   public void anchorStart(String address) {
     if (stopped()) throw new IllegalStateException("scan is already stopped");
     if (address == null) throw new IllegalArgumentException("address is required");
@@ -72,6 +99,11 @@ public final class BoundedAddressScan<T> {
     if (scannedEnd == null) scannedEnd = address;
   }
 
+  /**
+   * Records the terminal address reached when the scan finishes exhausting the range.
+   *
+   * @param address canonical completed end address
+   */
   public void anchorCompletedEnd(String address) {
     if (stopped()) throw new IllegalStateException("scan is already stopped");
     if (address == null) throw new IllegalArgumentException("address is required");
@@ -79,10 +111,20 @@ public final class BoundedAddressScan<T> {
     scannedEnd = address;
   }
 
+  /**
+   * Returns whether the scan has reached its item limit or timeout budget.
+   *
+   * @return {@code true} if the scan should stop visiting items
+   */
   public boolean stopped() {
     return stopReason != null;
   }
 
+  /**
+   * Builds the final {@link Page} and {@link ScanProgress} summary for this scan.
+   *
+   * @return paginated scan result
+   */
   public Page<T> finish() {
     ScanProgress.StopReason reason =
         stopReason == null ? ScanProgress.StopReason.COMPLETED : stopReason;

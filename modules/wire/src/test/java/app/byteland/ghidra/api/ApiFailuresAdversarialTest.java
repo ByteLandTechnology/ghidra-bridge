@@ -159,6 +159,7 @@ class ApiFailuresAdversarialTest {
   @DisplayName("Adversarial: custom DomainException implementations map status and code")
   void testCustomDomainExceptions() {
     class CustomDomainException extends RuntimeException implements DomainException {
+      private static final long serialVersionUID = 1L;
       private final int status;
       private final String code;
       private final String target;
@@ -232,15 +233,15 @@ class ApiFailuresAdversarialTest {
         try {
           startLatch.await();
           for (int i = 0; i < opsPerThread; i++) {
-            Throwable ex;
-            switch ((threadId + i) % 6) {
-              case 0 -> ex = new IllegalArgumentException("arg error " + i);
-              case 1 -> ex = new TransactionExecutionException("tx error " + i, "target." + i);
-              case 2 -> ex = new IllegalStateException("state error " + i);
-              case 3 -> ex = new NoSuchElementException("not found " + i);
-              case 4 -> ex = new TimeoutException("timeout " + i);
-              default -> ex = new RuntimeException("generic " + i);
-            }
+            Throwable ex =
+                switch ((threadId + i) % 6) {
+                  case 0 -> new IllegalArgumentException("arg error " + i);
+                  case 1 -> new TransactionExecutionException("tx error " + i, "target." + i);
+                  case 2 -> new IllegalStateException("state error " + i);
+                  case 3 -> new NoSuchElementException("not found " + i);
+                  case 4 -> new TimeoutException("timeout " + i);
+                  default -> new RuntimeException("generic " + i);
+                };
             var failure = ApiFailures.normalize(ex);
             assertNotNull(failure);
             assertTrue(failure.status() >= 400 && failure.status() <= 500);

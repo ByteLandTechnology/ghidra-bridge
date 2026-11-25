@@ -1,5 +1,22 @@
 plugins {
-    id 'base'
+    id 'java-base'
+    id 'net.ltgt.errorprone' version '5.2.0'
+    id 'com.github.spotbugs' version '6.5.13' apply false
+}
+
+repositories { mavenCentral() }
+
+def errorproneCompiler = configurations.register('errorproneCompiler') {
+    canBeConsumed = false
+    canBeResolved = true
+    extendsFrom(configurations.errorprone)
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.JAVA_RUNTIME))
+    }
+}
+
+dependencies {
+    errorprone 'com.google.errorprone:error_prone_core:2.53.0'
 }
 
 group = 'app.byteland'
@@ -18,6 +35,8 @@ subprojects {
     }
 
     apply plugin: 'java-library'
+    apply plugin: 'net.ltgt.errorprone'
+    apply plugin: 'com.github.spotbugs'
     java {
         toolchain {
             languageVersion = JavaLanguageVersion.of(21)
@@ -25,6 +44,7 @@ subprojects {
     }
     repositories { mavenCentral() }
     dependencies {
+        errorprone 'com.google.errorprone:error_prone_core:2.53.0'
         testImplementation platform('org.junit:junit-bom:6.1.2')
         testImplementation 'org.junit.jupiter:junit-jupiter'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -34,8 +54,31 @@ subprojects {
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
+        options.compilerArgs.addAll(['-Xlint:all,-path', '-Werror'])
+        options.errorprone.disableWarningsInGeneratedCode = false
+    }
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+        options.charSet = 'UTF-8'
+        options.docEncoding = 'UTF-8'
+        options.addBooleanOption('Xdoclint:all', true)
+        options.addBooleanOption('Werror', true)
+    }
+    spotbugs {
+        toolVersion = '4.10.5'
+        ignoreFailures = false
+        excludeFilter = rootProject.file('gradle/spotbugs-exclude.xml')
+    }
+    tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+        reports {
+            xml.required = true
+            text.required = true
+        }
     }
     def subprojectCheck = tasks.named('check')
+    subprojectCheck.configure {
+        dependsOn tasks.named('javadoc'), tasks.named('spotbugsMain'), tasks.named('spotbugsTest')
+    }
     rootProject.tasks.named('check') {
         dependsOn subprojectCheck
     }
@@ -88,8 +131,10 @@ tasks.register('verifyGhidraInstallDir') {
     }
 }
 project(':adapter').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+project(':adapter').tasks.named('javadoc') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
 project(':launcher').tasks.named('compileJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
 project(':launcher').tasks.named('compileTestJava') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
+project(':launcher').tasks.named('javadoc') { dependsOn rootProject.tasks.named('verifyGhidraInstallDir') }
 
 project(':launcher') {
     tasks.register('runtimeJar', Jar) {
@@ -189,6 +234,15 @@ tasks.register('verifyDistribution') {
             if (jar.entries().find { it.name.startsWith('org/snakeyaml/') } != null) {
                 throw new GradleException('Runtime jar contains the contract YAML library')
             }
+            def unexpectedClass = jar.entries().find { entry ->
+                entry.name.startsWith('edu/umd/cs/findbugs/') ||
+                    entry.name.startsWith('com/google/errorprone/') ||
+                    entry.name.startsWith('javax/annotation/') ||
+                    (entry.name.endsWith('.class') && !entry.name.startsWith('app/byteland/ghidra/'))
+            }
+            if (unexpectedClass != null) {
+                throw new GradleException("Runtime jar contains unexpected entry: ${unexpectedClass.name}")
+            }
         }
     }
 }
@@ -199,9 +253,16 @@ tasks.register('compileGeneratedScripts', JavaCompile) {
     source project(':launcher').layout.buildDirectory.dir('generated/scripts')
     classpath = ghidraJars
     destinationDirectory = layout.buildDirectory.dir('compiled-scripts')
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
     sourceCompatibility = '21'
     targetCompatibility = '21'
     options.encoding = 'UTF-8'
+    options.annotationProcessorPath = errorproneCompiler.get()
+    options.compilerArgs.addAll(['-Xlint:all,-path', '-Werror'])
+    options.errorprone.enabled = true
+    options.errorprone.disableWarningsInGeneratedCode = false
 }
 
 project(':launcher').tasks.named('test', Test) {

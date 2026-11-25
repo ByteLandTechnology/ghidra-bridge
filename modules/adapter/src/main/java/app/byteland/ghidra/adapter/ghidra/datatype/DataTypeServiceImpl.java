@@ -15,9 +15,15 @@ import ghidra.program.model.data.Structure;
 import ghidra.program.model.data.Union;
 import java.util.NoSuchElementException;
 
+/** Ghidra-backed implementation of {@link DataTypeService}. */
 public final class DataTypeServiceImpl implements DataTypeService {
   private final GhidraSession context;
 
+  /**
+   * Creates a data type service bound to {@code context}.
+   *
+   * @param context active Ghidra session
+   */
   public DataTypeServiceImpl(GhidraSession context) {
     this.context = context;
   }

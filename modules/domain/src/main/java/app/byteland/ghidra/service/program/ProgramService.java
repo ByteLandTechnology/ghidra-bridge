@@ -6,13 +6,27 @@ import app.byteland.ghidra.service.Page;
  * Gives access to program metadata, address spaces, and export operations.
  */
 public interface ProgramService {
-  /** Returns metadata for the active Ghidra program. */
+  /**
+   * Returns metadata for the active Ghidra program.
+   *
+   * @return program summary resource
+   */
   ProgramResource getProgram();
 
-  /** Returns one page of address spaces. */
+  /**
+   * Returns one page of address spaces.
+   *
+   * @param limit maximum items per page
+   * @param cursor pagination cursor, or {@code null}
+   * @return page of address spaces
+   */
   Page<AddressSpaceResource> getAddressSpaces(int limit, String cursor);
 
-  /** Returns compiler and architecture language details. */
+  /**
+   * Returns compiler and architecture language details.
+   *
+   * @return program language resource
+   */
   ProgramLanguageResource getLanguageInfo();
 
   /** Saves program changes to the project database. */

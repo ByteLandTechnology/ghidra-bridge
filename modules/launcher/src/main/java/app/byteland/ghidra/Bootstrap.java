@@ -29,6 +29,14 @@ public final class Bootstrap {
 
   private Bootstrap() {}
 
+  /**
+   * Starts a WebSocket bridge session for the active Ghidra script program.
+   *
+   * @param script running Ghidra script instance
+   * @param args key-value startup arguments
+   * @param onShutdown optional callback invoked during JVM shutdown
+   * @throws Exception if startup or transport execution fails
+   */
   public static void startFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
     if (script == null) {
@@ -111,6 +119,14 @@ public final class Bootstrap {
     }
   }
 
+  /**
+   * Starts an MCP HTTP server session for the active Ghidra script program.
+   *
+   * @param script running Ghidra script instance
+   * @param args key-value startup arguments
+   * @param onShutdown optional callback invoked during JVM shutdown
+   * @throws Exception if startup or server execution fails
+   */
   public static void startMcpFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
     if (script == null) {

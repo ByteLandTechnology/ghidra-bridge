@@ -235,6 +235,7 @@ class ListingDescriptionsTest {
             });
   }
 
+  @SuppressWarnings("ReferenceEquality")
   private static DataType stubDataType(String pathName) {
     return proxy(
         DataType.class,

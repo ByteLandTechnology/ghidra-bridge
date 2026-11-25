@@ -35,14 +35,29 @@ public final class ApiCatalog {
     return new ApiCatalog(interfaceVersion, List.copyOf(ordered.values()));
   }
 
+  /**
+   * Returns the semantic version of the API contract.
+   *
+   * @return API interface version string
+   */
   public String interfaceVersion() {
     return apiInterfaceVersion;
   }
 
+  /**
+   * Returns the ordered list of method descriptors in this catalog.
+   *
+   * @return immutable list of method descriptors
+   */
   public List<MethodDescriptor> methods() {
     return methodDescriptors;
   }
 
+  /**
+   * Formats this catalog as the response map for {@code interface.describe}.
+   *
+   * @return serializable interface description map
+   */
   public Map<String, Object> interfaceDescription() {
     return Map.of(
         "interface_version",
@@ -85,22 +100,47 @@ public final class ApiCatalog {
       return new MethodDescriptor(method);
     }
 
+    /**
+     * Returns the dotted wire method name.
+     *
+     * @return method name
+     */
     public String name() {
       return methodName;
     }
 
+    /**
+     * Returns the human-readable description of the method.
+     *
+     * @return method description
+     */
     public String description() {
       return methodDescription;
     }
 
+    /**
+     * Returns an unmodifiable view of the input JSON Schema.
+     *
+     * @return input schema map
+     */
     public Map<String, Object> inputSchema() {
-      return requestSchema;
+      return Collections.unmodifiableMap(requestSchema);
     }
 
+    /**
+     * Returns an unmodifiable view of the output JSON Schema.
+     *
+     * @return output schema map
+     */
     public Map<String, Object> outputSchema() {
-      return responseSchema;
+      return Collections.unmodifiableMap(responseSchema);
     }
 
+    /**
+     * Returns a map of contract metadata fields excluding the method name.
+     *
+     * @return unmodifiable contract metadata map
+     */
     public Map<String, Object> contractValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put("description", methodDescription);
@@ -110,6 +150,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(descriptor);
     }
 
+    /**
+     * Returns a map of interface metadata fields including the method name.
+     *
+     * @return unmodifiable interface metadata map
+     */
     public Map<String, Object> interfaceValue() {
       Map<String, Object> descriptor = new LinkedHashMap<>();
       descriptor.put(ApiVocabulary.NAME, methodName);
@@ -117,6 +162,11 @@ public final class ApiCatalog {
       return Collections.unmodifiableMap(descriptor);
     }
 
+    /**
+     * Returns a concise label summarizing the method's side-effect category.
+     *
+     * @return effect summary label
+     */
     public String effectSummary() {
       if (readOnly) return "read-only";
       if (!mutatesProgram) return "lifecycle";

@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Embedded WebSocket server for inbound JSON-RPC 2.0 connections.
  */
 public final class AgentWebSocketServer implements AutoCloseable {
+  /** Default WebSocket request path accepted by the embedded server. */
   public static final String DEFAULT_PATH = "/ws/agent";
   private static final int SERVER_SHUTDOWN_CLOSE_CODE = 1001;
   static final Duration DEFAULT_HANDSHAKE_TIMEOUT = Duration.ofSeconds(10);
@@ -29,6 +30,12 @@ public final class AgentWebSocketServer implements AutoCloseable {
   private final PendingSockets pendingSockets;
   private ServerSocket serverSocket;
 
+  /**
+   * Creates an embedded WebSocket server for the given session configuration and event handler.
+   *
+   * @param config server bind, path, and token configuration
+   * @param handler callback handler for WebSocket connection events
+   */
   public AgentWebSocketServer(AgentConfig config, Handler handler) {
     this(config, handler, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_MAX_PENDING_SOCKETS);
   }
@@ -48,6 +55,11 @@ public final class AgentWebSocketServer implements AutoCloseable {
     this.pendingSockets = new PendingSockets(running, maxPendingSockets);
   }
 
+  /**
+   * Binds the server socket and starts the background accept loop.
+   *
+   * @throws IOException if binding the server socket fails
+   */
   public void start() throws IOException {
     if (!running.compareAndSet(false, true)) {
       return;
@@ -71,6 +83,7 @@ public final class AgentWebSocketServer implements AutoCloseable {
     }
   }
 
+  @SuppressWarnings("ReferenceEquality")
   private static void closeAfterFailedStart(ServerSocket socket, Throwable startFailure) {
     try {
       socket.close();
@@ -146,21 +159,63 @@ public final class AgentWebSocketServer implements AutoCloseable {
     }
   }
 
+  /** Active WebSocket client connection accepted by {@link AgentWebSocketServer}. */
   public interface Connection {
+    /**
+     * Sends a UTF-8 text frame to the connected peer.
+     *
+     * @param message text payload to send
+     */
     void sendText(String message);
 
+    /**
+     * Sends a WebSocket close frame and closes the underlying socket.
+     *
+     * @param statusCode WebSocket close status code
+     * @param reason human-readable close reason
+     */
     void close(int statusCode, String reason);
   }
 
+  /** Callback interface receiving connection and server events from {@link AgentWebSocketServer}. */
   public interface Handler {
+    /**
+     * Invoked after a client completes the WebSocket upgrade handshake.
+     *
+     * @param connection accepted client connection
+     */
     void onOpen(Connection connection);
 
+    /**
+     * Invoked when a complete UTF-8 text message is received from a client.
+     *
+     * @param connection source client connection
+     * @param message decoded text payload
+     */
     void onText(Connection connection, String message);
 
+    /**
+     * Invoked when a client connection closes.
+     *
+     * @param connection closed client connection
+     * @param statusCode WebSocket close status code
+     * @param reason close reason string
+     */
     void onClose(Connection connection, int statusCode, String reason);
 
+    /**
+     * Invoked when a handshake, frame, or socket error occurs on a client connection.
+     *
+     * @param connection affected client connection, or {@code null} before upgrade completes
+     * @param error failure cause
+     */
     void onConnectionError(Connection connection, Throwable error);
 
+    /**
+     * Invoked when the server accept loop encounters an unexpected error.
+     *
+     * @param error server failure cause
+     */
     void onServerError(Throwable error);
   }
 }

@@ -21,31 +21,34 @@ import java.net.URISyntaxException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class GhidraTestSupport {
+  private static final Object LANGUAGE_LOCK = new Object();
   private static Language cachedX64Language;
 
   private GhidraTestSupport() {}
 
-  public static synchronized Language x64Language() {
-    if (cachedX64Language != null) {
+  public static Language x64Language() {
+    synchronized (LANGUAGE_LOCK) {
+      if (cachedX64Language != null) {
+        return cachedX64Language;
+      }
+      if (!Application.isInitialized()) {
+        File installDir = locateGhidraInstallDir();
+        ApplicationConfiguration config = new ApplicationConfiguration();
+        config.setInitializeLogging(false);
+        try {
+          Application.initializeApplication(new GhidraApplicationLayout(installDir), config);
+        } catch (IOException error) {
+          throw new IllegalStateException("Failed to initialize Ghidra application", error);
+        }
+      }
+      cachedX64Language =
+          SleighLanguageProvider.getSleighLanguageProvider()
+              .getLanguage(new LanguageID("x86:LE:64:default"));
+      if (cachedX64Language == null) {
+        throw new IllegalStateException("x86:LE:64:default language not found");
+      }
       return cachedX64Language;
     }
-    if (!Application.isInitialized()) {
-      File installDir = locateGhidraInstallDir();
-      ApplicationConfiguration config = new ApplicationConfiguration();
-      config.setInitializeLogging(false);
-      try {
-        Application.initializeApplication(new GhidraApplicationLayout(installDir), config);
-      } catch (IOException error) {
-        throw new IllegalStateException("Failed to initialize Ghidra application", error);
-      }
-    }
-    cachedX64Language =
-        SleighLanguageProvider.getSleighLanguageProvider()
-            .getLanguage(new LanguageID("x86:LE:64:default"));
-    if (cachedX64Language == null) {
-      throw new IllegalStateException("x86:LE:64:default language not found");
-    }
-    return cachedX64Language;
   }
 
   public static ProgramHolder createX64Program(String name) {

@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.BindException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -45,6 +46,10 @@ class AgentWebSocketServerTest {
   private static final String TOKEN = "secret-test-token";
   private static final String VALID_WS_KEY = "dGhlIHNhbXBsZSBub25jZQ==";
 
+  private static InetAddress loopbackAddress() throws IOException {
+    return InetAddress.getByAddress(new byte[] {127, 0, 0, 1});
+  }
+
   @Test
   @DisplayName("Bearer-authenticated client receives 101 while unauthenticated socket trickles header bytes")
   void testBearerClientReceives101WhileUnauthenticatedSocketTrickles() throws Exception {
@@ -55,7 +60,7 @@ class AgentWebSocketServerTest {
       String token = TOKEN;
       TestWebSocketListener listener = new TestWebSocketListener();
 
-      try (Socket unauthPartial = new Socket("127.0.0.1", port)) {
+      try (Socket unauthPartial = new Socket(loopbackAddress(), port)) {
         OutputStream unauthOut = unauthPartial.getOutputStream();
         unauthOut.write(
             ("GET /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nX-Marker: ")
@@ -89,7 +94,7 @@ class AgentWebSocketServerTest {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started =
         startCustomServer(TOKEN, handler, Duration.ofMillis(300), 8)) {
-      try (Socket trickle = new Socket("127.0.0.1", started.port())) {
+      try (Socket trickle = new Socket(loopbackAddress(), started.port())) {
         trickle.setSoTimeout(3_000);
         OutputStream out = trickle.getOutputStream();
         out.write(
@@ -119,7 +124,7 @@ class AgentWebSocketServerTest {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started =
         startCustomServer(TOKEN, handler, Duration.ofMillis(200), 8)) {
-      try (Socket idle = new Socket("127.0.0.1", started.port())) {
+      try (Socket idle = new Socket(loopbackAddress(), started.port())) {
         idle.setSoTimeout(3_000);
         OutputStream out = idle.getOutputStream();
         out.write("GET /ws/agent HTTP/1.1\r\n".getBytes(StandardCharsets.US_ASCII));
@@ -263,7 +268,7 @@ class AgentWebSocketServerTest {
           results.add(
               pool.submit(
                   () -> {
-                    Socket socket = new Socket("127.0.0.1", port);
+                    Socket socket = new Socket(loopbackAddress(), port);
                     sockets.add(socket);
                     socket.setSoTimeout(5_000);
                     OutputStream out = socket.getOutputStream();
@@ -320,12 +325,13 @@ class AgentWebSocketServerTest {
         HttpClient httpClient = HttpClient.newHttpClient()) {
       int port = started.port();
 
-      try (Socket pending1 = openPartialHandshake(port);
-          Socket pending2 = openPartialHandshake(port)) {
-        waitForPendingSlotSaturation(port);
+      try (Socket pending2 = openPartialHandshake(port)) {
+        try (Socket pending1 = openPartialHandshake(port)) {
+          waitForPendingSlotSaturation(port);
+          assertNotNull(pending1);
+        }
 
         TestWebSocketListener listener = new TestWebSocketListener();
-        pending1.close();
 
         // Retry briefly if the freed handshake slot cleanup races on the connection thread.
         WebSocket ws = connectWithSlotReleaseRetry(httpClient, port, listener);
@@ -368,7 +374,7 @@ class AgentWebSocketServerTest {
   void testOversizedHandshakeHeaderReturns431() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started = startDefaultServer(TOKEN, handler);
-        Socket socket = new Socket("127.0.0.1", started.port())) {
+        Socket socket = new Socket(loopbackAddress(), started.port())) {
       socket.setSoTimeout(3_000);
       OutputStream out = socket.getOutputStream();
       out.write(
@@ -399,7 +405,7 @@ class AgentWebSocketServerTest {
     AgentWebSocketServer.PendingSockets pendingSockets =
         new AgentWebSocketServer.PendingSockets(running, 4);
 
-    try (ServerSocket listener = new ServerSocket(0, 1, new InetSocketAddress("127.0.0.1", 0).getAddress())) {
+    try (ServerSocket listener = new ServerSocket(0, 1, loopbackAddress())) {
       int port = listener.getLocalPort();
       AgentConfig config =
           new AgentConfig(null, "127.0.0.1", port, "/ws/agent", TOKEN, "test-session", null);
@@ -407,7 +413,7 @@ class AgentWebSocketServerTest {
           new AgentWebSocketConnectionRunner(
               config, handler, running, activeConnection, pendingSockets, Duration.ofSeconds(5));
 
-      try (Socket client = new Socket("127.0.0.1", port);
+      try (Socket client = new Socket(loopbackAddress(), port);
           Socket serverSide = listener.accept()) {
         String request =
             "GET /ws/agent HTTP/1.1\r\n"
@@ -437,7 +443,7 @@ class AgentWebSocketServerTest {
   }
 
   private static Socket openPartialHandshake(int port) throws IOException {
-    Socket socket = new Socket("127.0.0.1", port);
+    Socket socket = new Socket(loopbackAddress(), port);
     OutputStream out = socket.getOutputStream();
     out.write(
         ("GET /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nX-Partial: ")
@@ -449,7 +455,7 @@ class AgentWebSocketServerTest {
   private static void waitForPendingSlotSaturation(int port) throws Exception {
     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
     while (System.nanoTime() < deadline) {
-      try (Socket excess = new Socket("127.0.0.1", port)) {
+      try (Socket excess = new Socket(loopbackAddress(), port)) {
         excess.setSoTimeout(2_000);
         String response = readAllAscii(excess.getInputStream());
         if (response.startsWith("HTTP/1.1 503 Service Unavailable\r\n")) {
@@ -485,7 +491,7 @@ class AgentWebSocketServerTest {
   }
 
   private static String sendRawRequest(int port, String rawRequest) throws IOException {
-    try (Socket socket = new Socket("127.0.0.1", port)) {
+    try (Socket socket = new Socket(loopbackAddress(), port)) {
       socket.setSoTimeout(3_000);
       OutputStream out = socket.getOutputStream();
       out.write(rawRequest.getBytes(StandardCharsets.US_ASCII));
@@ -519,7 +525,7 @@ class AgentWebSocketServerTest {
       prev = b;
     }
     String statusLine = line.toString(StandardCharsets.US_ASCII).trim();
-    String[] parts = statusLine.split(" ");
+    String[] parts = statusLine.split(" ", -1);
     assertTrue(parts.length >= 2, () -> "Unexpected HTTP status line: " + statusLine);
     return Integer.parseInt(parts[1]);
   }
@@ -572,7 +578,7 @@ class AgentWebSocketServerTest {
   private static int findFreePort() throws IOException {
     try (ServerSocket socket = new ServerSocket()) {
       socket.setReuseAddress(true);
-      socket.bind(new InetSocketAddress("127.0.0.1", 0));
+      socket.bind(new InetSocketAddress(loopbackAddress(), 0));
       return socket.getLocalPort();
     }
   }

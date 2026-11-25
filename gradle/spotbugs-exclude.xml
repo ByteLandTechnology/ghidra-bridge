@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/4.10.5/spotbugs/etc/findbugsfilter.xsd">
+
+  <!-- Dependency-injection container intentionally exposes shared domain service collaborators. -->
+  <Match>
+    <Class name="app.byteland.ghidra.service.BridgeServices"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+
+  <!-- GhidraSession intentionally provides the active GhidraScript handle to adapter services. -->
+  <Match>
+    <Class name="app.byteland.ghidra.adapter.ghidra.GhidraSession"/>
+    <Method name="script"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+
+  <!-- Oversized bodies throw 413 before closing the request stream so handle() can set
+       Connection: close first and close the exchange without draining 64+ MiB streams. -->
+  <Match>
+    <Class name="app.byteland.ghidra.mcp.McpHttpServer"/>
+    <Method name="readBody"/>
+    <Bug pattern="OS_OPEN_STREAM"/>
+  </Match>
+
+  <!-- Test fixtures and JDK/Ghidra test doubles intentionally expose mutable collaborators. -->
+  <Match>
+    <Class name="app.byteland.ghidra.adapter.ghidra.GhidraTestSupport$ProgramHolder"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="~app\.byteland\.ghidra\.adapter\.ghidra\.decompilation\.GuiDocumentTest\$.*"/>
+    <Method name="getCCodeMarkup"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="app.byteland.ghidra.adapter.ghidra.function.FunctionParameterMutationsTest$StubStorage"/>
+    <Bug pattern="EQ_DOESNT_OVERRIDE_EQUALS"/>
+  </Match>
+  <Match>
+    <Class name="~app\.byteland\.ghidra\.mcp\.McpHttpServerBodyLimitTest\$.*"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+  <Match>
+    <Class name="app.byteland.ghidra.mcp.McpHttpServerSseShutdownTest$BlockingExchange"/>
+    <Bug pattern="EI_EXPOSE_REP"/>
+  </Match>
+</FindBugsFilter>

@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/** Ghidra-backed implementation of {@link AnalysisService}. */
 public final class AnalysisServiceImpl implements AnalysisService {
   private final GhidraSession context;
   private final Program program;
@@ -21,6 +22,11 @@ public final class AnalysisServiceImpl implements AnalysisService {
   private AnalysisTask currentTask;
   private boolean closed;
 
+  /**
+   * Creates an analysis service bound to {@code context}.
+   *
+   * @param context active Ghidra session
+   */
   public AnalysisServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
     this.program = context.currentProgram();
@@ -32,23 +38,18 @@ public final class AnalysisServiceImpl implements AnalysisService {
   public AnalysisResource startAnalysis(List<String> analyzers) {
     synchronized (lock) {
       boolean bridgeRunning = currentTask != null && currentTask.isRunning();
-      switch (AnalysisStatusPolicy.start(closed, bridgeRunning, manager.isAnalyzing())) {
+      return switch (AnalysisStatusPolicy.start(closed, bridgeRunning, manager.isAnalyzing())) {
         case REJECT_CLOSED -> throw new IllegalStateException("analysis service is closed");
-        case RETURN_BRIDGE -> {
-          return currentTask.snapshot();
-        }
-        case RETURN_GHIDRA -> {
-          return globalStatus(AnalysisResource.Status.RUNNING);
-        }
+        case RETURN_BRIDGE -> currentTask.snapshot();
+        case RETURN_GHIDRA -> globalStatus(AnalysisResource.Status.RUNNING);
         case START_BRIDGE -> {
           AnalyzerSelection selection = AnalyzerSelection.from(analyzers);
           AnalysisTask task = new AnalysisTask(context, manager, selection);
           executor.execute(task::run);
           currentTask = task;
-          return currentTask.snapshot();
+          yield currentTask.snapshot();
         }
-      }
-      throw new AssertionError("unreachable analysis start decision");
+      };
     }
   }
 

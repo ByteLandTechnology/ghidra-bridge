@@ -82,10 +82,25 @@ public final class McpHttpServer implements AutoCloseable {
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, SseSession> sseSessions = new ConcurrentHashMap<>();
 
+  /**
+   * Creates an MCP HTTP server bound to {@code config} without request logging.
+   *
+   * @param config server bind and authentication configuration
+   * @param dispatcher request dispatcher for Ghidra services
+   * @throws IOException if binding the HTTP listener fails
+   */
   public McpHttpServer(McpConfig config, AgentDispatcher dispatcher) throws IOException {
     this(config, dispatcher, McpHttpServer::discardRequestLog);
   }
 
+  /**
+   * Creates an MCP HTTP server bound to {@code config} with a request log sink.
+   *
+   * @param config server bind and authentication configuration
+   * @param dispatcher request dispatcher for Ghidra services
+   * @param requestLogSink consumer receiving formatted request log lines
+   * @throws IOException if binding the HTTP listener fails
+   */
   public McpHttpServer(
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
@@ -133,18 +148,36 @@ public final class McpHttpServer implements AutoCloseable {
     }
   }
 
+  /** Starts accepting HTTP requests on the bound listener. */
   public void start() {
     server.start();
   }
 
+  /**
+   * Blocks until the server shuts down.
+   *
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   */
   public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
 
+  /**
+   * Blocks until the server shuts down or {@code cancelRequested} returns {@code true}.
+   *
+   * @param cancelRequested supplier polled to detect external cancellation
+   * @return {@code true} if shutdown completed normally, or {@code false} if cancelled
+   * @throws InterruptedException if the current thread is interrupted while waiting
+   */
   public boolean awaitShutdown(BooleanSupplier cancelRequested) throws InterruptedException {
     return awaitShutdown(shutdownLatch, cancelRequested, this::close, 250L);
   }
 
+  /**
+   * Returns the HTTP endpoint URL served by this instance.
+   *
+   * @return HTTP endpoint URL
+   */
   public String endpoint() {
     return config.endpoint();
   }
@@ -303,7 +336,9 @@ public final class McpHttpServer implements AutoCloseable {
           if (activeSse != null && activeSse.isActive()) {
             try {
               activeSse.sendEvent("message", JsonUtil.toJson(errResponse));
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+              // Best-effort SSE error delivery when the SSE client has disconnected.
+            }
             if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
               writeJson(exchange, error.httpStatus(), errResponse);
             } else {
@@ -325,7 +360,7 @@ public final class McpHttpServer implements AutoCloseable {
       String sessionId = UUID.randomUUID().toString();
       SseSession session;
       try {
-        session = new SseSession(sessionId, exchange);
+        session = new SseSession(exchange);
       } catch (IOException error) {
         log.method(HTTP_GET_METHOD).error().status(500);
         return;
@@ -410,9 +445,8 @@ public final class McpHttpServer implements AutoCloseable {
         yield success(id, cacheableResult(
             readResource(id, requireParamsMap(params, id), statelessProtocol), statelessProtocol));
       }
-      case "tools/call" -> {
-        yield success(id, handleToolCall(id, requireParamsMap(params, id), log, statelessProtocol));
-      }
+      case "tools/call" ->
+          success(id, handleToolCall(id, requireParamsMap(params, id), log, statelessProtocol));
       default ->
           throw new JsonRpcError(404, id, JSONRPC_METHOD_NOT_FOUND, "Method not found: " + method);
     };
@@ -1218,7 +1252,7 @@ public final class McpHttpServer implements AutoCloseable {
     if (query == null || query.isBlank()) {
       return null;
     }
-    for (String pair : query.split("&")) {
+    for (String pair : query.split("&", -1)) {
       int eq = pair.indexOf('=');
       String key = eq >= 0 ? pair.substring(0, eq) : pair;
       if (key.equals(name)) {
@@ -1231,7 +1265,6 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   static final class SseSession implements AutoCloseable {
-    private final String id;
     private final HttpExchange exchange;
     private final OutputStream output;
     private final AtomicBoolean active = new AtomicBoolean(true);
@@ -1239,8 +1272,7 @@ public final class McpHttpServer implements AutoCloseable {
     private final CountDownLatch closeLatch = new CountDownLatch(1);
     private final ReentrantLock writeLock = new ReentrantLock();
 
-    SseSession(String id, HttpExchange exchange) throws IOException {
-      this.id = id;
+    SseSession(HttpExchange exchange) throws IOException {
       this.exchange = exchange;
       exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
       exchange.getResponseHeaders().set("Cache-Control", "no-cache, no-transform");
@@ -1260,7 +1292,7 @@ public final class McpHttpServer implements AutoCloseable {
         if (event != null && !event.isBlank()) {
           sb.append("event: ").append(event).append("\n");
         }
-        for (String line : data.split("\r?\n")) {
+        for (String line : data.split("\r?\n", -1)) {
           sb.append("data: ").append(line).append("\n");
         }
         sb.append("\n");
@@ -1317,17 +1349,20 @@ public final class McpHttpServer implements AutoCloseable {
       }
     }
 
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void closeStream() {
       if (!streamClosed.compareAndSet(false, true)) {
         return;
       }
       try {
         output.close();
-      } catch (IOException ignored) {}
+      } catch (IOException ignored) {
+        // Ignore close errors while tearing down an SSE stream.
+      }
       try {
         exchange.close();
-      } catch (Exception ignored) {}
+      } catch (Exception ignored) {
+        // Ignore close errors while tearing down the underlying HttpExchange.
+      }
     }
 
     boolean isActive() {

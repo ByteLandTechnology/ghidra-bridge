@@ -5,9 +5,15 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import app.byteland.ghidra.service.reference.ReferenceService;
 
+/** Ghidra-backed implementation of {@link ReferenceService}. */
 public final class ReferenceServiceImpl implements ReferenceService {
   private final ReferenceListQueries listQueries;
 
+  /**
+   * Creates a reference service bound to {@code context}.
+   *
+   * @param context active Ghidra session
+   */
   public ReferenceServiceImpl(GhidraSession context) {
     this.listQueries = new ReferenceListQueries(context);
   }

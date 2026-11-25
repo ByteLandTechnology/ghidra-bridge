@@ -134,6 +134,7 @@ class FunctionCommentsTest {
     assertEquals(List.of("Repeatable comments are incomplete: database closed"), warnings);
   }
 
+  @SuppressWarnings("ReferenceEquality")
   static Address address(String spaceName, String hexOffset) {
     AddressSpace space = (AddressSpace) Proxy.newProxyInstance(
         AddressSpace.class.getClassLoader(),

@@ -15,14 +15,29 @@ public final class GhidraSession {
   private final Object executionLock = new Object();
   private int transactionDepth;
 
+  /**
+   * Creates a session bound to a running {@link GhidraScript}.
+   *
+   * @param script active Ghidra script instance
+   */
   public GhidraSession(GhidraScript script) {
     this.ghidraScript = Objects.requireNonNull(script, "script");
   }
 
+  /**
+   * Returns the underlying {@link GhidraScript} instance.
+   *
+   * @return bound Ghidra script
+   */
   public GhidraScript script() {
     return ghidraScript;
   }
 
+  /**
+   * Returns the open Ghidra program, throwing if no program is active.
+   *
+   * @return active {@link Program}
+   */
   public Program currentProgram() {
     Program program = currentProgramOrNull();
     if (program == null) {
@@ -31,10 +46,16 @@ public final class GhidraSession {
     return program;
   }
 
+  /**
+   * Returns the open Ghidra program, or {@code null} if none is open.
+   *
+   * @return active {@link Program}, or {@code null}
+   */
   public Program currentProgramOrNull() {
     return ghidraScript.getCurrentProgram();
   }
 
+  /** Commits any open script transaction and saves the current program to the project repository. */
   public void saveCurrentProgram() {
     synchronized (executionLock) {
       var monitor = ghidraScript.getMonitor();
@@ -63,10 +84,24 @@ public final class GhidraSession {
     }
   }
 
+  /**
+   * Parses {@code rawAddress} against the active program's address factory.
+   *
+   * @param rawAddress raw address text
+   * @return resolved {@link Address}
+   */
   public Address parseAddress(String rawAddress) {
     return AddressUtil.parseAddress(ghidraScript, rawAddress);
   }
 
+  /**
+   * Returns incoming or outgoing references associated with {@code address}.
+   *
+   * @param address target or source program address
+   * @param to {@code true} for incoming references to {@code address}, or {@code false} for
+   *     outgoing references from {@code address}
+   * @return iterable of matching Ghidra references
+   */
   public Iterable<ghidra.program.model.symbol.Reference> references(Address address, boolean to) {
     ghidra.program.model.symbol.ReferenceManager manager = currentProgram().getReferenceManager();
     if (to) {
@@ -79,10 +114,24 @@ public final class GhidraSession {
     return outgoing == null ? java.util.List.of() : java.util.Arrays.asList(outgoing);
   }
 
+  /**
+   * Executes {@code operation} inside a committed Ghidra program transaction.
+   *
+   * @param <T> operation return type
+   * @param operation transactional callback to execute
+   * @return callback result
+   */
   public <T> T withTransaction(TransactionalOperation<T> operation) {
     return withTransaction(operation, true);
   }
 
+  /**
+   * Executes {@code operation} inside an independent Ghidra transaction that is rolled back on exit.
+   *
+   * @param <T> operation return type
+   * @param operation transactional callback to execute
+   * @return callback result
+   */
   public <T> T withTemporaryChanges(TransactionalOperation<T> operation) {
     return withTransaction(operation, false);
   }
@@ -116,6 +165,12 @@ public final class GhidraSession {
     }
   }
 
+  /**
+   * Runs {@code command} against the open program or throws {@link TransactionExecutionException}.
+   *
+   * @param command Ghidra command to execute
+   * @param failurePrefix message prefix used when the command fails
+   */
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
     synchronized (executionLock) {
@@ -130,8 +185,19 @@ public final class GhidraSession {
     throw new TransactionExecutionException(failurePrefix + ": " + status);
   }
 
+  /**
+   * Callback executed inside a Ghidra program transaction.
+   *
+   * @param <T> callback result type
+   */
   @FunctionalInterface
   public interface TransactionalOperation<T> {
+    /**
+     * Executes transactional work against the current program.
+     *
+     * @return operation result
+     * @throws Exception if execution fails
+     */
     T run() throws Exception;
   }
 

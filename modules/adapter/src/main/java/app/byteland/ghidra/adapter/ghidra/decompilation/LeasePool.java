@@ -3,6 +3,7 @@ package app.byteland.ghidra.adapter.ghidra.decompilation;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -89,12 +90,13 @@ final class LeasePool<T> implements AutoCloseable {
     try {
       destroyer.accept(resource);
     } catch (RuntimeException ignored) {
+      // Best-effort cleanup when closing a pooled resource.
     }
   }
 
   private final class PooledLease implements Lease<T> {
     private final T leasedResource;
-    private boolean released;
+    private final AtomicBoolean released = new AtomicBoolean();
 
     private PooledLease(T value) {
       this.leasedResource = Objects.requireNonNull(value, "value");
@@ -102,7 +104,7 @@ final class LeasePool<T> implements AutoCloseable {
 
     @Override
     public T value() {
-      if (released) {
+      if (released.get()) {
         throw new IllegalStateException("lease already closed");
       }
       return leasedResource;
@@ -110,10 +112,9 @@ final class LeasePool<T> implements AutoCloseable {
 
     @Override
     public void close() {
-      if (released) {
+      if (!released.compareAndSet(false, true)) {
         return;
       }
-      released = true;
       if (closed) {
         created.decrementAndGet();
         destroyQuietly(leasedResource);

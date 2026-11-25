@@ -57,10 +57,12 @@ final class ProgramTimestamps {
     try {
       return Instant.parse(text);
     } catch (DateTimeParseException ignored) {
+      // Fall through to offset, zoned, and epoch-millisecond timestamp formats.
     }
     try {
       return OffsetDateTime.parse(text).toInstant();
     } catch (DateTimeParseException ignored) {
+      // Fall through to RFC-1123 / English date formats.
     }
     for (DateTimeFormatter formatter :
         List.of(
@@ -69,6 +71,7 @@ final class ProgramTimestamps {
       try {
         return ZonedDateTime.parse(text, formatter).toInstant();
       } catch (DateTimeParseException ignored) {
+        // Try the next formatter or epoch-millisecond fallback.
       }
     }
     try {

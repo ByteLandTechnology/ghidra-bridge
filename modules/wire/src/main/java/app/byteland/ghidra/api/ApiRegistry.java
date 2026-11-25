@@ -21,9 +21,16 @@ import java.util.function.Supplier;
  * Central registry that defines and dispatches all public API methods.
  */
 public final class ApiRegistry {
+  /** Semantic version of the public wire API contract. */
   public static final String INTERFACE_VERSION = "0.2.0";
+
+  /** Default page size for paginated list methods. */
   public static final int DEFAULT_LIMIT = 100;
+
+  /** Maximum allowed page size for paginated list methods. */
   public static final int MAX_LIMIT = Page.MAX_LIMIT;
+
+  /** Maximum number of sub-operations allowed in a single batch call. */
   public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
@@ -39,6 +46,14 @@ public final class ApiRegistry {
   private final ApiCatalog catalogSnapshot;
   private BatchMethod batchMethod;
 
+  /**
+   * Creates a registry bound to live domain services and session callbacks.
+   *
+   * @param services domain service bundle
+   * @param sessionId session identifier used to bind pagination cursors
+   * @param sessionSupplier supplier returning current session status fields
+   * @param shutdownAction callback invoked when {@code session.close} executes
+   */
   public ApiRegistry(
       BridgeServices services,
       String sessionId,
@@ -53,7 +68,11 @@ public final class ApiRegistry {
     catalogSnapshot = ApiCatalog.from(INTERFACE_VERSION, methodsByName.values());
   }
 
-  /** Builds the method catalog without an open Ghidra program. */
+  /**
+   * Builds the method catalog without an open Ghidra program.
+   *
+   * @return immutable API method catalog
+   */
   public static ApiCatalog catalog() {
     return new ApiRegistry(metadataServices(), "schema", Map::of, () -> {}).methodCatalog();
   }
@@ -76,7 +95,7 @@ public final class ApiRegistry {
         "metadata");
   }
 
-  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  @SuppressWarnings({ApiVocabulary.UNCHECKED, "ReferenceEquality"})
   private static <T> T inertService(Class<T> type) {
     return (T)
         java.lang.reflect.Proxy.newProxyInstance(
@@ -120,22 +139,51 @@ public final class ApiRegistry {
     return bridgeServices;
   }
 
+  /**
+   * Returns the immutable catalog snapshot for all registered methods.
+   *
+   * @return API catalog snapshot
+   */
   public ApiCatalog methodCatalog() {
     return catalogSnapshot;
   }
 
+  /**
+   * Returns all registered method definitions in registration order.
+   *
+   * @return immutable list of registered methods
+   */
   public List<ApiMethod<Map<String, Object>, Object>> methods() {
     return List.copyOf(methodsByName.values());
   }
 
+  /**
+   * Returns the set of all registered dotted method names.
+   *
+   * @return unmodifiable set of method names
+   */
   public Set<String> methodNames() {
     return Collections.unmodifiableSet(methodsByName.keySet());
   }
 
+  /**
+   * Looks up a registered method definition by name.
+   *
+   * @param name dotted method name
+   * @return matching {@link ApiMethod}, or {@code null} if unregistered
+   */
   public ApiMethod<Map<String, Object>, Object> method(String name) {
     return methodsByName.get(name);
   }
 
+  /**
+   * Validates and executes a registered method, wrapping transactional mutations as needed.
+   *
+   * @param name dotted method name
+   * @param params decoded JSON request parameters
+   * @return encoded response value
+   * @throws Exception if method lookup, validation, or execution fails
+   */
   public Object dispatch(String name, Map<String, Object> params) throws Exception {
     ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
     if (method == null) {
@@ -668,6 +716,7 @@ public final class ApiRegistry {
     return 0;
   }
 
+  @SuppressWarnings("ReferenceEquality")
   private static boolean sameReference(Object left, Object right) {
     return left == right;
   }

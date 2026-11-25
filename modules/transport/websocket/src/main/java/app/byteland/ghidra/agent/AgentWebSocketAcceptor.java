@@ -96,6 +96,7 @@ final class AgentWebSocketAcceptor implements Runnable {
     }
   }
 
+  @SuppressWarnings("ReferenceEquality")
   private static void closeAfterFailedStart(Socket socket, RuntimeException startFailure) {
     try {
       socket.close();

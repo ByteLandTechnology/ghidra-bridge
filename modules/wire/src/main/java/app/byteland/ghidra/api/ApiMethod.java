@@ -29,6 +29,7 @@ public record ApiMethod<Request, Response>(
     List<String> identityFields,
     Handler<Request, Response> handler) {
 
+  /** Validates method metadata and creates defensive copies of projection field collections. */
   public ApiMethod {
     Objects.requireNonNull(name, "name");
     if (description == null || description.isBlank()) {
@@ -42,14 +43,34 @@ public record ApiMethod<Request, Response>(
     Objects.requireNonNull(handler, "handler");
   }
 
+  /**
+   * Decodes {@code params}, executes the handler, encodes the response, and applies projections.
+   *
+   * @param params raw decoded JSON request parameters
+   * @return projected response payload
+   * @throws Exception if validation or execution fails
+   */
   public Object invoke(Object params) throws Exception {
     return invokeDecoded(decodeRequest(params));
   }
 
+  /**
+   * Validates and decodes raw request parameters using {@link #requestCodec()}.
+   *
+   * @param params raw decoded JSON request parameters
+   * @return typed decoded request value
+   */
   public Request decodeRequest(Object params) {
     return requestCodec.decode(params, "");
   }
 
+  /**
+   * Executes the handler on an already-decoded request and applies any field projections.
+   *
+   * @param request decoded request value
+   * @return projected response payload
+   * @throws Exception if field validation or handler execution fails
+   */
   public Object invokeDecoded(Request request) throws Exception {
     FieldProjection.validate(request, fields, identityFields);
     Response response = handler.handle(request);
@@ -57,8 +78,21 @@ public record ApiMethod<Request, Response>(
     return FieldProjection.apply(encoded, request, fields, identityFields);
   }
 
+  /**
+   * Functional handler that executes a typed API method request.
+   *
+   * @param <Request> typed request value
+   * @param <Response> typed response value
+   */
   @FunctionalInterface
   public interface Handler<Request, Response> {
+    /**
+     * Processes {@code request} and returns a typed response.
+     *
+     * @param request validated request object
+     * @return typed response object
+     * @throws Exception if the operation fails
+     */
     Response handle(Request request) throws Exception;
   }
 
@@ -82,6 +116,7 @@ public record ApiMethod<Request, Response>(
       boolean idempotent,
       boolean batchable) {
 
+    /** Validates consistency between read-only, mutation, and transaction flags. */
     public MethodEffects {
       if (readOnly && (mutatesProgram || requiresTransaction || destructive)) {
         throw new IllegalArgumentException("read-only methods cannot mutate or be destructive");
@@ -91,23 +126,55 @@ public record ApiMethod<Request, Response>(
       }
     }
 
+    /**
+     * Returns effect flags for a batchable, idempotent read-only query method.
+     *
+     * @return read-only method effects
+     */
     public static MethodEffects readOnlyMethod() {
       return new MethodEffects(true, false, false, true, false, true, true);
     }
 
+    /**
+     * Returns effect flags for a non-batchable metadata inspection method.
+     *
+     * @return metadata method effects
+     */
     public static MethodEffects metadata() {
       return new MethodEffects(true, false, false, true, false, true, false);
     }
 
+    /**
+     * Returns effect flags for a transactional program mutation method.
+     *
+     * @param destructive {@code true} if the mutation permanently deletes data
+     * @param idempotent {@code true} if repeating the mutation produces the same state
+     * @return transactional mutation effects
+     */
     public static MethodEffects mutation(boolean destructive, boolean idempotent) {
       return new MethodEffects(false, true, true, false, destructive, idempotent, true);
     }
 
+    /**
+     * Returns effect flags for a program-mutating operation that manages state outside a single
+     * transaction.
+     *
+     * @param destructive {@code true} if the operation permanently deletes data
+     * @param idempotent {@code true} if repeating the operation produces the same state
+     * @return non-transactional mutation effects
+     */
     public static MethodEffects mutationWithoutTransaction(
         boolean destructive, boolean idempotent) {
       return new MethodEffects(false, true, false, false, destructive, idempotent, false);
     }
 
+    /**
+     * Returns effect flags for a session or analysis lifecycle operation.
+     *
+     * @param destructive {@code true} if the operation terminates or discards state
+     * @param idempotent {@code true} if repeating the operation produces the same state
+     * @return lifecycle method effects
+     */
     public static MethodEffects lifecycle(boolean destructive, boolean idempotent) {
       return new MethodEffects(false, false, false, true, destructive, idempotent, false);
     }

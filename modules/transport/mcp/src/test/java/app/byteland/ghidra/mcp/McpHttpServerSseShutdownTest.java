@@ -34,6 +34,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Proxy;
 import java.net.BindException;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -130,8 +131,8 @@ class McpHttpServerSseShutdownTest {
             closeElapsedMs < 1_000L,
             "Expected immediate wakeup on close(), got " + closeElapsedMs + " ms");
 
-        // Drain any left-over lines; stream must reach EOF promptly after close().
-        while (client.reader.readLine() != null) {
+        // Drain any left-over bytes; stream must reach EOF promptly after close().
+        while (client.reader.read() != -1) {
           // drain to EOF
         }
       }
@@ -169,7 +170,7 @@ class McpHttpServerSseShutdownTest {
     CountDownLatch writeEntered = new CountDownLatch(1);
     CountDownLatch unblockWrite = new CountDownLatch(1);
     BlockingExchange exchange = new BlockingExchange(writeEntered, unblockWrite);
-    McpHttpServer.SseSession session = new McpHttpServer.SseSession("stalled-session", exchange);
+    McpHttpServer.SseSession session = new McpHttpServer.SseSession(exchange);
 
     CountDownLatch waiterWoke = new CountDownLatch(1);
     AtomicBoolean signaled = new AtomicBoolean(false);
@@ -193,6 +194,7 @@ class McpHttpServerSseShutdownTest {
                   try {
                     session.sendEvent("message", "{\"ok\":true}");
                   } catch (IOException ignored) {
+                    // Expected if the simulated stalled stream fails after unblock/close.
                   }
                 });
 
@@ -228,7 +230,7 @@ class McpHttpServerSseShutdownTest {
   void interruptedWaitRestoresInterruptStatus() throws Exception {
     BlockingExchange exchange =
         new BlockingExchange(new CountDownLatch(0), new CountDownLatch(0), false);
-    McpHttpServer.SseSession session = new McpHttpServer.SseSession("interrupt-session", exchange);
+    McpHttpServer.SseSession session = new McpHttpServer.SseSession(exchange);
 
     CountDownLatch startedWaiting = new CountDownLatch(1);
     CountDownLatch finished = new CountDownLatch(1);
@@ -312,7 +314,7 @@ class McpHttpServerSseShutdownTest {
     }
 
     static SseClient connect(int port) throws IOException {
-      Socket socket = new Socket("127.0.0.1", port);
+      Socket socket = new Socket(InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), port);
       socket.setSoTimeout(3_000);
       OutputStream out = socket.getOutputStream();
       String request =
@@ -374,6 +376,7 @@ class McpHttpServerSseShutdownTest {
       try {
         socket.close();
       } catch (IOException ignored) {
+        // Ignore close errors in test client teardown.
       }
     }
   }

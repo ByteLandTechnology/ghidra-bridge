@@ -128,33 +128,31 @@ final class AgentWebSocketConnectionRunner {
   private boolean handleFrame(
       AgentServerConnection connection, WebSocketFrames.Frame frame, CloseState closeState)
       throws IOException {
-    switch (frame.opcode()) {
+    return switch (frame.opcode()) {
       case WebSocketFrames.TEXT_OPCODE -> {
         if (!frame.fin()) {
           connection.close(UNSUPPORTED_DATA_CLOSE_CODE, "fragmented text not supported");
-          return false;
+          yield false;
         }
         handler.onText(connection, new String(frame.payloadView(), StandardCharsets.UTF_8));
-        return true;
+        yield true;
       }
       case WebSocketFrames.CLOSE_OPCODE -> {
         closeState.code = WebSocketFrames.closeStatus(frame.payloadView());
         closeState.reason = WebSocketFrames.closeReason(frame.payloadView());
         connection.close(closeState.code, closeState.reason);
-        return false;
+        yield false;
       }
       case WebSocketFrames.PING_OPCODE -> {
         connection.sendControlFrame(WebSocketFrames.PONG_OPCODE, frame.payloadView());
-        return true;
+        yield true;
       }
-      case WebSocketFrames.PONG_OPCODE -> {
-        return true;
-      }
+      case WebSocketFrames.PONG_OPCODE -> true;
       default -> {
         connection.close(UNSUPPORTED_DATA_CLOSE_CODE, "unsupported frame");
-        return false;
+        yield false;
       }
-    }
+    };
   }
 
   private static final class CloseState {

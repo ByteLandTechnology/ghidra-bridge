@@ -103,6 +103,7 @@ final class AgentClientChannels {
       }
     }
 
+    @SuppressWarnings("ReferenceEquality")
     private void abortAfter(RuntimeException failure) {
       try {
         webSocket.abort();

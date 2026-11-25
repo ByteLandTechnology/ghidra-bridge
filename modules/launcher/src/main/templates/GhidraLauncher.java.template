@@ -20,6 +20,8 @@ import java.util.jar.JarFile;
 import java.util.zip.CRC32;
 import java.util.zip.ZipException;
 
+// Ghidra user scripts must use the default package.
+@SuppressWarnings("DefaultPackage")
 public class __CLASS__ extends GhidraScript {
   private static final String JAR_NAME = "ghidra-bridge.jar";
   private static final String BOOTSTRAP_CLASS_ENTRY = "app/byteland/ghidra/Bootstrap.class";

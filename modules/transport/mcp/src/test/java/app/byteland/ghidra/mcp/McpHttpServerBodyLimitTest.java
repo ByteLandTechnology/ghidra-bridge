@@ -62,6 +62,10 @@ class McpHttpServerBodyLimitTest {
   private static final String LOOPBACK = "127.0.0.1";
   private static final int CHUNK_SIZE = 64 * 1024;
 
+  private static InetAddress loopbackAddress() throws IOException {
+    return InetAddress.getByAddress(new byte[] {127, 0, 0, 1});
+  }
+
   @Test
   void acceptsValidPostRequests() throws Exception {
     try (RunningServer running = startTestServer()) {
@@ -269,7 +273,7 @@ class McpHttpServerBodyLimitTest {
     try (RunningServer running = startTestServer()) {
       // 1. Oversized Content-Length (16 MiB + 1) rejected immediately before body is streamed.
       long overLimit = McpHttpServer.MAX_REQUEST_BODY_BYTES + 1L;
-      try (Socket socket = new Socket(LOOPBACK, running.port)) {
+      try (Socket socket = new Socket(loopbackAddress(), running.port)) {
         socket.setSoTimeout(10_000);
         String headers =
             "POST /mcp HTTP/1.1\r\n"
@@ -295,7 +299,7 @@ class McpHttpServerBodyLimitTest {
       }
 
       // 2. Oversized `Transfer-Encoding: chunked` (16 MiB + 1) where client pauses before 0\r\n\r\n.
-      try (Socket socket = new Socket(LOOPBACK, running.port)) {
+      try (Socket socket = new Socket(loopbackAddress(), running.port)) {
         socket.setSoTimeout(10_000);
         String headers =
             "POST /mcp HTTP/1.1\r\n"
@@ -333,7 +337,7 @@ class McpHttpServerBodyLimitTest {
       }
 
       // 3. Mismatched Content-Length over wire where client streams extra bytes past declared length.
-      try (Socket socket = new Socket(LOOPBACK, running.port)) {
+      try (Socket socket = new Socket(loopbackAddress(), running.port)) {
         socket.setSoTimeout(10_000);
         String headers =
             "POST /mcp HTTP/1.1\r\n"
@@ -359,7 +363,7 @@ class McpHttpServerBodyLimitTest {
   @Test
   void deliversSseErrorOnHttp413AndKeepsSessionActive() throws Exception {
     try (RunningServer running = startTestServer();
-        Socket sseSocket = new Socket(LOOPBACK, running.port)) {
+        Socket sseSocket = new Socket(loopbackAddress(), running.port)) {
       sseSocket.setSoTimeout(10_000);
       OutputStream sseOut = sseSocket.getOutputStream();
       sseOut.write(
@@ -389,7 +393,7 @@ class McpHttpServerBodyLimitTest {
 
       // 1. Oversized Content-Length POST to active ?sessionId= endpoint.
       long overLimit = McpHttpServer.MAX_REQUEST_BODY_BYTES + 1L;
-      try (Socket postSocket = new Socket(LOOPBACK, running.port)) {
+      try (Socket postSocket = new Socket(loopbackAddress(), running.port)) {
         postSocket.setSoTimeout(10_000);
         String postHeaders =
             "POST "
@@ -490,11 +494,9 @@ class McpHttpServerBodyLimitTest {
               }
             });
 
-    try {
+    try (BufferedReader stdout =
+        new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
       int port;
-      BufferedReader stdout =
-          new BufferedReader(
-              new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
       String readyLine = stdout.readLine();
       assertNotNull(
           readyLine,
@@ -584,7 +586,7 @@ class McpHttpServerBodyLimitTest {
   }
 
   private static RawHttpResponse sendRawRequest(int port, String rawRequest) throws Exception {
-    try (Socket socket = new Socket(LOOPBACK, port)) {
+    try (Socket socket = new Socket(loopbackAddress(), port)) {
       socket.setSoTimeout(10_000);
       OutputStream out = socket.getOutputStream();
       out.write(rawRequest.getBytes(StandardCharsets.US_ASCII));
@@ -595,7 +597,7 @@ class McpHttpServerBodyLimitTest {
 
   private static RawHttpResponse streamOversizedBody(
       int port, String rawHeaders, int totalBytes, boolean chunked) throws Exception {
-    try (Socket socket = new Socket(LOOPBACK, port)) {
+    try (Socket socket = new Socket(loopbackAddress(), port)) {
       socket.setSoTimeout(20_000);
       InputStream in = socket.getInputStream();
       CompletableFuture<RawHttpResponse> responseFuture =
@@ -735,7 +737,7 @@ class McpHttpServerBodyLimitTest {
   }
 
   private static int findFreePort() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getByName(LOOPBACK))) {
+    try (ServerSocket socket = new ServerSocket(0, 1, loopbackAddress())) {
       return socket.getLocalPort();
     }
   }

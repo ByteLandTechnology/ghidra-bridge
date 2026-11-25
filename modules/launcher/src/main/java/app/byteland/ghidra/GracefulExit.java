@@ -125,6 +125,7 @@ final class GracefulExit implements AutoCloseable {
     try {
       Runtime.getRuntime().removeShutdownHook(shutdownHook.orElseThrow());
     } catch (IllegalStateException ignored) {
+      // JVM shutdown is already in progress, so the hook can no longer be removed.
     } finally {
       shutdownHook = Optional.empty();
     }

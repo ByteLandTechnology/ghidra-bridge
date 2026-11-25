@@ -16,6 +16,14 @@ import java.util.Set;
 
 /**
  * Configuration values for a bridge runtime session.
+ *
+ * @param wsUrl outbound WebSocket endpoint URL, or {@code null} in server mode
+ * @param host local bind host in server mode, or {@code null} in outbound mode
+ * @param port local bind port in server mode, or {@code null} in outbound mode
+ * @param path WebSocket endpoint path in server mode
+ * @param token optional bearer authentication token
+ * @param sessionId unique bridge session identifier
+ * @param exitDeadlineSeconds optional post-session JVM exit deadline in seconds
  */
 public record AgentConfig(
     String wsUrl,
@@ -30,6 +38,7 @@ public record AgentConfig(
   private static final Set<String> ALLOWED =
       Set.of("ws_url", "host", "port", "path", "session_id", "token", "jar", "exit_deadline_sec");
 
+  /** Validates and normalizes session configuration values. */
   public AgentConfig {
     boolean pathWasProvided = optionalText(path) != null;
     wsUrl = optionalText(wsUrl);
@@ -58,10 +67,22 @@ public record AgentConfig(
     }
   }
 
+  /**
+   * Parses {@code key=value} startup arguments into an {@link AgentConfig}.
+   *
+   * @param args startup argument strings
+   * @return validated session configuration
+   */
   public static AgentConfig fromArgs(String... args) {
     return fromMap(parseArgs(args));
   }
 
+  /**
+   * Builds an {@link AgentConfig} from a map of startup key-value pairs.
+   *
+   * @param args startup key-value map
+   * @return validated session configuration
+   */
   public static AgentConfig fromMap(Map<String, String> args) {
     Objects.requireNonNull(args, "args");
     rejectUnknown(args, ALLOWED);
@@ -75,6 +96,12 @@ public record AgentConfig(
         optionalInteger(args.get("exit_deadline_sec"), "exit_deadline_sec"));
   }
 
+  /**
+   * Parses {@code key=value} startup arguments while rejecting malformed or duplicate keys.
+   *
+   * @param args raw startup arguments
+   * @return ordered map of parsed key-value pairs
+   */
   public static Map<String, String> parseArgs(String... args) {
     Map<String, String> parsed = new LinkedHashMap<>();
     if (args == null) return parsed;
@@ -93,18 +120,39 @@ public record AgentConfig(
     return parsed;
   }
 
+  /**
+   * Returns whether this configuration connects outbound to a remote WebSocket URL.
+   *
+   * @return {@code true} when {@code wsUrl} is configured
+   */
   public boolean isOutboundMode() {
     return wsUrl != null;
   }
 
+  /**
+   * Returns whether this configuration listens as an embedded WebSocket server.
+   *
+   * @return {@code true} when {@code port} is configured
+   */
   public boolean isServerMode() {
     return port != null;
   }
 
+  /**
+   * Returns the configured outbound WebSocket URL with userinfo and query/fragment values redacted.
+   *
+   * @return redacted WebSocket URL, or {@code null} when unset
+   */
   public String redactedWsUrl() {
     return redactWsUrl(wsUrl);
   }
 
+  /**
+   * Redacts userinfo, query parameters, and fragments from a WebSocket URL for safe logging.
+   *
+   * @param wsUrl raw WebSocket URL, or {@code null}
+   * @return redacted WebSocket URL, or {@code null} when blank
+   */
   public static String redactWsUrl(String wsUrl) {
     String normalized = optionalText(wsUrl);
     if (normalized == null) return null;
@@ -119,7 +167,12 @@ public record AgentConfig(
     return separator < 0 ? stripped : stripped + "?<redacted>";
   }
 
-  @SuppressWarnings("PMD.PreserveStackTrace")
+  /**
+   * Parses and validates an outbound {@code ws} or {@code wss} endpoint URI.
+   *
+   * @param wsUrl WebSocket URL string
+   * @return validated {@link URI}
+   */
   public static URI parseWsUri(String wsUrl) {
     String normalized = optionalText(wsUrl);
     if (normalized == null) {
@@ -240,7 +293,6 @@ public record AgentConfig(
     return decoded.toString();
   }
 
-  @SuppressWarnings("PMD.PreserveStackTrace")
   private static void appendUtf8Bytes(StringBuilder target, byte[] bytes) {
     try {
       target.append(
@@ -261,6 +313,13 @@ public record AgentConfig(
     return -1;
   }
 
+  /**
+   * Throws {@link IllegalArgumentException} if {@code args} contains any key outside {@code
+   * allowed}.
+   *
+   * @param args parsed startup arguments
+   * @param allowed permitted argument names
+   */
   public static void rejectUnknown(Map<String, String> args, Set<String> allowed) {
     for (String key : args.keySet()) {
       if (!allowed.contains(key))
@@ -268,12 +327,24 @@ public record AgentConfig(
     }
   }
 
+  /**
+   * Validates that {@code port} is within the TCP port range {@code 1..65535}.
+   *
+   * @param port TCP port number
+   */
   public static void requireValidPort(int port) {
     if (port < 1 || port > 65535) {
       throw new IllegalArgumentException("port must be in 1..65535");
     }
   }
 
+  /**
+   * Parses an optional integer startup value, returning {@code null} when blank.
+   *
+   * @param value raw text value, or {@code null}
+   * @param field field name used in validation errors
+   * @return parsed integer, or {@code null}
+   */
   public static Integer optionalInteger(String value, String field) {
     String normalized = optionalText(value);
     if (normalized == null) return null;
@@ -290,12 +361,25 @@ public record AgentConfig(
     return normalized;
   }
 
+  /**
+   * Trims {@code value} and returns {@code null} when {@code null} or blank.
+   *
+   * @param value raw text value, or {@code null}
+   * @return trimmed non-empty string, or {@code null}
+   */
   public static String optionalText(String value) {
     if (value == null) return null;
     String normalized = value.trim();
     return normalized.isEmpty() ? null : normalized;
   }
 
+  /**
+   * Normalizes an endpoint path with a leading {@code '/'}, falling back when blank.
+   *
+   * @param value raw path value, or {@code null}
+   * @param fallback default path used when {@code value} is blank
+   * @return normalized path starting with {@code '/'}
+   */
   public static String normalizePath(String value, String fallback) {
     String normalized = optionalText(value);
     if (normalized == null) normalized = fallback;

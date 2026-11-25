@@ -9,9 +9,16 @@ import app.byteland.ghidra.service.Page;
 public interface CommentService {
   /**
    * Search criteria and limits for comment queries.
+   *
+   * @param scan address-range and timeout scan options
+   * @param type optional comment type filter
+   * @param text optional case-insensitive substring filter
+   * @param limit maximum number of comments to return
+   * @param cursor optional resume cursor key
    */
   record CommentQuery(
       AddressScanOptions scan, CommentResource.Type type, String text, int limit, String cursor) {
+    /** Validates that {@code scan} is non-null and {@code limit} is within {@code 1..1000}. */
     public CommentQuery {
       if (scan == null) throw new IllegalArgumentException("scan is required");
       if (limit < 1 || limit > 1000) throw new IllegalArgumentException("limit must be in 1..1000");

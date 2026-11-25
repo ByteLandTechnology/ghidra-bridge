@@ -12,6 +12,7 @@ import java.util.TreeMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+/** Signs, encodes, and verifies HMAC-protected pagination cursor tokens. */
 public final class CursorTokens {
   private static final int CURSOR_PART_COUNT = 5;
   private static final int SIGNING_KEY_LENGTH = 32;
@@ -21,6 +22,15 @@ public final class CursorTokens {
 
   private CursorTokens() {}
 
+  /**
+   * Encodes and signs a pagination cursor token bound to a resource, session, and query.
+   *
+   * @param resource logical resource identifier
+   * @param sessionId active session identifier
+   * @param queryFingerprint SHA-256 fingerprint of query parameters
+   * @param compositeKey opaque pagination position key
+   * @return URL-safe Base64-encoded signed cursor token
+   */
   public static String encode(
       String resource, String sessionId, String queryFingerprint, String compositeKey) {
     String payload =
@@ -37,6 +47,16 @@ public final class CursorTokens {
         .encodeToString(wire.getBytes(StandardCharsets.UTF_8));
   }
 
+  /**
+   * Verifies and decodes a signed pagination cursor token, returning {@code null} when absent.
+   *
+   * @param token encoded cursor token, or {@code null}
+   * @param resource expected resource identifier
+   * @param sessionId expected session identifier
+   * @param queryFingerprint expected SHA-256 query fingerprint
+   * @param target JSON Pointer reported on validation failure
+   * @return decoded composite pagination key, or {@code null}
+   */
   public static String decode(
       String token, String resource, String sessionId, String queryFingerprint, String target) {
     if (token == null) return null;
@@ -67,6 +87,12 @@ public final class CursorTokens {
     }
   }
 
+  /**
+   * Computes a deterministic SHA-256 fingerprint over non-pagination request fields.
+   *
+   * @param request decoded request parameter map
+   * @return URL-safe Base64-encoded SHA-256 query fingerprint
+   */
   public static String queryFingerprint(Map<String, Object> request) {
     Map<String, Object> query = new TreeMap<>();
     for (Map.Entry<String, Object> entry : request.entrySet()) {

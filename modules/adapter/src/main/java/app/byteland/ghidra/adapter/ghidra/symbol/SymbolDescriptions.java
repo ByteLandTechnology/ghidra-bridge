@@ -5,9 +5,16 @@ import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
 import app.byteland.ghidra.service.symbol.SymbolResource;
 import ghidra.program.model.symbol.Symbol;
 
+/** Maps Ghidra {@link Symbol} instances to domain {@link SymbolResource} records. */
 public final class SymbolDescriptions {
   private SymbolDescriptions() {}
 
+  /**
+   * Converts {@code symbol} into a {@link SymbolResource} including any cached C++ demangled name.
+   *
+   * @param symbol Ghidra symbol to describe
+   * @return domain symbol resource
+   */
   public static SymbolResource describe(Symbol symbol) {
     return new SymbolResource(
         String.valueOf(symbol.getID()),

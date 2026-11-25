@@ -75,6 +75,7 @@ final class AgentServerConnection implements AgentWebSocketServer.Connection {
     }
   }
 
+  @SuppressWarnings("ReferenceEquality")
   private Throwable closeSocketOnce(Throwable priorFailure) {
     if (!socketCloseStarted.compareAndSet(false, true)) {
       return priorFailure;

@@ -30,9 +30,12 @@ public final class AgentClient {
   /** The maximum time for the send of one keepalive ping. */
   private static final Duration KEEPALIVE_TIMEOUT = Duration.ofSeconds(10);
 
+  /** Receives transport lifecycle notifications for server listening and outbound connection. */
   public interface LifecycleListener {
+    /** Invoked when the embedded WebSocket server starts listening for clients. */
     default void onListening() {}
 
+    /** Invoked when the outbound WebSocket client completes its handshake. */
     default void onConnected() {}
   }
 
@@ -45,10 +48,23 @@ public final class AgentClient {
       new AtomicReference<>();
   private final AtomicReference<AgentWebSocketServer> serverRef = new AtomicReference<>();
 
+  /**
+   * Creates a WebSocket transport client with no-op lifecycle callbacks.
+   *
+   * @param config session transport configuration
+   * @param dispatcher API request dispatcher
+   */
   public AgentClient(AgentConfig config, AgentDispatcher dispatcher) {
     this(config, dispatcher, new LifecycleListener() {});
   }
 
+  /**
+   * Creates a WebSocket transport client with a custom lifecycle listener.
+   *
+   * @param config session transport configuration
+   * @param dispatcher API request dispatcher
+   * @param lifecycleListener listener notified of transport state transitions
+   */
   public AgentClient(
       AgentConfig config, AgentDispatcher dispatcher, LifecycleListener lifecycleListener) {
     this(config, dispatcher, lifecycleListener, DEFAULT_CONNECT_TIMEOUT);
@@ -65,10 +81,21 @@ public final class AgentClient {
     this.connectTimeout = connectTimeout;
   }
 
+  /**
+   * Runs the configured WebSocket transport until disconnected.
+   *
+   * @throws Exception if connection setup or transport execution fails
+   */
   public void connect() throws Exception {
     connect(() -> false);
   }
 
+  /**
+   * Runs the configured WebSocket transport until disconnected or cancelled.
+   *
+   * @param cancellationRequested supplier polled to detect external cancellation
+   * @throws Exception if connection setup or transport execution fails
+   */
   public void connect(BooleanSupplier cancellationRequested) throws Exception {
     try {
       connectUntilDisconnected(cancellationRequested);
@@ -128,6 +155,7 @@ public final class AgentClient {
     LOGGER.log(System.Logger.Level.ERROR, message, error);
   }
 
+  /** Closes any active outbound WebSocket channel or embedded WebSocket server. */
   public void disconnect() {
     RuntimeException failure = null;
     try {
@@ -146,8 +174,8 @@ public final class AgentClient {
         } catch (RuntimeException closeFailure) {
           if (failure == null) {
             failure = closeFailure;
-          } else if (failure != closeFailure) {
-            failure.addSuppressed(closeFailure);
+          } else {
+            addDistinctSuppressed(failure, closeFailure);
           }
         }
       }
@@ -155,6 +183,13 @@ public final class AgentClient {
       disconnectLatch.countDown();
     }
     if (failure != null) throw failure;
+  }
+
+  @SuppressWarnings("ReferenceEquality")
+  private static void addDistinctSuppressed(Throwable failure, Throwable suppressedFailure) {
+    if (failure != suppressedFailure) {
+      failure.addSuppressed(suppressedFailure);
+    }
   }
 
   private void serve(BooleanSupplier cancellationRequested) throws Exception {

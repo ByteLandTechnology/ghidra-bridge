@@ -231,6 +231,7 @@ class GhidraSessionAdversarialTest {
                 var cmd = new TestCommand(true, "ok");
                 session.runCommand(cmd, "run");
               }
+              default -> throw new AssertionError("Unexpected mode: " + mode);
             }
           }
         } catch (Exception e) {

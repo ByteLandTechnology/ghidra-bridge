@@ -72,7 +72,7 @@ class McpHttpServerToolResultTest {
             "Plain text with \"quotes\", \\slashes\\, and \nnewlines",
             List.of("alpha", 2, true, Map.of("nested", "value")),
             42,
-            Boolean.TRUE,
+            true,
             Double.NaN);
 
     for (Object payload : payloads) {
@@ -352,7 +352,7 @@ class McpHttpServerToolResultTest {
       while ((line = reader.readLine()) != null) {
         if (line.isEmpty()) {
           if (event != null || !data.isEmpty()) {
-            sink.offer(new SseEvent(event, data.toString()));
+            assertTrue(sink.offer(new SseEvent(event, data.toString())));
             event = null;
             data.setLength(0);
           }

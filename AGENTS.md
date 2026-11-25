@@ -30,17 +30,38 @@ Follow these repository rules when you change code:
 
 ### Module Checks and Unit Tests (`check`)
 
-Run JUnit Platform test suites and module checks across all 8 Java subprojects:
+Run compiler lints, ErrorProne, SpotBugs, Javadoc checks, and JUnit Platform test suites across all 8 Java subprojects:
 
 ```bash
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon check
 ```
 
-To run JUnit tests for a single subproject during iteration:
+Run individual static analysis, Javadoc, or unit test gates during iteration:
 
 ```bash
+# Compiler lints (-Xlint:all,-path -Werror) and ErrorProne on main, test, and generated scripts
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon compileJava compileTestJava compileGeneratedScripts
+
+# SpotBugs bytecode analysis (exclusions in gradle/spotbugs-exclude.xml)
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon spotbugsMain spotbugsTest
+
+# Strict Javadoc validation (-Xdoclint:all -Werror)
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon javadoc
+
+# Single-module JUnit tests
 ./gradlew --no-daemon :domain:test
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
+```
+
+### Dependency Verification Checksums
+
+`gradle.properties` sets `org.gradle.dependency.verification=strict` and checks every plugin and dependency artifact against `gradle/verification-metadata.xml`. When you add or upgrade a Gradle plugin or dependency, regenerate SHA-256 checksums from an empty `GRADLE_USER_HOME`:
+
+```bash
+cold_gradle_home="$(mktemp -d)"
+GRADLE_USER_HOME="$cold_gradle_home" GHIDRA_INSTALL_DIR=/path/to/ghidra \
+  ./gradlew --no-daemon --write-verification-metadata sha256 clean verify
+rm -rf "$cold_gradle_home"
 ```
 
 ### Full Build and Verification (`clean verify`)
@@ -52,9 +73,9 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
 ```
 
 `verify` runs:
-- `check`: JUnit tests and checks across all 8 Java subprojects.
+- `check`: Java 21 compiler lints (`-Xlint:all,-path` and `-Werror`), ErrorProne, SpotBugs (`spotbugsMain` and `spotbugsTest`), strict Javadoc (`-Xdoclint:all` and `-Werror`), and JUnit tests across all 8 Java subprojects.
 - `verifyApiContracts`: Checks that checked-in contracts match generated output.
-- `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra (`compileGeneratedScripts`).
+- `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra with compiler lints and ErrorProne (`compileGeneratedScripts`).
 - `verifyArchitecture`: Verifies that no module outside `adapter` and `launcher` imports `ghidra.*`.
 
 ### Repository Hygiene Check

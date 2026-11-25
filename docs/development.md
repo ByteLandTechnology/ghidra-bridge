@@ -92,11 +92,38 @@ bash .github/scripts/verify-repository-hygiene.sh
 On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
 
 The verification tasks check:
-- **Unit Tests**: `check` runs JUnit tests across all Java modules.
+- **Compiler Lints and ErrorProne**: `compileJava`, `compileTestJava`, and `compileGeneratedScripts` enforce `-Xlint:all,-path`, `-Werror`, and ErrorProne checks.
+- **SpotBugs**: `spotbugsMain` and `spotbugsTest` analyze compiled main and test bytecode (`gradle/spotbugs-exclude.xml` records false-positive exclusions).
+- **Javadoc**: `javadoc` enforces `-Xdoclint:all` and `-Werror` across all Java modules.
+- **Unit Tests**: `test` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
-- **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
+- **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile without compiler or ErrorProne warnings.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+
+To run individual static analysis or documentation checks locally:
+
+```bash
+# Compiler lints and ErrorProne across main, test, and generated scripts
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon compileJava compileTestJava compileGeneratedScripts
+
+# SpotBugs analysis on main and test bytecode
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon spotbugsMain spotbugsTest
+
+# Strict Javadoc generation
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon javadoc
+```
+
+### Update Dependency Verification Checksums
+
+`gradle.properties` keeps `org.gradle.dependency.verification=strict`. When you update Gradle plugins or dependencies, regenerate `gradle/verification-metadata.xml` from an empty `GRADLE_USER_HOME` so Gradle records SHA-256 checksums for every resolved plugin, POM, module file, and JAR:
+
+```bash
+cold_gradle_home="$(mktemp -d)"
+GRADLE_USER_HOME="$cold_gradle_home" GHIDRA_INSTALL_DIR=/path/to/ghidra \
+  ./gradlew --no-daemon --write-verification-metadata sha256 clean verify
+rm -rf "$cold_gradle_home"
+```
 
 ## Releases
 

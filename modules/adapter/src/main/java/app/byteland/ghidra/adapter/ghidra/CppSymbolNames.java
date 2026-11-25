@@ -16,6 +16,15 @@ public final class CppSymbolNames {
 
   private CppSymbolNames() {}
 
+  /**
+   * Demangles {@code name} at {@code address} using a bounded per-program cache, or returns {@code
+   * null}.
+   *
+   * @param program owning Ghidra program
+   * @param name raw symbol name
+   * @param address symbol address
+   * @return demangled signature string, or {@code null} if unmangled or undecodable
+   */
   public static String demangled(Program program, String name, Address address) {
     if (!isMangled(name)) return null;
     Map<String, Optional<String>> cache = cacheFor(program);
@@ -32,6 +41,12 @@ public final class CppSymbolNames {
     return result;
   }
 
+  /**
+   * Returns whether {@code name} begins with a known Itanium or MSVC mangled prefix.
+   *
+   * @param name candidate symbol name
+   * @return {@code true} if {@code name} has a mangled C++ prefix
+   */
   public static boolean isMangled(String name) {
     return name != null
         && (name.startsWith("_Z") || name.startsWith("__Z") || name.startsWith("?"));

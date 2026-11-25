@@ -413,6 +413,7 @@ class FunctionParameterMutationsTest {
     }
   }
 
+  @SuppressWarnings("ReferenceEquality")
   private static Parameter stubParameter(
       String name,
       int ordinal,

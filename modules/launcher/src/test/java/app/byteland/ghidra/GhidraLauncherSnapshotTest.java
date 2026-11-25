@@ -152,7 +152,11 @@ class GhidraLauncherSnapshotTest {
       return entries
           .filter(
               path -> {
-                String name = path.getFileName().toString();
+                Path fileName = path.getFileName();
+                if (fileName == null) {
+                  return false;
+                }
+                String name = fileName.toString();
                 return name.startsWith("ghidra-bridge-runtime-") && name.endsWith(".jar");
               })
           .collect(Collectors.toSet());

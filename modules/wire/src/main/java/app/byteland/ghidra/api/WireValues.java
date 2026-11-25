@@ -53,8 +53,8 @@ final class WireValues {
           result.put("element", normalize(array.element()));
           result.put("count", array.count());
         }
-        case DataTypeReference.UntypedPointer ignored -> {
-        }
+        case DataTypeReference.UntypedPointer untyped ->
+            result.put(ApiVocabulary.KIND, untyped.kind());
       }
       return result;
     }

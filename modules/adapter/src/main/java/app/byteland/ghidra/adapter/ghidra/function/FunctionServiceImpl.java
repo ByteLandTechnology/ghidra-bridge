@@ -23,6 +23,7 @@ import ghidra.program.model.symbol.SymbolType;
 import ghidra.util.exception.InvalidInputException;
 import java.util.Set;
 
+/** Ghidra-backed implementation of {@link FunctionService}. */
 public final class FunctionServiceImpl implements FunctionService {
   private final GhidraSession context;
   private final FunctionLookupQueries lookupQueries;
@@ -30,6 +31,11 @@ public final class FunctionServiceImpl implements FunctionService {
   private final FunctionRelationQueries relationQueries;
   private final FunctionMutations.ParameterDataTypeResolver dataTypeResolver;
 
+  /**
+   * Creates a function service bound to {@code context}.
+   *
+   * @param context active Ghidra session
+   */
   public FunctionServiceImpl(GhidraSession context) {
     this.context = context;
     this.lookupQueries = new FunctionLookupQueries(context);
@@ -81,7 +87,7 @@ public final class FunctionServiceImpl implements FunctionService {
       functionName = symbol.getName();
       source = symbol.getSource();
       Namespace parent = symbol.getParentNamespace();
-      if (parent.getSymbol().getSymbolType() != SymbolType.FUNCTION) namespace = parent;
+      if (!SymbolType.FUNCTION.equals(parent.getSymbol().getSymbolType())) namespace = parent;
     }
     Function function;
     try {

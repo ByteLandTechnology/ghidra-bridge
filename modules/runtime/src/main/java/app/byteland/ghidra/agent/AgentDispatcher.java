@@ -20,12 +20,24 @@ public final class AgentDispatcher implements AutoCloseable {
   private final Object sequenceLock = new Object();
   private volatile boolean shuttingDown;
 
+  /**
+   * Creates a dispatcher using the session ID from {@code config}.
+   *
+   * @param services domain service bundle for the open program
+   * @param config runtime session configuration
+   */
   public AgentDispatcher(BridgeServices services, AgentConfig config) {
     this(
         Objects.requireNonNull(services, "services"),
         Objects.requireNonNull(config, "config").sessionId());
   }
 
+  /**
+   * Creates a dispatcher for the given services and session ID.
+   *
+   * @param services domain service bundle for the open program
+   * @param sessionId non-blank session identifier
+   */
   public AgentDispatcher(BridgeServices services, String sessionId) {
     this.services = Objects.requireNonNull(services, "services");
     String normalizedSessionId = AgentConfig.optionalText(sessionId);
@@ -44,6 +56,14 @@ public final class AgentDispatcher implements AutoCloseable {
     services.close();
   }
 
+  /**
+   * Dispatches a single wire method call sequentially while the session is open.
+   *
+   * @param method wire method name
+   * @param params decoded request parameter map, or {@code null}
+   * @return serialized-ready result value returned by the handler
+   * @throws Exception if validation or method execution fails
+   */
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {
@@ -56,14 +76,29 @@ public final class AgentDispatcher implements AutoCloseable {
         });
   }
 
+  /**
+   * Returns the wire API method catalog exposed by this dispatcher.
+   *
+   * @return API method catalog
+   */
   public ApiCatalog methodCatalog() {
     return apiRegistry.methodCatalog();
   }
 
+  /**
+   * Returns whether a {@code session.close} request has initiated shutdown.
+   *
+   * @return {@code true} if shutdown has been requested
+   */
   public boolean isShuttingDown() {
     return shuttingDown;
   }
 
+  /**
+   * Returns the name of the bound Ghidra program.
+   *
+   * @return program name
+   */
   public String getProgramName() {
     return programName;
   }

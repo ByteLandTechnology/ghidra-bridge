@@ -592,6 +592,11 @@ class ListPaginationParityTest {
                 Namespace.class.getClassLoader(),
                 new Class<?>[] {Namespace.class},
                 (proxy, method, args) -> ns);
+    return mockFunctionProxy(entry, name, namespace);
+  }
+
+  @SuppressWarnings("ReferenceEquality")
+  private static Function mockFunctionProxy(Address entry, String name, Namespace namespace) {
     return (Function)
         Proxy.newProxyInstance(
             Function.class.getClassLoader(),

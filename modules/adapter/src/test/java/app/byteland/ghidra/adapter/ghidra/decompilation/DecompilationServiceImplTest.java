@@ -125,7 +125,7 @@ class DecompilationServiceImplTest {
       assertTrue(textRes.c().contains(
           PrettyPrinter.INDENT_STRING + "return \"semi; {brace} /*comment*/\";\n"));
       assertNull(textRes.lines());
-      assertEquals(Boolean.TRUE, textRes.commentsComplete());
+      assertEquals(true, textRes.commentsComplete());
       assertEquals(List.of(), textRes.warnings());
     }
 

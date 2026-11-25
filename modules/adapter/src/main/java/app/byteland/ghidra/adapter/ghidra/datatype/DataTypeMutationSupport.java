@@ -5,7 +5,6 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import ghidra.program.model.data.Array;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
-import ghidra.util.exception.DuplicateNameException;
 import java.util.function.Function;
 
 final class DataTypeMutationSupport {
@@ -50,15 +49,7 @@ final class DataTypeMutationSupport {
 
   static void applyMetadataPatch(DataTypeComponent component, String newName, String newComment) {
     if (newName != null && !newName.equals(component.getFieldName())) {
-      try {
-        component.setFieldName(newName);
-      } catch (Exception exception) {
-        if (exception instanceof DuplicateNameException) {
-          throw new IllegalArgumentException("duplicate field name: " + newName, exception);
-        }
-        if (exception instanceof RuntimeException runtime) throw runtime;
-        throw new IllegalStateException("cannot rename data type field", exception);
-      }
+      component.setFieldName(newName);
     }
     if (!String.valueOf(component.getComment()).equals(String.valueOf(newComment))) {
       component.setComment(newComment);

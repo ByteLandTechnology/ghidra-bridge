@@ -14,6 +14,7 @@ import org.snakeyaml.engine.v2.api.DumpSettings;
 import org.snakeyaml.engine.v2.common.FlowStyle;
 import org.snakeyaml.engine.v2.common.ScalarStyle;
 
+/** Generates AsyncAPI and Markdown API contract files from the wire catalog. */
 public final class ApiContractGenerator {
   private static final String JSONRPC_FIELD = "jsonrpc";
   private static final String METHOD_FIELD = "method";
@@ -29,6 +30,12 @@ public final class ApiContractGenerator {
 
   private ApiContractGenerator() {}
 
+  /**
+   * Writes generated contract documentation under the given repository root.
+   *
+   * @param args optional repository root directory argument
+   * @throws IOException if writing contract files fails
+   */
   public static void main(String[] args) throws IOException {
     Path root = Path.of(args.length == 0 ? "." : args[0]).toAbsolutePath().normalize();
     ApiCatalog catalog = ApiRegistry.catalog();

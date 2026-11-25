@@ -115,6 +115,16 @@ class FunctionRelationQueriesTest {
                   if ("getName".equals(method.getName())) return namespaceName;
                   throw new AssertionError(method.getName());
                 });
+    return stubFunctionProxy(entry, name, namespace, namespaceLookups, programLookups);
+  }
+
+  @SuppressWarnings("ReferenceEquality")
+  private static Function stubFunctionProxy(
+      Address entry,
+      String name,
+      Namespace namespace,
+      AtomicInteger namespaceLookups,
+      AtomicInteger programLookups) {
     return (Function)
         Proxy.newProxyInstance(
             Function.class.getClassLoader(),
