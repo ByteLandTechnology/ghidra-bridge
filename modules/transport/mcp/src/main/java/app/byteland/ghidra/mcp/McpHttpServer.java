@@ -4,7 +4,6 @@ import app.byteland.ghidra.ExecutorShutdown;
 import app.byteland.ghidra.JsonRpc;
 import app.byteland.ghidra.JsonUtil;
 import app.byteland.ghidra.agent.AgentDispatcher;
-import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
 import app.byteland.ghidra.api.ApiFailures;
 import app.byteland.ghidra.network.NetworkBinding;
 import com.sun.net.httpserver.Headers;
@@ -498,30 +497,26 @@ public final class McpHttpServer implements AutoCloseable {
     String name = requireString(params.get(NAME_FIELD), NAME_FIELD, id);
     log.tool(name);
     if (!toolRegistry.hasTool(name)) {
-      throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "Unknown tool: " + name);
+      throw new JsonRpcError(
+          400, id, JSONRPC_INVALID_PARAMS, toolRegistry.unknownToolMessage(name));
     }
-    Map<String, Object> arguments = requireArguments(params.get("arguments"), id);
     try {
+      Object rawArguments = params.get("arguments");
       if (toolRegistry.isHelpTool(name)) {
+        Map<String, Object> helpResult = toolRegistry.help(rawArguments);
         log.ok().status(200);
-        return toolResult(toolRegistry.help(arguments), false, statelessProtocol);
+        return toolResult(helpResult, false, statelessProtocol);
       }
-      if (!List.of("operation", "params").containsAll(arguments.keySet())) {
-        throw new IllegalArgumentException("Unknown domain tool argument");
-      }
-      String operation = requireString(arguments.get("operation"), "operation", id);
-      MethodDescriptor tool = toolRegistry.findTool(name, operation);
-      if (tool == null) {
-        throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS,
-            "Unknown operation " + operation + " for " + name);
-      }
-      Map<String, Object> operationParams = requireArguments(arguments.get("params"), id);
-      Object result = dispatcher.dispatch(tool.name(), operationParams);
+      McpToolRegistry.ResolvedToolCall call = toolRegistry.resolveDomainCall(name, rawArguments);
+      Object result = dispatcher.dispatch(call.descriptor().name(), call.operationParams());
       if (dispatcher.isShuttingDown()) {
         closeSoon();
       }
       log.ok().status(200);
-      return toolResult(Map.of("operation", operation, "result", result), false, statelessProtocol);
+      return toolResult(
+          Map.of("operation", call.operation(), "result", result), false, statelessProtocol);
+    } catch (JsonRpcError error) {
+      throw error;
     } catch (Exception error) {
       log.error().status(200);
       return toolResult(errorPayload(error), true, statelessProtocol);
@@ -641,8 +636,15 @@ public final class McpHttpServer implements AutoCloseable {
         || INITIALIZE_PROTOCOL_VERSIONS.contains(version)) {
       return;
     }
-    throw new JsonRpcError(400, request.get("id"), JSONRPC_INVALID_REQUEST,
-        "Missing or unsupported MCP-Protocol-Version: " + version);
+    throw new JsonRpcError(
+        400,
+        request.get("id"),
+        JSONRPC_INVALID_REQUEST,
+        "Unsupported MCP-Protocol-Version header \""
+            + version
+            + "\". Supported protocol versions: "
+            + String.join(", ", SUPPORTED_PROTOCOL_VERSIONS)
+            + ".");
   }
 
   private static void validateMetadata(HttpExchange exchange, Map<String, Object> request) {
@@ -651,15 +653,30 @@ public final class McpHttpServer implements AutoCloseable {
     if (!(params.get("_meta") instanceof Map<?, ?> meta)
         || !(meta.get("io.modelcontextprotocol/protocolVersion") instanceof String)
         || !(meta.get("io.modelcontextprotocol/clientCapabilities") instanceof Map<?, ?>)) {
-      throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "Missing MCP request metadata");
+      throw new JsonRpcError(
+          400,
+          id,
+          JSONRPC_INVALID_PARAMS,
+          "Request params._meta must include string \"io.modelcontextprotocol/protocolVersion\""
+              + " and object \"io.modelcontextprotocol/clientCapabilities\".");
     }
     if (meta.containsKey("io.modelcontextprotocol/clientInfo")) {
       validateImplementation(meta.get("io.modelcontextprotocol/clientInfo"), id);
     }
     Object version = meta.get("io.modelcontextprotocol/protocolVersion");
     if (!MCP_PROTOCOL_VERSION.equals(version)) {
-      throw new JsonRpcError(400, id, UNSUPPORTED_PROTOCOL_VERSION,
-          "UnsupportedProtocolVersionError", String.valueOf(version));
+      throw new JsonRpcError(
+          400,
+          id,
+          UNSUPPORTED_PROTOCOL_VERSION,
+          "Unsupported MCP protocol version \""
+              + version
+              + "\" for stateless requests. Supported stateless protocol version: "
+              + MCP_PROTOCOL_VERSION
+              + " (supported initialize versions: "
+              + String.join(", ", SUPPORTED_PROTOCOL_VERSIONS)
+              + ").",
+          String.valueOf(version));
     }
     requireHeader(exchange, "MCP-Protocol-Version", version.toString(), id);
     Object method = request.get("method");
@@ -688,16 +705,28 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static void requireHeader(HttpExchange exchange, String header, String expected, Object id) {
     String actual = firstHeader(exchange, header);
-    if (actual != null && actual.startsWith("=?base64?") && actual.endsWith("?=")) {
+    if (actual == null || actual.isBlank()) {
+      throw new JsonRpcError(
+          400,
+          id,
+          HEADER_MISMATCH,
+          "Missing required HTTP header " + header + ". Expected \"" + expected + "\".");
+    }
+    if (actual.startsWith("=?base64?") && actual.endsWith("?=")) {
       try {
         actual = new String(java.util.Base64.getDecoder().decode(
             actual.substring(9, actual.length() - 2)), StandardCharsets.UTF_8);
       } catch (IllegalArgumentException invalid) {
-        throw new JsonRpcError(400, id, HEADER_MISMATCH, "Invalid " + header + " encoding");
+        throw new JsonRpcError(
+            400, id, HEADER_MISMATCH, "HTTP header " + header + " has invalid base64 encoding.");
       }
     }
     if (!expected.equals(actual)) {
-      throw new JsonRpcError(400, id, HEADER_MISMATCH, "HeaderMismatch: " + header);
+      throw new JsonRpcError(
+          400,
+          id,
+          HEADER_MISMATCH,
+          "HTTP header " + header + " must match the request and equal \"" + expected + "\".");
     }
   }
 
@@ -711,19 +740,6 @@ public final class McpHttpServer implements AutoCloseable {
       return cast;
     }
     throw new JsonRpcError(400, id, JSONRPC_INVALID_PARAMS, "params must be a JSON object");
-  }
-
-  private static Map<String, Object> requireArguments(Object arguments, Object id) {
-    if (arguments == null) {
-      return Map.of();
-    }
-    if (arguments instanceof Map<?, ?> map) {
-      @SuppressWarnings("unchecked")
-      Map<String, Object> cast = (Map<String, Object>) map;
-      return cast;
-    }
-    throw new JsonRpcError(
-        400, id, JSONRPC_INVALID_PARAMS, "tools/call arguments must be a JSON object");
   }
 
   private static String requireString(Object value, String field, Object id) {

@@ -1,5 +1,6 @@
 package app.byteland.ghidra.api;
 
+import app.byteland.ghidra.service.DomainException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,9 +53,52 @@ public record ApiMethod<Request, Response>(
 
   public Object invokeDecoded(Request request) throws Exception {
     FieldProjection.validate(request, fields, identityFields);
-    Response response = handler.handle(request);
+    Response response;
+    try {
+      response = handler.handle(request);
+    } catch (Exception error) {
+      throw rebaseExecutionFailure(error, requestCodec.schema());
+    }
     Object encoded = responseCodec.encode(response);
     return FieldProjection.apply(encoded, request, fields, identityFields);
+  }
+
+  private static Exception rebaseExecutionFailure(
+      Exception error, Map<String, Object> requestSchema) {
+    if (!(error instanceof DomainException domain)) {
+      return error;
+    }
+    ApiFailures.Failure normalized = ApiFailures.normalize(error);
+    BridgeError bridgeError = normalized.error();
+    String currentTarget = bridgeError.target();
+    String rebasedTarget = WireSchema.rebasePointer(currentTarget, requestSchema);
+    if (Objects.equals(currentTarget, rebasedTarget)) {
+      return error;
+    }
+    String message = bridgeError.message();
+    String rawTarget = domain.target();
+    if (currentTarget != null
+        && !currentTarget.isBlank()
+        && message != null
+        && message.startsWith(currentTarget + " ")) {
+      message = rebasedTarget + message.substring(currentTarget.length());
+    } else if (rawTarget != null
+        && !rawTarget.isBlank()
+        && message != null
+        && message.startsWith(rawTarget + " ")) {
+      message = rebasedTarget + message.substring(rawTarget.length());
+    }
+    ApiException rebased =
+        new ApiException(
+            normalized.status(),
+            new BridgeError(
+                bridgeError.status(),
+                bridgeError.code(),
+                message,
+                rebasedTarget,
+                bridgeError.details()));
+    rebased.initCause(error);
+    return rebased;
   }
 
   @FunctionalInterface

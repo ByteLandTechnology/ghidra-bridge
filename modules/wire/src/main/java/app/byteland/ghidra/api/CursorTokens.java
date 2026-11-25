@@ -40,31 +40,77 @@ public final class CursorTokens {
   public static String decode(
       String token, String resource, String sessionId, String queryFingerprint, String target) {
     if (token == null) return null;
-    try {
-      String wire = new String(Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8);
-      String[] parts = wire.split("\\n", -1);
-      if (parts.length != CURSOR_PART_COUNT) {
-        throw new IllegalArgumentException("invalid cursor parts");
-      }
-      String payload = parts[0] + "\n" + parts[1] + "\n" + parts[2] + "\n" + parts[3];
-      if (!MessageDigest.isEqual(
-          signature(payload).getBytes(StandardCharsets.US_ASCII),
-          parts[4].getBytes(StandardCharsets.US_ASCII))) {
-        throw new IllegalArgumentException("invalid cursor signature");
-      }
-      if (!parts[0].equals(resource) || !parts[1].equals(sessionId)) {
-        throw new IllegalArgumentException("cursor belongs to another resource or session");
-      }
-      if (!parts[2].equals(queryFingerprint)) {
-        throw new IllegalArgumentException("cursor belongs to another query");
-      }
-      return parts[3];
-    } catch (IllegalArgumentException error) {
-      ApiException translated =
-          ApiException.badRequest("invalid_cursor", "cursor is invalid", target);
-      translated.initCause(error);
-      throw translated;
+    if (token.isBlank()) {
+      throw invalidCursor(
+          "Cursor token is malformed. Omit page.cursor to start from the first page.",
+          target,
+          "malformed_token",
+          null);
     }
+    String wire;
+    try {
+      wire = new String(Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8);
+    } catch (IllegalArgumentException error) {
+      throw invalidCursor(
+          "Cursor token is malformed. Omit page.cursor to start from the first page.",
+          target,
+          "malformed_token",
+          error);
+    }
+    String[] parts = wire.split("\\n", -1);
+    if (parts.length != CURSOR_PART_COUNT || parts[3].isEmpty() || parts[4].isEmpty()) {
+      throw invalidCursor(
+          "Cursor token is malformed. Omit page.cursor to start from the first page.",
+          target,
+          "malformed_token",
+          null);
+    }
+    String payload = parts[0] + "\n" + parts[1] + "\n" + parts[2] + "\n" + parts[3];
+    if (!MessageDigest.isEqual(
+        signature(payload).getBytes(StandardCharsets.US_ASCII),
+        parts[4].getBytes(StandardCharsets.US_ASCII))) {
+      throw invalidCursor(
+          "Cursor token signature is invalid. Omit page.cursor to start a new pagination sequence.",
+          target,
+          "invalid_signature",
+          null);
+    }
+    if (!parts[1].equals(sessionId)) {
+      throw invalidCursor(
+          "Cursor token belongs to a different session. Omit page.cursor to start pagination in the"
+              + " current session.",
+          target,
+          "session_mismatch",
+          null);
+    }
+    if (!parts[0].equals(resource)) {
+      throw invalidCursor(
+          "Cursor token belongs to a different list operation. Omit page.cursor to start"
+              + " pagination for this operation.",
+          target,
+          "resource_mismatch",
+          null);
+    }
+    if (!parts[2].equals(queryFingerprint)) {
+      throw invalidCursor(
+          "Cursor token does not match the current filter or scan range. Keep filter and"
+              + " scan.range unchanged while paging, or omit page.cursor to start a new query.",
+          target,
+          "filter_mismatch",
+          null);
+    }
+    return parts[3];
+  }
+
+  private static ApiException invalidCursor(
+      String message, String target, String reason, Throwable cause) {
+    ApiException exception =
+        new ApiException(
+            400, new BridgeError(400, "invalid_cursor", message, target, Map.of("reason", reason)));
+    if (cause != null) {
+      exception.initCause(cause);
+    }
+    return exception;
   }
 
   public static String queryFingerprint(Map<String, Object> request) {
@@ -73,10 +119,11 @@ public final class CursorTokens {
       if (java.util.Set.of("cursor", "fields", "limit", "timeout_ms").contains(entry.getKey())) {
         continue;
       }
-      if ("filter".equals(entry.getKey())
-          && entry.getValue() instanceof Map<?, ?> filter
-          && filter.isEmpty()) continue;
-      query.put(entry.getKey(), canonical(entry.getValue()));
+      Object canonicalValue = canonical(entry.getValue());
+      if (canonicalValue instanceof Map<?, ?> map && map.isEmpty()) {
+        continue;
+      }
+      query.put(entry.getKey(), canonicalValue);
     }
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -94,7 +141,11 @@ public final class CursorTokens {
     if (value instanceof Map<?, ?> map) {
       Map<String, Object> sorted = new TreeMap<>();
       for (Map.Entry<?, ?> entry : map.entrySet()) {
-        sorted.put(String.valueOf(entry.getKey()), canonical(entry.getValue()));
+        Object child = canonical(entry.getValue());
+        if (child instanceof Map<?, ?> childMap && childMap.isEmpty()) {
+          continue;
+        }
+        sorted.put(String.valueOf(entry.getKey()), child);
       }
       return new LinkedHashMap<>(sorted);
     }

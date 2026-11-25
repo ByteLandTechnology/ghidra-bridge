@@ -108,7 +108,9 @@ public final class ApiContractGenerator {
                     Map.of(
                         "oneOf", List.of(Map.of("payload", response), Map.of("payload", ready)))),
                 "subscribe",
-                Map.of("message", Map.of("payload", Map.of("oneOf", requests))))));
+                Map.of(
+                    "message",
+                    Map.of("payload", WireSchema.taggedOneOf(METHOD_FIELD, requests))))));
     document.put("x-ghidra-bridge-methods", descriptors);
     return document;
   }

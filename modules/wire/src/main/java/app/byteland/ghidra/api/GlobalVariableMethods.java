@@ -55,7 +55,7 @@ final class GlobalVariableMethods implements ApiMethodProvider {
             ApiSchemaCatalog.props(
                 ApiVocabulary.NAME, WireSchema.string(),
                 ApiVocabulary.NAMESPACE, WireSchema.string(),
-                ApiVocabulary.CASE_SENSITIVE, WireSchema.bool()));
+                ApiVocabulary.CASE_SENSITIVE, WireSchema.withDefault(WireSchema.bool(), false)));
     registry.scanList(
         "global_variable.list",
         "List global variables in address order. Set a range or time limit if necessary."
@@ -153,7 +153,10 @@ final class GlobalVariableMethods implements ApiMethodProvider {
         "Delete a global variable definition. Set delete_symbol to delete its primary label.",
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
-                ApiVocabulary.SELECTOR, addressSelector, "delete_symbol", WireSchema.bool()),
+                ApiVocabulary.SELECTOR,
+                addressSelector,
+                "delete_symbol",
+                WireSchema.withDefault(WireSchema.bool(), false)),
             ApiVocabulary.SELECTOR),
         ApiSchemaCatalog.DELETED_RECEIPT_SCHEMA,
         request -> {
