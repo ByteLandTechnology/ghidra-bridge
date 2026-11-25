@@ -29,6 +29,7 @@ public final class GlobalVariableServiceImpl implements GlobalVariableService {
   @Override
   public void writeGlobalVariable(Mutation mutation, WriteMode mode) {
     context.withTransaction(
+        "global_variable.write",
         () -> {
           mutations.writeGlobalVariable(mutation, mode);
           return null;
@@ -38,6 +39,7 @@ public final class GlobalVariableServiceImpl implements GlobalVariableService {
   @Override
   public void deleteGlobalVariable(String address, boolean deleteSymbol) {
     context.withTransaction(
+        "global_variable.delete",
         () -> {
           mutations.deleteGlobalVariable(address, deleteSymbol);
           return null;

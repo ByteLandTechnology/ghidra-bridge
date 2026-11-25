@@ -9,6 +9,9 @@
 | `session.shutdown` | `lifecycle` | Stop the current Ghidra Bridge session. |
 | `program.get` | `read-only` | Get program data from the active program. |
 | `program.save` | `mutation` | Save the active program to its project file. |
+| `program.history` | `read-only` | Get the transaction undo and redo stacks for the active program. |
+| `program.undo` | `mutation` | Undo the latest committed transaction in the active program. |
+| `program.redo` | `mutation` | Redo the latest undone transaction in the active program. |
 | `program_language.get` | `read-only` | Get program language data from the active program. |
 | `address_space.list` | `read-only` | List address space data in the active program. |
 | `address.resolve` | `read-only` | Resolve an address and report its memory block, the function that contains it, and its primary symbol. |

@@ -56,6 +56,8 @@ The server validates the entire batch before it executes an operation:
 Batches cannot nest these operations:
 - `interface.get`
 - `program.save`
+- `program.undo`
+- `program.redo`
 - `analysis.start`
 - `session.shutdown`
 - `batch.execute`

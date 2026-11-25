@@ -1,9 +1,9 @@
 # Protocol Specification
 
 Ghidra Bridge supports two transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
-The unified registry defines 56 public dotted methods.
-WebSocket publishes all 56 methods.
-MCP publishes 55 methods, and does not publish `interface.get`.
+The unified registry defines 59 public dotted methods.
+WebSocket publishes all 59 methods.
+MCP publishes 58 methods, and does not publish `interface.get`.
 
 ## WebSocket JSON-RPC 2.0
 
@@ -26,7 +26,7 @@ Clients send requests as JSON objects:
 The server validates every field:
 - `jsonrpc` must equal `"2.0"`.
 - `id` must be a string or integer identifier.
-- `method` must match one of the 56 public dotted methods.
+- `method` must match one of the 59 public dotted methods.
 - `params` must be a JSON object that matches the method schema.
 - The server rejects unknown fields and invalid data types.
 

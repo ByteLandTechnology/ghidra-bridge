@@ -153,8 +153,9 @@ public final class ApiRegistry {
     return invokeDecoded(method, method.decodeRequest(params), false);
   }
 
-  <T> T inTransaction(app.byteland.ghidra.service.TransactionRunner.Operation<T> operation) {
-    return bridgeServices.transactionRunner().run(operation);
+  <T> T inTransaction(
+      String description, app.byteland.ghidra.service.TransactionRunner.Operation<T> operation) {
+    return bridgeServices.transactionRunner().run(description, operation);
   }
 
   private Object invokeDecoded(
@@ -174,7 +175,9 @@ public final class ApiRegistry {
           "/method");
     }
     if (method.effects().requiresTransaction() && ownTransaction) {
-      return bridgeServices.transactionRunner().run(() -> method.invokeDecoded(decoded));
+      return bridgeServices
+          .transactionRunner()
+          .run(method.name(), () -> method.invokeDecoded(decoded));
     }
     return method.invokeDecoded(decoded);
   }
@@ -470,8 +473,9 @@ public final class ApiRegistry {
 
               @Override
               public <T> T inTransaction(
+                  String description,
                   app.byteland.ghidra.service.TransactionRunner.Operation<T> operation) {
-                return ApiRegistry.this.inTransaction(operation);
+                return ApiRegistry.this.inTransaction(description, operation);
               }
             });
     BatchMethod.Registration registration = batchMethod.registration();

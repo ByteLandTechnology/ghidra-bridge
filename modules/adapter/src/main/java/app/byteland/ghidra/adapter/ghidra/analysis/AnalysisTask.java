@@ -117,6 +117,7 @@ final class AnalysisTask {
         return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
       }
       context.withTransaction(
+          "analysis.mark_analyzed",
           () -> {
             GhidraProgramUtilities.markProgramAnalyzed(program);
             return null;

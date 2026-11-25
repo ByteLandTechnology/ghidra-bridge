@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
+import app.byteland.ghidra.service.program.ProgramHistoryConflictException;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
@@ -11,12 +12,16 @@ import java.util.Objects;
  * Coordinates Ghidra program access, commands, and transaction lifecycles.
  */
 public final class GhidraSession {
+  private static final String DEFAULT_TRANSACTION_NAME = "bridge.write";
+  private static final String TEMPORARY_TRANSACTION_NAME = "bridge.temporary";
+
   private final GhidraScript ghidraScript;
   private final Object executionLock = new Object();
   private int transactionDepth;
 
   public GhidraSession(GhidraScript script) {
     this.ghidraScript = Objects.requireNonNull(script, "script");
+    endAmbientScriptTransaction();
   }
 
   public GhidraScript script() {
@@ -43,11 +48,7 @@ public final class GhidraSession {
         monitor.clearCancelled();
       }
       try {
-        try {
-          ghidraScript.end(true);
-        } catch (Exception ignored) {
-          // There is no ambient transaction, or the transaction ended.
-        }
+        endAmbientScriptTransaction();
         ghidraScript.saveProgram(currentProgram());
       } catch (Exception error) {
         String detail = error.getMessage();
@@ -56,6 +57,7 @@ public final class GhidraSession {
         }
         throw new IllegalStateException("Unable to save current program: " + detail, error);
       } finally {
+        endAmbientScriptTransaction();
         if (restoreCancellation) {
           monitor.cancel();
         }
@@ -80,15 +82,57 @@ public final class GhidraSession {
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
-    return withTransaction(operation, true);
+    return withTransaction(DEFAULT_TRANSACTION_NAME, operation, true);
+  }
+
+  public <T> T withTransaction(String description, TransactionalOperation<T> operation) {
+    return withTransaction(description, operation, true);
   }
 
   public <T> T withTemporaryChanges(TransactionalOperation<T> operation) {
-    return withTransaction(operation, false);
+    return withTransaction(TEMPORARY_TRANSACTION_NAME, operation, false);
   }
 
-  private <T> T withTransaction(TransactionalOperation<T> operation, boolean commitChanges) {
+  public <T> T withProgramLock(ProgramOperation<T> operation) {
     Objects.requireNonNull(operation, "operation");
+    synchronized (executionLock) {
+      Program program = currentProgram();
+      try {
+        return operation.run(program);
+      } catch (RuntimeException ex) {
+        throw ex;
+      } catch (Exception ex) {
+        throw new TransactionExecutionException(ex.getMessage(), ex);
+      }
+    }
+  }
+
+  public <T> T withIdleProgram(ProgramOperation<T> operation) {
+    Objects.requireNonNull(operation, "operation");
+    synchronized (executionLock) {
+      if (transactionDepth > 0) {
+        throw ProgramHistoryConflictException.transactionInProgress();
+      }
+      endAmbientScriptTransaction();
+      Program program = currentProgram();
+      if (program.getCurrentTransactionInfo() != null) {
+        throw ProgramHistoryConflictException.transactionInProgress();
+      }
+      try {
+        return operation.run(program);
+      } catch (RuntimeException ex) {
+        throw ex;
+      } catch (Exception ex) {
+        throw new TransactionExecutionException(ex.getMessage(), ex);
+      }
+    }
+  }
+
+  private <T> T withTransaction(
+      String description, TransactionalOperation<T> operation, boolean commitChanges) {
+    Objects.requireNonNull(operation, "operation");
+    String transactionName =
+        description == null || description.isBlank() ? DEFAULT_TRANSACTION_NAME : description;
     synchronized (executionLock) {
       if (transactionDepth > 0) {
         if (!commitChanges) {
@@ -97,8 +141,9 @@ public final class GhidraSession {
         return runOperation(operation);
       }
 
-      ghidraScript.end(true);
-      ghidraScript.start();
+      endAmbientScriptTransaction();
+      Program program = currentProgramOrNull();
+      int transactionId = program == null ? -1 : program.startTransaction(transactionName);
       transactionDepth++;
       boolean commit = false;
       try {
@@ -107,12 +152,18 @@ public final class GhidraSession {
         return result;
       } finally {
         transactionDepth--;
-        try {
-          ghidraScript.end(commit);
-        } finally {
-          ghidraScript.start();
+        if (program != null) {
+          program.endTransaction(transactionId, commit);
         }
       }
+    }
+  }
+
+  private void endAmbientScriptTransaction() {
+    try {
+      ghidraScript.end(true);
+    } catch (Exception ignored) {
+      // No ambient script transaction is active.
     }
   }
 
@@ -133,6 +184,11 @@ public final class GhidraSession {
   @FunctionalInterface
   public interface TransactionalOperation<T> {
     T run() throws Exception;
+  }
+
+  @FunctionalInterface
+  public interface ProgramOperation<T> {
+    T run(Program program) throws Exception;
   }
 
   private static <T> T runOperation(TransactionalOperation<T> operation) {

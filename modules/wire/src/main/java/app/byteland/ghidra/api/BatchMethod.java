@@ -356,7 +356,7 @@ final class BatchMethod {
           items.stream().anyMatch(item -> item.method().effects().requiresTransaction());
       List<Map<String, Object>> rows =
           requiresTransaction
-              ? runtime.inTransaction(() -> executeAllOrNoneItems(items))
+              ? runtime.inTransaction(NAME, () -> executeAllOrNoneItems(items))
               : executeAllOrNoneItems(items);
       return batchEnvelope(rows);
     } catch (BatchRollback rollback) {
@@ -443,6 +443,6 @@ final class BatchMethod {
         boolean ownTransaction)
         throws Exception;
 
-    <T> T inTransaction(TransactionRunner.Operation<T> operation);
+    <T> T inTransaction(String description, TransactionRunner.Operation<T> operation);
   }
 }

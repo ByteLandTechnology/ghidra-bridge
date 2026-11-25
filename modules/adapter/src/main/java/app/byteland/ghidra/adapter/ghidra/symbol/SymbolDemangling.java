@@ -17,7 +17,9 @@ final class SymbolDemangling {
   private SymbolDemangling() {}
 
   static DemangleResult apply(GhidraSession context) {
-    return context.withTransaction(() -> {
+    return context.withTransaction(
+        "symbol.demangle",
+        () -> {
       var program = context.currentProgram();
       var monitor = context.script().getMonitor();
       List<Symbol> candidates = new ArrayList<>();

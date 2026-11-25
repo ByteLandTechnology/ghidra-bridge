@@ -55,6 +55,32 @@ final class ApiSchemaCatalog {
 
   static final Map<String, Object> SAVED_RECEIPT_SCHEMA =
       WireSchema.object(Map.of("saved", WireSchema.bool()), "saved");
+  static final Map<String, Object> PROGRAM_UNDO_REDO_SCHEMA =
+      WireSchema.withDefinitions(
+          WireSchema.object(
+              props(
+                  "action",
+                  WireSchema.stringEnum("undo", "redo"),
+                  "transaction_name",
+                  WireSchema.string(),
+                  "can_undo",
+                  WireSchema.bool(),
+                  "can_redo",
+                  WireSchema.bool(),
+                  "undo_name",
+                  WireSchema.string(),
+                  "redo_name",
+                  WireSchema.string(),
+                  "undo_list",
+                  WireSchema.array(WireSchema.string(), 0, Integer.MAX_VALUE),
+                  "redo_list",
+                  WireSchema.array(WireSchema.string(), 0, Integer.MAX_VALUE)),
+              "action",
+              "transaction_name",
+              "can_undo",
+              "can_redo",
+              "undo_list",
+              "redo_list"));
   static final Map<String, Object> SHUTDOWN_RECEIPT_SCHEMA =
       WireSchema.object(Map.of("shutdown", WireSchema.bool()), "shutdown");
   static final Map<String, Object> DELETED_RECEIPT_SCHEMA =
@@ -411,6 +437,11 @@ final class ApiSchemaCatalog {
         "symbol_count");
   }
 
+  static Set<String> programHistoryFields() {
+    return Set.of(
+        "can_undo", "can_redo", "undo_name", "redo_name", "undo_list", "redo_list");
+  }
+
   static Map<String, Object> resourceSchema(Set<String> fields) {
     return resourceSchema(fields, List.of());
   }
@@ -486,7 +517,9 @@ final class ApiSchemaCatalog {
             "primary",
             "completed",
             "comments_complete",
-            "analyzed")
+            "analyzed",
+            "can_undo",
+            "can_redo")
         .contains(field)) {
       return WireSchema.bool();
     }
@@ -579,7 +612,7 @@ final class ApiSchemaCatalog {
     if (SIGNATURE.equals(field)) {
       return WireSchema.oneOf(WireSchema.string(), functionSignatureSchema());
     }
-    if (Set.of("operands", "tags", "warnings").contains(field)) {
+    if (Set.of("operands", "tags", "warnings", "undo_list", "redo_list").contains(field)) {
       return WireSchema.array(WireSchema.string(), 0, Integer.MAX_VALUE);
     }
     if (REFERENCES.equals(field)) {

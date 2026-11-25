@@ -17,4 +17,13 @@ public interface ProgramService {
 
   /** Saves program changes to the project database. */
   void saveProgram();
+
+  /** Returns transaction undo and redo stacks for the active program. */
+  ProgramHistoryResource getHistory();
+
+  /** Reverts the latest committed transaction on the active program. */
+  ProgramUndoRedoResult undo();
+
+  /** Restores the latest undone transaction on the active program. */
+  ProgramUndoRedoResult redo();
 }

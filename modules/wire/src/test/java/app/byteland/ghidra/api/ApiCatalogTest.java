@@ -59,11 +59,30 @@ class ApiCatalogTest {
         publicMethods);
 
     ApiCatalog catalog = ApiRegistry.catalog();
-    assertEquals(56, catalog.methods().size());
+    assertEquals(59, catalog.methods().size());
     Map<String, Object> description = catalog.interfaceDescription();
     assertEquals(catalog.interfaceVersion(), description.get("interface_version"));
     List<?> methods = (List<?>) description.get("methods");
-    assertEquals(56, methods.size());
+    assertEquals(59, methods.size());
+
+    Map<String, ApiCatalog.MethodDescriptor> byName =
+        catalog.methods().stream()
+            .collect(Collectors.toMap(ApiCatalog.MethodDescriptor::name, item -> item));
+    assertEquals("read-only", byName.get("program.history").effectSummary());
+    assertEquals("mutation", byName.get("program.undo").effectSummary());
+    assertEquals("mutation", byName.get("program.redo").effectSummary());
+    assertEquals(
+        Map.of(
+            "read_only", false,
+            "mutates_program", true,
+            "requires_transaction", false,
+            "allowed_during_analysis", false,
+            "destructive", false,
+            "idempotent", false),
+        byName.get("program.undo").contractValue().get("effects"));
+    assertEquals(
+        byName.get("program.undo").contractValue().get("effects"),
+        byName.get("program.redo").contractValue().get("effects"));
 
     for (ApiCatalog.MethodDescriptor descriptor : catalog.methods()) {
       Map<String, Object> contract = descriptor.contractValue();

@@ -38,7 +38,7 @@ The domain module defines the core service interfaces and data transfer models:
 ### 2. `modules/wire`
 
 The wire module maintains the unified method catalog:
-- `ApiRegistry` defines all 56 public dotted methods and their input and output schemas.
+- `ApiRegistry` defines all 59 public dotted methods and their input and output schemas.
 - `JsonParser`, `JsonWriter`, and `JsonUtil` parse and format JSON.
 - `modules/contracts` generates `docs/api.md` and `docs/asyncapi.yaml` at build time.
 - `modules/transport/mcp` generates `docs/mcp-tools.json` at build time.
