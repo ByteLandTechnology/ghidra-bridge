@@ -77,18 +77,23 @@ class AgentClientOutboundUrlTest {
         AgentConfig.fromArgs("port=8765", "session_id=server-check", "token=server-secret");
     Map<String, String> validHeaders =
         Map.of(
+            "host", "127.0.0.1:8765",
             "upgrade", "websocket",
             "connection", "Upgrade",
             "sec-websocket-version", "13",
-            "sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ==");
+            "sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ==",
+            "authorization", "Bearer server-secret");
 
     for (String rawQuery : new String[] {"token=marker-query-cred", "%74oken=marker-query-cred"}) {
       WebSocketHandshake.HandshakeRequest request =
           new WebSocketHandshake.HandshakeRequest(
               "GET", "/ws/agent", WebSocketHandshake.parseQuery(rawQuery), validHeaders);
-      assertThrows(
-          WebSocketHandshake.HttpHandshakeException.class,
-          () -> WebSocketHandshakeValidator.validate(serverConfig, request));
+      WebSocketHandshake.HttpHandshakeException handshakeEx =
+          assertThrows(
+              WebSocketHandshake.HttpHandshakeException.class,
+              () -> WebSocketHandshakeValidator.validate(serverConfig, request));
+      assertEquals(400, handshakeEx.status());
+      assertEquals("Query-string tokens are not supported", handshakeEx.getMessage());
 
       IllegalArgumentException clientEx =
           assertThrows(
@@ -126,6 +131,50 @@ class AgentClientOutboundUrlTest {
               .getMessage()
               .contains("ws://127.0.0.1:" + unusedPort + "/ws/agent?<redacted>"));
       assertFalse(failure.getMessage().contains("marker-query-param"));
+      assertTrue(failure.getCause() != null);
+    }
+  }
+
+  @Test
+  @DisplayName("Preserves HTTP 401 handshake rejection cause when openSession fails")
+  void preservesHttp401CauseInOpenSession() throws Exception {
+    try (ServerSocket rejectServer = new ServerSocket()) {
+      rejectServer.bind(new InetSocketAddress("127.0.0.1", 0));
+      int port = rejectServer.getLocalPort();
+      Thread responder =
+          new Thread(
+              () -> {
+                try (var socket = rejectServer.accept()) {
+                  socket
+                      .getOutputStream()
+                      .write(
+                          "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"
+                              .getBytes( java.nio.charset.StandardCharsets.US_ASCII));
+                  socket.getOutputStream().flush();
+                } catch (IOException ignored) {
+                }
+              });
+      responder.setDaemon(true);
+      responder.start();
+
+      AgentConfig config =
+          AgentConfig.fromArgs(
+              "ws_url=ws://127.0.0.1:" + port + "/ws/agent", "session_id=outbound-401");
+      try (AgentDispatcher dispatcher = new AgentDispatcher(stubBridgeServices(), config)) {
+        AgentClient client =
+            new AgentClient(
+                config, dispatcher, new AgentClient.LifecycleListener() {}, Duration.ofSeconds(5));
+        IOException failure = assertThrows(IOException.class, () -> client.openSession(() -> false));
+        assertTrue(failure.getMessage().contains("ws://127.0.0.1:" + port + "/ws/agent"));
+        boolean found401 = false;
+        for (Throwable cause = failure.getCause(); cause != null; cause = cause.getCause()) {
+          if (cause.getMessage() != null && cause.getMessage().contains("401")) {
+            found401 = true;
+            break;
+          }
+        }
+        assertTrue(found401, "Expected nested cause chain to include HTTP 401 status detail");
+      }
     }
   }
 

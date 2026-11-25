@@ -59,19 +59,22 @@ class AgentWebSocketAuthTest {
   }
 
   @Test
-  @DisplayName("Validator rejects mismatched bearer token and outbound null-token config with HTTP 401")
-  void testValidatorRejectsInvalidBearerAndNullConfigToken() {
+  @DisplayName("Validator rejects mismatched bearer headers with HTTP 401 and outbound config with IllegalArgumentException")
+  void testValidatorRejectsInvalidBearerAndOutboundConfig() {
     AgentConfig serverConfig =
         new AgentConfig(null, "127.0.0.1", 8765, "/ws/agent", CONFIGURED_TOKEN, "demo", null);
-    WebSocketHandshake.HandshakeRequest wrongTokenRequest =
-        new WebSocketHandshake.HandshakeRequest(
-            "GET", "/ws/agent", Map.of(), upgradeHeaders("Bearer wrong-token"));
+    for (String badAuth :
+        List.of("Bearer wrong-token", "Bearer null", "Bearer ", "Basic " + CONFIGURED_TOKEN)) {
+      WebSocketHandshake.HandshakeRequest wrongTokenRequest =
+          new WebSocketHandshake.HandshakeRequest(
+              "GET", "/ws/agent", Map.of(), upgradeHeaders(badAuth));
 
-    WebSocketHandshake.HttpHandshakeException wrongEx =
-        assertThrows(
-            WebSocketHandshake.HttpHandshakeException.class,
-            () -> WebSocketHandshakeValidator.validate(serverConfig, wrongTokenRequest));
-    assertEquals(401, wrongEx.status());
+      WebSocketHandshake.HttpHandshakeException wrongEx =
+          assertThrows(
+              WebSocketHandshake.HttpHandshakeException.class,
+              () -> WebSocketHandshakeValidator.validate(serverConfig, wrongTokenRequest));
+      assertEquals(401, wrongEx.status());
+    }
 
     AgentConfig outboundNullTokenConfig =
         new AgentConfig("ws://127.0.0.1:8765/ws/agent", null, null, null, null, "demo", null);
@@ -79,13 +82,11 @@ class AgentWebSocketAuthTest {
         new WebSocketHandshake.HandshakeRequest(
             "GET", "/ws/agent", Map.of(), upgradeHeaders("Bearer null"));
 
-    WebSocketHandshake.HttpHandshakeException outboundEx =
-        assertThrows(
-            WebSocketHandshake.HttpHandshakeException.class,
-            () ->
-                WebSocketHandshakeValidator.validate(
-                    outboundNullTokenConfig, literalNullHeaderRequest));
-    assertEquals(401, outboundEx.status());
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            WebSocketHandshakeValidator.validate(
+                outboundNullTokenConfig, literalNullHeaderRequest));
   }
 
   @Test
@@ -134,8 +135,7 @@ class AgentWebSocketAuthTest {
   @DisplayName("Live AgentWebSocketServer on 127.0.0.1 returns 401 without bearer token, 403 for untrusted Origin, 400 for query token, and 101 with valid bearer token")
   void testLiveLoopbackServerUpgradeResponses() throws Exception {
     CountDownLatch openedLatch = new CountDownLatch(1);
-    StartedServer started = startServerOnEphemeralPort(CONFIGURED_TOKEN, openedLatch);
-    try (AgentWebSocketServer ignored = started.server()) {
+    try (StartedServer started = startServerOnEphemeralPort(CONFIGURED_TOKEN, openedLatch)) {
       int port = started.port();
 
       // 1. Unauthenticated upgrade without Origin or from another local port must receive 401.
@@ -267,7 +267,12 @@ class AgentWebSocketAuthTest {
     return lines;
   }
 
-  private record StartedServer(AgentWebSocketServer server, int port) {}
+  private record StartedServer(AgentWebSocketServer server, int port) implements AutoCloseable {
+    @Override
+    public void close() {
+      server.close();
+    }
+  }
 
   private static final class NoOpHandler implements AgentWebSocketServer.Handler {
     private final CountDownLatch openedLatch;

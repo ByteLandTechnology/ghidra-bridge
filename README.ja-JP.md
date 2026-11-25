@@ -44,8 +44,8 @@ ghidra-bridge.jar
 1. Ghidra CodeBrowser で対象のバイナリを開きます。
 2. Script Manager（スクリプトマネージャ）ウィンドウを開きます。
 3. スクリプトパス一覧に `build/ghidra-script/` を追加します。
-4. `Bridge.java`（WebSocket）または `GhidraMcp.java`（MCP）を実行します。
-5. プロンプトウィンドウに設定引数を入力します。
+4. `Ghidra Bridge` カテゴリの `Bridge.java`（WebSocket）または `GhidraMcp.java`（MCP）を実行します。
+5. Console（コンソール）ウィンドウに出力されるバインド済みエンドポイント URL、`session_id`、`tool_prefix` を確認します。スクリプトはプロンプトなしで `127.0.0.1`（既定ポート `8765` または `8766`）で自動起動し、追加タブでポートが使用中の場合は次の空きポートを自動選択します。
 
 ### Ghidra ヘッドレスモードでの実行
 

@@ -274,7 +274,7 @@ class WebSocketOriginValidationTest {
           () -> "Expected 403 Forbidden but got: " + untrustedResponse);
       assertEquals(0, openCount.get(), "Rejected upgrade must not open a session");
 
-      // 2. Origin: null and duplicate Origin headers also return HTTP/1.1 403 Forbidden without wedging the slot.
+      // 2. Origin: null and duplicate Origin headers return HTTP/1.1 403 Forbidden and keep the slot free.
       String nullOriginResponse =
           sendRawAndReadHttpResponse(
               port, rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: null")));
@@ -295,7 +295,7 @@ class WebSocketOriginValidationTest {
           () -> "Expected 403 Forbidden for duplicate Origin but got: " + duplicateOriginResponse);
       assertEquals(0, openCount.get());
 
-      // 3. Immediately following 403 rejections, allowed loopback Origin upgrades succeed with 101 (not 409).
+      // 3. Right after 403 rejections, permitted loopback Origin upgrades succeed with 101 (not 409).
       assertSuccessfulUpgradeAndClose(
           port,
           rawUpgradeRequest(
@@ -304,12 +304,12 @@ class WebSocketOriginValidationTest {
           handler);
       assertEquals(1, openCount.get());
 
-      // 4. Absent Origin header continues to succeed with 101 Switching Protocols.
+      // 4. Absent Origin header continues to succeed with `101 Switching Protocols`.
       assertSuccessfulUpgradeAndClose(
           port, rawUpgradeRequest("127.0.0.1:" + port, List.of(LOOPBACK_AUTH_HEADER)), handler);
       assertEquals(2, openCount.get());
 
-      // 5. 127.0.0.2, localhost, and [::1] Origin headers also succeed with 101 Switching Protocols.
+      // 5. 127.0.0.2, localhost, and [::1] Origin headers also succeed with `101 Switching Protocols`.
       assertSuccessfulUpgradeAndClose(
           port,
           rawUpgradeRequest(
