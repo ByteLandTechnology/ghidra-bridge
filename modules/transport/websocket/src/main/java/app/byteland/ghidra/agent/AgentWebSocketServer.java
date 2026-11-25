@@ -2,6 +2,7 @@ package app.byteland.ghidra.agent;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -75,6 +76,17 @@ public final class AgentWebSocketServer implements AutoCloseable {
       thread.setDaemon(true);
       serverSocket = socket;
       thread.start();
+    } catch (BindException bindFailure) {
+      running.set(false);
+      BindException friendly =
+          new BindException(
+              "WebSocket endpoint "
+                  + config.serverEndpoint()
+                  + " is already in use. Stop the existing Bridge/GhidraMcp script, close the old"
+                  + " Ghidra session, or pass a different port value.");
+      friendly.initCause(bindFailure);
+      closeAfterFailedStart(socket, friendly);
+      throw friendly;
     } catch (IOException | RuntimeException startFailure) {
       running.set(false);
       closeAfterFailedStart(socket, startFailure);

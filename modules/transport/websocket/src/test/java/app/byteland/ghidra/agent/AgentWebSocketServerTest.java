@@ -1,6 +1,7 @@
 package app.byteland.ghidra.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -325,19 +326,20 @@ class AgentWebSocketServerTest {
         HttpClient httpClient = HttpClient.newHttpClient()) {
       int port = started.port();
 
-      try (Socket pending1 = openPartialHandshake(port);
-          Socket pending2 = openPartialHandshake(port)) {
-        waitForPendingSlotSaturation(port);
+      try (Socket pending2 = openPartialHandshake(port)) {
+        try (Socket pending1 = openPartialHandshake(port)) {
+          assertFalse(pending1.isClosed());
+          waitForPendingSlotSaturation(port);
+        }
 
         TestWebSocketListener listener = new TestWebSocketListener();
-        pending1.close();
 
         // Retry briefly if the freed handshake slot cleanup races on the connection thread.
         WebSocket ws = connectWithSlotReleaseRetry(httpClient, port, listener);
         assertNotNull(ws);
         assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS));
         ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
-        assertNotNull(pending2);
+        assertFalse(pending2.isClosed());
       }
     }
   }
@@ -465,6 +467,25 @@ class AgentWebSocketServerTest {
         assertEquals(0, handler.openCount.get());
         assertEquals(0, handler.closeCount.get());
         assertTrue(serverSide.isClosed());
+      }
+    }
+  }
+
+  @Test
+  @DisplayName("Reports ws:// endpoint and preserves underlying BindException cause when port is busy")
+  void testBindFailureReportsWsEndpointAndCause() throws Exception {
+    RecordingHandler handler = new RecordingHandler();
+    try (ServerSocket occupied = new ServerSocket()) {
+      occupied.bind(new InetSocketAddress("127.0.0.1", 0));
+      int busyPort = occupied.getLocalPort();
+      AgentConfig config =
+          new AgentConfig(null, "127.0.0.1", busyPort, "/ws/agent", TOKEN, "test-session", null);
+      try (AgentWebSocketServer server = new AgentWebSocketServer(config, handler)) {
+        BindException thrown = assertThrows(BindException.class, server::start);
+        assertTrue(
+            thrown.getMessage().contains("ws://127.0.0.1:" + busyPort + "/ws/agent"),
+            () -> "Expected ws:// endpoint in message, got: " + thrown.getMessage());
+        assertInstanceOf(BindException.class, thrown.getCause());
       }
     }
   }
