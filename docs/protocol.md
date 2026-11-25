@@ -98,6 +98,7 @@ The server replies with an error envelope for a bad message and keeps the socket
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
 - `400`: Absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
 - `401`: Absent or invalid bearer token.
+- `403`: Disallowed, malformed, or duplicate `Origin` header.
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.

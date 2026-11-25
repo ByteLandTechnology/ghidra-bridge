@@ -19,12 +19,9 @@ import java.net.BindException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -993,14 +990,17 @@ public final class McpHttpServer implements AutoCloseable {
       return OriginValidation.REJECTED;
     }
 
-    if ("localhost".equals(normalizedOriginHost)
-        || normalizedOriginHost.equals(normalizedConfigHost)) {
-      return new OriginValidation(true, origin);
+    InetAddress originLiteral = parseIpLiteral(normalizedOriginHost);
+    if (originLiteral != null) {
+      if (!originLiteral.isAnyLocalAddress()
+          && (originLiteral.isLoopbackAddress() || originLiteral.equals(configHostLiteral))) {
+        return new OriginValidation(true, origin);
+      }
+      return OriginValidation.REJECTED;
     }
 
-    InetAddress originLiteral = parseIpLiteral(normalizedOriginHost);
-    if (originLiteral != null
-        && (originLiteral.isLoopbackAddress() || originLiteral.equals(configHostLiteral))) {
+    if ("localhost".equals(normalizedOriginHost)
+        || normalizedOriginHost.equals(normalizedConfigHost)) {
       return new OriginValidation(true, origin);
     }
 
@@ -1008,146 +1008,11 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   static String normalizeHost(String host) {
-    String trimmed = host.trim();
-    if (trimmed.length() > 2
-        && trimmed.charAt(0) == '['
-        && trimmed.charAt(trimmed.length() - 1) == ']'
-        && trimmed.indexOf(':') >= 0) {
-      trimmed = trimmed.substring(1, trimmed.length() - 1);
-    }
-    return trimmed.toLowerCase(Locale.ROOT);
+    return NetworkBinding.normalizeHost(host);
   }
 
   static InetAddress parseIpLiteral(String literal) {
-    if (literal == null || literal.isEmpty()) {
-      return null;
-    }
-    byte[] bytes = literal.indexOf(':') >= 0 ? parseIpv6Bytes(literal) : parseIpv4Bytes(literal);
-    if (bytes == null) {
-      return null;
-    }
-    try {
-      return InetAddress.getByAddress(bytes);
-    } catch (UnknownHostException impossible) {
-      return null;
-    }
-  }
-
-  private static byte[] parseIpv4Bytes(String literal) {
-    byte[] bytes = new byte[4];
-    int octetIndex = 0;
-    int value = 0;
-    int digits = 0;
-    for (int i = 0; i < literal.length(); i++) {
-      char ch = literal.charAt(i);
-      if (ch == '.') {
-        if (digits == 0 || octetIndex == 3) {
-          return null;
-        }
-        bytes[octetIndex++] = (byte) value;
-        value = 0;
-        digits = 0;
-      } else if (ch >= '0' && ch <= '9') {
-        if (digits == 1 && value == 0) {
-          return null;
-        }
-        value = value * 10 + (ch - '0');
-        digits++;
-        if (digits > 3 || value > 255) {
-          return null;
-        }
-      } else {
-        return null;
-      }
-    }
-    if (digits == 0 || octetIndex != 3) {
-      return null;
-    }
-    bytes[3] = (byte) value;
-    return bytes;
-  }
-
-  private static byte[] parseIpv6Bytes(String literal) {
-    if (literal.length() < 2 || literal.indexOf('%') >= 0) {
-      return null;
-    }
-    int doubleColon = literal.indexOf("::");
-    if (doubleColon >= 0 && literal.indexOf("::", doubleColon + 1) >= 0) {
-      return null;
-    }
-    String headPart = doubleColon >= 0 ? literal.substring(0, doubleColon) : literal;
-    String tailPart = doubleColon >= 0 ? literal.substring(doubleColon + 2) : null;
-
-    byte[] headBytes =
-        headPart.isEmpty() ? new byte[0] : parseIpv6Groups(headPart, tailPart == null);
-    if (headBytes == null || (doubleColon < 0 && headPart.isEmpty())) {
-      return null;
-    }
-    if (tailPart == null) {
-      return headBytes.length == 16 ? headBytes : null;
-    }
-    byte[] tailBytes = tailPart.isEmpty() ? new byte[0] : parseIpv6Groups(tailPart, true);
-    if (tailBytes == null || headBytes.length + tailBytes.length >= 16) {
-      return null;
-    }
-    byte[] result = new byte[16];
-    System.arraycopy(headBytes, 0, result, 0, headBytes.length);
-    System.arraycopy(tailBytes, 0, result, 16 - tailBytes.length, tailBytes.length);
-    return result;
-  }
-
-  private static byte[] parseIpv6Groups(String part, boolean allowTrailingIpv4) {
-    if (part.charAt(0) == ':' || part.charAt(part.length() - 1) == ':') {
-      return null;
-    }
-    String[] groups = part.split(":", -1);
-    byte[] buffer = new byte[16];
-    int offset = 0;
-    for (int i = 0; i < groups.length; i++) {
-      String group = groups[i];
-      if (group.isEmpty()) {
-        return null;
-      }
-      if (group.indexOf('.') >= 0) {
-        if (!allowTrailingIpv4 || i != groups.length - 1 || offset > 12) {
-          return null;
-        }
-        byte[] ipv4 = parseIpv4Bytes(group);
-        if (ipv4 == null) {
-          return null;
-        }
-        System.arraycopy(ipv4, 0, buffer, offset, 4);
-        offset += 4;
-      } else {
-        if (group.length() > 4 || offset > 14) {
-          return null;
-        }
-        int word = 0;
-        for (int j = 0; j < group.length(); j++) {
-          int digit = asciiHexDigit(group.charAt(j));
-          if (digit < 0) {
-            return null;
-          }
-          word = (word << 4) | digit;
-        }
-        buffer[offset++] = (byte) (word >>> 8);
-        buffer[offset++] = (byte) word;
-      }
-    }
-    return Arrays.copyOf(buffer, offset);
-  }
-
-  private static int asciiHexDigit(char ch) {
-    if (ch >= '0' && ch <= '9') {
-      return ch - '0';
-    }
-    if (ch >= 'a' && ch <= 'f') {
-      return ch - 'a' + 10;
-    }
-    if (ch >= 'A' && ch <= 'F') {
-      return ch - 'A' + 10;
-    }
-    return -1;
+    return NetworkBinding.parseIpLiteral(literal);
   }
 
   private static String firstHeader(HttpExchange exchange, String name) {
