@@ -1,5 +1,6 @@
 package app.byteland.ghidra.agent;
 
+import app.byteland.ghidra.network.NetworkBinding;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.Socket;
@@ -18,6 +19,7 @@ final class AgentWebSocketConnectionRunner {
   private static final String KEEPALIVE_TIMEOUT_REASON = "keepalive timeout";
 
   private final AgentConfig config;
+  private final boolean loopbackListener;
   private final AgentWebSocketServer.Handler handler;
   private final AtomicBoolean running;
   private final AtomicReference<AgentServerConnection> activeConnection;
@@ -54,6 +56,7 @@ final class AgentWebSocketConnectionRunner {
       Duration keepaliveInterval,
       Duration pongTimeout) {
     this.config = config;
+    this.loopbackListener = NetworkBinding.isLoopback(config.host());
     this.handler = handler;
     this.running = running;
     this.activeConnection = activeConnection;
@@ -75,7 +78,7 @@ final class AgentWebSocketConnectionRunner {
         WebSocketHandshake.HandshakeRequest request;
         try {
           request = WebSocketHandshake.readHandshake(socket, deadlineNanos);
-          WebSocketHandshakeValidator.validate(config, request);
+          WebSocketHandshakeValidator.validate(config, loopbackListener, request);
         } catch (WebSocketHandshake.HttpHandshakeException e) {
           closeState.reason = e.getMessage();
           writeHandshakeFailure(socket, e);
