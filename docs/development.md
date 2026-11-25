@@ -114,7 +114,7 @@ After a push to `main` passes the `verify` job, release-please creates or update
 The pull request updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
 Review the proposed version and notes in the pull request.
 Merge the pull request into `main` to start the release.
-After verification, release-please creates a `v<version>` tag and a GitHub release.
+After verification, release-please creates a `v<version>` tag and a draft GitHub release.
 
 release-please reads Conventional Commit messages to select the version:
 
@@ -123,15 +123,19 @@ release-please reads Conventional Commit messages to select the version:
 - A `!` after the type or a `BREAKING CHANGE:` footer: Increases the major version.
 - Other types, such as `docs`, `ci`, and `test`: Do not start a release on their own.
 
-The `publish` job gets the release commit and verifies the build.
-Then it uploads two assets:
+The `publish` job gets the release commit without persisted credentials.
+Before Gradle runs, it checks `HEAD`, the `v<version>` tag, the remote tag SHA, the draft state,
+`.release-please-manifest.json`, and `version.txt`.
+Next, it builds the release archive with `verify` (which runs all JUnit tests) and runs `tests/function_mutation_regression.py`.
+Then it verifies non-empty files and the SHA-256 checksum, uploads two assets, and makes the draft release public:
 
 - `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
   `LICENSE`, and `README.md`.
 - `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
 
 Gradle reads the version from `version.txt` unless you set the `releaseVersion` property.
-The package script checks that the release version matches `version.txt` and the JAR manifest.
+The package script checks that the release version matches `version.txt`, `.release-please-manifest.json`,
+and the JAR manifest.
 To build and verify the release archive locally, run:
 
 ```bash
@@ -145,5 +149,5 @@ For CI on release pull requests, close and reopen the pull request, or set the `
 Give that token Contents and Pull requests write access to this repository.
 See the [release-please Action documentation](https://github.com/googleapis/release-please-action).
 
-If the `publish` job fails, use "Re-run failed jobs" in GitHub Actions.
-The upload step can replace assets from an earlier attempt that did not complete.
+If the `publish` job fails, the GitHub release stays hidden as a draft.
+Select "Re-run failed jobs" in GitHub Actions to repeat the checks, replace uploaded assets, and publish the draft.

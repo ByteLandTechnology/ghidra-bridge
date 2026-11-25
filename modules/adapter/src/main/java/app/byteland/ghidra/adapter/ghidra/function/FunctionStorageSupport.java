@@ -228,19 +228,20 @@ final class FunctionStorageSupport {
     }
   }
 
-  static ParameterImpl copyParameter(
-      Program program,
-      Parameter parameter,
-      String name,
-      DataType dataType,
-      VariableStorage storage) {
+  static ParameterImpl copyParameter(Program program, Parameter parameter) {
     SourceType source = parameter.getSource();
     if (source == null) {
       source = SourceType.USER_DEFINED;
     }
     ParameterImpl copy =
         createParameter(
-            program, name, parameter.getOrdinal(), dataType, storage, source, "parameter");
+            program,
+            parameter.getName(),
+            parameter.getOrdinal(),
+            parameter.getFormalDataType(),
+            parameter.getVariableStorage(),
+            source,
+            "parameter");
     copy.setComment(parameter.getComment());
     return copy;
   }
