@@ -125,6 +125,8 @@ def main() -> None:
         repo_root = pathlib.Path(temp_dir) / "repo"
         copy_working_tree(source_root, repo_root)
         version_file = repo_root / "version.txt"
+        manifest_file = repo_root / ".release-please-manifest.json"
+        original_manifest = manifest_file.read_bytes()
 
         version_file.write_bytes(b"  \t\r\n \n")
         blank_result = run_package_script(
@@ -133,6 +135,15 @@ def main() -> None:
         assert blank_result.returncode != 0, "Expected blank version.txt to fail"
 
         version_file.write_bytes(f"  \t{base_version} \r\n\n".encode("utf-8"))
+        empty_arg = run_package_script(
+            repo_root,
+            [""],
+            timezone="UTC",
+            umask_octal="0022",
+            check=False,
+        )
+        assert empty_arg.returncode != 0, "Expected empty CLI version argument to fail"
+
         mismatch = run_package_script(
             repo_root,
             ["0.0.0-mismatch"],
@@ -144,6 +155,23 @@ def main() -> None:
         assert f"has '{base_version}', expected '0.0.0-mismatch'" in mismatch.stderr, (
             f"Unexpected mismatch error output: {mismatch.stderr!r}"
         )
+
+        manifest_file.write_bytes(b'{\n  ".": "0.0.0-manifest"\n}\n')
+        manifest_mismatch = run_package_script(
+            repo_root,
+            [],
+            timezone="UTC",
+            umask_octal="0022",
+            check=False,
+        )
+        assert manifest_mismatch.returncode != 0, (
+            "Expected .release-please-manifest.json mismatch to fail"
+        )
+        assert (
+            f".release-please-manifest.json has '0.0.0-manifest', expected '{base_version}'"
+            in manifest_mismatch.stderr
+        ), f"Unexpected manifest mismatch output: {manifest_mismatch.stderr!r}"
+        manifest_file.write_bytes(original_manifest)
 
         run_package_script(
             repo_root, [], timezone="EST5", umask_octal="0022", ci_mode=True

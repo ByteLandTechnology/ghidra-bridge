@@ -1,3 +1,6 @@
+// __DESCRIPTION__
+// @category Ghidra Bridge
+
 import ghidra.app.script.GhidraScript;
 import java.io.File;
 import java.io.IOException;
@@ -13,8 +16,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.zip.CRC32;
@@ -228,21 +237,37 @@ public class __CLASS__ extends GhidraScript {
   }
 
   private String rootMessage(Throwable error) {
-    if (error instanceof InvocationTargetException invocation
+    while (error instanceof InvocationTargetException invocation
         && invocation.getTargetException() != null) {
-      Throwable target = invocation.getTargetException();
-      String targetMessage = target.getMessage();
-      if (targetMessage != null && !targetMessage.isBlank()) {
-        return targetMessage;
+      error = invocation.getTargetException();
+    }
+    List<String> details = new ArrayList<>();
+    Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+    Throwable leaf = error;
+    Throwable firstUnnamedCause = null;
+    for (Throwable current = error;
+        current != null && visited.add(current);
+        current = current.getCause()) {
+      leaf = current;
+      String message = current.getMessage();
+      if (message != null && !message.isBlank()) {
+        String trimmed = message.trim();
+        if (details.stream().noneMatch(existing -> existing.contains(trimmed))) {
+          details.add(trimmed);
+        }
+      } else if (current != error && firstUnnamedCause == null) {
+        firstUnnamedCause = current;
       }
-      error = target;
     }
-    Throwable current = error;
-    while (current.getCause() != null) {
-      current = current.getCause();
+    if (details.isEmpty()) {
+      return leaf == null ? "Unknown error" : leaf.getClass().getName();
     }
-    String message = current.getMessage();
-    return message == null || message.isBlank() ? current.getClass().getName() : message;
+    if (details.size() == 1
+        && firstUnnamedCause != null
+        && !(firstUnnamedCause instanceof TimeoutException)) {
+      details.add(firstUnnamedCause.getClass().getName());
+    }
+    return String.join(": ", details);
   }
 
   /** Loads bridge classes from the snapshot JAR after validation. Uses the parent loader for host classes. */

@@ -106,7 +106,7 @@ After a push to `main` passes the `verify` job, release-please creates or update
 The pull request updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
 Review the proposed version and notes in the pull request.
 Merge the pull request into `main` to start the release.
-After verification, release-please creates a `v<version>` tag and a GitHub release.
+After verification, release-please creates a `v<version>` tag and a draft GitHub release.
 
 release-please reads Conventional Commit messages to select the version:
 
@@ -115,8 +115,12 @@ release-please reads Conventional Commit messages to select the version:
 - A `!` after the type or a `BREAKING CHANGE:` footer: Increases the major version.
 - Other types, such as `docs`, `ci`, and `test`: Do not start a release on their own.
 
-The `publish` job gets the release commit and verifies the build.
-It signs a SLSA provenance attestation before it uploads two assets:
+The `publish` job gets the release commit without persisted credentials.
+Before Gradle runs, it checks `HEAD`, the `v<version>` tag, the remote tag SHA, the draft state,
+`.release-please-manifest.json`, and `version.txt`.
+Next, it builds the release archive with `verify` (which runs all JUnit tests) and runs `tests/function_mutation_regression.py`.
+It signs a SLSA provenance attestation for the archive.
+Then it verifies non-empty files and the SHA-256 checksum, uploads two assets, and makes the draft release public:
 
 - `ghidra-bridge-<version>.zip`: Deterministic archive with `Bridge.java`, `GhidraMcp.java`,
   `ghidra-bridge.jar`, `LICENSE`, and `README.md`.
@@ -130,7 +134,8 @@ gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghid
 ```
 
 Gradle reads the version from `version.txt` unless you set the `releaseVersion` property.
-The package script trims whitespace from `version.txt` and checks that the release version matches the JAR manifest.
+The package script trims whitespace from `version.txt` and checks that the release version matches
+`.release-please-manifest.json` and the JAR manifest.
 It sets fixed file modes, UTC `1980-02-01 00:00:00` timestamps, and sorted entries for reproducible zip digests.
 To build the release archive and verify archive reproducibility locally, run:
 
@@ -146,5 +151,5 @@ For CI on release pull requests, close and reopen the pull request, or set the `
 Give that token Contents and Pull requests write access to this repository.
 See the [release-please Action documentation](https://github.com/googleapis/release-please-action).
 
-If the `publish` job fails, use "Re-run failed jobs" in GitHub Actions.
-The upload step can replace assets from an earlier attempt that did not complete.
+If the `publish` job fails, the GitHub release stays hidden as a draft.
+Select "Re-run failed jobs" in GitHub Actions to repeat the checks, replace uploaded assets, and publish the draft.
