@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
 class ListingCodeUnitQueriesTest {
 
   @Test
-  void allKindStreamsForwardAndBackwardWithStatefulCodeUnitIterator() {
+  void allKindStreamsForwardWithStatefulCodeUnitIterator() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("code_units_all")) {
       holder.inTransaction(
           program -> {
@@ -67,7 +67,6 @@ class ListingCodeUnitQueriesTest {
               AddressScanOptions.of("ram:00001000", "ram:0000100a", 1000),
               10,
               "all",
-              "forward",
               null);
       assertEquals(1, spy.codeUnitIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
@@ -85,23 +84,6 @@ class ListingCodeUnitQueriesTest {
       assertEquals("ram:0000100a", forward.scanProgress().scannedEnd());
       assertTrue(forward.scanProgress().complete());
       assertNull(forward.nextCursor());
-
-      spy.reset();
-      Page<CodeUnitResource> backward =
-          queries.listCodeUnits(
-              AddressScanOptions.of("ram:00001000", "ram:0000100a", 1000),
-              10,
-              null,
-              "backward",
-              null);
-      assertEquals(1, spy.codeUnitIterators.get());
-      assertEquals(0, spy.statelessAfterBeforeCalls.get());
-      assertEquals(
-          List.of("ram:0000100a", "ram:00001006", "ram:00001005", "ram:00001000"),
-          backward.items().stream().map(CodeUnitResource::address).toList());
-      assertEquals("ram:0000100a", backward.scanProgress().scannedStart());
-      assertEquals("ram:00001000", backward.scanProgress().scannedEnd());
-      assertTrue(backward.scanProgress().complete());
     }
   }
 
@@ -139,13 +121,12 @@ class ListingCodeUnitQueriesTest {
       ListingCodeUnitQueries queries =
           new ListingCodeUnitQueries(GhidraTestSupport.sessionFor(spy.wrap(holder.program())));
 
-      // Completed instruction scan across 64 KB undefined gap + trailing undefined tail
+      // Completed instruction scan across 64 KB undefined gap and final undefined tail
       Page<CodeUnitResource> instructions =
           queries.listCodeUnits(
               AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
               10,
               "instruction",
-              "forward",
               null);
       assertEquals(1, spy.instructionIterators.get());
       assertEquals(0, spy.codeUnitIterators.get());
@@ -167,11 +148,11 @@ class ListingCodeUnitQueriesTest {
               AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
               1,
               "instruction",
-              "forward",
               null);
       assertEquals(1, spy.instructionIterators.get());
       assertEquals(1, spy.boundaryLookups.get());
-      assertEquals(List.of("ram:00110000"), page1.items().stream().map(CodeUnitResource::address).toList());
+      assertEquals(
+          List.of("ram:00110000"), page1.items().stream().map(CodeUnitResource::address).toList());
       assertEquals("ram:00100000", page1.scanProgress().scannedStart());
       assertEquals("ram:00110000", page1.scanProgress().scannedEnd());
       assertFalse(page1.scanProgress().complete());
@@ -184,11 +165,11 @@ class ListingCodeUnitQueriesTest {
               AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
               10,
               "instruction",
-              "forward",
               page1.nextCursor());
       assertEquals(1, spy.instructionIterators.get());
       assertTrue(spy.boundaryLookups.get() <= 2);
-      assertEquals(List.of("ram:00110001"), page2.items().stream().map(CodeUnitResource::address).toList());
+      assertEquals(
+          List.of("ram:00110001"), page2.items().stream().map(CodeUnitResource::address).toList());
       assertEquals("ram:00110001", page2.scanProgress().scannedStart());
       assertEquals("ram:0011001f", page2.scanProgress().scannedEnd());
       assertTrue(page2.scanProgress().complete());
@@ -201,7 +182,6 @@ class ListingCodeUnitQueriesTest {
               AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
               10,
               "data",
-              "forward",
               null);
       assertEquals(1, spy.definedDataIterators.get());
       assertEquals(0, spy.codeUnitIterators.get());
@@ -222,7 +202,6 @@ class ListingCodeUnitQueriesTest {
               AddressScanOptions.of("ram:00100000", "ram:0010ffff", 100),
               10,
               "instruction",
-              "forward",
               null);
       assertEquals(1, spy.instructionIterators.get());
       assertTrue(spy.boundaryLookups.get() <= 2);
@@ -231,24 +210,6 @@ class ListingCodeUnitQueriesTest {
       assertEquals("ram:0010ffff", emptyGap.scanProgress().scannedEnd());
       assertTrue(emptyGap.scanProgress().complete());
       assertNull(emptyGap.nextCursor());
-
-      // Backward filtered scan across the 64 KB undefined gap
-      spy.reset();
-      Page<CodeUnitResource> backwardInstructions =
-          queries.listCodeUnits(
-              AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
-              10,
-              "instruction",
-              "backward",
-              null);
-      assertEquals(1, spy.instructionIterators.get());
-      assertTrue(spy.boundaryLookups.get() <= 2);
-      assertEquals(
-          List.of("ram:00110001", "ram:00110000"),
-          backwardInstructions.items().stream().map(CodeUnitResource::address).toList());
-      assertEquals("ram:0011001f", backwardInstructions.scanProgress().scannedStart());
-      assertEquals("ram:00100000", backwardInstructions.scanProgress().scannedEnd());
-      assertTrue(backwardInstructions.scanProgress().complete());
     }
   }
 
@@ -314,7 +275,6 @@ class ListingCodeUnitQueriesTest {
               AddressScanOptions.of("ram:00002002", "ram:00002007", 1000),
               10,
               "data",
-              "forward",
               null);
       assertEquals(
           List.of("ram:00002005"),
@@ -328,7 +288,6 @@ class ListingCodeUnitQueriesTest {
               AddressScanOptions.of("ram:00002001", "ram:00002003", 1000),
               10,
               "instruction",
-              "forward",
               null);
       assertTrue(interiorSlice.items().isEmpty());
       assertNull(interiorSlice.scanProgress().scannedStart());
@@ -342,29 +301,12 @@ class ListingCodeUnitQueriesTest {
                 AddressScanOptions.of("ram:fffffffffffffffe", "ram:ffffffffffffffff", 1000),
                 10,
                 kind,
-                "forward",
                 "ram:ffffffffffffffff");
         assertTrue(atMax.items().isEmpty());
         assertTrue(atMax.scanProgress().complete());
         assertNull(atMax.scanProgress().scannedStart());
         assertNull(atMax.scanProgress().scannedEnd());
         assertNull(atMax.nextCursor());
-      }
-
-      // Cursor resumption at minAddress (0x0) going backward for all kinds
-      for (String kind : List.of("all", "instruction", "data")) {
-        Page<CodeUnitResource> atMin =
-            queries.listCodeUnits(
-                AddressScanOptions.of("ram:0000000000000000", "ram:0000000000000001", 1000),
-                10,
-                kind,
-                "backward",
-                "ram:0000000000000000");
-        assertTrue(atMin.items().isEmpty());
-        assertTrue(atMin.scanProgress().complete());
-        assertNull(atMin.scanProgress().scannedStart());
-        assertNull(atMin.scanProgress().scannedEnd());
-        assertNull(atMin.nextCursor());
       }
     }
   }

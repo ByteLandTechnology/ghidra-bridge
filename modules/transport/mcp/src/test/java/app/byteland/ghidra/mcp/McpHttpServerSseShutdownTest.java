@@ -130,9 +130,9 @@ class McpHttpServerSseShutdownTest {
             closeElapsedMs < 1_000L,
             "Expected immediate wakeup on close(), got " + closeElapsedMs + " ms");
 
-        // Drain any remaining lines; stream must reach EOF promptly after close().
+        // Drain any left-over lines; stream must reach EOF promptly after close().
         while (client.reader.readLine() != null) {
-          // draining EOF
+          // drain to EOF
         }
       }
     }
@@ -169,7 +169,7 @@ class McpHttpServerSseShutdownTest {
     CountDownLatch writeEntered = new CountDownLatch(1);
     CountDownLatch unblockWrite = new CountDownLatch(1);
     BlockingExchange exchange = new BlockingExchange(writeEntered, unblockWrite);
-    McpHttpServer.SseSession session = new McpHttpServer.SseSession("stalled-session", exchange);
+    McpHttpServer.SseSession session = new McpHttpServer.SseSession(exchange);
 
     CountDownLatch waiterWoke = new CountDownLatch(1);
     AtomicBoolean signaled = new AtomicBoolean(false);
@@ -228,7 +228,7 @@ class McpHttpServerSseShutdownTest {
   void interruptedWaitRestoresInterruptStatus() throws Exception {
     BlockingExchange exchange =
         new BlockingExchange(new CountDownLatch(0), new CountDownLatch(0), false);
-    McpHttpServer.SseSession session = new McpHttpServer.SseSession("interrupt-session", exchange);
+    McpHttpServer.SseSession session = new McpHttpServer.SseSession(exchange);
 
     CountDownLatch startedWaiting = new CountDownLatch(1);
     CountDownLatch finished = new CountDownLatch(1);

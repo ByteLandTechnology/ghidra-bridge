@@ -66,14 +66,6 @@ final class LeasePool<T> implements AutoCloseable {
     }
   }
 
-  int maxSize() {
-    return capacity;
-  }
-
-  int createdCount() {
-    return created.get();
-  }
-
   @Override
   public void close() {
     closed = true;

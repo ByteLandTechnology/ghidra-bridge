@@ -57,7 +57,7 @@ class WireSchemaValidationTest {
     assertEquals("/value must match exactly one schema", multipleWithoutFailure.error().message());
     assertEquals("/value", multipleWithoutFailure.error().target());
 
-    // Multiple branches match with a trailing failing branch: reports that failing branch.
+    // Multiple branches match with a final failed branch: reports that failed branch.
     Map<String, Object> overlappingWithTrailingFailure =
         WireSchema.oneOf(
             WireSchema.string(),
@@ -228,7 +228,7 @@ class WireSchemaValidationTest {
         "/params/a~1b~0c/0/val~01~1leaf must be in 1..10", valueFailure.error().message());
     assertEquals("/params/a~1b~0c/0/val~01~1leaf", valueFailure.error().target());
 
-    // Missing required field keeps raw field name on leaf while escaping ancestor segments.
+    // Absent required field keeps raw field name on leaf and escapes ancestor segments.
     ApiException missingFailure =
         assertThrows(
             ApiException.class,
@@ -240,7 +240,7 @@ class WireSchemaValidationTest {
         "/params/a~1b~0c/0/raw/required~field is required", missingFailure.error().message());
     assertEquals("/params/a~1b~0c/0/raw/required~field", missingFailure.error().target());
 
-    // Unknown field keeps raw field name on leaf while escaping ancestor segments.
+    // Unknown field keeps raw field name on leaf and escapes ancestor segments.
     ApiException unknownFailure =
         assertThrows(
             ApiException.class,
@@ -299,7 +299,7 @@ class WireSchemaValidationTest {
     assertEquals("invalid_value", nanFailure.error().code());
     assertEquals("/progress must be finite", nanFailure.error().message());
 
-    // Object non-string keys and property count bounds.
+    // Object non-text keys and property count bounds.
     Map<Object, Object> nonStringKeyMap = new LinkedHashMap<>();
     nonStringKeyMap.put(123, "bad");
     ApiException invalidField =
@@ -494,5 +494,204 @@ class WireSchemaValidationTest {
     } finally {
       Files.deleteIfExists(recordingPath);
     }
+  }
+
+  @Test
+  void validatesNullTargetsAndEmptyRootsWithExactDiagnostics() {
+    Map<String, Object> itemSchema =
+        WireSchema.object(
+            Map.of(
+                "a/b", WireSchema.nonBlankString(),
+                "count", WireSchema.integer(1, 5),
+                "ratio", WireSchema.number(0.0, 1.0)),
+            "a/b");
+    Map<String, Object> rootSchema =
+        WireSchema.object(
+            Map.of("items", WireSchema.array(itemSchema, 1, 2)),
+            "items");
+
+    Map<String, Object> validPayload =
+        Map.of("items", List.of(Map.of("a/b", "ok", "count", 3, "ratio", 0.5)));
+    assertDoesNotThrow(() -> WireSchema.validate(validPayload, rootSchema, null));
+    assertDoesNotThrow(() -> WireSchema.validate(validPayload, rootSchema, ""));
+
+    // Null target root preserves null target at root and prefixes child pointers with "null/".
+    ApiException nullRootType =
+        assertThrows(ApiException.class, () -> WireSchema.validate(123, WireSchema.string(), null));
+    assertEquals("invalid_type", nullRootType.error().code());
+    assertEquals("null must be a string", nullRootType.error().message());
+    assertEquals(null, nullRootType.error().target());
+    assertEquals(false, nullRootType.error().toMap().containsKey("target"));
+
+    ApiException nullRootRange =
+        assertThrows(
+            ApiException.class, () -> WireSchema.validate(9.5, WireSchema.number(0.0, 1.0), null));
+    assertEquals("invalid_value", nullRootRange.error().code());
+    assertEquals("null must be in 0.0..1.0", nullRootRange.error().message());
+    assertEquals(null, nullRootRange.error().target());
+
+    ApiException nullMissingField =
+        assertThrows(ApiException.class, () -> WireSchema.validate(Map.of(), rootSchema, null));
+    assertEquals("missing_field", nullMissingField.error().code());
+    assertEquals("null/items is required", nullMissingField.error().message());
+    assertEquals("null/items", nullMissingField.error().target());
+
+    ApiException nullUnknownField =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("items", List.of(Map.of("a/b", "ok")), "extra", 1), rootSchema, null));
+    assertEquals("unknown_field", nullUnknownField.error().code());
+    assertEquals("null/extra is not allowed", nullUnknownField.error().message());
+    assertEquals("null/extra", nullUnknownField.error().target());
+
+    ApiException nullNestedRange =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("items", List.of(Map.of("a/b", "ok", "count", 9))), rootSchema, null));
+    assertEquals("invalid_value", nullNestedRange.error().code());
+    assertEquals("null/items/0/count must be in 1..5", nullNestedRange.error().message());
+    assertEquals("null/items/0/count", nullNestedRange.error().target());
+
+    Map<String, Object> overlapping =
+        WireSchema.oneOf(WireSchema.string(), WireSchema.nonBlankString());
+    ApiException nullUnionOverlap =
+        assertThrows(ApiException.class, () -> WireSchema.validate("ok", overlapping, null));
+    assertEquals("invalid_union", nullUnionOverlap.error().code());
+    assertEquals("null must match exactly one schema", nullUnionOverlap.error().message());
+    assertEquals(null, nullUnionOverlap.error().target());
+
+    // Empty root keeps empty target at root and formats child pointers from "/".
+    ApiException emptyRootType =
+        assertThrows(ApiException.class, () -> WireSchema.validate("bad", rootSchema, ""));
+    assertEquals("invalid_type", emptyRootType.error().code());
+    assertEquals(" must be an object", emptyRootType.error().message());
+    assertEquals("", emptyRootType.error().target());
+
+    ApiException emptyRootEnum =
+        assertThrows(
+            ApiException.class,
+            () -> WireSchema.validate("z", WireSchema.stringEnum("a", "b"), ""));
+    assertEquals("invalid_enum", emptyRootEnum.error().code());
+    assertEquals(" has an unsupported value", emptyRootEnum.error().message());
+    assertEquals("", emptyRootEnum.error().target());
+
+    ApiException emptyArrayCount =
+        assertThrows(
+            ApiException.class,
+            () -> WireSchema.validate(Map.of("items", List.of()), rootSchema, ""));
+    assertEquals("invalid_count", emptyArrayCount.error().code());
+    assertEquals("/items must contain 1..2 items", emptyArrayCount.error().message());
+    assertEquals("/items", emptyArrayCount.error().target());
+
+    ApiException emptyMissingField =
+        assertThrows(ApiException.class, () -> WireSchema.validate(Map.of(), rootSchema, ""));
+    assertEquals("missing_field", emptyMissingField.error().code());
+    assertEquals("/items is required", emptyMissingField.error().message());
+    assertEquals("/items", emptyMissingField.error().target());
+
+    ApiException emptyNestedLeaf =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("items", List.of(Map.of("a/b", ""), Map.of("a/b", "ok"))),
+                    rootSchema,
+                    ""));
+    assertEquals("invalid_value", emptyNestedLeaf.error().code());
+    assertEquals("/items/0/a~1b must not be empty", emptyNestedLeaf.error().message());
+    assertEquals("/items/0/a~1b", emptyNestedLeaf.error().target());
+
+    ApiException emptyNumberRange =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("items", List.of(Map.of("a/b", "ok", "ratio", 2.5))), rootSchema, ""));
+    assertEquals("invalid_value", emptyNumberRange.error().code());
+    assertEquals("/items/0/ratio must be in 0.0..1.0", emptyNumberRange.error().message());
+    assertEquals("/items/0/ratio", emptyNumberRange.error().target());
+
+    ApiException emptyUnionOverlap =
+        assertThrows(ApiException.class, () -> WireSchema.validate("ok", overlapping, ""));
+    assertEquals("invalid_union", emptyUnionOverlap.error().code());
+    assertEquals(" must match exactly one schema", emptyUnionOverlap.error().message());
+    assertEquals("", emptyUnionOverlap.error().target());
+  }
+
+  @Test
+  void validatesNestedOneOfUnionsAndMalformedInnerBranches() {
+    Map<String, Object> registerStorage =
+        WireSchema.object(
+            Map.of("kind", WireSchema.stringEnum("register"), "name", WireSchema.nonBlankString()),
+            "kind",
+            "name");
+    Map<String, Object> stackStorage =
+        WireSchema.object(
+            Map.of("kind", WireSchema.stringEnum("stack"), "offset", WireSchema.integer(-4096, 4096)),
+            "kind",
+            "offset");
+    Map<String, Object> concreteStorage = WireSchema.oneOf(registerStorage, stackStorage);
+    Map<String, Object> autoStorage =
+        WireSchema.object(Map.of("kind", WireSchema.stringEnum("auto")), "kind");
+    Map<String, Object> nestedUnion =
+        WireSchema.oneOf(concreteStorage, autoStorage, Map.of(ApiVocabulary.TYPE, ApiVocabulary.NULL));
+
+    assertDoesNotThrow(
+        () ->
+            WireSchema.validate(
+                Map.of("kind", "register", "name", "RAX"), nestedUnion, "/storage"));
+    assertDoesNotThrow(
+        () -> WireSchema.validate(Map.of("kind", "stack", "offset", -16), nestedUnion, "/storage"));
+    assertDoesNotThrow(() -> WireSchema.validate(Map.of("kind", "auto"), nestedUnion, "/storage"));
+    assertDoesNotThrow(() -> WireSchema.validate(null, nestedUnion, "/storage"));
+
+    // Zero matches across nested oneOf preserves the first inner branch diagnostic.
+    ApiException zeroMatch =
+        assertThrows(
+            ApiException.class,
+            () -> WireSchema.validate(Map.of("kind", "stack", "offset", 99999), nestedUnion, "/storage"));
+    assertEquals("invalid_union", zeroMatch.error().code());
+    assertEquals("/storage/name is required", zeroMatch.error().message());
+    assertEquals("/storage/name", zeroMatch.error().target());
+
+    // Inner oneOf matches and outer second branch also matches without any outer failure.
+    Map<String, Object> outerDoubleMatch = WireSchema.oneOf(concreteStorage, WireSchema.openObject());
+    ApiException doubleMatch =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("kind", "stack", "offset", -8), outerDoubleMatch, "/storage"));
+    assertEquals("invalid_union", doubleMatch.error().code());
+    assertEquals("/storage must match exactly one schema", doubleMatch.error().message());
+    assertEquals("/storage", doubleMatch.error().target());
+
+    // Failed inner oneOf before two outer branches match reports first inner failure.
+    Map<String, Object> failedInnerThenTwoMatches =
+        WireSchema.oneOf(concreteStorage, WireSchema.openObject(), WireSchema.any());
+    ApiException failedInner =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("kind", "auto"), failedInnerThenTwoMatches, "/storage"));
+    assertEquals("invalid_union", failedInner.error().code());
+    assertEquals("/storage/name is required", failedInner.error().message());
+    assertEquals("/storage/name", failedInner.error().target());
+
+    // Malformed inner branch inside a later nested oneOf throws IllegalStateException immediately.
+    Map<String, Object> badInner =
+        WireSchema.oneOf(
+            WireSchema.integer(0, 10),
+            Map.of(ApiVocabulary.REFERENCE, "#/$defs/missing_inner"));
+    Map<String, Object> validFirstWithMalformedNested =
+        WireSchema.oneOf(WireSchema.string(), badInner);
+    assertThrows(
+        IllegalStateException.class,
+        () -> WireSchema.validate("valid", validFirstWithMalformedNested, "/value"));
   }
 }

@@ -49,7 +49,6 @@ final class InstructionMethods implements ApiMethodProvider {
                 .listInstructions(
                     addressScan(request),
                     page.limit(),
-                    "forward",
                     page.cursor()));
     Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
     Map<String, Object> flowFilter =

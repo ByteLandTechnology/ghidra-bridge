@@ -2,6 +2,7 @@ package app.byteland.ghidra.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
@@ -67,6 +68,32 @@ class BatchQueryMethodTest {
             "destructive", true,
             "idempotent", false),
         execute.contractValue().get("effects"));
+
+    ApiRegistry registry =
+        new ApiRegistry(
+            new BridgeServices(
+                unused(ProgramService.class),
+                unused(AddressService.class),
+                unused(CommentService.class),
+                unused(ReferenceService.class),
+                unused(MemoryService.class),
+                unused(ListingService.class),
+                unused(FunctionService.class),
+                unused(GlobalVariableService.class),
+                unused(AnalysisService.class),
+                unused(DecompilationService.class),
+                unused(SymbolService.class),
+                unused(DataTypeService.class),
+                unused(TransactionRunner.class),
+                "schema"),
+            "schema",
+            Map::of,
+            () -> {});
+    ApiMethod<Map<String, Object>, Object> queryMethod = registry.method(BatchMethod.QUERY_NAME);
+    assertNotNull(queryMethod);
+    Map<String, Object> firstSchema = queryMethod.requestCodec().schema();
+    assertSame(firstSchema, queryMethod.requestCodec().schema());
+    assertThrows(UnsupportedOperationException.class, () -> firstSchema.put("extra", true));
   }
 
   @Test
@@ -191,7 +218,7 @@ class BatchQueryMethodTest {
     assertEquals("/items", mutationRejected.error().target());
     assertEquals(1, programReads.get(), "prevalidation must reject before it runs item 0");
 
-    // Non-batchable read-only metadata methods (such as interface.get or batch.query) also fail.
+    // Prevalidation also rejects non-batchable methods such as interface.get and batch.query.
     for (String nonBatchable : List.of("interface.get", "batch.query", "batch.execute")) {
       ApiException nestedRejected =
           assertThrows(
