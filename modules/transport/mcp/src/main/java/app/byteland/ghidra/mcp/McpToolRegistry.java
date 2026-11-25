@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Publishes per-operation MCP tools named {@code <prefix>_<domain>_<operation>} plus
- * {@code <prefix>_help}, while retaining lookup for legacy {@code <prefix>_<domain>} calls.
+ * Publishes per-operation MCP tools named {@code <prefix>_<domain>_<operation>} and {@code
+ * <prefix>_help}. It also keeps lookup for legacy {@code <prefix>_<domain>} calls.
  */
 final class McpToolRegistry {
   record OperationTarget(String domain, String operation, MethodDescriptor descriptor) {}
@@ -32,10 +32,14 @@ final class McpToolRegistry {
       String[] target = target(method.name());
       domains.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>())
           .put(target[1], method);
-      operationsBySuffix.put(
-          operationSuffix(target[0], target[1]),
-          new OperationTarget(target[0], target[1], method));
     }
+    domains.forEach(
+        (domain, operations) ->
+            operations.forEach(
+                (operation, method) ->
+                    operationsBySuffix.put(
+                        operationSuffix(domain, operation),
+                        new OperationTarget(domain, operation, method))));
     List<Map<String, Object>> tools = new ArrayList<>(1 + operationsBySuffix.size());
     tools.add(
         orderedMap(

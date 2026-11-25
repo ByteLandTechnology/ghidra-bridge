@@ -198,9 +198,9 @@ The MCP error schema for that version cannot represent this case.
 
 `tools/list` publishes 56 underscored tools:
 - `ghidra_help`: Finds domains, lists operations with schemas and effects, and shows single-operation contracts.
-- 55 Per-Operation Tools across 14 domains (`bridge`, `program`, `address`, `memory`, `listing`, `global_variable`, `function`, `analysis`, `decompilation`, `symbol`, `reference`, `comment`, `data_type`, `batch`), named `<prefix>_<domain>_<operation>` with dots in operation names replaced by underscores (for example, `ghidra_memory_read`, `ghidra_decompilation_get`, and `ghidra_function_local_variable_patch`).
+- 55 Per-Operation Tools across 14 domains (`bridge` through `batch`), named `<prefix>_<domain>_<operation>` with dots replaced by underscores. Examples include `ghidra_memory_read` and `ghidra_function_local_variable_patch`.
 
-Each per-operation tool publishes its flattened parameter schema (omitting `oneOf`, `anyOf`, `allOf`, `$ref`, `$defs`, and `additionalProperties`) and exact method safety hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`) in `tools/list`.
+Each operation tool publishes a flattened parameter schema without `oneOf`, `anyOf`, `allOf`, `$ref`, `$defs`, or `additionalProperties`. It also publishes exact safety hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`) in `tools/list`.
 `interface.get` is available only through WebSocket.
 
 ### Tool Name Prefix and Multi-Server Tool Budgets
@@ -210,11 +210,12 @@ Set the `tool_prefix` startup argument to change it, for example `tool_prefix=sa
 Then the tool names include `sample_help` and `sample_program_get`.
 Use a different prefix for each bridge when one MCP client connects to more than one bridge.
 
-The prefix starts with a letter and has 1 to 34 letters, digits, `_`, or `-`, keeping every tool name within the 64-character limit enforced by strict MCP providers.
-Because each bridge lists 56 tools, connecting two bridges publishes 112 tools and connecting three bridges publishes 168 tools, which exceeds the 128-tool cap enforced by strict MCP clients; keep multi-server sessions within your client's tool budget or route multiple binaries through `ghidra-mcp`.
+The prefix starts with a letter and has 1 to 34 letters, digits, `_`, or `-`. This rule keeps every tool name within the 64-character limit of strict MCP providers.
 The server rejects a tool name with a different prefix.
 In `ghidra_help`, the `domain` argument accepts the domain tool name (`ghidra_memory`) or the bare domain name (`memory`).
 The examples in this document use the default prefix.
+
+Each bridge lists 56 tools: two bridges publish 112 tools, and three bridges publish 168 tools. Three bridges exceed the 128-tool cap in strict MCP clients. Keep multi-server sessions within your client tool budget, or use `ghidra-mcp` for multiple binaries.
 
 `ghidra_help` accepts optional `domain` and `operation` arguments:
 - No arguments: Returns the list of domain names (`ghidra_bridge` through `ghidra_batch`).
@@ -244,7 +245,7 @@ For example, call `ghidra_memory_read` for the `memory.read` method:
 }
 ```
 
-For backward compatibility with existing integrations, `tools/call` also accepts unlisted grouped `<prefix>_<domain>` (and legacy `<prefix>.<domain>`) requests with `operation` and `params`, such as `"name": "ghidra_memory"` with `{"operation": "read", "params": {"selector": {"address": "ram:00100000"}, "length": 4}}`.
+For compatibility with earlier clients, `tools/call` also accepts unlisted `<prefix>_<domain>` and `<prefix>.<domain>` requests with `operation` and `params`. For example, `"name": "ghidra_memory"` accepts `{"operation": "read", "params": {"selector": {"address": "ram:00100000"}, "length": 4}}`.
 
 The server returns both text and structured content:
 

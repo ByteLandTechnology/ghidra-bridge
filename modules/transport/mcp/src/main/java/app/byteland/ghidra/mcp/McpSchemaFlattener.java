@@ -11,9 +11,9 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Builds provider-safe JSON Schemas for MCP {@code tools/list} declarations by flattening each
- * operation input schema to depth 4 and omitting {@code oneOf}, {@code anyOf}, {@code allOf},
- * {@code $ref}, {@code $defs}, and {@code additionalProperties} at every depth.
+ * Builds provider-safe JSON Schemas for MCP {@code tools/list} declarations. It flattens each
+ * operation input schema to depth 4 and omits {@code oneOf}, {@code anyOf}, {@code allOf}, {@code
+ * $ref}, {@code $defs}, and {@code additionalProperties}.
  */
 final class McpSchemaFlattener {
   static final int OPERATION_MAX_DEPTH = 4;

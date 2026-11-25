@@ -145,8 +145,8 @@ For example, call `ghidra_program_get` with top-level operation parameters:
 }
 ```
 
-For backward compatibility, `tools/call` also accepts unlisted grouped `<prefix>_<domain>` requests with `operation` and `params` (such as `ghidra_program` with `{"operation": "get", "params": {}}`).
-Note that each bridge publishes 56 tools; connecting three or more bridges at once exceeds 128 tools in strict MCP clients.
+For backward compatibility, `tools/call` also accepts unlisted grouped `<prefix>_<domain>` requests with `operation` and `params`, such as `ghidra_program` with `{"operation": "get", "params": {}}`.
+Each bridge publishes 56 tools. Three or more connected bridges exceed 128 tools in strict MCP clients.
 
 Requests that use `2026-07-28` must also send MCP metadata and headers.
 The server supports `initialize` clients with versions `2025-06-18` and `2025-11-25`.

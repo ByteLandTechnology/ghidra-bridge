@@ -71,7 +71,7 @@ This module implements the WebSocket transport:
 
 This module implements the Model Context Protocol:
 - `McpHttpServer` implements a Streamable HTTP server that complies with protocol `2026-07-28`.
-- `McpToolRegistry` maps 55 public methods across 14 domains to 55 underscored per-operation tools (`<prefix>_<domain>_<operation>`) plus `ghidra_help`, while keeping legacy `<prefix>_<domain>` lookup for `tools/call`.
+- `McpToolRegistry` maps 55 public methods across 14 domains to 55 underscored tools (`<prefix>_<domain>_<operation>`) and `ghidra_help`. It also keeps legacy `<prefix>_<domain>` lookup for `tools/call`.
   It does not publish `interface.get`.
 - It serves the contract resource at `ghidra-bridge://contracts/mcp-tools`.
 
