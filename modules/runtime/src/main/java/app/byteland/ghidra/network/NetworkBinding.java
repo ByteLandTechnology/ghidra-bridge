@@ -31,7 +31,7 @@ public final class NetworkBinding {
   }
 
   /**
-   * Requires a non-blank bearer token when an allowed origin host resolves outside loopback.
+   * Requires a non-blank bearer token when a configured origin host resolves outside loopback.
    *
    * @param host origin host name or IP address
    * @param token configured bearer token, or {@code null}
@@ -94,8 +94,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Normalizes a host string by trimming ASCII whitespace, removing surrounding IPv6 brackets when
-   * a colon is present, and converting letters to lowercase in {@link Locale#ROOT}.
+   * Trims ASCII whitespace from a host string, removes outer IPv6 brackets when a colon is present,
+   * and converts letters to lowercase in {@link Locale#ROOT}.
    *
    * @param host host name or IP literal
    * @return normalized lowercase host string
@@ -113,9 +113,9 @@ public final class NetworkBinding {
   }
 
   /**
-   * Reports whether {@code host} is {@code localhost} (case-insensitive) or parses syntactically as
-   * a literal IPv4 or IPv6 loopback address ({@code 127.0.0.0/8}, {@code ::1}, or IPv4-mapped
-   * loopback {@code ::ffff:127.0.0.0/104}) without DNS lookups.
+   * Reports whether {@code host} is {@code localhost} (case-insensitive) or a literal IPv4 or IPv6
+   * loopback address without DNS lookups. Accepts {@code 127.0.0.0/8}, {@code ::1}, and
+   * IPv4-mapped {@code ::ffff:127.0.0.0/104}.
    *
    * @param host candidate host string, or {@code null}
    * @return {@code true} if {@code host} is {@code localhost} or a literal loopback IP address
@@ -188,8 +188,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Parses a strict dotted-quad decimal IPv4 literal (rejecting leading zeros, short forms, and
-   * non-ASCII digits) into a 4-byte array.
+   * Parses a strict dotted-quad decimal IPv4 literal into a 4-byte array. Rejects initial zeros,
+   * short forms, and non-ASCII digits.
    *
    * @param literal candidate IPv4 literal string, or {@code null}
    * @return 4-byte IPv4 address array, or {@code null} if {@code literal} is invalid
@@ -232,8 +232,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Parses a strict unbracketed IPv6 literal (with {@code ::} zero-compression and trailing
-   * dotted-quad IPv4, rejecting {@code %} zone identifiers) into a 16-byte array.
+   * Parses a strict unbracketed IPv6 literal into a 16-byte array. Supports {@code ::}
+   * zero-compression and final dotted-quad IPv4, and rejects {@code %} zone identifiers.
    *
    * @param literal candidate IPv6 literal string, or {@code null}
    * @return 16-byte IPv6 address array, or {@code null} if {@code literal} is invalid
