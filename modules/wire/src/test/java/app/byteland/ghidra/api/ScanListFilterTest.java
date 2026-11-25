@@ -159,6 +159,13 @@ class ScanListFilterTest {
     assertEquals("0x1500", harness.lastSymbolQuery.get().address());
 
     harness.registry.dispatch(
+        "instruction.list",
+        Map.of(
+            "filter", Map.of("selector", Map.of("kind", "address", "address", "0x1000")),
+            "scan", Map.of("timeout_ms", 1700)));
+    assertEquals(new AddressScanOptions(null, null, 1700), harness.lastScan.get());
+
+    harness.registry.dispatch(
         "flow_override.list",
         Map.of(
             "filter", Map.of("selector", Map.of("kind", "address", "address", "0x1000")),
@@ -317,7 +324,7 @@ class ScanListFilterTest {
                     switch (method) {
                       case "listCodeUnits", "listDataUnits" -> (AddressScanOptions) args[0];
                       case "listInstructions" ->
-                          args.length == 5
+                          args.length == 4
                               ? (AddressScanOptions) args[1]
                               : (AddressScanOptions) args[0];
                       case "getFlowOverrides" -> (AddressScanOptions) args[2];
@@ -328,7 +335,7 @@ class ScanListFilterTest {
                     switch (method) {
                       case "listCodeUnits", "listDataUnits" -> (Integer) args[1];
                       case "listInstructions" ->
-                          args.length == 5 ? (Integer) args[2] : (Integer) args[1];
+                          args.length == 4 ? (Integer) args[2] : (Integer) args[1];
                       case "getFlowOverrides" -> (Integer) args[3];
                       default -> 100;
                     };
