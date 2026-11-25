@@ -133,7 +133,7 @@ class CppSymbolNamesTest {
       assertNotNull(cache.get(key));
     }
 
-    // Sweep 10x the ceiling of single-hit scan entries.
+    // Sweep 10x the upper limit of single-hit scan entries.
     for (int i = 0; i < ceiling * 10; i++) {
       String coldKey = "_ZN4scan5entry" + i + "Ev";
       cache.putIfAbsent(coldKey, DecodedSymbol.EMPTY, ceiling);
@@ -186,7 +186,7 @@ class CppSymbolNamesTest {
     String invalidMangled = "_Z_not_a_valid_cpp_name";
     String conflictMangled = "_ZN5outer5inner7blockedEv";
 
-    // Direction 1: CppSymbolNames.demangled warms cache -> SymbolDemangling.apply reuses it.
+    // Direction 1: `CppSymbolNames.demangled` warms cache and `SymbolDemangling.apply` reuses it.
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("share_read_to_write")) {
       setupSymbolsForSharing(holder, validMangled, invalidMangled, conflictMangled);
       AtomicInteger demangleProbes = new AtomicInteger();
@@ -203,12 +203,12 @@ class CppSymbolNamesTest {
           CppSymbolNames.demangled(spy, conflictMangled, base.add(0x20)));
       assertTrue(demangleProbes.get() > 0);
 
-      // Re-reading negative entry does not invoke the demangler again.
+      // A second read of the negative entry does not invoke the demangler again.
       demangleProbes.set(0);
       assertNull(CppSymbolNames.demangled(spy, invalidMangled, base.add(0x10)));
       assertEquals(0, demangleProbes.get());
 
-      // Running symbol.demangle reuses cached positive & negative entries with zero demangler calls.
+      // `symbol.demangle` reuses cached positive and negative entries with zero demangler calls.
       SymbolServiceImpl service = new SymbolServiceImpl(GhidraTestSupport.sessionFor(spy));
       DemangleResult result = service.demangleSymbols();
       assertEquals(0, demangleProbes.get());
@@ -221,7 +221,7 @@ class CppSymbolNamesTest {
           result.failures());
     }
 
-    // Direction 2: SymbolDemangling.apply warms cache -> post-demangle symbol.list & demangled hit cache.
+    // Direction 2: `SymbolDemangling.apply` warms cache and `symbol.list` hits the cache.
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("share_write_to_read")) {
       setupSymbolsForSharing(holder, validMangled, invalidMangled, null);
       AtomicInteger demangleProbes = new AtomicInteger();
@@ -394,7 +394,7 @@ class CppSymbolNamesTest {
       DemangleResult result = symService.demangleSymbols();
       assertEquals(2, result.renamed());
 
-      // Also verify explicit MangledContext stripping on a DemangledFunction namespace node.
+      // Also verify explicit MangledContext removal on a DemangledFunction namespace node.
       DemangledFunction rawFnNamespace =
           new DemangledFunction("_ZN5alpha3runEi", "alpha::run(int)", "run");
       rawFnNamespace.setMangledContext(

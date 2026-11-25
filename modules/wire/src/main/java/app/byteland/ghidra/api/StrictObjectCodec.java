@@ -12,10 +12,6 @@ final class StrictObjectCodec implements JsonCodec<Map<String, Object>> {
   private final Map<String, Object> publishedSchema;
   private final Map<String, Object> validationSchema;
 
-  StrictObjectCodec(Map<String, Object> schema) {
-    this(schema, schema);
-  }
-
   StrictObjectCodec(Map<String, Object> schema, Map<String, Object> validationSchema) {
     this.publishedSchema = Collections.unmodifiableMap(new LinkedHashMap<>(schema));
     this.validationSchema = Collections.unmodifiableMap(new LinkedHashMap<>(validationSchema));

@@ -2,6 +2,7 @@ package app.byteland.ghidra.api;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.TransactionRunner;
+import java.io.Serial;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -381,6 +382,7 @@ final class BatchMethod {
   private record PreparedBatch(List<PreparedItem> items, String transactionMode) {}
 
   private static final class BatchRollback extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
     private final String failedItemId;
 

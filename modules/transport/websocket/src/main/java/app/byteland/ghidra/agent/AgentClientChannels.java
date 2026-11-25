@@ -24,6 +24,14 @@ final class AgentClientChannels {
     void close(int code, String reason);
   }
 
+  static final class ChannelSendException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
+    ChannelSendException(String message, Throwable cause) {
+      super(message, cause);
+    }
+  }
+
   static OutboundMessageChannel outbound(WebSocket webSocket) {
     return outbound(webSocket, DEFAULT_OPERATION_TIMEOUT);
   }
@@ -47,7 +55,14 @@ final class AgentClientChannels {
 
     @Override
     public synchronized void sendText(String message) {
-      await(webSocket.sendText(message, true), "sendText", operationTimeout);
+      try {
+        await(webSocket.sendText(message, true), "sendText", operationTimeout);
+      } catch (ChannelSendException sendFailure) {
+        throw sendFailure;
+      } catch (RuntimeException failure) {
+        abortAfter(failure);
+        throw new ChannelSendException("WebSocket sendText failed", failure);
+      }
     }
 
     /**
@@ -99,7 +114,9 @@ final class AgentClientChannels {
         abortAfter(failure);
         throw failure;
       } catch (ExecutionException failed) {
-        throw mapFailure(operationName, failed.getCause());
+        RuntimeException failure = mapFailure(operationName, failed.getCause());
+        abortAfter(failure);
+        throw failure;
       }
     }
 
@@ -144,7 +161,13 @@ final class AgentClientChannels {
 
     @Override
     public void sendText(String message) {
-      connection.sendText(message);
+      try {
+        connection.sendText(message);
+      } catch (ChannelSendException sendFailure) {
+        throw sendFailure;
+      } catch (RuntimeException failure) {
+        throw new ChannelSendException("WebSocket sendText failed", failure);
+      }
     }
 
     @Override

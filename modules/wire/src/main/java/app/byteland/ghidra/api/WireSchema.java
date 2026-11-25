@@ -259,186 +259,27 @@ public final class WireSchema {
 
   public static void validate(Object value, Map<String, Object> schema, String target) {
     Map<String, Map<String, Object>> definitions = schemaDefinitions(schema);
-    if (matches(value, schema, definitions)) {
+    if (evaluate(value, schema, null, definitions) == null) {
       return;
     }
-    PointerCursor cursor = new PointerCursor(target);
-    ValidationFailure failure = findFailure(value, schema, cursor, definitions);
-    if (failure == null) {
-      throw new IllegalStateException("schema mismatch without failure diagnostic");
-    }
+    ValidationFailure failure = evaluate(value, schema, new PointerCursor(target), definitions);
     throw ApiException.badRequest(failure.code(), failure.message(), failure.target());
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static boolean matches(
-      Object value,
-      Map<String, Object> schema,
-      Map<String, Map<String, Object>> definitions) {
-    Object ref = schema.get(ApiVocabulary.REFERENCE);
-    if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
-      return matches(value, resolveReference(reference, definitions), definitions);
-    }
-    Object type = schema.get(ApiVocabulary.TYPE);
-    if (type != null && !matchesType(value, String.valueOf(type), schema, definitions)) {
-      return false;
-    }
-    if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
-      String discriminator = discriminatorProperty(schema);
-      if (discriminator != null) {
-        if (!(value instanceof Map<?, ?> object)
-            || !(object.get(discriminator) instanceof String tag)) {
-          return false;
-        }
-        Map<String, Object> matched = findTaggedBranch(alternatives, discriminator, tag);
-        return matched != null && matches(value, matched, definitions);
-      }
-      int matchCount = 0;
-      for (Object rawAlternative : alternatives) {
-        if (matches(value, (Map<String, Object>) rawAlternative, definitions)) {
-          matchCount++;
-        }
-      }
-      return matchCount == EXACT_UNION_MATCHES;
-    }
-    return true;
-  }
-
-  private static boolean matchesType(
-      Object value,
-      String type,
-      Map<String, Object> schema,
-      Map<String, Map<String, Object>> definitions) {
-    return switch (type) {
-      case ApiVocabulary.NULL -> value == null;
-      case ApiVocabulary.OBJECT -> matchesObject(value, schema, definitions);
-      case ApiVocabulary.ARRAY -> matchesArray(value, schema, definitions);
-      case ApiVocabulary.STRING -> matchesString(value, schema);
-      case ApiVocabulary.INTEGER -> matchesInteger(value, schema);
-      case ApiVocabulary.NUMBER -> matchesNumber(value, schema);
-      case ApiVocabulary.BOOLEAN -> value instanceof Boolean;
-      default -> throw new IllegalStateException("unsupported schema type: " + type);
-    };
-  }
-
-  @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static boolean matchesObject(
-      Object value,
-      Map<String, Object> schema,
-      Map<String, Map<String, Object>> definitions) {
-    if (!(value instanceof Map<?, ?> object)) {
-      return false;
-    }
-    int minimumProperties =
-        ((Number) schema.getOrDefault(ApiVocabulary.MIN_PROPERTIES, 0)).intValue();
-    int maximumProperties =
-        ((Number) schema.getOrDefault(ApiVocabulary.MAX_PROPERTIES, MAX_INT)).intValue();
-    if (object.size() < minimumProperties || object.size() > maximumProperties) {
-      return false;
-    }
-    for (Object required : (List<?>) schema.getOrDefault(ApiVocabulary.REQUIRED, List.of())) {
-      if (!object.containsKey(required)) {
-        return false;
-      }
-    }
-    Map<String, Object> properties =
-        (Map<String, Object>) schema.getOrDefault(ApiVocabulary.PROPERTIES, Map.of());
-    boolean additional = !Boolean.FALSE.equals(schema.get(ApiVocabulary.ADDITIONAL_PROPERTIES));
-    for (Map.Entry<?, ?> entry : object.entrySet()) {
-      if (!(entry.getKey() instanceof String key)) {
-        return false;
-      }
-      Object propertySchema = properties.get(key);
-      if (propertySchema == null) {
-        if (!additional) {
-          return false;
-        }
-      } else if (!matches(entry.getValue(), (Map<String, Object>) propertySchema, definitions)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static boolean matchesArray(
-      Object value,
-      Map<String, Object> schema,
-      Map<String, Map<String, Object>> definitions) {
-    if (!(value instanceof List<?> items)) {
-      return false;
-    }
-    int minimum = ((Number) schema.getOrDefault(ApiVocabulary.MIN_ITEMS, 0)).intValue();
-    int maximum = ((Number) schema.getOrDefault(ApiVocabulary.MAX_ITEMS, MAX_INT)).intValue();
-    if (items.size() < minimum || items.size() > maximum) {
-      return false;
-    }
-    Map<String, Object> itemSchema =
-        (Map<String, Object>) schema.getOrDefault(ApiVocabulary.ITEMS, Map.of());
-    for (int index = 0; index < items.size(); index++) {
-      if (!matches(items.get(index), itemSchema, definitions)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private static boolean matchesString(Object value, Map<String, Object> schema) {
-    if (!(value instanceof String text)) {
-      return false;
-    }
-    int minimum = ((Number) schema.getOrDefault(ApiVocabulary.MIN_LENGTH, 0)).intValue();
-    if (text.length() < minimum) {
-      return false;
-    }
-    if (schema.get(ApiVocabulary.CONST) instanceof String expected && !expected.equals(text)) {
-      return false;
-    }
-    return !(schema.get(ApiVocabulary.ENUM) instanceof List<?> values) || values.contains(text);
-  }
-
-  private static boolean matchesInteger(Object value, Map<String, Object> schema) {
-    if (!(value instanceof Byte
-        || value instanceof Short
-        || value instanceof Integer
-        || value instanceof Long)) {
-      return false;
-    }
-    long number = ((Number) value).longValue();
-    long minimum = ((Number) schema.getOrDefault(ApiVocabulary.MINIMUM, MIN_LONG)).longValue();
-    long maximum = ((Number) schema.getOrDefault(ApiVocabulary.MAXIMUM, MAX_LONG)).longValue();
-    return !(number < minimum || number > maximum);
-  }
-
-  private static boolean matchesNumber(Object value, Map<String, Object> schema) {
-    if (!(value instanceof Number number)) {
-      return false;
-    }
-    double actual = number.doubleValue();
-    if (!Double.isFinite(actual)) {
-      return false;
-    }
-    double minimum =
-        ((Number) schema.getOrDefault(ApiVocabulary.MINIMUM, MIN_DOUBLE)).doubleValue();
-    double maximum =
-        ((Number) schema.getOrDefault(ApiVocabulary.MAXIMUM, MAX_DOUBLE)).doubleValue();
-    return !(actual < minimum || actual > maximum);
-  }
-
-  @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static ValidationFailure findFailure(
+  private static ValidationFailure evaluate(
       Object value,
       Map<String, Object> schema,
       PointerCursor cursor,
       Map<String, Map<String, Object>> definitions) {
     Object ref = schema.get(ApiVocabulary.REFERENCE);
     if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
-      return findFailure(value, resolveReference(reference, definitions), cursor, definitions);
+      return evaluate(value, resolveReference(reference, definitions), cursor, definitions);
     }
     Object type = schema.get(ApiVocabulary.TYPE);
     if (type != null) {
       ValidationFailure typeFailure =
-          findTypeFailure(value, String.valueOf(type), schema, cursor, definitions);
+          evaluateType(value, String.valueOf(type), schema, cursor, definitions);
       if (typeFailure != null) {
         return typeFailure;
       }
@@ -446,38 +287,36 @@ public final class WireSchema {
     if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
       String discriminator = discriminatorProperty(schema);
       if (discriminator != null) {
-        return findDiscriminatedFailure(value, alternatives, discriminator, cursor, definitions);
+        return evaluateDiscriminated(value, alternatives, discriminator, cursor, definitions);
       }
       ValidationFailure firstFailure = null;
       int matchCount = 0;
       for (Object rawAlternative : alternatives) {
         Map<String, Object> alternative = (Map<String, Object>) rawAlternative;
-        if (firstFailure == null) {
-          ValidationFailure failure = findFailure(value, alternative, cursor, definitions);
-          if (failure == null) {
-            matchCount++;
-          } else {
-            firstFailure = failure;
-          }
-        } else if (matches(value, alternative, definitions)) {
+        PointerCursor branchCursor = firstFailure == null ? cursor : null;
+        ValidationFailure failure = evaluate(value, alternative, branchCursor, definitions);
+        if (failure == null) {
           matchCount++;
+        } else if (firstFailure == null) {
+          firstFailure = failure;
         }
       }
-      if (matchCount != EXACT_UNION_MATCHES) {
-        if (firstFailure != null) {
-          return new ValidationFailure(
-              "invalid_union", firstFailure.message(), firstFailure.target());
-        }
-        String target = cursor.format();
+      if (matchCount == EXACT_UNION_MATCHES) {
+        return null;
+      }
+      if (cursor == null) {
+        return ValidationFailure.PROBE_FAILURE;
+      }
+      if (firstFailure != null) {
         return new ValidationFailure(
-            "invalid_union", target + " must match exactly one schema", target);
+            "invalid_union", firstFailure.message(), firstFailure.target());
       }
-      return null;
+      return failure("invalid_union", cursor, " must match exactly one schema");
     }
     return null;
   }
 
-  private static ValidationFailure findTypeFailure(
+  private static ValidationFailure evaluateType(
       Object value,
       String type,
       Map<String, Object> schema,
@@ -486,11 +325,11 @@ public final class WireSchema {
     return switch (type) {
       case ApiVocabulary.NULL ->
           value == null ? null : failure(ApiVocabulary.INVALID_TYPE, cursor, " must be null");
-      case ApiVocabulary.OBJECT -> findObjectFailure(value, schema, cursor, definitions);
-      case ApiVocabulary.ARRAY -> findArrayFailure(value, schema, cursor, definitions);
-      case ApiVocabulary.STRING -> findStringFailure(value, schema, cursor);
-      case ApiVocabulary.INTEGER -> findIntegerFailure(value, schema, cursor);
-      case ApiVocabulary.NUMBER -> findNumberFailure(value, schema, cursor);
+      case ApiVocabulary.OBJECT -> evaluateObject(value, schema, cursor, definitions);
+      case ApiVocabulary.ARRAY -> evaluateArray(value, schema, cursor, definitions);
+      case ApiVocabulary.STRING -> evaluateString(value, schema, cursor);
+      case ApiVocabulary.INTEGER -> evaluateInteger(value, schema, cursor);
+      case ApiVocabulary.NUMBER -> evaluateNumber(value, schema, cursor);
       case ApiVocabulary.BOOLEAN ->
           value instanceof Boolean
               ? null
@@ -499,7 +338,7 @@ public final class WireSchema {
     };
   }
 
-  private static ValidationFailure findDiscriminatedFailure(
+  private static ValidationFailure evaluateDiscriminated(
       Object value,
       List<?> alternatives,
       String propertyName,
@@ -514,32 +353,37 @@ public final class WireSchema {
       }
     }
     if (!object.containsKey(propertyName)) {
-      String fieldTarget = cursor.format() + "/" + propertyName;
-      return new ValidationFailure(
-          ApiVocabulary.MISSING_FIELD, fieldTarget + " is required", fieldTarget);
+      return fieldFailure(ApiVocabulary.MISSING_FIELD, cursor, propertyName, " is required");
     }
     Object rawTag = object.get(propertyName);
     Map<String, Object> matchedBranch;
-    cursor.pushKey(propertyName);
+    if (cursor != null) {
+      cursor.pushKey(propertyName);
+    }
     try {
       if (!(rawTag instanceof String tag)) {
         return failure(ApiVocabulary.INVALID_TYPE, cursor, " must be a string");
       }
       matchedBranch = findTaggedBranch(alternatives, propertyName, tag);
       if (matchedBranch == null) {
+        if (cursor == null) {
+          return ValidationFailure.PROBE_FAILURE;
+        }
         return failure(
             "invalid_enum",
             cursor,
             " must be one of: " + String.join(", ", allowedTags(alternatives, propertyName)));
       }
     } finally {
-      cursor.pop();
+      if (cursor != null) {
+        cursor.pop();
+      }
     }
-    return findFailure(value, matchedBranch, cursor, definitions);
+    return evaluate(value, matchedBranch, cursor, definitions);
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static ValidationFailure findObjectFailure(
+  private static ValidationFailure evaluateObject(
       Object value,
       Map<String, Object> schema,
       PointerCursor cursor,
@@ -552,15 +396,17 @@ public final class WireSchema {
     int maximumProperties =
         ((Number) schema.getOrDefault(ApiVocabulary.MAX_PROPERTIES, MAX_INT)).intValue();
     if (object.size() < minimumProperties || object.size() > maximumProperties) {
-      return failure(
+      return rangeFailure(
           "invalid_count",
           cursor,
-          " must contain " + minimumProperties + ".." + maximumProperties + " fields");
+          " must contain ",
+          minimumProperties,
+          maximumProperties,
+          " fields");
     }
     for (Object required : (List<?>) schema.getOrDefault(ApiVocabulary.REQUIRED, List.of())) {
       if (!object.containsKey(required)) {
-        String fieldTarget = cursor.format() + "/" + required;
-        return new ValidationFailure("missing_field", fieldTarget + " is required", fieldTarget);
+        return fieldFailure(ApiVocabulary.MISSING_FIELD, cursor, required, " is required");
       }
     }
     Map<String, Object> properties =
@@ -573,20 +419,22 @@ public final class WireSchema {
       Object propertySchema = properties.get(key);
       if (propertySchema == null) {
         if (!additional) {
-          String fieldTarget = cursor.format() + "/" + key;
-          return new ValidationFailure(
-              "unknown_field", fieldTarget + " is not allowed", fieldTarget);
+          return fieldFailure("unknown_field", cursor, key, " is not allowed");
         }
       } else {
-        cursor.pushKey(key);
+        if (cursor != null) {
+          cursor.pushKey(key);
+        }
         try {
           ValidationFailure failure =
-              findFailure(entry.getValue(), (Map<String, Object>) propertySchema, cursor, definitions);
+              evaluate(entry.getValue(), (Map<String, Object>) propertySchema, cursor, definitions);
           if (failure != null) {
             return failure;
           }
         } finally {
-          cursor.pop();
+          if (cursor != null) {
+            cursor.pop();
+          }
         }
       }
     }
@@ -594,7 +442,7 @@ public final class WireSchema {
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static ValidationFailure findArrayFailure(
+  private static ValidationFailure evaluateArray(
       Object value,
       Map<String, Object> schema,
       PointerCursor cursor,
@@ -605,26 +453,29 @@ public final class WireSchema {
     int minimum = ((Number) schema.getOrDefault(ApiVocabulary.MIN_ITEMS, 0)).intValue();
     int maximum = ((Number) schema.getOrDefault(ApiVocabulary.MAX_ITEMS, MAX_INT)).intValue();
     if (items.size() < minimum || items.size() > maximum) {
-      return failure(
-          "invalid_count", cursor, " must contain " + minimum + ".." + maximum + " items");
+      return rangeFailure("invalid_count", cursor, " must contain ", minimum, maximum, " items");
     }
     Map<String, Object> itemSchema =
         (Map<String, Object>) schema.getOrDefault(ApiVocabulary.ITEMS, Map.of());
     for (int index = 0; index < items.size(); index++) {
-      cursor.pushIndex(index);
+      if (cursor != null) {
+        cursor.pushIndex(index);
+      }
       try {
-        ValidationFailure failure = findFailure(items.get(index), itemSchema, cursor, definitions);
+        ValidationFailure failure = evaluate(items.get(index), itemSchema, cursor, definitions);
         if (failure != null) {
           return failure;
         }
       } finally {
-        cursor.pop();
+        if (cursor != null) {
+          cursor.pop();
+        }
       }
     }
     return null;
   }
 
-  private static ValidationFailure findStringFailure(
+  private static ValidationFailure evaluateString(
       Object value, Map<String, Object> schema, PointerCursor cursor) {
     if (!(value instanceof String text)) {
       return failure(ApiVocabulary.INVALID_TYPE, cursor, " must be a string");
@@ -634,9 +485,14 @@ public final class WireSchema {
       return failure(ApiVocabulary.INVALID_VALUE, cursor, " must not be empty");
     }
     if (schema.get(ApiVocabulary.CONST) instanceof String expected && !expected.equals(text)) {
-      return failure("invalid_enum", cursor, " must equal " + expected);
+      return cursor == null
+          ? ValidationFailure.PROBE_FAILURE
+          : failure("invalid_enum", cursor, " must equal " + expected);
     }
     if (schema.get(ApiVocabulary.ENUM) instanceof List<?> values && !values.contains(text)) {
+      if (cursor == null) {
+        return ValidationFailure.PROBE_FAILURE;
+      }
       String allowed =
           values.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(", "));
       return failure("invalid_enum", cursor, " must be one of: " + allowed);
@@ -786,7 +642,7 @@ public final class WireSchema {
     return value.replace("~1", "/").replace("~0", "~");
   }
 
-  private static ValidationFailure findIntegerFailure(
+  private static ValidationFailure evaluateInteger(
       Object value, Map<String, Object> schema, PointerCursor cursor) {
     if (!(value instanceof Byte
         || value instanceof Short
@@ -798,13 +654,12 @@ public final class WireSchema {
     long minimum = ((Number) schema.getOrDefault(ApiVocabulary.MINIMUM, MIN_LONG)).longValue();
     long maximum = ((Number) schema.getOrDefault(ApiVocabulary.MAXIMUM, MAX_LONG)).longValue();
     if (number < minimum || number > maximum) {
-      return failure(
-          ApiVocabulary.INVALID_VALUE, cursor, " must be in " + minimum + ".." + maximum);
+      return rangeFailure(ApiVocabulary.INVALID_VALUE, cursor, " must be in ", minimum, maximum, "");
     }
     return null;
   }
 
-  private static ValidationFailure findNumberFailure(
+  private static ValidationFailure evaluateNumber(
       Object value, Map<String, Object> schema, PointerCursor cursor) {
     if (!(value instanceof Number number)) {
       return failure(ApiVocabulary.INVALID_TYPE, cursor, " must be a number");
@@ -818,8 +673,7 @@ public final class WireSchema {
     double maximum =
         ((Number) schema.getOrDefault(ApiVocabulary.MAXIMUM, MAX_DOUBLE)).doubleValue();
     if (actual < minimum || actual > maximum) {
-      return failure(
-          ApiVocabulary.INVALID_VALUE, cursor, " must be in " + minimum + ".." + maximum);
+      return numberRangeFailure(cursor, minimum, maximum);
     }
     return null;
   }
@@ -846,11 +700,50 @@ public final class WireSchema {
   }
 
   private static ValidationFailure failure(String code, PointerCursor cursor, String suffix) {
+    if (cursor == null) {
+      return ValidationFailure.PROBE_FAILURE;
+    }
     String target = cursor.format();
     return new ValidationFailure(code, target + suffix, target);
   }
 
-  private record ValidationFailure(String code, String message, String target) {}
+  private static ValidationFailure fieldFailure(
+      String code, PointerCursor cursor, Object field, String suffix) {
+    if (cursor == null) {
+      return ValidationFailure.PROBE_FAILURE;
+    }
+    String fieldTarget = cursor.format() + "/" + field;
+    return new ValidationFailure(code, fieldTarget + suffix, fieldTarget);
+  }
+
+  private static ValidationFailure rangeFailure(
+      String code,
+      PointerCursor cursor,
+      String prefix,
+      long minimum,
+      long maximum,
+      String suffix) {
+    if (cursor == null) {
+      return ValidationFailure.PROBE_FAILURE;
+    }
+    String target = cursor.format();
+    return new ValidationFailure(
+        code, target + prefix + minimum + ".." + maximum + suffix, target);
+  }
+
+  private static ValidationFailure numberRangeFailure(
+      PointerCursor cursor, double minimum, double maximum) {
+    if (cursor == null) {
+      return ValidationFailure.PROBE_FAILURE;
+    }
+    String target = cursor.format();
+    return new ValidationFailure(
+        ApiVocabulary.INVALID_VALUE, target + " must be in " + minimum + ".." + maximum, target);
+  }
+
+  private record ValidationFailure(String code, String message, String target) {
+    private static final ValidationFailure PROBE_FAILURE = new ValidationFailure("", "", "");
+  }
 
   private static final class PointerCursor {
     private final String root;
