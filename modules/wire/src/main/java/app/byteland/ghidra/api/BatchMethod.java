@@ -2,8 +2,7 @@ package app.byteland.ghidra.api;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.TransactionRunner;
-import java.math.BigDecimal;
-import java.math.BigInteger;
+import java.io.Serial;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -95,7 +94,7 @@ final class BatchMethod {
   }
 
   private JsonCodec<Map<String, Object>> batchCodec(Map<String, Object> schema) {
-    Map<String, Object> publishedSchema = immutableSchema(schema);
+    Map<String, Object> publishedSchema = WireSchema.snapshot(schema);
     return new JsonCodec<>() {
       @Override
       public Map<String, Object> decode(Object value, String target) {
@@ -116,7 +115,7 @@ final class BatchMethod {
 
       @Override
       public Map<String, Object> schema() {
-        return immutableSchema(publishedSchema);
+        return publishedSchema;
       }
     };
   }
@@ -132,46 +131,6 @@ final class BatchMethod {
     Map<String, Object> copy = new LinkedHashMap<>(schema);
     copy.remove("$defs");
     return copy;
-  }
-
-  private static Map<String, Object> immutableSchema(Map<?, ?> source) {
-    Objects.requireNonNull(source, "responseSchema");
-    Map<String, Object> copy = new LinkedHashMap<>();
-    for (Map.Entry<?, ?> entry : source.entrySet()) {
-      if (!(entry.getKey() instanceof String key)) {
-        throw new IllegalArgumentException("response schema keys must be strings");
-      }
-      copy.put(key, immutableSchemaValue(entry.getValue()));
-    }
-    return Collections.unmodifiableMap(copy);
-  }
-
-  private static Object immutableSchemaValue(Object value) {
-    if (value instanceof Map<?, ?> map) {
-      return immutableSchema(map);
-    }
-    if (value instanceof List<?> list) {
-      List<Object> copy = new ArrayList<>(list.size());
-      for (Object item : list) {
-        copy.add(immutableSchemaValue(item));
-      }
-      return Collections.unmodifiableList(copy);
-    }
-    if (value == null
-        || value instanceof String
-        || value instanceof Boolean
-        || value instanceof Byte
-        || value instanceof Short
-        || value instanceof Integer
-        || value instanceof Long
-        || value instanceof Float
-        || value instanceof Double
-        || value instanceof BigInteger
-        || value instanceof BigDecimal) {
-      return value;
-    }
-    throw new IllegalArgumentException(
-        "response schema contains an unsupported value: " + value.getClass().getName());
   }
 
   private MethodEffects batchEffects(Set<String> methodNames) {
@@ -413,6 +372,7 @@ final class BatchMethod {
   private record PreparedBatch(List<PreparedItem> items, String transactionMode) {}
 
   private static final class BatchRollback extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
     private final String failedItemId;
 
@@ -432,7 +392,7 @@ final class BatchMethod {
       Map<String, Object> responseSchema,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
     Registration {
-      responseSchema = immutableSchema(responseSchema);
+      responseSchema = WireSchema.snapshot(responseSchema);
     }
   }
 
