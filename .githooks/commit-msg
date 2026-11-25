@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Validate the commit message file with verify-commit-messages.sh.
+set -euo pipefail
+
+repository_root="$(git rev-parse --show-toplevel)"
+bash "$repository_root/.github/scripts/verify-commit-messages.sh" --commit-msg-file "$1"

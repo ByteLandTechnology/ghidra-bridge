@@ -82,16 +82,20 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
+Run `./gradlew --no-daemon installGitHooks` once (also run by local `check` and `verify` tasks) to configure `.githooks/pre-commit` and `.githooks/commit-msg`. `.githooks/pre-commit` runs `verify-repository-hygiene.sh` and blocks `import ghidra.` lines in staged `.java` files outside `modules/adapter` and `modules/launcher`. `.githooks/commit-msg` validates commit messages with `verify-commit-messages.sh`.
+
 Before you submit a change, run the verification suite that matches CI:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
+bash .github/scripts/verify-commit-messages.sh
 ./gradlew --no-daemon clean verify
 ```
 
 On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
 
 The verification tasks check:
+- **Git Hooks**: `installGitHooks` sets local `core.hooksPath` to `.githooks` when `.git` exists and `CI` is unset.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
@@ -107,7 +111,7 @@ Review the proposed version and notes in the pull request.
 Merge the pull request into `main` to start the release.
 After verification, release-please creates a `v<version>` tag and a GitHub release.
 
-release-please reads Conventional Commit messages to select the version:
+release-please reads Conventional Commit messages to select the version (see [the commit message rules](../AGENTS.md#commit-messages)):
 
 - `fix`: Increases the patch version, such as `1.2.1`.
 - `feat`: Increases the minor version, such as `1.3.0`.

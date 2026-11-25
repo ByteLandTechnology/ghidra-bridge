@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Run repository hygiene and staged Ghidra API boundary checks before commit.
+set -euo pipefail
+
+repository_root="$(git rev-parse --show-toplevel)"
+cd "$repository_root"
+
+bash .github/scripts/verify-repository-hygiene.sh
+
+while IFS= read -r -d '' staged_file; do
+  [[ -n "$staged_file" ]] || continue
+  blob_size="$(git cat-file -s ":$staged_file")"
+  if [[ "$blob_size" == "0" ]]; then
+    printf 'pre-commit check failed: staged zero-byte file: %s\n' "$staged_file" >&2
+    exit 1
+  fi
+
+  if [[ "$staged_file" == *.java && "$staged_file" != modules/adapter/* && "$staged_file" != modules/launcher/* ]]; then
+    illegal_imports="$(git show ":$staged_file" | grep -nE '^[[:space:]]*import[[:space:]]+(static[[:space:]]+)?ghidra\.' || true)"
+    if [[ -n "$illegal_imports" ]]; then
+      printf 'pre-commit check failed: Ghidra API import outside modules/adapter and modules/launcher: %s\n' "$staged_file" >&2
+      printf '%s\n' "$illegal_imports" >&2
+      exit 1
+    fi
+  fi
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)

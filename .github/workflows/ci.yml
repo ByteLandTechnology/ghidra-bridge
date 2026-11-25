@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Java and Ghidra
         uses: ./.github/actions/setup-ghidra
@@ -38,6 +40,13 @@ jobs:
 
       - name: Verify repository hygiene
         run: bash .github/scripts/verify-repository-hygiene.sh
+
+      - name: Verify commit messages
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/verify-commit-messages.sh
 
       - name: Run clean repository verification
         run: ./gradlew --no-daemon clean verify

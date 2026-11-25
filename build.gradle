@@ -222,7 +222,27 @@ tasks.register('verifyArchitecture') {
     }
 }
 
+final boolean installLocalGitHooks = file('.git').exists() &&
+    providers.environmentVariable('CI').orElse('').get().trim().isEmpty()
+
+tasks.register('installGitHooks', Exec) {
+    group = 'build setup'
+    description = 'Sets the local Git hooks path to .githooks.'
+    onlyIf { installLocalGitHooks }
+    workingDir rootDir
+    commandLine 'git', 'config', '--local', 'core.hooksPath', '.githooks'
+}
+
+if (installLocalGitHooks) {
+    tasks.named('check') {
+        dependsOn 'installGitHooks'
+    }
+}
+
 tasks.register('verify') {
     group = 'verification'
     dependsOn 'check', 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    if (installLocalGitHooks) {
+        dependsOn 'installGitHooks'
+    }
 }

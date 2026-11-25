@@ -20,15 +20,18 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 ## Submit a change
 
+Run `./gradlew --no-daemon installGitHooks` once (also run by local `check` and `verify` tasks) to configure `.githooks/pre-commit` and `.githooks/commit-msg`.
+
 Run the local checks that match CI verification:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
+bash .github/scripts/verify-commit-messages.sh
 ./gradlew --no-daemon clean verify
 ```
 
 `verify` runs JUnit tests across all Java modules (`check`), contract drift checks, script compilation, distribution checks, and architecture boundary checks. On Linux x86-64, also run `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify` when you change function or runtime behavior. State the behavior change and its effect on users in the pull request.
 
-Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
+Use a Conventional Commit message for each commit and pull request title. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the commit message rules](AGENTS.md#commit-messages) and [the development guide](docs/development.md#releases).
 
 Report a security problem as described in [SECURITY.md](SECURITY.md). Do not put a security report in a public issue.
