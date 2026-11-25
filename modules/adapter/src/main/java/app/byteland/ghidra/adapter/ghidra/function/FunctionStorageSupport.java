@@ -28,36 +28,16 @@ final class FunctionStorageSupport {
 
   static ParsedStorage parseExplicit(
       Program program, VariableStorageReference input, String field) {
-    if (input == null) {
-      return null;
-    }
-    try {
-      VariableStorage storage =
-          switch (input) {
-            case VariableStorageReference.Serialization serialization ->
-                VariableStorage.deserialize(program, serialization.serialization());
-            case VariableStorageReference.Register namedRegister -> {
-              Register register = program.getLanguage().getRegister(namedRegister.register());
-              if (register == null) {
-                throw new IllegalArgumentException(
-                    field + ".register names an unknown register: " + namedRegister.register());
-              }
-              if (register.isProcessorContext()) {
-                throw new IllegalArgumentException(
-                    field + ".register must not identify a processor context register");
-              }
-              yield new VariableStorage(program, register);
-            }
-          };
-      requireRealStorage(storage, field, false);
-      return new ParsedStorage(storage, storage.getSerializationString());
-    } catch (InvalidInputException ex) {
-      throw new IllegalArgumentException(field + " is invalid: " + failureDetail(ex), ex);
-    }
+    return parseStorage(program, input, field, false);
   }
 
   static ParsedStorage parseLocalSelector(
       Program program, VariableStorageReference input, String field) {
+    return parseStorage(program, input, field, true);
+  }
+
+  private static ParsedStorage parseStorage(
+      Program program, VariableStorageReference input, String field, boolean allowHashStorage) {
     if (input == null) {
       return null;
     }
@@ -79,7 +59,7 @@ final class FunctionStorageSupport {
               yield new VariableStorage(program, register);
             }
           };
-      requireRealStorage(storage, field, true);
+      requireRealStorage(storage, field, allowHashStorage);
       return new ParsedStorage(storage, storage.getSerializationString());
     } catch (InvalidInputException ex) {
       throw new IllegalArgumentException(field + " is invalid: " + failureDetail(ex), ex);

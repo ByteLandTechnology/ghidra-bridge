@@ -76,6 +76,7 @@ record GuiDocument(String code, List<Line> lines) {
     Map<Address, String> canonicalAddresses = new HashMap<>();
     Map<Address, String> codeUnitAddresses = new HashMap<>();
     Map<Function, SymbolResource> functionSymbols = new HashMap<>();
+    Map<HighSymbol, SymbolResource> highSymbols = new HashMap<>();
     String[] namespaceHolder = new String[1];
     List<Line> lines = new ArrayList<>(nativeLines.size());
     StringBuilder code = new StringBuilder();
@@ -142,6 +143,7 @@ record GuiDocument(String code, List<Line> lines) {
                 entryPoint,
                 canonicalAddresses,
                 functionSymbols,
+                highSymbols,
                 namespaceHolder,
                 token,
                 kind,
@@ -174,6 +176,7 @@ record GuiDocument(String code, List<Line> lines) {
       Address entryPoint,
       Map<Address, String> canonicalAddresses,
       Map<Function, SymbolResource> functionSymbols,
+      Map<HighSymbol, SymbolResource> highSymbols,
       String[] namespaceHolder,
       ClangToken token,
       Token.Kind kind,
@@ -192,6 +195,17 @@ record GuiDocument(String code, List<Line> lines) {
     if (highSymbol == null || highSymbol.isGlobal()) {
       return null;
     }
+    return highSymbols.computeIfAbsent(
+        highSymbol,
+        sym -> describeHighSymbol(function, entryPoint, canonicalAddresses, namespaceHolder, sym));
+  }
+
+  private static SymbolResource describeHighSymbol(
+      Function function,
+      Address entryPoint,
+      Map<Address, String> canonicalAddresses,
+      String[] namespaceHolder,
+      HighSymbol highSymbol) {
     String entry = canonical(entryPoint, canonicalAddresses);
     String namespace = namespaceHolder[0];
     if (namespace == null) {

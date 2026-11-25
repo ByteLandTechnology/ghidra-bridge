@@ -327,11 +327,10 @@ final class FunctionMethods implements ApiMethodProvider {
   }
 
   private FunctionResource.ParameterResource functionParameter(String entry, int ordinal) {
-    app.byteland.ghidra.service.function.FunctionResource function =
+    FunctionResource function =
         registry.services().functionService().getFunction(entry, Set.of(ApiVocabulary.PARAMETERS));
     if (function.parameters() != null) {
-      for (app.byteland.ghidra.service.function.FunctionResource.ParameterResource parameter :
-          function.parameters()) {
+      for (FunctionResource.ParameterResource parameter : function.parameters()) {
         if (parameter.ordinal() == ordinal) return parameter;
       }
     }
