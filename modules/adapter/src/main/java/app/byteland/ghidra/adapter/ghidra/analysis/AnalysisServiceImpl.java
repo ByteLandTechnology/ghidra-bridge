@@ -87,6 +87,7 @@ public final class AnalysisServiceImpl implements AnalysisService {
     manager.cancelQueuedTasks();
     ExecutorShutdown.shutdownAndAwait(executor);
     AnalysisManagerWait.awaitIdle(manager);
+    context.close();
   }
 
   private AnalysisResource globalStatus(AnalysisResource.Status state) {

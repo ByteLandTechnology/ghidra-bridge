@@ -27,7 +27,6 @@ import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.app.script.GhidraScript;
-import ghidra.app.util.demangler.DemanglerUtil;
 import java.util.Objects;
 
 /**
@@ -43,15 +42,20 @@ public final class GhidraServiceFactory {
    * @return bridge services instance
    */
   public static BridgeServices create(GhidraScript script) {
-    return create(script, CppSymbolIndex.Config.defaults(), DemanglerUtil::demangle);
+    Objects.requireNonNull(script, "script");
+    return create(new GhidraSession(script));
   }
 
   static BridgeServices create(
-      GhidraScript script,
-      CppSymbolIndex.Config indexConfig,
-      CppSymbolIndex.Demangler demangler) {
+      GhidraScript script, CppSymbolIndexConfig indexConfig, CppDemangler demangler) {
     Objects.requireNonNull(script, "script");
-    GhidraSession context = new GhidraSession(script, indexConfig, demangler);
+    return create(new GhidraSession(script, indexConfig, demangler));
+  }
+
+  static BridgeServices create(GhidraSession context) {
+    Objects.requireNonNull(context, "context");
+    DecompilationService decompilationService = null;
+    AnalysisService analysisService = null;
     boolean initialized = false;
     try {
       ProgramService programService = new ProgramServiceImpl(context);
@@ -59,8 +63,8 @@ public final class GhidraServiceFactory {
       GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
       MemoryService memoryService = new MemoryServiceImpl(context);
       ListingService listingService = new ListingServiceImpl(context);
-      DecompilationService decompilationService = new DecompilationServiceImpl(context);
-      AnalysisService analysisService = new AnalysisServiceImpl(context);
+      decompilationService = new DecompilationServiceImpl(context);
+      analysisService = new AnalysisServiceImpl(context);
       SymbolService symbolService = new SymbolServiceImpl(context);
       ReferenceService referenceService = new ReferenceServiceImpl(context);
       CommentService commentService = new CommentServiceImpl(context);
@@ -89,13 +93,22 @@ public final class GhidraServiceFactory {
                   return context.withTransaction(operation::execute);
                 }
               },
-              programName,
-              context);
+              programName);
       initialized = true;
       return services;
     } finally {
       if (!initialized) {
-        context.close();
+        try {
+          if (decompilationService != null) {
+            decompilationService.close();
+          }
+        } finally {
+          if (analysisService != null) {
+            analysisService.close();
+          } else {
+            context.close();
+          }
+        }
       }
     }
   }

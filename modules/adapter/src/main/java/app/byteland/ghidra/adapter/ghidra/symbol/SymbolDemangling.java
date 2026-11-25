@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.symbol;
 
 import app.byteland.ghidra.adapter.ghidra.CppSymbolIndex;
 import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
+import app.byteland.ghidra.adapter.ghidra.CppSymbolNames.NameCandidate;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.symbol.SymbolService.DemangleResult;
 import ghidra.app.util.demangler.DemangledVariable;
@@ -46,10 +47,10 @@ final class SymbolDemangling {
             String name = symbol.getName();
             boolean applied = false;
             String error = "No supported C++ name";
-            CppSymbolIndex.Entry entry = cppSymbols.lookup(program, name, symbol.getAddress());
-            for (CppSymbolIndex.Candidate decoded : entry.candidates()) {
+            for (NameCandidate decoded :
+                cppSymbols.lookup(program, name, symbol.getAddress()).candidates()) {
               try {
-                applied = new NameOnly(decoded).applyName(program, symbol.getAddress());
+                applied = new NameOnly(name, decoded).applyName(program, symbol.getAddress());
               } catch (InvalidInputException failure) {
                 error = failure.getMessage();
               }
@@ -68,7 +69,7 @@ final class SymbolDemangling {
 
   private static void warmMissingOutsideLock(GhidraSession context, Program program) {
     TaskMonitor monitor = context.script().getMonitor();
-    List<WarmTarget> unindexed = new ArrayList<>();
+    List<WarmTarget> targets = new ArrayList<>();
     var symbols = program.getSymbolTable().getDefinedSymbols();
     while (symbols.hasNext()) {
       if (monitor != null && monitor.isCancelled()) {
@@ -76,11 +77,11 @@ final class SymbolDemangling {
       }
       Symbol symbol = symbols.next();
       if (symbol.isPrimary() && CppSymbolNames.isMangled(symbol.getName())) {
-        unindexed.add(new WarmTarget(symbol.getName(), symbol.getAddress()));
+        targets.add(new WarmTarget(symbol.getName(), symbol.getAddress()));
       }
     }
     CppSymbolIndex cppSymbols = context.cppSymbols();
-    for (WarmTarget target : unindexed) {
+    for (WarmTarget target : targets) {
       if (monitor != null) {
         try {
           monitor.checkCancelled();
@@ -101,8 +102,8 @@ final class SymbolDemangling {
    * the namespaces and keeps the mangled name as a secondary label.
    */
   private static final class NameOnly extends DemangledVariable {
-    NameOnly(CppSymbolIndex.Candidate decoded) {
-      super(decoded.mangled(), decoded.originalDemangled(), decoded.name());
+    NameOnly(String mangled, NameCandidate decoded) {
+      super(mangled, decoded.originalDemangled(), decoded.name());
       setNamespace(decoded.namespace());
     }
 

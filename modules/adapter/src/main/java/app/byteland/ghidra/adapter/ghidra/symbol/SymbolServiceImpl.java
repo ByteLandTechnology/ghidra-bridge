@@ -19,7 +19,7 @@ public final class SymbolServiceImpl implements SymbolService {
 
   @Override
   public SymbolResource getSymbol(long symbolId) {
-    return SymbolDescriptions.describe(context, SymbolQueries.getSymbolById(context, symbolId));
+    return SymbolDescriptions.describe(SymbolQueries.getSymbolById(context, symbolId));
   }
 
 

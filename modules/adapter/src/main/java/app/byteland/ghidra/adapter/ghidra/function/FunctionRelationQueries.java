@@ -2,22 +2,15 @@ package app.byteland.ghidra.adapter.ghidra.function;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
-import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.program.model.listing.Function;
 import ghidra.util.task.TaskMonitor;
 
 final class FunctionRelationQueries {
-  private final GhidraSession context;
   private final FunctionResolver resolver;
 
   FunctionRelationQueries(FunctionResolver resolver) {
-    this(null, resolver);
-  }
-
-  FunctionRelationQueries(GhidraSession context, FunctionResolver resolver) {
-    this.context = context;
     this.resolver = resolver;
   }
 
@@ -53,7 +46,7 @@ final class FunctionRelationQueries {
               direction,
               relatedFunction.getParentNamespace().getName(true),
               CppSymbolNames.demangled(
-                  context, relatedFunction.getProgram(), name, relatedFunction.getEntryPoint()));
+                  relatedFunction.getProgram(), name, relatedFunction.getEntryPoint()));
         });
   }
 }

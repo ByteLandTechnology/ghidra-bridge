@@ -34,7 +34,7 @@ public final class FunctionServiceImpl implements FunctionService {
     this.context = context;
     this.lookupQueries = new FunctionLookupQueries(context);
     this.listQueries = new FunctionListQueries(context, lookupQueries);
-    this.relationQueries = new FunctionRelationQueries(context, lookupQueries);
+    this.relationQueries = new FunctionRelationQueries(lookupQueries);
     this.dataTypeResolver =
         input ->
             GhidraDataTypeReferences.resolve(context.currentProgram().getDataTypeManager(), input);
@@ -48,7 +48,7 @@ public final class FunctionServiceImpl implements FunctionService {
   @Override
   public FunctionResource getFunction(String rawAddress, Set<String> includes) {
     return FunctionDescriptions.describe(
-        context, lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes));
+        lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes));
   }
 
   @Override
@@ -95,7 +95,7 @@ public final class FunctionServiceImpl implements FunctionService {
     if (name != null && !name.equals(function.getName())) {
       throw new IllegalArgumentException("function name was not applied: " + name);
     }
-    return FunctionDescriptions.describe(context, function, Set.of());
+    return FunctionDescriptions.describe(function, Set.of());
   }
 
   @Override
@@ -106,11 +106,6 @@ public final class FunctionServiceImpl implements FunctionService {
     if (context.script().getFunctionAt(entry) != null) {
       throw new IllegalArgumentException("function was not deleted at: " + rawAddress);
     }
-  }
-
-  static FunctionResource toFunctionSummary(
-      ghidra.program.model.listing.Function function, Set<String> includes) {
-    return FunctionDescriptions.describe(function, FunctionIncludes.normalize(includes));
   }
 
   @Override

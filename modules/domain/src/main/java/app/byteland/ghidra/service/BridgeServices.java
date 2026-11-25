@@ -17,7 +17,7 @@ import java.util.Objects;
 /**
  * Holds domain services for an active Ghidra program session.
  *
- * <p>Close this container to release session, analysis, and decompilation resources.
+ * <p>Close this container to release analysis and decompilation resources.
  */
 public record BridgeServices(
     ProgramService programService,
@@ -33,50 +33,8 @@ public record BridgeServices(
     SymbolService symbolService,
     DataTypeService dataTypeService,
     TransactionRunner transactionRunner,
-    String programName,
-    SessionCloseable sessionResources)
+    String programName)
     implements AutoCloseable {
-
-  @FunctionalInterface
-  public interface SessionCloseable extends AutoCloseable {
-    @Override
-    void close();
-  }
-
-  private static final SessionCloseable NOOP_CLOSEABLE = () -> {};
-
-  public BridgeServices(
-      ProgramService programService,
-      AddressService addressService,
-      CommentService commentService,
-      ReferenceService referenceService,
-      MemoryService memoryService,
-      ListingService listingService,
-      FunctionService functionService,
-      GlobalVariableService globalVariableService,
-      AnalysisService analysisService,
-      DecompilationService decompilationService,
-      SymbolService symbolService,
-      DataTypeService dataTypeService,
-      TransactionRunner transactionRunner,
-      String programName) {
-    this(
-        programService,
-        addressService,
-        commentService,
-        referenceService,
-        memoryService,
-        listingService,
-        functionService,
-        globalVariableService,
-        analysisService,
-        decompilationService,
-        symbolService,
-        dataTypeService,
-        transactionRunner,
-        programName,
-        NOOP_CLOSEABLE);
-  }
 
   public BridgeServices {
     Objects.requireNonNull(programService, "programService");
@@ -93,15 +51,13 @@ public record BridgeServices(
     Objects.requireNonNull(dataTypeService, "dataTypeService");
     Objects.requireNonNull(transactionRunner, "transactionRunner");
     Objects.requireNonNull(programName, "programName");
-    Objects.requireNonNull(sessionResources, "sessionResources");
   }
 
   @Override
   @SuppressWarnings("try")
   public void close() {
     try (decompilationService;
-        analysisService;
-        sessionResources) {
+        analysisService) {
     }
   }
 }

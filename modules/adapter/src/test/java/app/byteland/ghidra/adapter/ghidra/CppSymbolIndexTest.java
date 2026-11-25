@@ -24,11 +24,14 @@ import ghidra.app.script.GhidraScript;
 import ghidra.app.util.demangler.DemanglerUtil;
 import ghidra.program.database.ProgramDB;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSpace;
+import ghidra.program.model.address.DefaultAddressFactory;
 import ghidra.program.model.address.GenericAddressSpace;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionManager;
+import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.ExternalLocation;
 import ghidra.program.model.symbol.Namespace;
 import ghidra.program.model.symbol.RefType;
@@ -36,6 +39,8 @@ import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.symbol.SymbolTable;
 import ghidra.util.task.TaskMonitor;
 import java.io.ByteArrayInputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -77,10 +82,8 @@ class CppSymbolIndexTest {
             FunctionManager fm = program.getFunctionManager();
             SymbolTable st = program.getSymbolTable();
 
-            Function caller =
-                createRetFunction(fm, "_ZN4core6Engine3runEi", base);
-            Function callee =
-                createRetFunction(fm, "_ZN4core6Logger4infoEPKc", base.add(0x20));
+            Function caller = createRetFunction(fm, "_ZN4core6Engine3runEi", base);
+            Function callee = createRetFunction(fm, "_ZN4core6Logger4infoEPKc", base.add(0x20));
             createRetFunction(fm, "__ZN4core6Helper4initEv", base.add(0x40));
             createRetFunction(fm, "plain_c_helper", base.add(0x60));
             st.createLabel(base.add(0x80), "_Z999not_valid_itanium$$$", SourceType.IMPORTED);
@@ -104,12 +107,25 @@ class CppSymbolIndexTest {
             extSymbolId.set(ext.getSymbol().getID());
           });
 
+      String expectedCallerSignature =
+          CppSymbolNames.decodeWith(
+                  DemanglerUtil::demangle,
+                  holder.program(),
+                  "_ZN4core6Engine3runEi",
+                  callerEntry.get())
+              .signature();
+      String expectedHelperSignature =
+          CppSymbolNames.decodeWith(
+                  DemanglerUtil::demangle, holder.program(), "__ZN4core6Helper4initEv", null)
+              .signature();
+      assertNotNull(expectedCallerSignature);
+
       long initialModNumber = holder.program().getModificationNumber();
       AtomicInteger rawDemangleCalls = new AtomicInteger();
       AtomicBoolean heldLockDuringDemangle = new AtomicBoolean(false);
       AtomicReference<GhidraSession> sessionRef = new AtomicReference<>();
 
-      CppSymbolIndex.Demangler countingDemangler =
+      CppDemangler countingDemangler =
           (program, name, address) -> {
             GhidraSession current = sessionRef.get();
             if (current != null && current.holdsExecutionLock()) {
@@ -120,12 +136,10 @@ class CppSymbolIndexTest {
           };
 
       GhidraScript script = GhidraTestSupport.scriptFor(holder.program());
-      try (BridgeServices services =
-          GhidraServiceFactory.create(
-              script, CppSymbolIndex.Config.defaults(), countingDemangler)) {
-        GhidraSession session = (GhidraSession) services.sessionResources();
-        sessionRef.set(session);
-
+      GhidraSession session =
+          new GhidraSession(script, CppSymbolIndexConfig.defaults(), countingDemangler);
+      sessionRef.set(session);
+      try (BridgeServices services = GhidraServiceFactory.create(session)) {
         assertTrue(session.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
         assertFalse(heldLockDuringDemangle.get());
         assertEquals(initialModNumber, holder.program().getModificationNumber());
@@ -155,14 +169,13 @@ class CppSymbolIndexTest {
           for (FunctionResource fn : functions.items()) {
             fnDemangled.put(fn.name(), fn.demangledName());
           }
+          assertEquals(expectedCallerSignature, fnDemangled.get("_ZN4core6Engine3runEi"));
           assertEquals(
-              CppSymbolNames.demangled(holder.program(), "_ZN4core6Engine3runEi", callerEntry.get()),
-              fnDemangled.get("_ZN4core6Engine3runEi"));
-          assertNotNull(fnDemangled.get("_ZN4core6Engine3runEi"));
+              expectedCallerSignature,
+              CppSymbolNames.demangled(
+                  holder.program(), "_ZN4core6Engine3runEi", callerEntry.get()));
           assertNotNull(fnDemangled.get("_ZN4core6Logger4infoEPKc"));
-          assertEquals(
-              CppSymbolNames.demangled(holder.program(), "__ZN4core6Helper4initEv", null),
-              fnDemangled.get("__ZN4core6Helper4initEv"));
+          assertEquals(expectedHelperSignature, fnDemangled.get("__ZN4core6Helper4initEv"));
           assertNull(fnDemangled.get("plain_c_helper"));
 
           Page<SymbolResource> symbols =
@@ -263,14 +276,16 @@ class CppSymbolIndexTest {
           });
 
       String expectedLateDemangled =
-          CppSymbolNames.demangled(holder.program(), lateName, lateAddress[0]);
+          CppSymbolNames.decodeWith(
+                  DemanglerUtil::demangle, holder.program(), lateName, lateAddress[0])
+              .signature();
       assertNotNull(expectedLateDemangled);
 
       CountDownLatch enteredBlockedSymbol = new CountDownLatch(1);
       CountDownLatch releaseBlockedSymbol = new CountDownLatch(1);
       ConcurrentHashMap<String, AtomicInteger> perSymbolCalls = new ConcurrentHashMap<>();
 
-      CppSymbolIndex.Demangler controlledDemangler =
+      CppDemangler controlledDemangler =
           (program, name, address) -> {
             perSymbolCalls.computeIfAbsent(name, ignored -> new AtomicInteger()).incrementAndGet();
             if (blockedName.equals(name)) {
@@ -285,23 +300,22 @@ class CppSymbolIndexTest {
           };
 
       GhidraScript script = GhidraTestSupport.scriptFor(holder.program());
-      try (BridgeServices services =
-          GhidraServiceFactory.create(
-              script, new CppSymbolIndex.Config(1024, 8L * 1024 * 1024, 4), controlledDemangler)) {
-        GhidraSession session = (GhidraSession) services.sessionResources();
-
-        // Wait until background pre-warming is paused inside the very first symbol.
+      GhidraSession session =
+          new GhidraSession(
+              script, new CppSymbolIndexConfig(1024, 8L * 1024 * 1024, 4), controlledDemangler);
+      try (BridgeServices services = GhidraServiceFactory.create(session)) {
+        // Wait until background pre-warming is paused inside the first symbol.
         assertTrue(enteredBlockedSymbol.await(5, TimeUnit.SECONDS));
         assertTrue(session.cppSymbols().isPrewarming());
 
-        // Query the late symbol on demand while pre-warming is still blocked on the first symbol.
+        // Query the late symbol on demand while pre-warming is blocked on the first symbol.
         FunctionResource resolvedDuringPrewarm =
             services
                 .functionService()
                 .getFunction(AddressUtil.canonicalAddress(lateAddress[0]), Set.of());
         assertEquals(expectedLateDemangled, resolvedDuringPrewarm.demangledName());
 
-        // Unblock pre-warming and verify full completion does not re-decode the late symbol.
+        // Unblock pre-warming and verify full completion does not decode the late symbol again.
         releaseBlockedSymbol.countDown();
         assertTrue(session.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
         assertEquals(1, perSymbolCalls.get(lateName).get());
@@ -331,7 +345,7 @@ class CppSymbolIndexTest {
           });
 
       ConcurrentHashMap<String, AtomicInteger> perSymbolCalls = new ConcurrentHashMap<>();
-      CppSymbolIndex.Demangler trackingDemangler =
+      CppDemangler trackingDemangler =
           (program, name, address) -> {
             perSymbolCalls.computeIfAbsent(name, ignored -> new AtomicInteger()).incrementAndGet();
             return DemanglerUtil.demangle(program, name, address);
@@ -339,7 +353,7 @@ class CppSymbolIndexTest {
 
       GhidraScript script = GhidraTestSupport.scriptFor(holder.program());
       try (GhidraSession session =
-          new GhidraSession(script, CppSymbolIndex.Config.defaults(), trackingDemangler)) {
+          new GhidraSession(script, CppSymbolIndexConfig.defaults(), trackingDemangler)) {
         FunctionServiceImpl functionService = new FunctionServiceImpl(session);
         SymbolServiceImpl symbolService = new SymbolServiceImpl(session);
         session.startCppSymbolPrewarm();
@@ -348,7 +362,7 @@ class CppSymbolIndexTest {
         assertEquals(1, perSymbolCalls.get(fnOne).get());
         assertEquals(1, perSymbolCalls.get(fnTwo).get());
 
-        // Mutate the program in a session transaction: add one plain label and one new mangled function.
+        // Mutate the program in a session transaction: add one plain label and one mangled function.
         session.withTransaction(
             () -> {
               ProgramDB program = holder.program();
@@ -387,12 +401,12 @@ class CppSymbolIndexTest {
                     null));
         assertFalse(symbols.items().isEmpty());
 
-        // Unchanged mangled names were never decoded again; only the newly added mangled name was decoded.
+        // Unchanged mangled names were not decoded again; only the added mangled name was decoded.
         assertEquals(1, perSymbolCalls.get(fnOne).get());
         assertEquals(1, perSymbolCalls.get(fnTwo).get());
         assertEquals(1, perSymbolCalls.get(fnThree).get());
 
-        // Also mutate directly on ProgramDB outside GhidraSession.withTransaction (simulating GUI edits).
+        // Mutate directly on ProgramDB outside GhidraSession.withTransaction to simulate GUI edits.
         String fnFour = "_ZN3svc5Delta5flushEv";
         holder.inTransaction(
             program -> {
@@ -442,7 +456,7 @@ class CppSymbolIndexTest {
       populateBatchDemangleFixture(indexedHolder);
       populateBatchDemangleFixture(baselineHolder);
 
-      // Run baseline unindexed demangle + symbol.list sweep.
+      // Run baseline unindexed demangle and symbol.list sweep.
       GhidraScript baselineScript = GhidraTestSupport.scriptFor(baselineHolder.program());
       DemangleResult baselineResult;
       List<String> baselineSymbolSummary;
@@ -454,19 +468,18 @@ class CppSymbolIndexTest {
         endAmbientTransaction(baselineScript);
       }
 
-      // Run pre-warmed session demangle + follow-up sweeps and verify zero redundant demangle calls.
+      // Run pre-warmed session demangle and follow-up sweeps and verify zero extra demangle calls.
       AtomicInteger demangleCalls = new AtomicInteger();
-      CppSymbolIndex.Demangler countingDemangler =
+      CppDemangler countingDemangler =
           (program, name, address) -> {
             demangleCalls.incrementAndGet();
             return DemanglerUtil.demangle(program, name, address);
           };
 
       GhidraScript indexedScript = GhidraTestSupport.scriptFor(indexedHolder.program());
-      try (BridgeServices services =
-          GhidraServiceFactory.create(
-              indexedScript, CppSymbolIndex.Config.defaults(), countingDemangler)) {
-        GhidraSession indexedSession = (GhidraSession) services.sessionResources();
+      GhidraSession indexedSession =
+          new GhidraSession(indexedScript, CppSymbolIndexConfig.defaults(), countingDemangler);
+      try (BridgeServices services = GhidraServiceFactory.create(indexedSession)) {
         assertTrue(indexedSession.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
 
         int callsAfterPrewarm = demangleCalls.get();
@@ -477,7 +490,7 @@ class CppSymbolIndexTest {
         assertEquals(3, indexedResult.renamed());
         assertEquals(1, indexedResult.failed());
 
-        // Follow-up symbol.list and function.list refreshes (as triggered by VS Code after symbol.demangle).
+        // Run follow-up symbol.list and function.list refreshes after symbol.demangle.
         List<String> indexedSymbolSummary = summarizeSymbols(services.symbolService());
         List<String> repeatSymbolSummary = summarizeSymbols(services.symbolService());
         services
@@ -488,7 +501,6 @@ class CppSymbolIndexTest {
 
         assertEquals(baselineSymbolSummary, indexedSymbolSummary);
         assertEquals(baselineSymbolSummary, repeatSymbolSummary);
-        // Zero redundant DemanglerUtil.demangle calls during symbol.demangle or its follow-up sweeps!
         assertEquals(callsAfterPrewarm, demangleCalls.get());
       } finally {
         endAmbientTransaction(indexedScript);
@@ -516,7 +528,7 @@ class CppSymbolIndexTest {
       AtomicBoolean lockHeldDuringDemangle = new AtomicBoolean(false);
       AtomicReference<GhidraSession> sessionRef = new AtomicReference<>();
 
-      CppSymbolIndex.Demangler demangler =
+      CppDemangler demangler =
           (program, name, address) -> {
             GhidraSession current = sessionRef.get();
             if (current != null && current.holdsExecutionLock()) {
@@ -539,7 +551,7 @@ class CppSymbolIndexTest {
       GhidraScript script = GhidraTestSupport.scriptFor(holder.program());
       try (GhidraSession session =
           new GhidraSession(
-              script, new CppSymbolIndex.Config(1024, 8L * 1024 * 1024, 2), demangler)) {
+              script, new CppSymbolIndexConfig(1024, 8L * 1024 * 1024, 2), demangler)) {
         sessionRef.set(session);
         session.startCppSymbolPrewarm();
         assertTrue(firstBatchStarted.await(5, TimeUnit.SECONDS));
@@ -558,7 +570,7 @@ class CppSymbolIndexTest {
           session.onAnalysisFinished();
         }
 
-        // Also verify withTransaction acquires executionLock immediately and pauses pre-warming.
+        // Verify withTransaction acquires executionLock immediately and pauses pre-warming.
         ExecutorService txRunner = Executors.newSingleThreadExecutor();
         try {
           CountDownLatch insideTx = new CountDownLatch(1);
@@ -606,7 +618,7 @@ class CppSymbolIndexTest {
           });
 
       AtomicInteger demangleCalls = new AtomicInteger();
-      CppSymbolIndex.Demangler countingDemangler =
+      CppDemangler countingDemangler =
           (program, name, address) -> {
             demangleCalls.incrementAndGet();
             return DemanglerUtil.demangle(program, name, address);
@@ -618,18 +630,19 @@ class CppSymbolIndexTest {
       try (GhidraSession session =
           new GhidraSession(
               script,
-              new CppSymbolIndex.Config(maxEntries, maxBytes, 2),
+              new CppSymbolIndexConfig(maxEntries, maxBytes, 2),
               countingDemangler)) {
         session.startCppSymbolPrewarm();
         assertTrue(session.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
 
-        // Pre-warming stopped at the memory/entry cap instead of thrashing through all 12 symbols.
+        // Pre-warming stops at the entry or byte cap instead of thrashing through all 12 symbols.
         assertTrue(session.cppSymbols().entryCount() <= maxEntries);
         assertTrue(session.cppSymbols().estimatedBytes() <= maxBytes);
         assertTrue(demangleCalls.get() <= maxEntries + 1);
 
-        // Foreground lookups for uncached symbols still succeed and respect both bounds via LRU eviction.
-        Address base = holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x500000L);
+        // Foreground lookups for uncached symbols succeed and respect both bounds via LRU eviction.
+        Address base =
+            holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x500000L);
         for (int i = 0; i < names.size(); i++) {
           String resolved =
               session.cppSymbols().demangled(holder.program(), names.get(i), base.add(0x20L * i));
@@ -660,7 +673,7 @@ class CppSymbolIndexTest {
       CountDownLatch interruptedLatch = new CountDownLatch(1);
       AtomicInteger seenCount = new AtomicInteger();
 
-      CppSymbolIndex.Demangler blockingDemangler =
+      CppDemangler blockingDemangler =
           (program, name, address) -> {
             int index = seenCount.incrementAndGet();
             if (index == 5) {
@@ -677,12 +690,12 @@ class CppSymbolIndexTest {
           };
 
       GhidraScript script = GhidraTestSupport.scriptFor(holder.program());
-      BridgeServices services =
-          GhidraServiceFactory.create(
+      GhidraSession session =
+          new GhidraSession(
               script,
-              new CppSymbolIndex.Config(1024, 8L * 1024 * 1024, 4),
+              new CppSymbolIndexConfig(1024, 8L * 1024 * 1024, 4),
               blockingDemangler);
-      GhidraSession session = (GhidraSession) services.sessionResources();
+      BridgeServices services = GhidraServiceFactory.create(session);
 
       assertTrue(fifthSymbolEntered.await(5, TimeUnit.SECONDS));
       assertEquals(4, session.cppSymbols().entryCount());
@@ -692,6 +705,7 @@ class CppSymbolIndexTest {
       services.close();
 
       assertTrue(interruptedLatch.await(5, TimeUnit.SECONDS));
+      assertTrue(session.cppSymbols().isClosed());
       assertFalse(session.cppSymbols().isPrewarming());
       assertEquals(0, session.cppSymbols().entryCount());
       assertEquals(0L, session.cppSymbols().estimatedBytes());
@@ -737,12 +751,12 @@ class CppSymbolIndexTest {
       try (GhidraSession prewarmedSession =
               new GhidraSession(
                   prewarmedScript,
-                  new CppSymbolIndex.Config(1024, 8L * 1024 * 1024, 2),
+                  new CppSymbolIndexConfig(1024, 8L * 1024 * 1024, 2),
                   DemanglerUtil::demangle);
           GhidraSession liveSession =
               new GhidraSession(
                   liveScript,
-                  new CppSymbolIndex.Config(1024, 8L * 1024 * 1024, 2),
+                  new CppSymbolIndexConfig(1024, 8L * 1024 * 1024, 2),
                   DemanglerUtil::demangle)) {
         prewarmedSession.startCppSymbolPrewarm();
         assertTrue(prewarmedSession.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
@@ -801,6 +815,152 @@ class CppSymbolIndexTest {
       } finally {
         endAmbientTransaction(prewarmedScript);
         endAmbientTransaction(liveScript);
+      }
+    }
+  }
+
+  @Test
+  void sharesStaticCppSymbolNamesCacheWithDefaultSessionAndUnbindsOnClose() throws Exception {
+    try (ProgramHolder holder = GhidraTestSupport.createX64Program("cpp_static_share")) {
+      String prewarmedByStatic = "_ZN6shared5Cache4seedEi";
+      String sessionOnly = "_ZN6shared5Cache5extraEv";
+      Address[] baseHolder = new Address[1];
+
+      holder.inTransaction(
+          program -> {
+            program.setExecutableFormat("Executable and Linking Format (ELF)");
+            Address base = initCodeBlock(program, 0x900000L, 0x1000);
+            baseHolder[0] = base;
+            FunctionManager fm = program.getFunctionManager();
+            createRetFunction(fm, prewarmedByStatic, base);
+            createRetFunction(fm, sessionOnly, base.add(0x20));
+          });
+
+      // Warm one symbol in CppSymbolNames static cache before opening a session.
+      String expectedSeed =
+          CppSymbolNames.demangled(holder.program(), prewarmedByStatic, baseHolder[0]);
+      assertNotNull(expectedSeed);
+
+      GhidraScript script = GhidraTestSupport.scriptFor(holder.program());
+      GhidraSession session = new GhidraSession(script);
+      BridgeServices services = GhidraServiceFactory.create(session);
+      try {
+        assertTrue(session.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
+        // Pre-warmer imported prewarmedByStatic from static cache and only decoded sessionOnly.
+        assertEquals(1L, session.cppSymbols().demangleCalls());
+        assertEquals(2, session.cppSymbols().entryCount());
+
+        // CppSymbolNames.demangled delegates to the bound session index while active.
+        long hitsBefore = session.cppSymbols().hits();
+        assertEquals(
+            expectedSeed,
+            CppSymbolNames.demangled(holder.program(), prewarmedByStatic, baseHolder[0]));
+        assertNotNull(
+            CppSymbolNames.demangled(holder.program(), sessionOnly, baseHolder[0].add(0x20)));
+        assertEquals(hitsBefore + 2L, session.cppSymbols().hits());
+      } finally {
+        services.close();
+        endAmbientTransaction(script);
+      }
+
+      assertTrue(session.cppSymbols().isClosed());
+      assertNull(CppSymbolNames.sessionIndexFor(holder.program()));
+      assertEquals(
+          expectedSeed,
+          CppSymbolNames.demangled(holder.program(), prewarmedByStatic, baseHolder[0]));
+    }
+  }
+
+  @Test
+  void resetsIndexOnProgramSwitchAndSupportsStrictProxyPrograms() throws Exception {
+    GenericAddressSpace ram = new GenericAddressSpace("ram", 64, AddressSpace.TYPE_RAM, 0);
+    AddressFactory factory = new DefaultAddressFactory(new AddressSpace[] {ram});
+    Program strictProxy =
+        (Program)
+            Proxy.newProxyInstance(
+                Program.class.getClassLoader(),
+                new Class<?>[] {Program.class},
+                (proxy, method, args) -> {
+                  if ("getAddressFactory".equals(method.getName())) {
+                    return factory;
+                  }
+                  throw new AssertionError("Unexpected proxy call: " + method.getName());
+                });
+    GhidraScript strictScript =
+        new GhidraScript() {
+          {
+            this.monitor =
+                (TaskMonitor)
+                    Proxy.newProxyInstance(
+                        TaskMonitor.class.getClassLoader(),
+                        new Class<?>[] {TaskMonitor.class},
+                        (proxy, method, args) -> {
+                          throw new AssertionError("Read touched monitor: " + method.getName());
+                        });
+          }
+
+          @Override
+          protected void run() {}
+
+          @Override
+          public Program getCurrentProgram() {
+            return strictProxy;
+          }
+        };
+
+    try (GhidraSession strictSession = new GhidraSession(strictScript)) {
+      assertFalse(strictSession.canCacheSnapshots());
+      strictSession.startCppSymbolPrewarm();
+      assertTrue(strictSession.cppSymbols().awaitPrewarm(Duration.ofSeconds(2)));
+      assertNull(strictSession.cppSymbols().demangled(strictProxy, "plain_symbol", null));
+    }
+
+    try (ProgramHolder first = GhidraTestSupport.createX64Program("cpp_switch_one");
+        ProgramHolder second = GhidraTestSupport.createX64Program("cpp_switch_two")) {
+      first.inTransaction(
+          program -> {
+            program.setExecutableFormat("Executable and Linking Format (ELF)");
+            Address base = initCodeBlock(program, 0x100000L, 0x100);
+            createRetFunction(program.getFunctionManager(), "_ZN6switch3One3runEv", base);
+          });
+      second.inTransaction(
+          program -> {
+            program.setExecutableFormat("Executable and Linking Format (ELF)");
+            Address base = initCodeBlock(program, 0x200000L, 0x100);
+            createRetFunction(program.getFunctionManager(), "_ZN6switch3Two3runEv", base);
+          });
+
+      AtomicReference<Program> activeProgram = new AtomicReference<>(first.program());
+      GhidraScript switchingScript =
+          new GhidraScript() {
+            {
+              set(first.program(), TaskMonitor.DUMMY);
+            }
+
+            @Override
+            protected void run() {}
+
+            @Override
+            public Program getCurrentProgram() {
+              return activeProgram.get();
+            }
+          };
+
+      try (GhidraSession session = new GhidraSession(switchingScript)) {
+        session.startCppSymbolPrewarm();
+        assertTrue(session.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
+        assertEquals(1, session.cppSymbols().entryCount());
+        assertEquals(session.cppSymbols(), CppSymbolNames.sessionIndexFor(first.program()));
+
+        activeProgram.set(second.program());
+        assertTrue(session.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
+        assertNull(CppSymbolNames.sessionIndexFor(first.program()));
+        assertEquals(session.cppSymbols(), CppSymbolNames.sessionIndexFor(second.program()));
+        assertEquals(1, session.cppSymbols().entryCount());
+        assertNotNull(
+            CppSymbolNames.demangled(second.program(), "_ZN6switch3Two3runEv", null));
+      } finally {
+        endAmbientTransaction(switchingScript);
       }
     }
   }
@@ -875,6 +1035,27 @@ class CppSymbolIndexTest {
       assertCanonicalMatchesLegacy(extAddress[0]);
       assertNull(AddressUtil.canonicalAddress((Address) null));
     }
+
+    // Verify non-GenericAddressSpace fallback delegates without assumptions.
+    Address customAddress =
+        (Address)
+            Proxy.newProxyInstance(
+                Address.class.getClassLoader(),
+                new Class<?>[] {Address.class},
+                (proxy, method, args) -> {
+                  if ("getAddressSpace".equals(method.getName())) {
+                    return space64;
+                  }
+                  if ("toString".equals(method.getName()) && (args == null || args.length == 0)) {
+                    return "00401000";
+                  }
+                  try {
+                    return method.invoke(space64.getAddress(0x401000L), args);
+                  } catch (InvocationTargetException error) {
+                    throw error.getTargetException();
+                  }
+                });
+    assertEquals("ram64:00401000", AddressUtil.canonicalAddress(customAddress));
   }
 
   private static void assertCanonicalMatchesLegacy(Address address) {

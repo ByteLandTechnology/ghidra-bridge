@@ -1,9 +1,9 @@
 package app.byteland.ghidra.adapter.ghidra.symbol;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
-import app.byteland.ghidra.adapter.ghidra.CppSymbolIndex;
 import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.SymbolTableSnapshot;
 import app.byteland.ghidra.adapter.ghidra.scan.AddressScanRanges;
 import app.byteland.ghidra.adapter.ghidra.scan.BoundedAddressScan;
 import app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor;
@@ -44,44 +44,31 @@ final class SymbolListQueries {
             query.limit(), query.scan().timeoutMs(), range.startText(), range.endText());
 
     Program program = context.currentProgram();
-    CppSymbolIndex.SymbolSnapshot snapshot =
+    SymbolTableSnapshot snapshot =
         context.cppSymbols().symbolSnapshotIfCurrent(program, iterationStart);
     if (snapshot != null) {
       return listFromSnapshot(
-          snapshot.symbols(),
-          program,
-          range,
-          cursor,
-          iterationStart,
-          normalizedName,
-          filterAddress,
-          query,
-          scan);
+          snapshot, program, range, cursor, iterationStart, normalizedName, filterAddress, query, scan);
     }
 
     SymbolIterator symbols = program.getSymbolTable().getSymbolIterator(iterationStart, true);
     while (symbols.hasNext()) {
       Symbol symbol = symbols.next();
-      Address symbolAddress = symbol.getAddress();
-      long symbolId = symbol.getID();
-      if (cursor != null && compare(symbolAddress, symbolId, cursor) <= 0) continue;
-      if (range.afterEnd(symbolAddress)) break;
-      String address = AddressUtil.canonicalAddress(symbolAddress);
-      String idText = String.valueOf(symbolId);
-      String symbolName = symbol.getName();
+      if (cursor != null && compare(symbol.getAddress(), symbol.getID(), cursor) <= 0) continue;
+      if (range.afterEnd(symbol.getAddress())) break;
+      String address = AddressUtil.canonicalAddress(symbol.getAddress());
       SymbolResource match =
-          matchesSymbol(symbol, symbolName, symbolAddress, normalizedName, filterAddress, query)
-              ? SymbolDescriptions.describe(
-                  context, program, symbol, idText, symbolName, symbolAddress, address)
+          matchesSymbol(symbol, normalizedName, filterAddress, query)
+              ? SymbolDescriptions.describe(symbol)
               : null;
-      scan.visit(address, CompositeCursor.key(address, idText), match);
+      scan.visit(address, CompositeCursor.key(address, String.valueOf(symbol.getID())), match);
       if (scan.stopped()) break;
     }
     return scan.finish();
   }
 
   private Page<SymbolResource> listFromSnapshot(
-      List<CppSymbolIndex.IndexedSymbol> symbols,
+      SymbolTableSnapshot snapshot,
       Program program,
       AddressScanRanges.Resolved range,
       CursorPosition cursor,
@@ -90,10 +77,11 @@ final class SymbolListQueries {
       Address filterAddress,
       SymbolQuery query,
       BoundedAddressScan<SymbolResource> scan) {
-    int startIndex = lowerBoundByAddress(symbols, iterationStart);
+    List<SymbolTableSnapshot.Row> symbols = snapshot.symbols();
+    int startIndex = snapshot.lowerBound(iterationStart);
     int size = symbols.size();
     for (int i = startIndex; i < size; i++) {
-      CppSymbolIndex.IndexedSymbol row = symbols.get(i);
+      SymbolTableSnapshot.Row row = symbols.get(i);
       Address symbolAddress = row.address();
       long symbolId = row.id();
       if (cursor != null && compare(symbolAddress, symbolId, cursor) <= 0) continue;
@@ -110,26 +98,11 @@ final class SymbolListQueries {
     return scan.finish();
   }
 
-  private static int lowerBoundByAddress(
-      List<CppSymbolIndex.IndexedSymbol> symbols, Address target) {
-    int low = 0;
-    int high = symbols.size();
-    while (low < high) {
-      int mid = (low + high) >>> 1;
-      if (symbols.get(mid).address().compareTo(target) < 0) {
-        low = mid + 1;
-      } else {
-        high = mid;
-      }
-    }
-    return low;
-  }
-
-  private SymbolResource describeIndexedSymbol(Program program, CppSymbolIndex.IndexedSymbol row) {
+  private SymbolResource describeIndexedSymbol(Program program, SymbolTableSnapshot.Row row) {
     String name = row.name();
     String demangled =
         CppSymbolNames.isMangled(name)
-            ? CppSymbolNames.demangled(context, program, name, row.address())
+            ? context.cppSymbols().demangled(program, name, row.address())
             : null;
     return new SymbolResource(
         row.idText(),
@@ -143,7 +116,7 @@ final class SymbolListQueries {
   }
 
   private static boolean matchesIndexedSymbol(
-      CppSymbolIndex.IndexedSymbol row,
+      SymbolTableSnapshot.Row row,
       String normalizedName,
       Address filterAddress,
       SymbolQuery query) {
@@ -167,12 +140,7 @@ final class SymbolListQueries {
   }
 
   private static boolean matchesSymbol(
-      Symbol symbol,
-      String symbolName,
-      Address symbolAddress,
-      String normalizedName,
-      Address filterAddress,
-      SymbolQuery query) {
+      Symbol symbol, String normalizedName, Address filterAddress, SymbolQuery query) {
     if (query.type() != null
         && symbol.getSymbolType() != null
         && !query.type().equalsIgnoreCase(symbol.getSymbolType().toString())) {
@@ -187,11 +155,10 @@ final class SymbolListQueries {
         && !query.sourceType().equalsIgnoreCase(String.valueOf(symbol.getSource()))) {
       return false;
     }
-    if (normalizedName != null) {
-      String valueName = query.caseSensitive() ? symbolName : symbolName.toLowerCase(Locale.ROOT);
-      if (!valueName.contains(normalizedName)) return false;
-    }
-    return filterAddress == null || symbolAddress.equals(filterAddress);
+    String symbolName = symbol.getName();
+    String valueName = query.caseSensitive() ? symbolName : symbolName.toLowerCase(Locale.ROOT);
+    if (normalizedName != null && !valueName.contains(normalizedName)) return false;
+    return filterAddress == null || symbol.getAddress().equals(filterAddress);
   }
 
   private CursorPosition parseCursor(String cursor) {
