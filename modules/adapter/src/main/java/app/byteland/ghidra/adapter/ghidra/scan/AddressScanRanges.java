@@ -59,10 +59,6 @@ public final class AddressScanRanges {
       return end == null ? null : AddressUtil.canonicalAddress(end);
     }
 
-    public boolean includes(Address address) {
-      return address.compareTo(start) >= 0 && (end == null || address.compareTo(end) <= 0);
-    }
-
     public boolean afterEnd(Address address) {
       return end != null && address.compareTo(end) > 0;
     }
