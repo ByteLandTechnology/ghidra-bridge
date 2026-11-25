@@ -74,8 +74,12 @@ final class McpToolRegistry {
         "properties", properties,
         "required", List.of("operation"));
 
-    String purpose = "listing".equals(domain)
-        ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
+    String purpose =
+        switch (domain) {
+          case "listing" -> "for code units, instructions, and flow overrides";
+          case "search" -> "for string and byte pattern searches";
+          default -> "for " + domain + " data";
+        };
     return Map.of("name", toolName(domain),
         "description", "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",

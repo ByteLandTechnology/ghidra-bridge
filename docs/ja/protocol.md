@@ -1,9 +1,9 @@
 # プロトコル仕様 (Protocol Specification)
 
 Ghidra Bridge は、WebSocket JSON-RPC 2.0 と MCP Streamable HTTP `2026-07-28` の 2 つのトランスポートをサポートします。
-統一レジストリは 56 個の公開ドット記法メソッドを定義します。
-WebSocket は 56 個すべてを提供します。
-MCP は 55 個を提供し、`interface.get` は提供しません。
+統一レジストリは 58 個の公開ドット記法メソッドを定義します。
+WebSocket は 58 個すべてを提供します。
+MCP は 57 個を提供し、`interface.get` は提供しません。
 
 ## WebSocket JSON-RPC 2.0
 
@@ -26,7 +26,7 @@ WebSocket メッセージは JSON-RPC 2.0 仕様に準拠します。
 サーバーは各フィールドを厳格に検証します:
 - `jsonrpc` は `"2.0"` である必要があります。
 - `id` は文字列または整数の識別子である必要があります。
-- `method` は 56 個の公開ドット記法メソッドのいずれかと一致する必要があります。
+- `method` は 58 個の公開ドット記法メソッドのいずれかと一致する必要があります。
 - `params` はメソッドのスキーマに合致する JSON オブジェクトである必要があります。
 - 未知のフィールドや不正なデータ型は拒否されます。
 
@@ -178,7 +178,7 @@ ASCII 以外のテキストには `=?base64?<base64 テキスト>?=` 形式の�
 - `server/discover`: サーバーの識別情報とサポート機能を返します。
 - `ping`: 初期化を使用するバージョンでサーバーの状態を確認します。
   ブリッジは `2026-07-28` でもこの互換メソッドを維持します。
-- `tools/list`: 全 15 個のツールのスキーマ定義を返します。
+- `tools/list`: 全 16 個のツールのスキーマ定義を返します。
 - `tools/call`: 指定されたツール操作を実行し、構造化コンテンツを返します。
 - `resources/list`: `ghidra-bridge://contracts/mcp-tools` などの利用可能なリソース一覧を返します。
 - `resources/read`: リソースの内容を返します。
@@ -197,11 +197,11 @@ ASCII 以外のテキストには `=?base64?<base64 テキスト>?=` 形式の�
 
 ### ツール呼び出し規則
 
-MCP は操作を 15 個のツールに分類します:
+MCP は操作を 16 個のツールに分類します:
 - `ghidra.help`: ドメインの検索、操作一覧の表示、スキーマの確認。
-- 14 個のドメインツール: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.batch`。
+- 15 個のドメインツール: `ghidra.bridge`, `ghidra.program`, `ghidra.address`, `ghidra.memory`, `ghidra.listing`, `ghidra.global_variable`, `ghidra.function`, `ghidra.analysis`, `ghidra.decompilation`, `ghidra.symbol`, `ghidra.reference`, `ghidra.comment`, `ghidra.data_type`, `ghidra.search`, `ghidra.batch`。
 
-ドメインツールは 55 個のメソッドを公開します。`interface.get` は WebSocket 専用です。
+ドメインツールは 57 個のメソッドを公開します。`interface.get` は WebSocket 専用です。
 
 ### ツール名のプレフィックス
 

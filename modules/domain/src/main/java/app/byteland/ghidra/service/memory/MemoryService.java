@@ -2,9 +2,11 @@ package app.byteland.ghidra.service.memory;
 
 import app.byteland.ghidra.service.ByteSequence;
 import app.byteland.ghidra.service.Page;
+import app.byteland.ghidra.service.search.ByteSearchResult;
+import app.byteland.ghidra.service.search.SearchService;
 
 /**
- * Reads memory blocks, reads byte ranges, and patches program bytes.
+ * Reads memory blocks, reads byte ranges, scans byte patterns, and patches program bytes.
  */
 public interface MemoryService {
   int MAX_RANGE_LENGTH = 65_536;
@@ -38,4 +40,11 @@ public interface MemoryService {
    * Patches program memory with the specified byte sequence.
    */
   void patchMemory(String startRaw, ByteSequence bytes);
+
+  /**
+   * Scans initialized memory blocks for batch wildcard byte patterns.
+   */
+  default ByteSearchResult searchBytes(SearchService.ByteSearchQuery query) {
+    throw new UnsupportedOperationException("searchBytes is not configured");
+  }
 }

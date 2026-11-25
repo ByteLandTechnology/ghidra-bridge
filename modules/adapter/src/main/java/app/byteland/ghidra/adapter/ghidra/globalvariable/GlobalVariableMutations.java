@@ -47,12 +47,21 @@ final class GlobalVariableMutations {
     }
 
     if (mutation.dataType() != null) {
+      if (existing != null) {
+        context.recordMutatedRange(existing.getMinAddress(), existing.getMaxAddress());
+      }
       DataType dataType =
           GhidraDataTypeReferences.resolve(
               context.currentProgram().getDataTypeManager(), mutation.dataType());
       applyData(address, dataType, existing == null, mode);
+      Data updated = listing.getDefinedDataAt(address);
+      context.recordMutatedRange(
+          address, updated != null ? updated.getMaxAddress() : address);
     }
-    if (mutation.name() != null) applyName(address, mutation.name());
+    if (mutation.name() != null) {
+      applyName(address, mutation.name());
+      context.recordMutatedRange(address, address);
+    }
   }
 
   void deleteGlobalVariable(String rawAddress, boolean deleteSymbol) {
@@ -60,8 +69,10 @@ final class GlobalVariableMutations {
     Listing listing = context.currentProgram().getListing();
     Data data = listing.getDefinedDataAt(address);
     if (data == null) throw new NoSuchElementException("global variable not found: " + rawAddress);
+    Address minAddress = data.getMinAddress();
+    Address maxAddress = data.getMaxAddress();
     Symbol primary = context.currentProgram().getSymbolTable().getPrimarySymbol(address);
-    listing.clearCodeUnits(data.getMinAddress(), data.getMaxAddress(), false);
+    listing.clearCodeUnits(minAddress, maxAddress, false);
     if (deleteSymbol
         && primary != null
         && !primary.isDynamic()
@@ -69,6 +80,7 @@ final class GlobalVariableMutations {
         && !primary.delete()) {
       throw new IllegalArgumentException("unable to delete global variable symbol");
     }
+    context.recordMutatedRange(minAddress, maxAddress);
   }
 
   private void applyData(Address address, DataType dataType, boolean create, WriteMode mode) {

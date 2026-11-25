@@ -10,8 +10,8 @@ The runtime JAR has zero third-party dependencies.
 ## Key Features
 
 - **Dual Transports**: Access Ghidra through WebSocket JSON-RPC 2.0 or MCP Streamable HTTP.
-- **Unified Catalog**: One typed registry defines 56 public dotted methods.
-  WebSocket exposes all 56. MCP exposes 55 and does not expose `interface.get`.
+- **Unified Catalog**: One typed registry defines 58 public dotted methods.
+  WebSocket exposes all 58. MCP exposes 57 and does not expose `interface.get`.
 - **Bounded Scans**: Address-ordered list results support cooperative cancellation and cursor pagination.
 - **Atomic Transactions**: The bridge executes batch operations.
   It reverts a transaction after an error.
@@ -117,7 +117,7 @@ The bridge enforces strict security boundaries:
 
 ## API and Transports
 
-The public API has 56 dotted methods, from `interface.get` to `batch.execute`.
+The public API has 58 dotted methods, from `interface.get` to `batch.execute`.
 
 ### WebSocket JSON-RPC 2.0
 
@@ -131,9 +131,9 @@ Call `interface.get` to discover all methods and schemas that the server support
 
 ### Model Context Protocol (MCP)
 
-MCP exposes the same operations, except `interface.get`, through 15 tools over Streamable HTTP:
+MCP exposes the same operations, except `interface.get`, through 16 tools over Streamable HTTP:
 - `ghidra.help`: Discover domains, list operations, or view schemas.
-- 14 Domain Tools: `ghidra.program`, `ghidra.memory`, `ghidra.function`, and other domain tools.
+- 15 Domain Tools: `ghidra.program`, `ghidra.memory`, `ghidra.function`, and other domain tools.
 
 Call a domain tool with an operation name and its parameters.
 For example, the `program.get` method is the `get` operation of `ghidra.program`:
@@ -161,7 +161,7 @@ The MCP tool schema is also available at `ghidra-bridge://contracts/mcp-tools`.
 - [Protocol Specification](docs/protocol.md): JSON-RPC envelopes, MCP endpoints, and error formats.
 - [Batch and Transactions](docs/batch-and-transactions.md): Atomic execution and transaction boundaries.
 - [Development Guide](docs/development.md): Environment configuration, workflows, and quality checks.
-- [Method Reference](docs/api.md): Full 56-method catalog and schemas.
+- [Method Reference](docs/api.md): Full 58-method catalog and schemas.
 - [AsyncAPI Contract](docs/asyncapi.yaml): Formal WebSocket contract.
 - [MCP Tools Contract](docs/mcp-tools.json): Formal MCP tool definitions.
 

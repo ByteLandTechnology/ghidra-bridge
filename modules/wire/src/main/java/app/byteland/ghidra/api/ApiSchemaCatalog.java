@@ -486,7 +486,8 @@ final class ApiSchemaCatalog {
             "primary",
             "completed",
             "comments_complete",
-            "analyzed")
+            "analyzed",
+            "defined")
         .contains(field)) {
       return WireSchema.bool();
     }

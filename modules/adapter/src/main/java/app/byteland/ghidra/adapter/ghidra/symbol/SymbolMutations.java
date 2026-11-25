@@ -9,5 +9,6 @@ final class SymbolMutations {
 
   static void renameSymbol(GhidraSession context, Symbol symbol, String newName) {
     ScriptSymbolRenamer.rename(context, symbol, newName);
+    context.recordMutatedRange(symbol.getAddress(), symbol.getAddress());
   }
 }

@@ -59,6 +59,8 @@
 | `data_type.patch` | `destructive mutation` | Change data type data in the active program. |
 | `data_type.upsert` | `destructive mutation` | Create or replace data type data in the active program. |
 | `data_type.delete` | `destructive mutation` | Delete data type data from the active program. |
+| `search.strings` | `read-only` | Search cached ASCII and UTF-16 strings by text or regex. Use next_cursor to get the next page. |
+| `search.bytes` | `read-only` | Scan initialized memory blocks for wildcard hex byte patterns. Use next_cursor to get the next page. |
 | `batch.execute` | `destructive mutation` | Check a batch. Run its items in order. Use per_item to keep item errors. Use all_or_none to revert the batch after an error. |
 
 Use the input schema for each method. The bridge rejects unknown fields and type conversions.

@@ -51,8 +51,8 @@
                           - "output_schema"
                           - "effects"
                           "type": "object"
-                        "maxItems": !!int "56"
-                        "minItems": !!int "56"
+                        "maxItems": !!int "58"
+                        "minItems": !!int "58"
                         "type": "array"
                     "required":
                     - "interface_version"
@@ -6489,6 +6489,241 @@
                         "type": "boolean"
                     "required":
                     - "deleted"
+                    "type": "object"
+                  - "$defs":
+                      "data_type_reference":
+                        "oneOf":
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "named"
+                              "type": "string"
+                            "name":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "name"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "pointer"
+                              "type": "string"
+                            "target":
+                              "$ref": "#/$defs/data_type_reference"
+                          "required":
+                          - "kind"
+                          - "target"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "count":
+                              "maximum": !!int "2147483647"
+                              "minimum": !!int "1"
+                              "type": "integer"
+                            "element":
+                              "$ref": "#/$defs/data_type_reference"
+                            "kind":
+                              "enum":
+                              - "array"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "element"
+                          - "count"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "untyped_pointer"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          "type": "object"
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "index_complete":
+                        "type": "boolean"
+                      "items":
+                        "items":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "address":
+                              "type": "string"
+                            "data_type":
+                              "$ref": "#/$defs/data_type_reference"
+                            "defined":
+                              "type": "boolean"
+                            "encoding":
+                              "enum":
+                              - "ascii"
+                              - "utf16be"
+                              - "utf16le"
+                              "type": "string"
+                            "length":
+                              "maximum": !!int "9223372036854775807"
+                              "minimum": !!int "0"
+                              "type": "integer"
+                            "value":
+                              "type": "string"
+                          "required":
+                          - "address"
+                          "type": "object"
+                        "maxItems": !!int "2147483647"
+                        "minItems": !!int "0"
+                        "type": "array"
+                      "modification_number":
+                        "maximum": !!int "9223372036854775807"
+                        "minimum": !!int "-9223372036854775808"
+                        "type": "integer"
+                      "next_cursor":
+                        "minLength": !!int "1"
+                        "type": "string"
+                      "total_indexed":
+                        "maximum": !!int "2147483647"
+                        "minimum": !!int "0"
+                        "type": "integer"
+                    "required":
+                    - "items"
+                    - "index_complete"
+                    - "total_indexed"
+                    - "modification_number"
+                    "type": "object"
+                  - "$defs":
+                      "data_type_reference":
+                        "oneOf":
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "named"
+                              "type": "string"
+                            "name":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "name"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "pointer"
+                              "type": "string"
+                            "target":
+                              "$ref": "#/$defs/data_type_reference"
+                          "required":
+                          - "kind"
+                          - "target"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "count":
+                              "maximum": !!int "2147483647"
+                              "minimum": !!int "1"
+                              "type": "integer"
+                            "element":
+                              "$ref": "#/$defs/data_type_reference"
+                            "kind":
+                              "enum":
+                              - "array"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "element"
+                          - "count"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "untyped_pointer"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          "type": "object"
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "items":
+                        "items":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "index":
+                              "maximum": !!int "99"
+                              "minimum": !!int "0"
+                              "type": "integer"
+                            "match_count":
+                              "maximum": !!int "2147483647"
+                              "minimum": !!int "0"
+                              "type": "integer"
+                            "matches":
+                              "items":
+                                "minLength": !!int "1"
+                                "type": "string"
+                              "maxItems": !!int "2147483647"
+                              "minItems": !!int "0"
+                              "type": "array"
+                            "pattern":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "index"
+                          - "pattern"
+                          - "matches"
+                          - "match_count"
+                          "type": "object"
+                        "maxItems": !!int "100"
+                        "minItems": !!int "1"
+                        "type": "array"
+                      "next_cursor":
+                        "minLength": !!int "1"
+                        "type": "string"
+                      "scan":
+                        "additionalProperties": !!bool "false"
+                        "properties":
+                          "complete":
+                            "type": "boolean"
+                          "elapsed_ms":
+                            "maximum": !!int "9223372036854775807"
+                            "minimum": !!int "0"
+                            "type": "integer"
+                          "kind":
+                            "enum":
+                            - "address"
+                            "type": "string"
+                          "requested_end":
+                            "type": "string"
+                          "requested_start":
+                            "type": "string"
+                          "scanned_end":
+                            "type": "string"
+                          "scanned_start":
+                            "type": "string"
+                          "stop_reason":
+                            "enum":
+                            - "completed"
+                            - "limit"
+                            - "timeout"
+                            "type": "string"
+                        "required":
+                        - "kind"
+                        - "complete"
+                        - "stop_reason"
+                        - "elapsed_ms"
+                        "type": "object"
+                      "total_matches":
+                        "maximum": !!int "2147483647"
+                        "minimum": !!int "0"
+                        "type": "integer"
+                    "required":
+                    - "items"
+                    - "total_matches"
+                    - "scan"
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
@@ -13156,6 +13391,268 @@
                 "const": "2.0"
                 "type": "string"
               "method":
+                "const": "search.strings"
+                "type": "string"
+              "params":
+                "$defs":
+                  "data_type_reference":
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "named"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "pointer"
+                          "type": "string"
+                        "target":
+                          "$ref": "#/$defs/data_type_reference"
+                      "required":
+                      - "kind"
+                      - "target"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "count":
+                          "maximum": !!int "2147483647"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                        "element":
+                          "$ref": "#/$defs/data_type_reference"
+                        "kind":
+                          "enum":
+                          - "array"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "element"
+                      - "count"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "untyped_pointer"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      "type": "object"
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "filter":
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "case_sensitive":
+                        "type": "boolean"
+                      "defined":
+                        "type": "boolean"
+                      "encoding":
+                        "enum":
+                        - "all"
+                        - "ascii"
+                        - "utf16"
+                        - "utf16be"
+                        - "utf16le"
+                        "type": "string"
+                      "min_length":
+                        "maximum": !!int "4096"
+                        "minimum": !!int "1"
+                        "type": "integer"
+                      "query":
+                        "type": "string"
+                      "regex":
+                        "minLength": !!int "1"
+                        "type": "string"
+                    "type": "object"
+                  "page":
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "cursor":
+                        "minLength": !!int "1"
+                        "type": "string"
+                      "limit":
+                        "maximum": !!int "1000"
+                        "minimum": !!int "1"
+                        "type": "integer"
+                    "type": "object"
+                  "projection":
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "fields":
+                        "items":
+                          "enum":
+                          - "address"
+                          - "data_type"
+                          - "defined"
+                          - "encoding"
+                          - "length"
+                          - "value"
+                          "type": "string"
+                        "maxItems": !!int "256"
+                        "minItems": !!int "1"
+                        "type": "array"
+                        "uniqueItems": !!bool "true"
+                    "type": "object"
+                  "scan":
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "range":
+                        "additionalProperties": !!bool "false"
+                        "properties":
+                          "end":
+                            "type": "string"
+                          "start":
+                            "type": "string"
+                        "type": "object"
+                      "timeout_ms":
+                        "default": !!int "1000"
+                        "maximum": !!int "60000"
+                        "minimum": !!int "100"
+                        "type": "integer"
+                    "type": "object"
+                "type": "object"
+            "required":
+            - "jsonrpc"
+            - "id"
+            - "method"
+            - "params"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "id":
+                "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
+                - "type": "number"
+              "jsonrpc":
+                "const": "2.0"
+                "type": "string"
+              "method":
+                "const": "search.bytes"
+                "type": "string"
+              "params":
+                "$defs":
+                  "data_type_reference":
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "named"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "pointer"
+                          "type": "string"
+                        "target":
+                          "$ref": "#/$defs/data_type_reference"
+                      "required":
+                      - "kind"
+                      - "target"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "count":
+                          "maximum": !!int "2147483647"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                        "element":
+                          "$ref": "#/$defs/data_type_reference"
+                        "kind":
+                          "enum":
+                          - "array"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "element"
+                      - "count"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "untyped_pointer"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      "type": "object"
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "page":
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "cursor":
+                        "minLength": !!int "1"
+                        "type": "string"
+                      "limit":
+                        "maximum": !!int "1000"
+                        "minimum": !!int "1"
+                        "type": "integer"
+                    "type": "object"
+                  "patterns":
+                    "items":
+                      "minLength": !!int "1"
+                      "type": "string"
+                    "maxItems": !!int "100"
+                    "minItems": !!int "1"
+                    "type": "array"
+                  "scan":
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "range":
+                        "additionalProperties": !!bool "false"
+                        "properties":
+                          "end":
+                            "type": "string"
+                          "start":
+                            "type": "string"
+                        "type": "object"
+                      "timeout_ms":
+                        "default": !!int "1000"
+                        "maximum": !!int "60000"
+                        "minimum": !!int "100"
+                        "type": "integer"
+                    "type": "object"
+                "required":
+                - "patterns"
+                "type": "object"
+            "required":
+            - "jsonrpc"
+            - "id"
+            - "method"
+            - "params"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "id":
+                "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
+                - "type": "number"
+              "jsonrpc":
+                "const": "2.0"
+                "type": "string"
+              "method":
                 "const": "batch.execute"
                 "type": "string"
               "params":
@@ -16380,6 +16877,150 @@
                           "method":
                             "enum":
                             - "data_type.delete"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "filter":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "case_sensitive":
+                                    "type": "boolean"
+                                  "defined":
+                                    "type": "boolean"
+                                  "encoding":
+                                    "enum":
+                                    - "all"
+                                    - "ascii"
+                                    - "utf16"
+                                    - "utf16be"
+                                    - "utf16le"
+                                    "type": "string"
+                                  "min_length":
+                                    "maximum": !!int "4096"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                  "query":
+                                    "type": "string"
+                                  "regex":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "type": "object"
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "address"
+                                      - "data_type"
+                                      - "defined"
+                                      - "encoding"
+                                      - "length"
+                                      - "value"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "search.strings"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "page":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "cursor":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "limit":
+                                    "maximum": !!int "1000"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                "type": "object"
+                              "patterns":
+                                "items":
+                                  "minLength": !!int "1"
+                                  "type": "string"
+                                "maxItems": !!int "100"
+                                "minItems": !!int "1"
+                                "type": "array"
+                              "scan":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "range":
+                                    "additionalProperties": !!bool "false"
+                                    "properties":
+                                      "end":
+                                        "type": "string"
+                                      "start":
+                                        "type": "string"
+                                    "type": "object"
+                                  "timeout_ms":
+                                    "default": !!int "1000"
+                                    "maximum": !!int "60000"
+                                    "minimum": !!int "100"
+                                    "type": "integer"
+                                "type": "object"
+                            "required":
+                            - "patterns"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "search.bytes"
                             "type": "string"
                         "required":
                         - "id"
@@ -20420,6 +21061,150 @@
                 "method":
                   "enum":
                   - "data_type.delete"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "filter":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "case_sensitive":
+                          "type": "boolean"
+                        "defined":
+                          "type": "boolean"
+                        "encoding":
+                          "enum":
+                          - "all"
+                          - "ascii"
+                          - "utf16"
+                          - "utf16be"
+                          - "utf16le"
+                          "type": "string"
+                        "min_length":
+                          "maximum": !!int "4096"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                        "query":
+                          "type": "string"
+                        "regex":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "type": "object"
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "address"
+                            - "data_type"
+                            - "defined"
+                            - "encoding"
+                            - "length"
+                            - "value"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "search.strings"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "page":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "cursor":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "limit":
+                          "maximum": !!int "1000"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                      "type": "object"
+                    "patterns":
+                      "items":
+                        "minLength": !!int "1"
+                        "type": "string"
+                      "maxItems": !!int "100"
+                      "minItems": !!int "1"
+                      "type": "array"
+                    "scan":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "range":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "end":
+                              "type": "string"
+                            "start":
+                              "type": "string"
+                          "type": "object"
+                        "timeout_ms":
+                          "default": !!int "1000"
+                          "maximum": !!int "60000"
+                          "minimum": !!int "100"
+                          "type": "integer"
+                      "type": "object"
+                  "required":
+                  - "patterns"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "search.bytes"
                   "type": "string"
               "required":
               - "id"
@@ -29867,8 +30652,8 @@
             - "output_schema"
             - "effects"
             "type": "object"
-          "maxItems": !!int "56"
-          "minItems": !!int "56"
+          "maxItems": !!int "58"
+          "minItems": !!int "58"
           "type": "array"
       "required":
       - "interface_version"
@@ -31299,6 +32084,487 @@
           "type": "string"
       "required":
       - "items"
+      "type": "object"
+  "search.bytes":
+    "description": "Scan initialized memory blocks for wildcard hex byte\
+      \ patterns. Use next_cursor to get the next page."
+    "effects":
+      "allowed_during_analysis": !!bool "true"
+      "destructive": !!bool "false"
+      "idempotent": !!bool "true"
+      "mutates_program": !!bool "false"
+      "read_only": !!bool "true"
+      "requires_transaction": !!bool "false"
+    "input_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "page":
+          "additionalProperties": !!bool "false"
+          "properties":
+            "cursor":
+              "minLength": !!int "1"
+              "type": "string"
+            "limit":
+              "maximum": !!int "1000"
+              "minimum": !!int "1"
+              "type": "integer"
+          "type": "object"
+        "patterns":
+          "items":
+            "minLength": !!int "1"
+            "type": "string"
+          "maxItems": !!int "100"
+          "minItems": !!int "1"
+          "type": "array"
+        "scan":
+          "additionalProperties": !!bool "false"
+          "properties":
+            "range":
+              "additionalProperties": !!bool "false"
+              "properties":
+                "end":
+                  "type": "string"
+                "start":
+                  "type": "string"
+              "type": "object"
+            "timeout_ms":
+              "default": !!int "1000"
+              "maximum": !!int "60000"
+              "minimum": !!int "100"
+              "type": "integer"
+          "type": "object"
+      "required":
+      - "patterns"
+      "type": "object"
+    "output_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "items":
+          "items":
+            "additionalProperties": !!bool "false"
+            "properties":
+              "index":
+                "maximum": !!int "99"
+                "minimum": !!int "0"
+                "type": "integer"
+              "match_count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "0"
+                "type": "integer"
+              "matches":
+                "items":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "maxItems": !!int "2147483647"
+                "minItems": !!int "0"
+                "type": "array"
+              "pattern":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "index"
+            - "pattern"
+            - "matches"
+            - "match_count"
+            "type": "object"
+          "maxItems": !!int "100"
+          "minItems": !!int "1"
+          "type": "array"
+        "next_cursor":
+          "minLength": !!int "1"
+          "type": "string"
+        "scan":
+          "additionalProperties": !!bool "false"
+          "properties":
+            "complete":
+              "type": "boolean"
+            "elapsed_ms":
+              "maximum": !!int "9223372036854775807"
+              "minimum": !!int "0"
+              "type": "integer"
+            "kind":
+              "enum":
+              - "address"
+              "type": "string"
+            "requested_end":
+              "type": "string"
+            "requested_start":
+              "type": "string"
+            "scanned_end":
+              "type": "string"
+            "scanned_start":
+              "type": "string"
+            "stop_reason":
+              "enum":
+              - "completed"
+              - "limit"
+              - "timeout"
+              "type": "string"
+          "required":
+          - "kind"
+          - "complete"
+          - "stop_reason"
+          - "elapsed_ms"
+          "type": "object"
+        "total_matches":
+          "maximum": !!int "2147483647"
+          "minimum": !!int "0"
+          "type": "integer"
+      "required":
+      - "items"
+      - "total_matches"
+      - "scan"
+      "type": "object"
+  "search.strings":
+    "description": "Search cached ASCII and UTF-16 strings by text or regex.\
+      \ Use next_cursor to get the next page."
+    "effects":
+      "allowed_during_analysis": !!bool "true"
+      "destructive": !!bool "false"
+      "idempotent": !!bool "true"
+      "mutates_program": !!bool "false"
+      "read_only": !!bool "true"
+      "requires_transaction": !!bool "false"
+    "input_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "filter":
+          "additionalProperties": !!bool "false"
+          "properties":
+            "case_sensitive":
+              "type": "boolean"
+            "defined":
+              "type": "boolean"
+            "encoding":
+              "enum":
+              - "all"
+              - "ascii"
+              - "utf16"
+              - "utf16be"
+              - "utf16le"
+              "type": "string"
+            "min_length":
+              "maximum": !!int "4096"
+              "minimum": !!int "1"
+              "type": "integer"
+            "query":
+              "type": "string"
+            "regex":
+              "minLength": !!int "1"
+              "type": "string"
+          "type": "object"
+        "page":
+          "additionalProperties": !!bool "false"
+          "properties":
+            "cursor":
+              "minLength": !!int "1"
+              "type": "string"
+            "limit":
+              "maximum": !!int "1000"
+              "minimum": !!int "1"
+              "type": "integer"
+          "type": "object"
+        "projection":
+          "additionalProperties": !!bool "false"
+          "properties":
+            "fields":
+              "items":
+                "enum":
+                - "address"
+                - "data_type"
+                - "defined"
+                - "encoding"
+                - "length"
+                - "value"
+                "type": "string"
+              "maxItems": !!int "256"
+              "minItems": !!int "1"
+              "type": "array"
+              "uniqueItems": !!bool "true"
+          "type": "object"
+        "scan":
+          "additionalProperties": !!bool "false"
+          "properties":
+            "range":
+              "additionalProperties": !!bool "false"
+              "properties":
+                "end":
+                  "type": "string"
+                "start":
+                  "type": "string"
+              "type": "object"
+            "timeout_ms":
+              "default": !!int "1000"
+              "maximum": !!int "60000"
+              "minimum": !!int "100"
+              "type": "integer"
+          "type": "object"
+      "type": "object"
+    "output_schema":
+      "$defs":
+        "data_type_reference":
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "index_complete":
+          "type": "boolean"
+        "items":
+          "items":
+            "additionalProperties": !!bool "false"
+            "properties":
+              "address":
+                "type": "string"
+              "data_type":
+                "$ref": "#/$defs/data_type_reference"
+              "defined":
+                "type": "boolean"
+              "encoding":
+                "enum":
+                - "ascii"
+                - "utf16be"
+                - "utf16le"
+                "type": "string"
+              "length":
+                "maximum": !!int "9223372036854775807"
+                "minimum": !!int "0"
+                "type": "integer"
+              "value":
+                "type": "string"
+            "required":
+            - "address"
+            "type": "object"
+          "maxItems": !!int "2147483647"
+          "minItems": !!int "0"
+          "type": "array"
+        "modification_number":
+          "maximum": !!int "9223372036854775807"
+          "minimum": !!int "-9223372036854775808"
+          "type": "integer"
+        "next_cursor":
+          "minLength": !!int "1"
+          "type": "string"
+        "total_indexed":
+          "maximum": !!int "2147483647"
+          "minimum": !!int "0"
+          "type": "integer"
+      "required":
+      - "items"
+      - "index_complete"
+      - "total_indexed"
+      - "modification_number"
       "type": "object"
   "session.get":
     "description": "Get the bridge session id, status, and program name."

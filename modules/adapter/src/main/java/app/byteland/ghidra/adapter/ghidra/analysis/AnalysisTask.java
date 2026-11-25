@@ -21,6 +21,7 @@ final class AnalysisTask {
   private final String id = UUID.randomUUID().toString();
   private final BooleanSupplier analyzed;
   private final TaskBody body;
+  private final Runnable completionHook;
   private final AnalysisTaskMonitor monitor = new AnalysisTaskMonitor();
   private volatile AnalysisResource.Status status = AnalysisResource.Status.RUNNING;
   private final long startedAt = System.currentTimeMillis();
@@ -33,6 +34,7 @@ final class AnalysisTask {
     Program program = session.currentProgram();
     this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(program);
     this.body = () -> performAnalysis(session, analysisManager, program, analyzerSelection);
+    this.completionHook = () -> session.notifyProgramMutated(null);
   }
 
   AnalysisTask(BooleanSupplier analyzed, Runnable operation) {
@@ -43,6 +45,7 @@ final class AnalysisTask {
           operation.run();
           return new TaskOutcome(AnalysisResource.Status.COMPLETED, null);
         };
+    this.completionHook = () -> {};
   }
 
   void run() {
@@ -53,6 +56,7 @@ final class AnalysisTask {
       outcome = new TaskOutcome(AnalysisResource.Status.FAILED, errorMessage(failure));
     }
     publish(outcome);
+    completionHook.run();
   }
 
   private TaskOutcome performAnalysis(

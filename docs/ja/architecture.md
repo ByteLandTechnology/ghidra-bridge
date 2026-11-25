@@ -30,7 +30,7 @@ modules/domain (サービスインターフェースとデータモデル)
 ### 1. `modules/domain`
 
 ドメインモジュールは、コアサービスインターフェースとデータ転送モデルを定義します:
-- サービスインターフェース: `ProgramService`, `MemoryService`, `ListingService`, `FunctionService`, `DataTypeService` など。
+- サービスインターフェース: `ProgramService`, `MemoryService`, `ListingService`, `FunctionService`, `DataTypeService`, `SearchService` など。
 - モデルレコード: `AddressResource`, `InstructionResource`, `FunctionResource`, `Page` など。
 - 例外定義: `DomainException`, `GlobalVariableConflictException`, `TransactionExecutionException` など。
 - **制約**: このモジュールは Ghidra API クラスを一切インポートしてはなりません。
@@ -38,7 +38,7 @@ modules/domain (サービスインターフェースとデータモデル)
 ### 2. `modules/wire`
 
 通信層モジュールは、統合されたメソッドカタログを管理します:
-- `ApiRegistry` が全 56 個の公開ドット記法メソッドとその入出力スキーマを一元管理します。
+- `ApiRegistry` が全 58 個の公開ドット記法メソッドとその入出力スキーマを一元管理します。
 - `JsonParser`、`JsonWriter`、`JsonUtil` が JSON を解析して整形します。
 - `modules/contracts` がビルド時に `docs/api.md` と `docs/asyncapi.yaml` を生成します。
 - `modules/transport/mcp` がビルド時に `docs/mcp-tools.json` を生成します。
@@ -71,7 +71,7 @@ modules/domain (サービスインターフェースとデータモデル)
 
 このモジュールは Model Context Protocol を実装します:
 - `McpHttpServer` がプロトコル `2026-07-28` に準拠する Streamable HTTP サーバーを実装します。
-- `McpToolRegistry` が 55 個の公開メソッドを 14 個のドメインツールおよび `ghidra.help` にマッピングします。
+- `McpToolRegistry` が 57 個の公開メソッドを 15 個のドメインツールおよび `ghidra.help` にマッピングします。
   `interface.get` は公開しません。
 - `ghidra-bridge://contracts/mcp-tools` にてツール規約リソースを提供します。
 

@@ -11,6 +11,7 @@ import app.byteland.ghidra.adapter.ghidra.listing.ListingServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.memory.MemoryServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.program.ProgramServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.reference.ReferenceServiceImpl;
+import app.byteland.ghidra.adapter.ghidra.search.SearchServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.symbol.SymbolServiceImpl;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
@@ -25,6 +26,7 @@ import app.byteland.ghidra.service.listing.ListingService;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
+import app.byteland.ghidra.service.search.SearchService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.app.script.GhidraScript;
 import java.util.Objects;
@@ -57,6 +59,7 @@ public final class GhidraServiceFactory {
     CommentService commentService = new CommentServiceImpl(context);
     AddressService addressService = new AddressServiceImpl(context);
     DataTypeService dataTypeService = new DataTypeServiceImpl(context);
+    SearchService searchService = new SearchServiceImpl(context, analysisService, memoryService);
 
     return new BridgeServices(
         programService,
@@ -71,6 +74,7 @@ public final class GhidraServiceFactory {
         decompilationService,
         symbolService,
         dataTypeService,
+        searchService,
         new TransactionRunner() {
           @Override
           public <T> T run(Operation<T> operation) {

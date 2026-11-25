@@ -72,6 +72,7 @@ public final class ApiRegistry {
         inertService(app.byteland.ghidra.service.decompilation.DecompilationService.class),
         inertService(app.byteland.ghidra.service.symbol.SymbolService.class),
         inertService(app.byteland.ghidra.service.datatype.DataTypeService.class),
+        inertService(app.byteland.ghidra.service.search.SearchService.class),
         inertService(app.byteland.ghidra.service.TransactionRunner.class),
         "metadata");
   }
@@ -213,7 +214,8 @@ public final class ApiRegistry {
             new SymbolMethods(this),
             new ReferenceMethods(this),
             new CommentMethods(this),
-            new DataTypeMethods(this));
+            new DataTypeMethods(this),
+            new SearchMethods(this));
     for (ApiMethodProvider provider : providers) {
       provider.register();
     }
@@ -292,8 +294,26 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
+    readWith(name, null, input, output, fields, identityFields, handler);
+  }
+
+  void readWith(
+      String name,
+      String description,
+      Map<String, Object> input,
+      Map<String, Object> output,
+      Set<String> fields,
+      List<String> identityFields,
+      ApiMethod.Handler<Map<String, Object>, Object> handler) {
     register(
-        name, MethodEffects.readOnlyMethod(), null, input, output, fields, identityFields, handler);
+        name,
+        MethodEffects.readOnlyMethod(),
+        description,
+        input,
+        output,
+        fields,
+        identityFields,
+        handler);
   }
 
   void list(
@@ -675,6 +695,29 @@ public final class ApiRegistry {
   private boolean analysisRunning() {
     return bridgeServices.analysisService().getStatus().status()
         == app.byteland.ghidra.service.analysis.AnalysisResource.Status.RUNNING;
+  }
+
+  PageRequest decodePageRequest(Map<String, Object> request, String resource) {
+    return decodePage(request, resource);
+  }
+
+  Map<String, Object> encodePagedList(
+      String resource,
+      Map<String, Object> request,
+      Page<?> raw,
+      PageRequest page,
+      Set<String> fields,
+      List<String> identityFields) {
+    return canonicalList(resource, request, raw, page, fields, identityFields);
+  }
+
+  String encodeCursorToken(
+      String resource, Map<String, Object> request, PageRequest page, String nextCursor) {
+    String fingerprint =
+        page.queryFingerprint() != null
+            ? page.queryFingerprint()
+            : CursorTokens.queryFingerprint(request);
+    return CursorTokens.encode(resource, sessionId, fingerprint, nextCursor);
   }
 
   private PageRequest decodePage(Map<String, Object> request, String resource) {

@@ -4,6 +4,7 @@ import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.ByteSequence;
 import app.byteland.ghidra.service.TransactionExecutionException;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressOverflowException;
 import ghidra.program.model.mem.MemoryAccessException;
 
 final class MemoryMutations {
@@ -19,6 +20,15 @@ final class MemoryMutations {
         MemoryEncoding.decodeBytes(
             sequence.data(), sequence.encoding().name().toLowerCase(java.util.Locale.ROOT));
     writeBytes(start, bytes);
+    if (bytes.length > 0) {
+      Address end;
+      try {
+        end = bytes.length == 1 ? start : start.addNoWrap(bytes.length - 1L);
+      } catch (AddressOverflowException overflow) {
+        end = start.getAddressSpace().getMaxAddress();
+      }
+      context.recordMutatedRange(start, end);
+    }
   }
 
   private Address parseAddress(String rawAddress) {

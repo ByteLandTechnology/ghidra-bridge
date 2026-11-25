@@ -4,19 +4,68 @@ import app.byteland.ghidra.service.TransactionExecutionException;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressSet;
+import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Program;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Coordinates Ghidra program access, commands, and transaction lifecycles.
  */
 public final class GhidraSession {
+  /**
+   * Receives notifications after committed transactions, commands, or analysis runs.
+   */
+  @FunctionalInterface
+  public interface MutationListener {
+    /**
+     * Reports a committed mutation. A null address set indicates a full-program mutation.
+     */
+    void onProgramMutated(AddressSetView affectedAddresses);
+  }
+
   private final GhidraScript ghidraScript;
   private final Object executionLock = new Object();
+  private final List<MutationListener> mutationListeners = new CopyOnWriteArrayList<>();
   private int transactionDepth;
+  private AddressSet pendingMutatedAddresses;
+  private boolean pendingUnscopedMutation;
 
   public GhidraSession(GhidraScript script) {
     this.ghidraScript = Objects.requireNonNull(script, "script");
+  }
+
+  public void addMutationListener(MutationListener listener) {
+    mutationListeners.add(Objects.requireNonNull(listener, "listener"));
+  }
+
+  public void recordMutatedRange(Address start, Address end) {
+    if (start == null) {
+      notifyProgramMutated(null);
+      return;
+    }
+    Address effectiveEnd = end == null ? start : end;
+    if (!start.getAddressSpace().equals(effectiveEnd.getAddressSpace())) {
+      notifyProgramMutated(null);
+      return;
+    }
+    Address min = start.compareTo(effectiveEnd) <= 0 ? start : effectiveEnd;
+    Address max = start.compareTo(effectiveEnd) <= 0 ? effectiveEnd : start;
+    synchronized (executionLock) {
+      if (transactionDepth > 0 && pendingMutatedAddresses != null) {
+        pendingMutatedAddresses.add(min, max);
+        return;
+      }
+    }
+    notifyProgramMutated(new AddressSet(min, max));
+  }
+
+  public void notifyProgramMutated(AddressSetView affectedAddresses) {
+    for (MutationListener listener : mutationListeners) {
+      listener.onProgramMutated(affectedAddresses);
+    }
   }
 
   public GhidraScript script() {
@@ -100,17 +149,32 @@ public final class GhidraSession {
       ghidraScript.end(true);
       ghidraScript.start();
       transactionDepth++;
+      pendingMutatedAddresses = new AddressSet();
+      pendingUnscopedMutation = false;
       boolean commit = false;
+      AddressSet committedRanges = null;
+      boolean unscoped = false;
       try {
         T result = runOperation(operation);
         commit = commitChanges;
         return result;
       } finally {
+        committedRanges = pendingMutatedAddresses;
+        unscoped = pendingUnscopedMutation;
+        pendingMutatedAddresses = null;
+        pendingUnscopedMutation = false;
         transactionDepth--;
         try {
           ghidraScript.end(commit);
         } finally {
           ghidraScript.start();
+        }
+        if (commit) {
+          AddressSetView affected =
+              unscoped || committedRanges == null || committedRanges.isEmpty()
+                  ? null
+                  : committedRanges;
+          notifyProgramMutated(affected);
         }
       }
     }
@@ -118,8 +182,19 @@ public final class GhidraSession {
 
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
+    boolean notifyStandalone = false;
     synchronized (executionLock) {
       if (ghidraScript.runCommand(command)) {
+        if (transactionDepth > 0) {
+          if (!command.getClass().getSimpleName().contains("Label")) {
+            pendingUnscopedMutation = true;
+          }
+        } else {
+          notifyStandalone = true;
+        }
+        if (notifyStandalone) {
+          notifyProgramMutated(null);
+        }
         return;
       }
     }
