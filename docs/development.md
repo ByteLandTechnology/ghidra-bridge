@@ -82,9 +82,19 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
+Install the local `pre-commit` and `commit-msg` hooks from `.pre-commit-config.yaml`:
+
+```bash
+pre-commit install --install-hooks
+```
+
+If a container or sandbox sets global `core.hooksPath=/dev/null`, unset it (`git config --global --unset-all core.hooksPath`) or run `GIT_CONFIG_GLOBAL=/dev/null pre-commit install --install-hooks` and `git config --local core.hooksPath .git/hooks`.
+
 Before you submit a change, run the verification suite that matches CI:
 
 ```bash
+pre-commit run --all-files
+pre-commit run --hook-stage commit-msg --commit-msg-filename .git/COMMIT_EDITMSG
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
@@ -92,6 +102,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
 
 The verification tasks check:
+- **Pre-Commit and Commit Rules**: `pre-commit` checks conflict markers, YAML and JSON syntax, repository hygiene, and Conventional Commit formatting.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
@@ -107,6 +118,7 @@ Review the proposed version and notes in the pull request.
 Merge the pull request into `main` to start the release.
 After verification, release-please creates a `v<version>` tag and a GitHub release.
 
+Follow the [commit message rules](../AGENTS.md#commit-messages) for all commits and pull request titles.
 release-please reads Conventional Commit messages to select the version:
 
 - `fix`: Increases the patch version, such as `1.2.1`.

@@ -73,14 +73,26 @@ Gradle 按以下优先级解析 Ghidra 安装路径：
 
 ## 质量检查
 
-在提交代码更改之前，必须运行全量验证套件：
+从 `.pre-commit-config.yaml` 安装本地 `pre-commit` 与 `commit-msg` Git 钩子：
 
 ```bash
-./gradlew --no-daemon clean verify
+pre-commit install --install-hooks
+```
+
+如果容器或沙盒环境设置了全局 `core.hooksPath=/dev/null`，请执行 `git config --global --unset-all core.hooksPath` 取消设置，或运行 `GIT_CONFIG_GLOBAL=/dev/null pre-commit install --install-hooks` 与 `git config --local core.hooksPath .git/hooks`。
+
+在提交代码更改之前，运行与 CI 一致的验证套件：
+
+```bash
+pre-commit run --all-files
+pre-commit run --hook-stage commit-msg --commit-msg-filename .git/COMMIT_EDITMSG
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
 ```
 
 验证套件执行以下检查：
+- **Pre-Commit 与提交规范**：`pre-commit` 检查冲突标记、YAML 与 JSON 语法、仓库卫生以及 Conventional Commit 格式。
+- **单元测试**：`check` 在所有 Java 模块中运行 JUnit 测试。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。
 - **生成脚本编译**：`compileGeneratedScripts` 确保生成的启动脚本编译通过。
@@ -95,6 +107,7 @@ CI 工作流使用 release-please 管理版本和发布说明。
 将该拉取请求合并到 `main` 以开始发布。
 验证通过后，release-please 创建 `v<版本号>` 标签和 GitHub Release。
 
+所有提交消息与拉取请求标题必须遵循[提交消息规范](../../AGENTS.md#commit-messages)。
 release-please 根据 Conventional Commit 提交消息计算版本号：
 
 - `fix`：递增补丁版本，例如 `1.2.1`。

@@ -1,0 +1,50 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+        stages: [pre-commit]
+        args: [--assume-in-merge]
+      - id: check-yaml
+        stages: [pre-commit]
+      - id: check-json
+        stages: [pre-commit]
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+        exclude: ^docs/(api\.md|asyncapi\.yaml|mcp-tools\.json)$
+      - id: trailing-whitespace
+        stages: [pre-commit]
+        exclude: ^docs/(api\.md|asyncapi\.yaml|mcp-tools\.json)$
+      - id: mixed-line-ending
+        stages: [pre-commit]
+        args: [--fix=no]
+        exclude: ^docs/(api\.md|asyncapi\.yaml|mcp-tools\.json)$
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.5.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - --verbose
+          - --scopes
+          - adapter,build,ci,contracts,docs,domain,launcher,mcp,runtime,test,transport,websocket,wire
+
+  - repo: local
+    hooks:
+      - id: verify-repository-hygiene
+        name: Verify repository hygiene
+        entry: bash .github/scripts/verify-repository-hygiene.sh
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+      - id: verify-commit-message
+        name: Verify commit message rules
+        entry: python3 .github/scripts/verify-commit-message.py
+        language: system
+        stages: [commit-msg]

@@ -73,14 +73,26 @@ Ghidra の内部データ構造を型付けされたドメインレコードに�
 
 ## 品質チェック
 
-変更をコミットする前に、必ず検証スイートを実行してください:
+`.pre-commit-config.yaml` からローカルの `pre-commit` と `commit-msg` フックをインストールします:
 
 ```bash
-./gradlew --no-daemon clean verify
+pre-commit install --install-hooks
+```
+
+コンテナやサンドボックス環境でグローバルの `core.hooksPath=/dev/null` が設定されている場合は、`git config --global --unset-all core.hooksPath` で解除するか、`GIT_CONFIG_GLOBAL=/dev/null pre-commit install --install-hooks` と `git config --local core.hooksPath .git/hooks` を実行してください。
+
+変更をコミットする前に、CI と一致する検証スイートを実行してください:
+
+```bash
+pre-commit run --all-files
+pre-commit run --hook-stage commit-msg --commit-msg-filename .git/COMMIT_EDITMSG
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
 ```
 
 検証タスクは以下を厳格に検査します:
+- **Pre-Commit とコミット規約**: `pre-commit` がコンフリクトマーカー、YAML・JSON 構文、リポジトリ衛生、Conventional Commit 形式を検査します。
+- **単体テスト**: `check` がすべての Java モジュールで JUnit テストを実行します。
 - **アーキテクチャ境界**: `verifyArchitecture` により、adapter と launcher 以外での Ghidra クラスのインポートが禁止されます。
 - **規約ドリフト検出**: `verifyApiContracts` により、ドキュメント規約とコードの一致が確認されます。
 - **スクリプトコンパイル**: `compileGeneratedScripts` により、生成された起動スクリプトが正常にコンパイルできることを確認します。
@@ -95,6 +107,7 @@ CI ワークフローは release-please でバージョンとリリースノー�
 プルリクエストを `main` にマージしてリリースを開始します。
 検証後に、release-please が `v<バージョン>` タグと GitHub リリースを作成します。
 
+すべてのコミットメッセージとプルリクエストタイトルは [コミットメッセージ規約](../../AGENTS.md#commit-messages) に従ってください。
 release-please は Conventional Commit メッセージからバージョンを決定します:
 
 - `fix`: パッチバージョンを上げます（`1.2.1` など）。

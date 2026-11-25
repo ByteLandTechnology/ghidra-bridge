@@ -25,6 +25,37 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-py3.12-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Install pre-commit
+        run: |
+          python3 -m pip install pre-commit==4.7.0
+          pre-commit install-hooks
+
+      - name: Run pre-commit checks
+        run: pre-commit run --all-files
+
+      - name: Verify commit messages and pull request title
+        # Runs pre-commit run --hook-stage commit-msg on non-exempt PR titles and commits.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/verify-commits.sh
 
       - name: Install Java and Ghidra
         uses: ./.github/actions/setup-ghidra

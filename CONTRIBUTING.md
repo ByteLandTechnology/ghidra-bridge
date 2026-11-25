@@ -20,15 +20,25 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 ## Submit a change
 
+Install the local `pre-commit` and `commit-msg` Git hooks once per clone:
+
+```bash
+pre-commit install --install-hooks
+```
+
+If a container or sandbox sets global `core.hooksPath=/dev/null`, unset it (`git config --global --unset-all core.hooksPath`) or run `GIT_CONFIG_GLOBAL=/dev/null pre-commit install --install-hooks` and `git config --local core.hooksPath .git/hooks`.
+
 Run the local checks that match CI verification:
 
 ```bash
+pre-commit run --all-files
+pre-commit run --hook-stage commit-msg --commit-msg-filename .git/COMMIT_EDITMSG
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
 `verify` runs JUnit tests across all Java modules (`check`), contract drift checks, script compilation, distribution checks, and architecture boundary checks. On Linux x86-64, also run `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify` when you change function or runtime behavior. State the behavior change and its effect on users in the pull request.
 
-Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
+Use a Conventional Commit message and pull request title. For example: `fix(wire): reject unknown fields`. Follow the [commit message rules](AGENTS.md#commit-messages). The commit type sets the next release version. See [the development guide](docs/development.md#releases).
 
 Report a security problem as described in [SECURITY.md](SECURITY.md). Do not put a security report in a public issue.
