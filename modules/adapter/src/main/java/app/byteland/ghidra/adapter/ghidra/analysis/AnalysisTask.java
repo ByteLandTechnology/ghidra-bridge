@@ -150,10 +150,6 @@ final class AnalysisTask {
         error);
   }
 
-  String message() {
-    return monitor.getMessage();
-  }
-
   private void publish(TaskOutcome outcome) {
     if (outcome.error() != null) {
       monitor.setMessage(outcome.error());

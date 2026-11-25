@@ -20,10 +20,6 @@ final class RequestLog {
   private int httpStatus = 200;
   private String failureCause;
 
-  RequestLog() {
-    this(RequestLog::discard);
-  }
-
   RequestLog(Consumer<String> sink) {
     this.sink = Objects.requireNonNull(sink, "sink");
   }
@@ -102,8 +98,6 @@ final class RequestLog {
     }
     output.append(hex);
   }
-
-  private static void discard(String ignored) {}
 
   void finish() {
     long elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000L;

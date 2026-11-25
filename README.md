@@ -44,8 +44,8 @@ The loader scripts locate `ghidra-bridge.jar` relative to their file path.
 1. Open a binary in the Ghidra CodeBrowser tool.
 2. Open the Script Manager window.
 3. Add `build/ghidra-script/` to your script directories.
-4. Run `Bridge.java` for WebSocket or `GhidraMcp.java` for MCP.
-5. Enter configuration arguments in the prompt window.
+4. Run `Bridge.java` for WebSocket or `GhidraMcp.java` for MCP in the `Ghidra Bridge` category.
+5. Read the bound endpoint URL, `session_id`, and `tool_prefix` in the Console window. The script starts automatically on `127.0.0.1` (`8765` or `8766`) and picks the next free port for extra tabs.
 
 ### Run in Ghidra Headless Mode
 
