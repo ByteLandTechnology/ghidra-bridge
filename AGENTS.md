@@ -97,7 +97,7 @@ Run JUnit tests across all Java modules or for one module during iteration:
 ./gradlew --no-daemon :adapter:test
 ```
 
-Run the repository verification suite before you commit or open a pull request:
+Run the repository verification suite before you commit or open a pull request. CI runs `./gradlew --no-daemon verify` on a new checkout. Local runs use `clean verify` to delete previous build output:
 
 ```bash
 pre-commit run --all-files
@@ -105,7 +105,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-On Linux x86-64, run the headless regression test after `clean verify` (requires `gcc` and `nm`):
+On Linux x86-64, run the headless regression test after `buildGhidraScript`, `verify`, or `clean verify` (requires `gcc` and `nm`):
 
 ```bash
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"

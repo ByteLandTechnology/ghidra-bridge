@@ -87,7 +87,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-[AGENTS.md](../../AGENTS.md) のリポジトリ規則および[コミットメッセージ規則](../../AGENTS.md#commit-messages)に従ってください。Linux x86-64 では、CI は `clean verify` の後に `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` も実行します。
+[AGENTS.md](../../AGENTS.md) のリポジトリ規則および[コミットメッセージ規則](../../AGENTS.md#commit-messages)に従ってください。Linux x86-64 では、CI は `verify` の後に `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` も実行します。
 
 検証タスクは以下を厳格に検査します:
 - **リポジトリ衛生**: `pre-commit` と `verify-repository-hygiene.sh` が空ファイル、重複ファイル、生成物を拒否し、`docs/api.md` のメソッド数を確認します。
@@ -132,9 +132,9 @@ bash .github/scripts/package-release.sh
 Settings > Actions > General で
 「Allow GitHub Actions to create and approve pull requests」を有効にします。
 ワークフローは既定で `GITHUB_TOKEN` を使用します。このトークンで作成したプルリクエストは、新しいイベントなしでは CI を実行しません。
-リリースプルリクエストで CI を実行するには、個人アクセストークンをリポジトリの secret
+リリースプルリクエストで CI を実行するには、プルリクエストを閉じて再度開くか、個人アクセストークンをリポジトリの secret
 `RELEASE_PLEASE_TOKEN` に設定します。
-トークンに、このリポジトリの Contents、Issues、Pull requests の書き込み権限を付与します。
+トークンに、このリポジトリの Contents と Pull requests の書き込み権限を付与します。
 詳細は [release-please Action のドキュメント](https://github.com/googleapis/release-please-action) を参照してください。
 
 `publish` ジョブが失敗した場合は、GitHub Actions で「Re-run failed jobs」を選択します。

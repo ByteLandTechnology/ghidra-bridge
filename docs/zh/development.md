@@ -87,7 +87,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-请遵守 [AGENTS.md](../../AGENTS.md) 中的仓库规则与[提交消息规则](../../AGENTS.md#commit-messages)。在 Linux x86-64 上，CI 还会在 `clean verify` 之后运行 `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`。
+请遵守 [AGENTS.md](../../AGENTS.md) 中的仓库规则与[提交消息规则](../../AGENTS.md#commit-messages)。在 Linux x86-64 上，CI 还会在 `verify` 之后运行 `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`。
 
 验证套件执行以下检查：
 - **仓库卫生**：`pre-commit` 与 `verify-repository-hygiene.sh` 拒绝空文件、重复文件和生成产物，并校验 `docs/api.md` 的方法数量。
@@ -132,8 +132,8 @@ bash .github/scripts/package-release.sh
 在 Settings > Actions > General 中启用
 “Allow GitHub Actions to create and approve pull requests”。
 工作流默认使用 `GITHUB_TOKEN`，该令牌创建的拉取请求不会在没有新事件时启动 CI。
-如需在发布拉取请求上运行 CI，设置仓库 secret `RELEASE_PLEASE_TOKEN`，使用个人访问令牌。
-为该令牌授予此仓库的 Contents、Issues 和 Pull requests 写权限。
+如需在发布拉取请求上运行 CI，请关闭并重新打开该拉取请求，或将仓库 secret `RELEASE_PLEASE_TOKEN` 设置为个人访问令牌。
+为该令牌授予此仓库的 Contents 和 Pull requests 写权限。
 详见 [release-please Action 文档](https://github.com/googleapis/release-please-action)。
 
 如果 `publish` 任务失败，可在 GitHub Actions 中选择 “Re-run failed jobs”。

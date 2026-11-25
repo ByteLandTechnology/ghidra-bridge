@@ -96,7 +96,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`. Obey the repository rules in [AGENTS.md](../AGENTS.md) and the [commit message rules](../AGENTS.md#commit-messages).
+On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `verify`. Obey the repository rules in [AGENTS.md](../AGENTS.md) and the [commit message rules](../AGENTS.md#commit-messages).
 
 The verification tasks check:
 - **Repository Hygiene**: `pre-commit` and `verify-repository-hygiene.sh` reject empty, duplicate, and generated files and verify `docs/api.md` method counts.
@@ -141,8 +141,8 @@ bash .github/scripts/package-release.sh
 In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests".
 The workflow uses `GITHUB_TOKEN` by default.
 Pull requests created with this token do not start CI without a new event.
-For CI on release pull requests, set the `RELEASE_PLEASE_TOKEN` secret to a personal access token.
-Give that token Contents, Issues, and Pull requests write access to this repository.
+For CI on release pull requests, close and reopen the pull request, or set the `RELEASE_PLEASE_TOKEN` secret to a personal access token.
+Give that token Contents and Pull requests write access to this repository.
 See the [release-please Action documentation](https://github.com/googleapis/release-please-action).
 
 If the `publish` job fails, use "Re-run failed jobs" in GitHub Actions.
