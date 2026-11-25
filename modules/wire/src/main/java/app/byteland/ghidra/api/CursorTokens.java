@@ -1,12 +1,11 @@
 package app.byteland.ghidra.api;
 
+import app.byteland.ghidra.JsonUtil;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import javax.crypto.Mac;
@@ -119,42 +118,36 @@ public final class CursorTokens {
       if (java.util.Set.of("cursor", "fields", "limit", "timeout_ms").contains(entry.getKey())) {
         continue;
       }
-      Object canonicalValue = canonical(entry.getValue());
-      if (canonicalValue instanceof Map<?, ?> map && map.isEmpty()) {
+      Object pruned = pruneEmptyMaps(entry.getValue());
+      if (pruned instanceof Map<?, ?> map && map.isEmpty()) {
         continue;
       }
-      query.put(entry.getKey(), canonicalValue);
+      query.put(entry.getKey(), JsonUtil.canonical(pruned));
     }
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       return Base64.getUrlEncoder()
           .withoutPadding()
           .encodeToString(
-              digest.digest(
-                  app.byteland.ghidra.JsonUtil.toJson(query).getBytes(StandardCharsets.UTF_8)));
+              digest.digest(JsonUtil.toJson(query).getBytes(StandardCharsets.UTF_8)));
     } catch (java.security.GeneralSecurityException impossible) {
       throw new IllegalStateException(impossible);
     }
   }
 
-  private static Object canonical(Object value) {
-    if (value instanceof Map<?, ?> map) {
-      Map<String, Object> sorted = new TreeMap<>();
-      for (Map.Entry<?, ?> entry : map.entrySet()) {
-        Object child = canonical(entry.getValue());
-        if (child instanceof Map<?, ?> childMap && childMap.isEmpty()) {
-          continue;
-        }
-        sorted.put(String.valueOf(entry.getKey()), child);
+  private static Object pruneEmptyMaps(Object value) {
+    if (!(value instanceof Map<?, ?> map)) {
+      return value;
+    }
+    Map<String, Object> pruned = new LinkedHashMap<>();
+    for (Map.Entry<?, ?> entry : map.entrySet()) {
+      Object child = pruneEmptyMaps(entry.getValue());
+      if (child instanceof Map<?, ?> childMap && childMap.isEmpty()) {
+        continue;
       }
-      return new LinkedHashMap<>(sorted);
+      pruned.put(String.valueOf(entry.getKey()), child);
     }
-    if (value instanceof Iterable<?> iterable) {
-      List<Object> result = new ArrayList<>();
-      for (Object item : iterable) result.add(canonical(item));
-      return result;
-    }
-    return value;
+    return pruned;
   }
 
   private static String signature(String payload) {

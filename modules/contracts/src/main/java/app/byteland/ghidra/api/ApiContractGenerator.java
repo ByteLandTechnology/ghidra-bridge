@@ -1,14 +1,13 @@
 package app.byteland.ghidra.api;
 
+import app.byteland.ghidra.JsonUtil;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import org.snakeyaml.engine.v2.api.Dump;
 import org.snakeyaml.engine.v2.api.DumpSettings;
 import org.snakeyaml.engine.v2.common.FlowStyle;
@@ -184,26 +183,10 @@ public final class ApiContractGenerator {
             .setBestLineBreak("\n")
             .setDereferenceAliases(true)
             .build();
-    String output = new Dump(settings).dumpToString(canonical(value));
+    String output = new Dump(settings).dumpToString(JsonUtil.canonical(value));
     if (output.lines().anyMatch(line -> line.codePointCount(0, line.length()) > YAML_MAX_WIDTH)) {
       throw new IllegalArgumentException("A YAML line exceeds 100 characters");
     }
     return output;
-  }
-
-  private static Object canonical(Object value) {
-    if (value instanceof Map<?, ?> map) {
-      Map<String, Object> result = new TreeMap<>();
-      for (Map.Entry<?, ?> entry : map.entrySet()) {
-        result.put(String.valueOf(entry.getKey()), canonical(entry.getValue()));
-      }
-      return result;
-    }
-    if (value instanceof Iterable<?> iterable) {
-      List<Object> result = new ArrayList<>();
-      for (Object item : iterable) result.add(canonical(item));
-      return result;
-    }
-    return value;
   }
 }

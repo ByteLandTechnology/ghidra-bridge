@@ -86,23 +86,17 @@ final class GlobalVariableMethods implements ApiMethodProvider {
             ApiVocabulary.ADDRESS,
             ApiVocabulary.NAME,
             ApiVocabulary.DATA_TYPE);
-    registry.writeResource(
+    Map<String, Object> globalVariableInput =
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(ApiVocabulary.RESOURCE, globalVariableDefinition),
+            ApiVocabulary.RESOURCE);
+    registerGlobalVariableWrite(
         "global_variable.create",
         MethodEffects.mutation(false, false),
         "Create typed data and a primary global variable label at an unused address.",
-        ApiSchemaCatalog.input(
-            ApiSchemaCatalog.props(ApiVocabulary.RESOURCE, globalVariableDefinition),
-            ApiVocabulary.RESOURCE),
+        globalVariableInput,
         globalVariableFields,
-        List.of(ApiVocabulary.ADDRESS),
-        request -> {
-          Map<String, Object> resource = resource(request);
-          writeGlobalVariable(globalVariableMutation(resource), WriteMode.CREATE);
-          return registry
-              .services()
-              .globalVariableService()
-              .getGlobalVariable(text(resource, ApiVocabulary.ADDRESS));
-        });
+        WriteMode.CREATE);
     Map<String, Object> globalVariablePatch =
         ApiSchemaCatalog.nonEmptyObject(
             ApiSchemaCatalog.props(
@@ -130,23 +124,13 @@ final class GlobalVariableMethods implements ApiMethodProvider {
               WriteMode.PATCH);
           return registry.services().globalVariableService().getGlobalVariable(address);
         });
-    registry.writeResource(
+    registerGlobalVariableWrite(
         "global_variable.upsert",
         MethodEffects.mutation(true, true),
         "Create or replace a typed global variable. Keep unrelated code and data.",
-        ApiSchemaCatalog.input(
-            ApiSchemaCatalog.props(ApiVocabulary.RESOURCE, globalVariableDefinition),
-            ApiVocabulary.RESOURCE),
+        globalVariableInput,
         globalVariableFields,
-        List.of(ApiVocabulary.ADDRESS),
-        request -> {
-          Map<String, Object> resource = resource(request);
-          writeGlobalVariable(globalVariableMutation(resource), WriteMode.UPSERT);
-          return registry
-              .services()
-              .globalVariableService()
-              .getGlobalVariable(text(resource, ApiVocabulary.ADDRESS));
-        });
+        WriteMode.UPSERT);
     registry.writeResult(
         "global_variable.delete",
         MethodEffects.mutation(true, true),
@@ -167,6 +151,30 @@ final class GlobalVariableMethods implements ApiMethodProvider {
                   text(selector(request), ApiVocabulary.ADDRESS),
                   Boolean.TRUE.equals(bool(request, "delete_symbol").orElse(null)));
           return Map.of(ApiVocabulary.DELETED, true);
+        });
+  }
+
+  private void registerGlobalVariableWrite(
+      String name,
+      MethodEffects effects,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      WriteMode mode) {
+    registry.writeResource(
+        name,
+        effects,
+        description,
+        input,
+        fields,
+        List.of(ApiVocabulary.ADDRESS),
+        request -> {
+          Map<String, Object> resource = resource(request);
+          writeGlobalVariable(globalVariableMutation(resource), mode);
+          return registry
+              .services()
+              .globalVariableService()
+              .getGlobalVariable(text(resource, ApiVocabulary.ADDRESS));
         });
   }
 
