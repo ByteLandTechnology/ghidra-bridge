@@ -45,7 +45,7 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
 
 ### Full Build and Verification (`clean verify`)
 
-Run the full Gradle verification gate used in pull requests and release archives:
+Run the full local Gradle verification check. CI runs `./gradlew --no-daemon verify` on a new checkout for pull requests and release archives. Keep `clean verify` locally to delete previous build output:
 
 ```bash
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
@@ -91,26 +91,36 @@ bash .github/scripts/verify-repository-hygiene.sh
 
 ### Headless Regression Tests
 
-After `buildGhidraScript` or `clean verify` populates `build/ghidra-script/`, run the headless Ghidra function-mutation regression test on Linux x86-64 (requires `gcc` and `nm`):
+After `buildGhidraScript`, `verify`, or `clean verify` populates `build/ghidra-script/`, run the headless Ghidra function-mutation regression test on Linux x86-64 (requires `gcc` and `nm`):
 
 ```bash
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
-### Release Packaging Verification
-
-Build and verify the release archive locally with full Gradle stack traces (`--stacktrace`):
-
-```bash
-GHIDRA_INSTALL_DIR=/path/to/ghidra bash .github/scripts/package-release.sh
-```
-
 ### Exact Local CI Sequence
 
-Run these three commands in order to match the `verify` job in `.github/workflows/ci.yml`:
+Run these three commands in order to match the `verify` job in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
+
+### Release Archive Check
+
+Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, run Gradle verification with `--stacktrace`, and build the release archive and SHA-256 checksum in `build/release/`:
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra bash .github/scripts/package-release.sh
+```
+
+## Releases
+
+- CI keeps the `verify -> release -> publish` job sequence without cross-job workflow artifacts.
+- `release-please` creates a `v<version>` tag and a draft GitHub release (`"draft": true` and `"force-tag-creation": true` in `release-please-config.json`).
+- `publish` gets `needs.release.outputs.sha` with `persist-credentials: false` and checks `HEAD`, the `v<version>` tag, the remote tag SHA, `isDraft == true`, `.release-please-manifest.json`, and `version.txt`.
+- `publish` runs `package-release.sh` (which runs `verify` in CI and `clean verify` locally) and `tests/function_mutation_regression.py` before asset upload.
+- `publish` checks non-empty `.zip` and `.sha256` files, verifies `sha256sum -c`, and uploads both assets with `gh release upload --clobber`.
+- `publish` makes the draft release public last with `gh api --method PATCH` and `-F draft=false`.
+- If `publish` fails, the GitHub release stays hidden as a draft until you rerun the failed jobs.

@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import app.byteland.ghidra.service.DomainException;
 import app.byteland.ghidra.service.TransactionExecutionException;
 import java.io.IOException;
+import java.io.Serial;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -158,23 +159,6 @@ class ApiFailuresAdversarialTest {
   @Test
   @DisplayName("Adversarial: custom DomainException implementations map status and code")
   void testCustomDomainExceptions() {
-    class CustomDomainException extends RuntimeException implements DomainException {
-      private final int status;
-      private final String code;
-      private final String target;
-
-      CustomDomainException(int status, String code, String target, String msg) {
-        super(msg);
-        this.status = status;
-        this.code = code;
-        this.target = target;
-      }
-
-      @Override public int status() { return status; }
-      @Override public String code() { return code; }
-      @Override public String target() { return target; }
-    }
-
     var ex409 = new CustomDomainException(409, "conflict_error", "session_id", "conflict detected");
     var f409 = ApiFailures.normalize(ex409);
     assertEquals(409, f409.status());
@@ -262,6 +246,37 @@ class ApiFailuresAdversarialTest {
       assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
     } finally {
       executor.shutdownNow();
+    }
+  }
+
+  private static final class CustomDomainException extends RuntimeException
+      implements DomainException {
+    @Serial
+    private static final long serialVersionUID = 1L;
+    private final int status;
+    private final String code;
+    private final String target;
+
+    CustomDomainException(int status, String code, String target, String msg) {
+      super(msg);
+      this.status = status;
+      this.code = code;
+      this.target = target;
+    }
+
+    @Override
+    public int status() {
+      return status;
+    }
+
+    @Override
+    public String code() {
+      return code;
+    }
+
+    @Override
+    public String target() {
+      return target;
     }
   }
 }
