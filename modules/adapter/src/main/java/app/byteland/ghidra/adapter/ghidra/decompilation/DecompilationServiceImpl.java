@@ -89,14 +89,20 @@ public final class DecompilationServiceImpl implements DecompilationService {
   }
 
   private LeasePool<DecompInterface> poolFor(Program program) {
+    if (injectedPool != null) {
+      synchronized (poolLock) {
+        if (closed) {
+          throw new IllegalStateException("decompilation service is closed");
+        }
+        return injectedPool;
+      }
+    }
+    Program target = program != null ? program : context.currentProgram();
     synchronized (poolLock) {
       if (closed) {
         throw new IllegalStateException("decompilation service is closed");
       }
-      if (injectedPool != null) {
-        return injectedPool;
-      }
-      return decompilerPools.computeIfAbsent(program, DecompilerPoolFactory::create);
+      return decompilerPools.computeIfAbsent(target, DecompilerPoolFactory::create);
     }
   }
 

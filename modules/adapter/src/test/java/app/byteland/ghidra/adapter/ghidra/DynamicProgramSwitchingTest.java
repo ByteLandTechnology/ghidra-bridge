@@ -6,11 +6,18 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.ByteSequence;
+import app.byteland.ghidra.service.decompilation.DecompilationResource;
+import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
+import app.byteland.ghidra.service.listing.InstructionResource;
+import app.byteland.ghidra.service.symbol.SymbolService.DemangleResult;
 import ghidra.framework.cmd.Command;
 import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
+import ghidra.util.classfinder.ClassSearcher;
+import ghidra.util.task.TaskMonitor;
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -202,6 +209,133 @@ class DynamicProgramSwitchingTest {
           });
       assertEquals((byte) 0x22, betaChecksBytes(beta, 0x401000, 1)[0]);
       assertTrue(!beta.isChanged() || betaChecksBytes(beta, 0x401000, 1)[0] == 0x22);
+    }
+  }
+
+  @Test
+  void decompilationListingScanAndDemanglingSwitchAcrossActivePrograms() throws Exception {
+    GhidraTestSupport.x64Language();
+    ClassSearcher.search(TaskMonitor.DUMMY);
+
+    try (var alphaHolder = GhidraTestSupport.createX64Program("alpha.elf");
+        var betaHolder = GhidraTestSupport.createX64Program("beta.elf")) {
+      alphaHolder.inTransaction(
+          program -> {
+            program.setExecutableFormat("Executable and Linking Format (ELF)");
+            Address start =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+            // mov eax, 0x2a; ret
+            byte[] code = new byte[] {(byte) 0xb8, 0x2a, 0x00, 0x00, 0x00, (byte) 0xc3};
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    start,
+                    new ByteArrayInputStream(code),
+                    code.length,
+                    TaskMonitor.DUMMY,
+                    false);
+          });
+      betaHolder.inTransaction(
+          program -> {
+            program.setExecutableFormat("Executable and Linking Format (ELF)");
+            Address start =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+            // nop; mov eax, 0x07; ret
+            byte[] code = new byte[] {(byte) 0x90, (byte) 0xb8, 0x07, 0x00, 0x00, 0x00, (byte) 0xc3};
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    start,
+                    new ByteArrayInputStream(code),
+                    code.length,
+                    TaskMonitor.DUMMY,
+                    false);
+          });
+
+      Program alpha = alphaHolder.program();
+      Program beta = betaHolder.program();
+      AtomicReference<Program> active = new AtomicReference<>(alpha);
+      GhidraSession session = new GhidraSession(active::get);
+
+      try (var services = GhidraServiceFactory.create(session, "gui-fallback")) {
+        // Create mangled function on alpha.elf, list instructions, demangle, and decompile.
+        services
+            .transactionRunner()
+            .run(() -> services.functionService().createFunction("0x401000", "_ZN5alpha3runEv", true));
+        List<InstructionResource> alphaInsns =
+            services
+                .listingService()
+                .listInstructions(AddressScanOptions.of(null, null, 2_000), 10, null)
+                .items();
+        assertEquals(List.of("MOV", "RET"), alphaInsns.stream().map(InstructionResource::mnemonic).toList());
+
+        DemangleResult alphaDemangle = services.symbolService().demangleSymbols();
+        assertEquals(1, alphaDemangle.renamed());
+        DecompilationResource alphaDecomp =
+            services
+                .decompilationService()
+                .decompileFunction("0x401000", DecompilationResource.Format.TEXT, 10_000, false);
+        assertEquals("run", alphaDecomp.name());
+        assertTrue(alphaDecomp.c().contains("run("));
+
+        // Rename the function on alpha.elf and confirm cache flush updates decompiler output.
+        services
+            .transactionRunner()
+            .run(
+                () -> {
+                  services
+                      .functionService()
+                      .patchFunction(
+                          "0x401000",
+                          "alpha_updated",
+                          null,
+                          false,
+                          null,
+                          null,
+                          null,
+                          FunctionAttributePatch.empty());
+                  return null;
+                });
+        DecompilationResource alphaUpdated =
+            services
+                .decompilationService()
+                .decompileFunction("0x401000", DecompilationResource.Format.TEXT, 10_000, false);
+        assertEquals("alpha_updated", alphaUpdated.name());
+        assertTrue(alphaUpdated.c().contains("alpha_updated("));
+
+        // Switch active program to beta.elf and verify instruction scan, demangler, and decompiler isolate state.
+        active.set(beta);
+        services
+            .transactionRunner()
+            .run(() -> services.functionService().createFunction("0x401000", "_ZN4beta4stepEv", true));
+        List<InstructionResource> betaInsns =
+            services
+                .listingService()
+                .listInstructions(AddressScanOptions.of(null, null, 2_000), 10, null)
+                .items();
+        assertEquals(
+            List.of("NOP", "MOV", "RET"),
+            betaInsns.stream().map(InstructionResource::mnemonic).toList());
+
+        DemangleResult betaDemangle = services.symbolService().demangleSymbols();
+        assertEquals(1, betaDemangle.renamed());
+        DecompilationResource betaDecomp =
+            services
+                .decompilationService()
+                .decompileFunction("0x401000", DecompilationResource.Format.TEXT, 10_000, false);
+        assertEquals("step", betaDecomp.name());
+        assertTrue(betaDecomp.c().contains("step("));
+
+        // Release alpha.elf pool and verify beta.elf decompiler continues to work.
+        session.notifyProgramClosed(alpha);
+        DecompilationResource betaAfterAlphaClose =
+            services
+                .decompilationService()
+                .decompileFunction("0x401000", DecompilationResource.Format.TEXT, 10_000, false);
+        assertEquals("step", betaAfterAlphaClose.name());
+      }
     }
   }
 
