@@ -26,8 +26,10 @@ import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Proxy;
+import java.net.BindException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -161,22 +163,12 @@ class McpServerContractTest {
   @Test
   @SuppressWarnings("unchecked")
   void mcpHttpServerScopesResourceUrisSupportsSseAndKeepsDottedCallFallback() throws Exception {
-    int defaultPort = freePort();
-    int customPort = freePort();
     HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
-    try (AgentDispatcher defaultDispatcher = testDispatcher("default-session");
-        AgentDispatcher customDispatcher = testDispatcher("sample-session");
-        McpHttpServer defaultServer =
-            new McpHttpServer(
-                new McpConfig("127.0.0.1", defaultPort, "/mcp", null, "default-session", "ghidra"),
-                defaultDispatcher);
-        McpHttpServer customServer =
-            new McpHttpServer(
-                new McpConfig("127.0.0.1", customPort, "/mcp", null, "sample-session", "sample"),
-                customDispatcher)) {
-      defaultServer.start();
-      customServer.start();
+    try (RunningServer defaultRunning = startServer("default-session", "ghidra");
+        RunningServer customRunning = startServer("sample-session", "sample")) {
+      McpHttpServer defaultServer = defaultRunning.server();
+      McpHttpServer customServer = customRunning.server();
 
       Map<String, Object> defaultList =
           postInitializedJsonRpc(client, defaultServer.endpoint(), "resources/list", Map.of());
@@ -260,7 +252,7 @@ class McpServerContractTest {
         assertTrue(dataLine.startsWith("data: /mcp?sessionId="), dataLine);
 
         String relativeEndpoint = dataLine.substring("data: ".length());
-        String sessionUrl = "http://127.0.0.1:" + defaultPort + relativeEndpoint;
+        String sessionUrl = "http://127.0.0.1:" + defaultRunning.port() + relativeEndpoint;
         HttpResponse<String> posted =
             sendInitializedRaw(client, sessionUrl, "ping", Map.of());
         assertEquals(202, posted.statusCode());
@@ -390,9 +382,40 @@ class McpServerContractTest {
     return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
   }
 
-  private static int freePort() throws Exception {
+  private static RunningServer startServer(String sessionId, String toolPrefix) throws Exception {
+    IOException lastError = null;
+    for (int attempt = 0; attempt < 10; attempt++) {
+      int port = freePort();
+      AgentDispatcher dispatcher = testDispatcher(sessionId);
+      try {
+        McpHttpServer server =
+            new McpHttpServer(
+                new McpConfig("127.0.0.1", port, "/mcp", null, sessionId, toolPrefix), dispatcher);
+        server.start();
+        return new RunningServer(server, dispatcher, port);
+      } catch (BindException bindError) {
+        dispatcher.close();
+        lastError = bindError;
+      }
+    }
+    throw lastError;
+  }
+
+  private static int freePort() throws IOException {
     try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
       return socket.getLocalPort();
+    }
+  }
+
+  private record RunningServer(McpHttpServer server, AgentDispatcher dispatcher, int port)
+      implements AutoCloseable {
+    @Override
+    public void close() {
+      try {
+        server.close();
+      } finally {
+        dispatcher.close();
+      }
     }
   }
 
