@@ -15,6 +15,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Serial;
 import java.net.BindException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -1065,6 +1066,7 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   static final class JsonRpcError extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
     private final int statusCode;
     private final transient Object requestId;

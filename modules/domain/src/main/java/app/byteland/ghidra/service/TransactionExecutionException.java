@@ -1,5 +1,6 @@
 package app.byteland.ghidra.service;
 
+import java.io.Serial;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -8,9 +9,10 @@ import java.util.Map;
  * Indicates an internal failure during a Ghidra database transaction or command.
  */
 public class TransactionExecutionException extends RuntimeException implements DomainException {
+  @Serial
   private static final long serialVersionUID = 1L;
   private final String target;
-  private final Map<String, Object> details;
+  private final transient Map<String, Object> details;
 
   public TransactionExecutionException(String message) {
     this(message, null, null, null);
