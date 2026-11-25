@@ -39,6 +39,9 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global caller_entry
+caller_entry: call label_only
+ ret
 """
 
 
@@ -349,18 +352,83 @@ def run_test(headless, root):
                 "after_auto",
             ]
 
-            idle_cancel = tool(37, "ghidra_analysis", {"operation": "cancel", "params": {}})["result"]
+            decomp_initial = tool(37, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a" in decomp_initial["c"]
+            decomp_repeat = tool(38, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert decomp_repeat["c"] == decomp_initial["c"]
+
+            sym_items = tool(39, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "func_a", "address": symbols["func_a"]}},
+            })["result"]["items"]
+            assert len(sym_items) == 1
+            renamed_sym = tool(40, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": sym_items[0]["id"]},
+                    "patch": {"name": "func_a_renamed"},
+                },
+            })["result"]
+            assert renamed_sym["name"] == "func_a_renamed"
+            decomp_after_rename = tool(41, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["func_a"]}},
+            })["result"]
+            assert "func_a_renamed" in decomp_after_rename["c"]
+
+            caller = function(42, "create", {
+                "resource": {"entry": symbols["caller_entry"], "name": "caller_entry"},
+                "disassemble": True,
+            })["result"]
+            assert caller["name"] == "caller_entry"
+            caller_before = tool(43, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_only(" in caller_before["c"]
+            caller_repeat = tool(44, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert caller_repeat["c"] == caller_before["c"]
+
+            callee_syms = tool(45, "ghidra_symbol", {
+                "operation": "list",
+                "params": {"filter": {"name": "label_only", "address": symbols["label_only"]}},
+            })["result"]["items"]
+            assert len(callee_syms) == 1
+            tool(46, "ghidra_symbol", {
+                "operation": "patch",
+                "params": {
+                    "selector": {"id": callee_syms[0]["id"]},
+                    "patch": {"name": "label_renamed"},
+                },
+            })
+            caller_after = tool(47, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {"selector": {"entry": symbols["caller_entry"]}},
+            })["result"]
+            assert "label_renamed(" in caller_after["c"]
+            assert "label_only(" not in caller_after["c"]
+
+            idle_cancel = tool(48, "ghidra_analysis", {"operation": "cancel", "params": {}})["result"]
             assert idle_cancel["kind"] == "ghidra"
             assert idle_cancel["status"] == "idle"
             assert "error" not in idle_cancel
 
-            tool(38, "ghidra_analysis", {
+            tool(49, "ghidra_analysis", {
                 "operation": "start",
                 "params": {"analyzers": ["NoSuchAnalyzer"]},
             })
             failed_snapshot = None
             for _ in range(40):
-                snapshot = tool(39, "ghidra_analysis", {"operation": "get", "params": {}})["result"]
+                snapshot = tool(50, "ghidra_analysis", {"operation": "get", "params": {}})["result"]
                 if snapshot["status"] != "running":
                     failed_snapshot = snapshot
                     break
@@ -369,7 +437,7 @@ def run_test(headless, root):
             assert failed_snapshot["status"] == "failed"
             assert failed_snapshot.get("error") == "unknown analyzer: NoSuchAnalyzer"
 
-            after_cancel = tool(40, "ghidra_analysis", {"operation": "cancel", "params": {}})["result"]
+            after_cancel = tool(51, "ghidra_analysis", {"operation": "cancel", "params": {}})["result"]
             assert after_cancel["status"] == "failed"
             assert after_cancel.get("error") == "unknown analyzer: NoSuchAnalyzer"
             print("Function mutation regression checks passed")
