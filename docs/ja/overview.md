@@ -125,6 +125,9 @@ format を `document` にした `decompilation.get` は、1 回の逆コンパ�
 また、`function.patch` は `patch.parameters` を受け付け、1 つのトランザクションでパラメータ一覧全体を置き換えます。
 `patch.signature` と `patch.parameters` のどちらも、互換性のあるカスタム変数ストレージを保持します。
 
+C 型文字列の最大サイズは 4,096 UTF-8 バイトです。
+`patch.signature` の最大サイズは 8,192 UTF-8 バイト、`declarations` の最大サイズは 65,536 UTF-8 バイトです。
+
 ## 次のステップ
 
 - モジュール構造の詳細は[アーキテクチャガイド](architecture.md)を参照してください。

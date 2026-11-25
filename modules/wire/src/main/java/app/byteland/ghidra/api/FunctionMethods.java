@@ -20,6 +20,7 @@ import static app.byteland.ghidra.api.ApiRegistry.text;
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionResource;
+import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
 import app.byteland.ghidra.service.function.FunctionService.ParameterPatch;
@@ -306,6 +307,14 @@ final class FunctionMethods implements ApiMethodProvider {
     Map<String, Object> patch = patch(request);
     String signature = optionalText(patch, ApiVocabulary.SIGNATURE);
     if (signature != null) {
+      if (ApiRegistry.utf8BytesExceed(signature, FunctionService.MAX_SIGNATURE_BYTES)) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE,
+            "/patch/signature exceeds maximum size of "
+                + FunctionService.MAX_SIGNATURE_BYTES
+                + " UTF-8 bytes",
+            "/patch/signature");
+      }
       if (signature.isBlank()) {
         throw ApiException.badRequest(
             ApiVocabulary.INVALID_VALUE, "/patch/signature must not be blank", "/patch/signature");

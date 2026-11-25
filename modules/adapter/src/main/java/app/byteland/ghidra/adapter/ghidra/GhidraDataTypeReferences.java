@@ -20,7 +20,6 @@ import ghidra.program.model.data.StandAloneDataTypeManager;
 import ghidra.program.model.data.TypeDef;
 import ghidra.program.model.data.TypedefDataType;
 import ghidra.program.model.data.VoidDataType;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -95,16 +94,19 @@ public final class GhidraDataTypeReferences {
   private static DataType resolveCExpression(
       DataTypeManager programDataTypeManager, String rawExpression, int depth) {
     requireCanDescend(depth);
-    String trimmed = rawExpression == null ? "" : rawExpression.trim();
-    if (trimmed.isEmpty()) {
+    if (rawExpression == null) {
       throw new IllegalArgumentException("C data type expression must not be blank");
     }
-    if (trimmed.getBytes(StandardCharsets.UTF_8).length
-        > GhidraCParserSupport.MAX_TYPE_EXPRESSION_BYTES) {
+    if (GhidraCParserSupport.utf8BytesExceed(
+        rawExpression, GhidraCParserSupport.MAX_TYPE_EXPRESSION_BYTES)) {
       throw new IllegalArgumentException(
           "C data type expression exceeds maximum size of "
               + GhidraCParserSupport.MAX_TYPE_EXPRESSION_BYTES
               + " UTF-8 bytes");
+    }
+    String trimmed = rawExpression.trim();
+    if (trimmed.isEmpty()) {
+      throw new IllegalArgumentException("C data type expression must not be blank");
     }
     if (trimmed.indexOf(';') >= 0 || trimmed.indexOf('{') >= 0 || trimmed.indexOf('}') >= 0) {
       throw new IllegalArgumentException(

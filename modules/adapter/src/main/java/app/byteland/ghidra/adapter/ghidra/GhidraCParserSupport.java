@@ -1,5 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra;
 
+import app.byteland.ghidra.service.datatype.DataTypeReference;
+import app.byteland.ghidra.service.function.FunctionService;
 import ghidra.app.services.DataTypeManagerService;
 import ghidra.app.util.cparser.C.CParser;
 import ghidra.app.util.cparser.C.CParserUtils;
@@ -22,6 +24,7 @@ import ghidra.program.model.data.TypedefDataType;
 import ghidra.program.model.listing.Program;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -34,8 +37,8 @@ import java.util.regex.Pattern;
  * Shared Ghidra C parser helpers for C type expressions, headers, and function prototypes.
  */
 public final class GhidraCParserSupport {
-  public static final int MAX_TYPE_EXPRESSION_BYTES = 4_096;
-  public static final int MAX_SIGNATURE_BYTES = 8_192;
+  public static final int MAX_TYPE_EXPRESSION_BYTES = DataTypeReference.MAX_EXPRESSION_BYTES;
+  public static final int MAX_SIGNATURE_BYTES = FunctionService.MAX_SIGNATURE_BYTES;
 
   private static final Pattern ARRAY_BOUNDS_SUFFIX_PATTERN =
       Pattern.compile("^(\\[\\s*\\d+\\s*\\])+$");
@@ -43,6 +46,10 @@ public final class GhidraCParserSupport {
       Set.of("const", "volatile", "restrict", "__restrict", "__restrict__", "_Restrict");
 
   private GhidraCParserSupport() {}
+
+  public static boolean utf8BytesExceed(String text, int maxBytes) {
+    return text.length() > maxBytes || text.getBytes(StandardCharsets.UTF_8).length > maxBytes;
+  }
 
   public static StandAloneDataTypeManager createScratchManager(
       DataTypeManager programDataTypeManager) {

@@ -17,7 +17,6 @@ import ghidra.program.model.data.FunctionDefinition;
 import ghidra.program.model.data.SourceArchive;
 import ghidra.program.model.data.StandAloneDataTypeManager;
 import ghidra.util.exception.DuplicateNameException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -41,17 +40,20 @@ final class CDeclarationParser {
       String declarations,
       String categoryPath,
       ConflictMode conflictMode) {
-    if (declarations == null || declarations.isBlank()) {
+    if (declarations == null) {
       throw new DataTypeMutationValidationException(
           DECLARATIONS_TARGET, "declarations must not be blank");
     }
-    int byteLength = declarations.getBytes(StandardCharsets.UTF_8).length;
-    if (byteLength > DataTypeService.MAX_DECLARATIONS_BYTES) {
+    if (GhidraCParserSupport.utf8BytesExceed(declarations, DataTypeService.MAX_DECLARATIONS_BYTES)) {
       throw new DataTypeMutationValidationException(
           DECLARATIONS_TARGET,
           "declarations exceeds maximum size of "
               + DataTypeService.MAX_DECLARATIONS_BYTES
               + " UTF-8 bytes");
+    }
+    if (declarations.isBlank()) {
+      throw new DataTypeMutationValidationException(
+          DECLARATIONS_TARGET, "declarations must not be blank");
     }
     CategoryPath targetCategory = parseCategoryPath(categoryPath);
     ConflictMode effectiveMode = conflictMode == null ? ConflictMode.REPLACE : conflictMode;

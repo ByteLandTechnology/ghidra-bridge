@@ -1,5 +1,6 @@
 package app.byteland.ghidra.service.datatype;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 public sealed interface DataTypeReference
@@ -8,6 +9,9 @@ public sealed interface DataTypeReference
         DataTypeReference.Array,
         DataTypeReference.UntypedPointer,
         DataTypeReference.CExpression {
+
+  /** Maximum UTF-8 byte length accepted for a C data type expression. */
+  int MAX_EXPRESSION_BYTES = 4_096;
 
   String kind();
 
@@ -56,7 +60,7 @@ public sealed interface DataTypeReference
 
   record CExpression(String expression) implements DataTypeReference {
     public CExpression {
-      expression = requiredText(expression, "expression");
+      expression = requiredExpression(expression);
     }
 
     @Override
@@ -83,6 +87,23 @@ public sealed interface DataTypeReference
 
   static DataTypeReference cExpression(String expression) {
     return new CExpression(expression);
+  }
+
+  private static String requiredExpression(String value) {
+    if (value == null) {
+      throw new IllegalArgumentException("expression must be a non-empty string");
+    }
+    if (value.length() > MAX_EXPRESSION_BYTES
+        || value.getBytes(StandardCharsets.UTF_8).length > MAX_EXPRESSION_BYTES) {
+      throw new IllegalArgumentException(
+          "C data type expression exceeds maximum size of "
+              + MAX_EXPRESSION_BYTES
+              + " UTF-8 bytes");
+    }
+    if (value.isBlank()) {
+      throw new IllegalArgumentException("expression must be a non-empty string");
+    }
+    return value.trim();
   }
 
   private static String requiredText(String value, String field) {

@@ -386,6 +386,28 @@ class FunctionParameterPatchSupportTest {
                             new FunctionAttributePatch(null, null, null, false, null)));
             assertEquals(400, conflictingCustomFlag.status());
             assertEquals("/patch/has_custom_variable_storage", conflictingCustomFlag.target());
+
+            DataTypeMutationValidationException oversizedSignature =
+                assertThrows(
+                    DataTypeMutationValidationException.class,
+                    () ->
+                        service.patchFunction(
+                            "0x100200",
+                            null,
+                            null,
+                            false,
+                            "int validate_fn("
+                                + " ".repeat(
+                                    app.byteland.ghidra.service.function.FunctionService
+                                        .MAX_SIGNATURE_BYTES)
+                                + ")",
+                            null,
+                            null,
+                            null,
+                            null,
+                            FunctionAttributePatch.empty()));
+            assertEquals(400, oversizedSignature.status());
+            assertEquals("/patch/signature", oversizedSignature.target());
           });
     }
   }

@@ -26,6 +26,7 @@ import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -270,6 +271,19 @@ class CDeclarationsAndPrototypesWireTest {
     assertEquals("invalid_value", oversizedDecl.error().code());
     assertEquals("/declarations", oversizedDecl.error().target());
 
+    String multibyteDecl = "/* " + "\u00e9".repeat(33_000) + " */ typedef int x;";
+    assertTrue(multibyteDecl.length() <= DataTypeService.MAX_DECLARATIONS_BYTES);
+    assertTrue(
+        multibyteDecl.getBytes(StandardCharsets.UTF_8).length
+            > DataTypeService.MAX_DECLARATIONS_BYTES);
+    ApiException multibyteDeclErr =
+        assertThrows(
+            ApiException.class,
+            () -> registry.dispatch("data_type.parse_c", Map.of("declarations", multibyteDecl)));
+    assertEquals(400, multibyteDeclErr.status());
+    assertEquals("invalid_value", multibyteDeclErr.error().code());
+    assertEquals("/declarations", multibyteDeclErr.error().target());
+
     ApiException badConflict =
         assertThrows(
             ApiException.class,
@@ -439,6 +453,128 @@ class CDeclarationsAndPrototypesWireTest {
                         Map.of("parameters", List.of(Map.of("name", "bad", "data_type", "   "))))));
     assertEquals(400, blankNestedParamType.status());
     assertEquals("/patch/parameters/0/data_type", blankNestedParamType.error().target());
+
+    // 8. Check UTF-8 byte-size caps on C type strings and C signature strings.
+    String exactMaxType =
+        " ".repeat(DataTypeReference.MAX_EXPRESSION_BYTES - "int".length()) + "int";
+    assertEquals(
+        DataTypeReference.MAX_EXPRESSION_BYTES,
+        exactMaxType.getBytes(StandardCharsets.UTF_8).length);
+    registry.dispatch(
+        "function_parameter.patch",
+        Map.of(
+            "selector", Map.of("entry", "0x100000", "ordinal", 0),
+            "patch", Map.of("data_type", exactMaxType)));
+    assertEquals(DataTypeReference.cExpression("int"), writeArguments.get().get(3));
+
+    invokedWriteMethod.set(null);
+    ApiException oversizedTypeAscii =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "function_parameter.patch",
+                    Map.of(
+                        "selector", Map.of("entry", "0x100000", "ordinal", 0),
+                        "patch",
+                        Map.of(
+                            "data_type",
+                            "a".repeat(DataTypeReference.MAX_EXPRESSION_BYTES + 1)))));
+    assertEquals(400, oversizedTypeAscii.status());
+    assertEquals("invalid_value", oversizedTypeAscii.error().code());
+    assertEquals("/patch/data_type", oversizedTypeAscii.error().target());
+    assertEquals(null, invokedWriteMethod.get());
+
+    String multibyteType = "/* " + "\u00e9".repeat(2_050) + " */ int";
+    assertTrue(multibyteType.length() <= DataTypeReference.MAX_EXPRESSION_BYTES);
+    assertTrue(
+        multibyteType.getBytes(StandardCharsets.UTF_8).length
+            > DataTypeReference.MAX_EXPRESSION_BYTES);
+    ApiException oversizedTypeUtf8 =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "function.patch",
+                    Map.of(
+                        "selector", Map.of("entry", "0x100000"),
+                        "patch",
+                        Map.of(
+                            "parameters",
+                            List.of(Map.of("name", "p", "data_type", multibyteType))))));
+    assertEquals(400, oversizedTypeUtf8.status());
+    assertEquals("invalid_value", oversizedTypeUtf8.error().code());
+    assertEquals("/patch/parameters/0/data_type", oversizedTypeUtf8.error().target());
+
+    ApiException oversizedNestedPointerTarget =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "global_variable.patch",
+                    Map.of(
+                        "selector", Map.of("address", "0x200000"),
+                        "patch",
+                        Map.of(
+                            "data_type",
+                            Map.of(
+                                "kind",
+                                "pointer",
+                                "target",
+                                " ".repeat(DataTypeReference.MAX_EXPRESSION_BYTES) + "int")))));
+    assertEquals(400, oversizedNestedPointerTarget.status());
+    assertEquals("invalid_value", oversizedNestedPointerTarget.error().code());
+    assertEquals("/patch/data_type/target", oversizedNestedPointerTarget.error().target());
+
+    String exactMaxSignature =
+        "int f("
+            + " ".repeat(FunctionService.MAX_SIGNATURE_BYTES - "int f(int x)".length())
+            + "int x)";
+    assertEquals(
+        FunctionService.MAX_SIGNATURE_BYTES,
+        exactMaxSignature.getBytes(StandardCharsets.UTF_8).length);
+    registry.dispatch(
+        "function.patch",
+        Map.of(
+            "selector", Map.of("entry", "0x100000"),
+            "patch", Map.of("signature", exactMaxSignature)));
+    assertEquals(exactMaxSignature, writeArguments.get().get(4));
+
+    invokedWriteMethod.set(null);
+    ApiException oversizedSigAscii =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "function.patch",
+                    Map.of(
+                        "selector", Map.of("entry", "0x100000"),
+                        "patch",
+                        Map.of(
+                            "signature",
+                            "a".repeat(FunctionService.MAX_SIGNATURE_BYTES + 1)))));
+    assertEquals(400, oversizedSigAscii.status());
+    assertEquals("invalid_value", oversizedSigAscii.error().code());
+    assertEquals("/patch/signature", oversizedSigAscii.error().target());
+    assertEquals(null, invokedWriteMethod.get());
+
+    String multibyteSig = "/* " + "\u00e9".repeat(4_100) + " */ int f(void)";
+    assertTrue(multibyteSig.length() <= FunctionService.MAX_SIGNATURE_BYTES);
+    assertTrue(
+        multibyteSig.getBytes(StandardCharsets.UTF_8).length > FunctionService.MAX_SIGNATURE_BYTES);
+    ApiException oversizedSigUtf8 =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "function.patch",
+                    Map.of(
+                        "selector", Map.of("entry", "0x100000"),
+                        "patch", Map.of("signature", multibyteSig))));
+    assertEquals(400, oversizedSigUtf8.status());
+    assertEquals("invalid_value", oversizedSigUtf8.error().code());
+    assertEquals("/patch/signature", oversizedSigUtf8.error().target());
+    assertEquals(null, invokedWriteMethod.get());
   }
 
   private interface Handler {

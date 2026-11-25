@@ -525,6 +525,52 @@ def run_test(headless, root):
             assert cleared_custom["has_custom_variable_storage"] is False
             assert cleared_custom["parameter_count"] == 0
 
+            # 9. Reject oversized declarations, signatures, and C type strings with 400
+            oversized_decl = tool(
+                28,
+                "ghidra_data_type",
+                {
+                    "operation": "parse_c",
+                    "params": {"declarations": "a" * 65537},
+                },
+                success=False,
+            )
+            assert oversized_decl["status"] == 400
+            assert oversized_decl["code"] == "invalid_value"
+            assert oversized_decl["target"] == "/declarations"
+
+            oversized_sig = tool(
+                29,
+                "ghidra_function",
+                {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"entry": symbols["custom_packet"]},
+                        "patch": {"signature": "int custom_packet(" + (" " * 8192) + ")"},
+                    },
+                },
+                success=False,
+            )
+            assert oversized_sig["status"] == 400
+            assert oversized_sig["code"] == "invalid_value"
+            assert oversized_sig["target"] == "/patch/signature"
+
+            oversized_type = tool(
+                30,
+                "ghidra_function",
+                {
+                    "operation": "parameter.patch",
+                    "params": {
+                        "selector": {"entry": symbols["recv_packet"], "ordinal": 0},
+                        "patch": {"data_type": "/* " + ("\u00e9" * 2050) + " */ int"},
+                    },
+                },
+                success=False,
+            )
+            assert oversized_type["status"] == 400
+            assert oversized_type["code"] == "invalid_value"
+            assert oversized_type["target"] == "/patch/data_type"
+
             print("C declaration and prototype regression checks passed")
         finally:
             if ready:

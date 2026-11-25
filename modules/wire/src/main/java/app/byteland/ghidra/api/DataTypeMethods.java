@@ -21,7 +21,6 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
 import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -171,18 +170,17 @@ final class DataTypeMethods implements ApiMethodProvider {
 
   private Page<DataTypeResource> parseCDeclarations(Map<String, Object> request) {
     String declarations = text(request, ApiVocabulary.DECLARATIONS);
-    if (declarations.isBlank()) {
-      throw ApiException.badRequest(
-          ApiVocabulary.INVALID_VALUE, "/declarations must not be blank", "/declarations");
-    }
-    if (declarations.getBytes(StandardCharsets.UTF_8).length
-        > DataTypeService.MAX_DECLARATIONS_BYTES) {
+    if (ApiRegistry.utf8BytesExceed(declarations, DataTypeService.MAX_DECLARATIONS_BYTES)) {
       throw ApiException.badRequest(
           ApiVocabulary.INVALID_VALUE,
           "/declarations exceeds maximum size of "
               + DataTypeService.MAX_DECLARATIONS_BYTES
               + " UTF-8 bytes",
           "/declarations");
+    }
+    if (declarations.isBlank()) {
+      throw ApiException.badRequest(
+          ApiVocabulary.INVALID_VALUE, "/declarations must not be blank", "/declarations");
     }
     String categoryPath = optionalText(request, ApiVocabulary.CATEGORY_PATH, "/");
     String rawConflictMode = optionalText(request, ApiVocabulary.CONFLICT_MODE, "replace");

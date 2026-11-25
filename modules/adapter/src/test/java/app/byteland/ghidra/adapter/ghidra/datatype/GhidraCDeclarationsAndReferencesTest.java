@@ -106,6 +106,21 @@ class GhidraCDeclarationsAndReferencesTest {
                   GhidraDataTypeReferences.resolve(
                       dtm, DataTypeReference.cExpression("UnknownWidget *")));
       assertFalse(unknown.getMessage().contains("<html>"));
+
+      String exactPaddedInt =
+          " ".repeat(DataTypeReference.MAX_EXPRESSION_BYTES - "int".length()) + "int";
+      DataType resolvedPadded =
+          GhidraDataTypeReferences.resolve(dtm, DataTypeReference.cExpression(exactPaddedInt));
+      assertEquals(4, resolvedPadded.getLength());
+
+      assertThrows(
+          IllegalArgumentException.class,
+          () ->
+              DataTypeReference.cExpression(
+                  " ".repeat(DataTypeReference.MAX_EXPRESSION_BYTES) + "int"));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> DataTypeReference.cExpression("\u00e9".repeat(2_049)));
     }
   }
 

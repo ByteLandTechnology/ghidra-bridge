@@ -23,7 +23,6 @@ import ghidra.program.model.symbol.SourceType;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.InvalidInputException;
 import java.lang.reflect.Proxy;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -64,17 +63,21 @@ final class FunctionSignaturePatchSupport {
       Function function,
       String rawSignature,
       boolean preserveExistingName) {
-    if (rawSignature == null || rawSignature.isBlank()) {
+    if (rawSignature == null) {
       throw new DataTypeMutationValidationException(
           SIGNATURE_TARGET, "/patch/signature must not be blank");
     }
-    int byteLength = rawSignature.getBytes(StandardCharsets.UTF_8).length;
-    if (byteLength > GhidraCParserSupport.MAX_SIGNATURE_BYTES) {
+    if (GhidraCParserSupport.utf8BytesExceed(
+        rawSignature, GhidraCParserSupport.MAX_SIGNATURE_BYTES)) {
       throw new DataTypeMutationValidationException(
           SIGNATURE_TARGET,
           "/patch/signature exceeds maximum size of "
               + GhidraCParserSupport.MAX_SIGNATURE_BYTES
               + " UTF-8 bytes");
+    }
+    if (rawSignature.isBlank()) {
+      throw new DataTypeMutationValidationException(
+          SIGNATURE_TARGET, "/patch/signature must not be blank");
     }
     String trimmed = rawSignature.trim();
     if (trimmed.indexOf('{') >= 0 || trimmed.indexOf('}') >= 0) {

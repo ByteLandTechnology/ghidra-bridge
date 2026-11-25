@@ -125,6 +125,9 @@ token 的 `location_address` 是 Ghidra GUI 为该 token 选择的地址。
 `function.patch` 还接受 `patch.parameters`，可在单个事务中原子替换完整参数列表。
 `patch.signature` 与 `patch.parameters` 均会保留兼容的自定义变量存储位置。
 
+C 类型字符串最大为 4,096 UTF-8 字节。
+`patch.signature` 最大为 8,192 UTF-8 字节，`declarations` 最大为 65,536 UTF-8 字节。
+
 ## 后续阅读
 
 - 查阅[体系架构指南](architecture.md)了解模块划分。

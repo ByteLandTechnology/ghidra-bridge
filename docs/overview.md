@@ -125,6 +125,9 @@ The prototype sets the return type, name, `calling_convention`, varargs flag, an
 `function.patch` also accepts `patch.parameters` to replace the full parameter list in one transaction.
 Both `patch.signature` and `patch.parameters` keep compatible custom variable storage.
 
+C type strings have a maximum size of 4,096 UTF-8 bytes.
+`patch.signature` has a maximum size of 8,192 UTF-8 bytes, and `declarations` has a maximum size of 65,536 UTF-8 bytes.
+
 ## Next Steps
 
 - Read the [Architecture Guide](architecture.md) for the module structure.

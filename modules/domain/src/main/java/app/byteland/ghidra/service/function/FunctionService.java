@@ -10,6 +10,9 @@ import java.util.Set;
  * Manages functions, parameters, local variables, and call graphs.
  */
 public interface FunctionService {
+  /** Maximum UTF-8 byte length accepted for a C function prototype signature. */
+  int MAX_SIGNATURE_BYTES = 8_192;
+
   /**
    * Parameter definition for atomic function prototype updates.
    */
