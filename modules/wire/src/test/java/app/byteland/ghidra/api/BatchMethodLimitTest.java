@@ -227,6 +227,14 @@ class BatchMethodLimitTest {
         proxy(
             ListingService.class,
             (method, args) -> {
+              if ("setFlowOverrides".equals(method)) {
+                return null;
+              }
+              if ("getFlowOverrides".equals(method)) {
+                AddressScanOptions scan = (AddressScanOptions) args[2];
+                observedScanTimeouts.add(scan.timeoutMs());
+                return Page.of(List.of(), 1_000, null);
+              }
               assertEquals("listCodeUnits", method);
               AddressScanOptions scan = (AddressScanOptions) args[0];
               observedScanTimeouts.add(scan.timeoutMs());
@@ -289,6 +297,17 @@ class BatchMethodLimitTest {
         List.of(
             scanItem("scan-0", 100),
             scanItem("scan-1", 5_000),
+            Map.of(
+                "id",
+                "flow-0",
+                "method",
+                "flow_override.patch",
+                "arguments",
+                Map.of(
+                    "selector",
+                    Map.of("kind", "address", "address", "ram:00100000"),
+                    "patch",
+                    Map.of("flow_override", "return"))),
             decompileItem("dec-0", 30_000),
             scanItem("scan-2", 100));
 
@@ -303,9 +322,10 @@ class BatchMethodLimitTest {
     assertEquals(BatchMethod.MAX_DURATION_MS, error.error().details().get("timeout_ms"));
     // scan-0 had 60,000 ms remaining -> clamped to 100 ms.
     // scan-1 had 30,020 ms remaining -> clamped to 5,000 ms.
-    // dec-0 had 40 ms remaining -> clamped to 40 ms (even below public 100 ms minimum!).
-    // scan-2 had -10 ms remaining -> aborted before execution!
-    assertEquals(List.of(100, 5_000), observedScanTimeouts);
+    // flow-0 had 40 ms remaining -> default 5,000 ms scan clamped to 40 ms.
+    // dec-0 had 40 ms remaining -> clamped to 40 ms (below public 100 ms minimum).
+    // scan-2 had -10 ms remaining -> stopped before execution.
+    assertEquals(List.of(100, 5_000, 40), observedScanTimeouts);
     assertEquals(List.of(40), observedDecompileTimeouts);
     assertEquals(30_000, BatchMethod.clampTimeoutMs(30_000));
   }

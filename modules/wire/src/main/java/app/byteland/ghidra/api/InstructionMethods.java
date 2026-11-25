@@ -120,7 +120,10 @@ final class InstructionMethods implements ApiMethodProvider {
               .getFlowOverrides(
                   scope,
                   flowOverrides(null, List.of("branch", "call", "call_return", "return")),
-                  new AddressScanOptions(null, null, AddressScanOptions.DEFAULT_TIMEOUT_MS),
+                  new AddressScanOptions(
+                      null,
+                      null,
+                      BatchMethod.clampTimeoutMs(AddressScanOptions.DEFAULT_TIMEOUT_MS)),
                   MAX_LIMIT,
                   null);
         });
