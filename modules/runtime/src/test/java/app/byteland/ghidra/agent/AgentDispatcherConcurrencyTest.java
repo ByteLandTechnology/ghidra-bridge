@@ -243,7 +243,18 @@ class AgentDispatcherConcurrencyTest {
         assertTrue(batchObs != null && batchObs.writeLocked(), "Mixed/mutating batch must hold write lock");
       }
 
-      // Lifecycle method session.shutdown must also acquire the fair write lock
+      // Lifecycle actions via runExclusive and session.shutdown must acquire the fair write lock.
+      AtomicReference<LockObservation> exclusiveObs = new AtomicReference<>();
+      dispatcher.runExclusive(
+          () ->
+              exclusiveObs.set(
+                  new LockObservation(
+                      dispatcher.barrier().readHoldCount(),
+                      dispatcher.barrier().readLockCount(),
+                      dispatcher.barrier().isWriteLockedByCurrentThread())));
+      assertTrue(exclusiveObs.get().writeLocked(), "runExclusive must hold write lock");
+      assertEquals(0, exclusiveObs.get().readHoldCount());
+
       assertFalse(dispatcher.isShuttingDown());
       Object shutdownResp = dispatcher.dispatch("session.shutdown", Map.of());
       assertEquals(Map.of("shutdown", true), shutdownResp);

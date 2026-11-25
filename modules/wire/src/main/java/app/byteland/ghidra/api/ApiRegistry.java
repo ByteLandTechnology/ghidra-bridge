@@ -24,7 +24,6 @@ public final class ApiRegistry {
   public static final String INTERFACE_VERSION = "0.2.0";
   public static final int DEFAULT_LIMIT = 100;
   public static final int MAX_LIMIT = Page.MAX_LIMIT;
-  public static final int MAX_BATCH_ITEMS = BatchMethod.MAX_ITEMS;
 
   static final int NOT_FOUND_STATUS = 404;
   static final String ANALYSIS_START_METHOD = "analysis.start";
@@ -124,14 +123,6 @@ public final class ApiRegistry {
     return catalogSnapshot;
   }
 
-  public List<ApiMethod<Map<String, Object>, Object>> methods() {
-    return List.copyOf(methodsByName.values());
-  }
-
-  public Set<String> methodNames() {
-    return Collections.unmodifiableSet(methodsByName.keySet());
-  }
-
   public ApiMethod<Map<String, Object>, Object> method(String name) {
     return methodsByName.get(name);
   }
@@ -191,17 +182,6 @@ public final class ApiRegistry {
     Map<String, Object> decoded = method.decodeRequest(params);
     method.validateProjection(decoded);
     Object rawResponse = invokeHandler(method, decoded, true);
-    return method.encodeResponse(decoded, rawResponse);
-  }
-
-  Object dispatchWithoutTransaction(String name, Map<String, Object> params) throws Exception {
-    ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
-    if (method == null) {
-      throw new ApiException(404, "unknown_operation", "No such operation: " + name, "/operation");
-    }
-    Map<String, Object> decoded = method.decodeRequest(params);
-    method.validateProjection(decoded);
-    Object rawResponse = invokeHandler(method, decoded, false);
     return method.encodeResponse(decoded, rawResponse);
   }
 

@@ -39,19 +39,18 @@ class LeasePoolTest {
     LeasePool<Integer> pool =
         new LeasePool<>(4, createdIds::incrementAndGet, destroyedIds::add);
 
-    // Lazy initialization: zero instances created until first acquire()
-    assertEquals(0, pool.createdCount());
-    assertEquals(4, pool.maxSize());
+    // Lazy initialization: zero instances created until first acquire().
+    assertEquals(0, createdIds.get());
 
-    // Sequential reuse keeps pool size at 1
+    // Sequential reuse keeps created resource count at 1.
     for (int i = 0; i < 5; i++) {
       try (LeasePool.Lease<Integer> lease = pool.acquire()) {
         assertEquals(1, lease.value());
       }
     }
-    assertEquals(1, pool.createdCount());
+    assertEquals(1, createdIds.get());
 
-    // Concurrent demand scales up to maxSize (4) and blocks 6 extra callers without exceeding 4
+    // Concurrent demand scales up to maxSize (4) and blocks 6 extra callers without exceeding 4.
     AtomicInteger activeLeases = new AtomicInteger();
     AtomicInteger maxActiveLeases = new AtomicInteger();
     CountDownLatch startLatch = new CountDownLatch(1);
@@ -79,12 +78,11 @@ class LeasePoolTest {
       }
     }
 
-    assertEquals(4, pool.createdCount());
+    assertEquals(4, createdIds.get());
     assertEquals(4, maxActiveLeases.get());
 
     pool.close();
     assertEquals(Set.of(1, 2, 3, 4), destroyedIds);
-    assertEquals(0, pool.createdCount());
     assertThrows(IllegalStateException.class, pool::acquire);
   }
 
@@ -106,20 +104,24 @@ class LeasePoolTest {
             destroyed::add);
 
     assertThrows(IllegalStateException.class, pool::acquire);
-    assertEquals(0, pool.createdCount(), "Failed factory call must release reserved slot");
+    assertEquals(0, nextId.get(), "Failed factory call must not create a resource");
 
+    // Acquire both slots of the size-2 pool to prove the failed factory call released its slot.
     LeasePool.Lease<Integer> inFlight = pool.acquire();
+    LeasePool.Lease<Integer> secondSlot = pool.acquire();
     assertEquals(1, inFlight.value());
-    assertEquals(1, pool.createdCount());
+    assertEquals(2, secondSlot.value());
+    assertEquals(2, nextId.get());
+    secondSlot.close();
 
-    // Close pool while lease is still held; resource must be destroyed as soon as lease closes
+    // Close pool while first lease is still held; idle slot drains now and active lease destroys on close.
     pool.close();
-    assertTrue(destroyed.isEmpty(), "In-flight lease must not be destroyed while still checked out");
+    assertEquals(
+        Set.of(2), destroyed, "Only idle resources should destroy before the active lease closes");
 
     inFlight.close();
-    inFlight.close(); // Idempotent double-close
-    assertEquals(Set.of(1), destroyed);
-    assertEquals(0, pool.createdCount());
+    inFlight.close(); // Idempotent double-close.
+    assertEquals(Set.of(1, 2), destroyed);
     assertThrows(IllegalStateException.class, inFlight::value);
   }
 }

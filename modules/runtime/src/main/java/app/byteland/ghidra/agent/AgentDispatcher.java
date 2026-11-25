@@ -55,6 +55,26 @@ public final class AgentDispatcher implements AutoCloseable {
         });
   }
 
+  /**
+   * Runs a lifecycle action under the fair write lock while the dispatcher is open.
+   */
+  public void runExclusive(Runnable action) {
+    Objects.requireNonNull(action, "action");
+    try {
+      dispatchBarrier.run(
+          () ->
+              dispatchBarrier.runWrite(
+                  () -> {
+                    action.run();
+                    return null;
+                  }));
+    } catch (RuntimeException error) {
+      throw error;
+    } catch (Exception error) {
+      throw new IllegalStateException("Exclusive dispatcher action failed", error);
+    }
+  }
+
   DispatchBarrier barrier() {
     return dispatchBarrier;
   }
