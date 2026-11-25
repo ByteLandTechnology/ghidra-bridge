@@ -108,81 +108,42 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> listInput(Map<String, Object> filter) {
-    return input(
-        props(
-            FILTER,
-            filter,
-            LIMIT,
-            ApiRegistry.limitSchema(),
-            CURSOR,
-            ApiRegistry.cursorSchema(),
-            FIELDS,
-            ApiRegistry.fieldsSchema()));
+    return pagedListInput(filter, false, false, false);
   }
 
   static Map<String, Object> scanListInput(Map<String, Object> filter) {
-    return input(
-        props(
-            FILTER,
-            filter,
-            "range",
-            ADDRESS_RANGE_SCHEMA,
-            "timeout_ms",
-            scanTimeoutSchema(),
-            LIMIT,
-            ApiRegistry.limitSchema(),
-            CURSOR,
-            ApiRegistry.cursorSchema(),
-            FIELDS,
-            ApiRegistry.fieldsSchema()));
+    return pagedListInput(filter, true, true, false);
   }
 
   static Map<String, Object> requiredListInput(Map<String, Object> filter) {
-    return input(
-        props(
-            FILTER,
-            filter,
-            LIMIT,
-            ApiRegistry.limitSchema(),
-            CURSOR,
-            ApiRegistry.cursorSchema(),
-            FIELDS,
-            ApiRegistry.fieldsSchema()),
-        FILTER);
+    return pagedListInput(filter, false, false, true);
   }
 
   static Map<String, Object> requiredScanListInput(Map<String, Object> filter) {
-    return input(
-        props(
-            FILTER,
-            filter,
-            "timeout_ms",
-            scanTimeoutSchema(),
-            LIMIT,
-            ApiRegistry.limitSchema(),
-            CURSOR,
-            ApiRegistry.cursorSchema(),
-            FIELDS,
-            ApiRegistry.fieldsSchema()),
-        FILTER);
+    return pagedListInput(filter, false, true, true);
+  }
+
+  private static Map<String, Object> pagedListInput(
+      Map<String, Object> filter,
+      boolean includeRange,
+      boolean includeTimeout,
+      boolean requireFilter) {
+    Map<String, Map<String, Object>> properties = new LinkedHashMap<>();
+    properties.put(FILTER, filter);
+    if (includeRange) {
+      properties.put("range", ADDRESS_RANGE_SCHEMA);
+    }
+    if (includeTimeout) {
+      properties.put("timeout_ms", scanTimeoutSchema());
+    }
+    properties.put(LIMIT, ApiRegistry.limitSchema());
+    properties.put(CURSOR, ApiRegistry.cursorSchema());
+    properties.put(FIELDS, ApiRegistry.fieldsSchema());
+    return requireFilter ? input(properties, FILTER) : input(properties);
   }
 
   static Map<String, Object> requiredRangeScanListInput(Map<String, Object> filter) {
-    return input(
-        props(
-            FILTER,
-            filter,
-            "range",
-            ADDRESS_RANGE_SCHEMA,
-            "timeout_ms",
-            scanTimeoutSchema(),
-            LIMIT,
-            ApiRegistry.limitSchema(),
-            CURSOR,
-            ApiRegistry.cursorSchema(),
-            FIELDS,
-            ApiRegistry.fieldsSchema()),
-        FILTER);
+    return pagedListInput(filter, true, true, true);
   }
 
   static Map<String, Object> selectorInput(Map<String, Object> selector) {
@@ -444,27 +405,23 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> listSchema(Set<String> fields, List<String> identityFields) {
-    return WireSchema.withDefinitions(
-        WireSchema.object(
-            Map.of(
-                ITEMS,
-                WireSchema.array(resourceSchema(fields, identityFields), 0, Integer.MAX_VALUE),
-                ApiVocabulary.NEXT_CURSOR,
-                WireSchema.nonBlankString()),
-            ITEMS));
+    return pagedListSchema(fields, identityFields, false);
   }
 
   static Map<String, Object> scanListSchema(Set<String> fields, List<String> identityFields) {
-    return WireSchema.withDefinitions(
-        WireSchema.object(
-            Map.of(
-                ITEMS,
-                WireSchema.array(resourceSchema(fields, identityFields), 0, Integer.MAX_VALUE),
-                ApiVocabulary.NEXT_CURSOR,
-                WireSchema.nonBlankString(),
-                "scan",
-                SCAN_PROGRESS_SCHEMA),
-            ITEMS));
+    return pagedListSchema(fields, identityFields, true);
+  }
+
+  private static Map<String, Object> pagedListSchema(
+      Set<String> fields, List<String> identityFields, boolean includeScan) {
+    Map<String, Map<String, Object>> properties = new LinkedHashMap<>();
+    properties.put(
+        ITEMS, WireSchema.array(resourceSchema(fields, identityFields), 0, Integer.MAX_VALUE));
+    properties.put(ApiVocabulary.NEXT_CURSOR, WireSchema.nonBlankString());
+    if (includeScan) {
+      properties.put(ApiVocabulary.SCAN, SCAN_PROGRESS_SCHEMA);
+    }
+    return WireSchema.withDefinitions(WireSchema.object(properties, ITEMS));
   }
 
   static Map<String, Object> outputFieldSchema(String field) {
