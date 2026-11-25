@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -57,7 +56,7 @@ public final class McpContractGenerator {
     Files.writeString(
         output,
         JsonUtil.toJson(
-                canonical(
+                JsonUtil.canonical(
                     Map.of(
                         "version", ApiRegistry.INTERFACE_VERSION,
                         "protocol_version", "2026-07-28",
@@ -206,17 +205,5 @@ public final class McpContractGenerator {
         rejectForbiddenSchemaKeys(toolName, item);
       }
     }
-  }
-
-  private static Object canonical(Object value) {
-    if (value instanceof Map<?, ?> map) {
-      Map<String, Object> sorted = new TreeMap<>();
-      map.forEach((key, child) -> sorted.put(String.valueOf(key), canonical(child)));
-      return sorted;
-    }
-    if (value instanceof List<?> list) {
-      return list.stream().map(McpContractGenerator::canonical).toList();
-    }
-    return value;
   }
 }

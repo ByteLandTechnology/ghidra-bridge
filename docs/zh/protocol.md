@@ -98,6 +98,7 @@ WebSocket 消息严格遵循 JSON-RPC 2.0 协议规范。
 在连接建立之前，服务端以 HTTP 状态码拒绝非法的升级请求：
 - `400`：缺少升级头部、WebSocket 版本不受支持，或在查询字符串中携带 Token。
 - `401`：缺少 Bearer Token 或 Token 无效。
+- `403`：不允许、格式错误或重复的 `Origin` 头部。
 - `404`：请求路径与配置的 `path` 不一致。
 - `405`：升级请求未使用 GET 方法。
 - `409`：已有其他客户端处于连接状态。
@@ -121,7 +122,7 @@ MCP HTTP 服务端按以下规则处理请求：
 - **HEAD**：返回状态码 `200`，且不含响应体。
 - **OPTIONS**：处理 CORS 预检请求并返回状态码 `204`。
 - **其他方法**：服务端返回状态码 `405` 并附带 `Allow: POST, GET, OPTIONS` 响应头。
-- **Origin**：若请求携带的 `Origin` 头部既不是回环主机也不是配置的 `host`，返回状态码 `403`。
+- **Origin**：默认情况下，非回环且不匹配已配置 `host` 的 `Origin` 头部返回状态码 `403`，且不附带任何 CORS 响应头。可通过 `allowed_origins` 或 `GHIDRA_MCP_ALLOWED_ORIGINS` 配置 `scheme://host[:port]` 列表以仅放行指定来源（返回 `Access-Control-Allow-Origin` 与 `Vary: Origin`），或设为 `none` 拒绝所有携带 `Origin` 头部的请求。
 - **内容类型**：POST 请求必须发送 `Content-Type: application/json`，否则返回状态码 `415`。
 - **通知**：不含 `id` 的请求返回状态码 `202`，且不含响应体。
 
@@ -283,6 +284,7 @@ MCP 将操作组织为 15 个工具：
 
 - **默认回环**：监听器默认绑定 `127.0.0.1`。未设置 `token` 的回环监听器不需要认证。
 - **外部监听器**：外部网络接口上的监听器必须提供 `token` 参数。
+- **浏览器来源策略**：MCP HTTP 服务端默认放行回环地址与已配置 `host` 的来源。可通过 `allowed_origins` 或 `GHIDRA_MCP_ALLOWED_ORIGINS`（`allowed_origins` 优先）覆盖默认规则，或设为 `none` 拒绝所有 `Origin` 头部；包含非回环来源时必须配置 `token`。
 - **认证头部**：通过 `Authorization: Bearer <token>` 头部传递凭据。
 - **拒绝 URL Token**：URL 查询参数中携带的 Token 会直接被 HTTP 400 拒绝。
 - **日志脱敏**：安全 Token 绝不会在服务日志中打印。
