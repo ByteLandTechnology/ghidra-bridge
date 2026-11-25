@@ -53,7 +53,7 @@ public final class GhidraServiceFactory {
     MemoryService memoryService = new MemoryServiceImpl(context);
     ListingService listingService = new ListingServiceImpl(context);
     DecompilationService decompilationService =
-        new DecompilationServiceImpl(context, decompilerPool);
+        DecompilationServiceImpl.withPool(context, decompilerPool);
     AnalysisService analysisService = new AnalysisServiceImpl(context);
     SymbolService symbolService = new SymbolServiceImpl(context);
     ReferenceService referenceService = new ReferenceServiceImpl(context);

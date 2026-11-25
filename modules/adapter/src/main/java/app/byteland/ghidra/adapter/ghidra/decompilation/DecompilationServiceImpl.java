@@ -23,21 +23,29 @@ public final class DecompilationServiceImpl implements DecompilationService {
 
   public DecompilationServiceImpl(GhidraSession context) {
     this(
-        Objects.requireNonNull(context, "context"),
-        DecompilerPool.create(context.currentProgram()));
-  }
-
-  public DecompilationServiceImpl(GhidraSession context, DecompilerPool decompilerPool) {
-    this.context = Objects.requireNonNull(context, "context");
-    this.decompilerPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
+        DecompilerPool.create(Objects.requireNonNull(context, "context").currentProgram()),
+        context);
   }
 
   DecompilationServiceImpl(GhidraSession context, LeasePool<DecompInterface> decompilerPool) {
     this(
-        Objects.requireNonNull(context, "context"),
         new DecompilerPool(
             Objects.requireNonNull(decompilerPool, "decompilerPool"),
-            context::currentProgramOrNull));
+            Objects.requireNonNull(context, "context")::currentProgramOrNull),
+        context);
+  }
+
+  private DecompilationServiceImpl(DecompilerPool decompilerPool, GhidraSession context) {
+    this.context = Objects.requireNonNull(context, "context");
+    this.decompilerPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
+  }
+
+  /** Creates a decompilation service that shares {@code decompilerPool}. */
+  public static DecompilationServiceImpl withPool(
+      GhidraSession context, DecompilerPool decompilerPool) {
+    return new DecompilationServiceImpl(
+        Objects.requireNonNull(decompilerPool, "decompilerPool"),
+        Objects.requireNonNull(context, "context"));
   }
 
   @Override
