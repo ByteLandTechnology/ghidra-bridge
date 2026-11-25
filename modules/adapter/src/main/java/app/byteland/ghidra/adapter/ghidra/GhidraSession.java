@@ -5,7 +5,9 @@ import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Coordinates Ghidra program access, commands, and transaction lifecycles.
@@ -13,6 +15,7 @@ import java.util.Objects;
 public final class GhidraSession {
   private final GhidraScript ghidraScript;
   private final Object executionLock = new Object();
+  private final List<Runnable> commitListeners = new CopyOnWriteArrayList<>();
   private int transactionDepth;
 
   public GhidraSession(GhidraScript script) {
@@ -35,6 +38,14 @@ public final class GhidraSession {
     return ghidraScript.getCurrentProgram();
   }
 
+  public void addCommitListener(Runnable listener) {
+    commitListeners.add(Objects.requireNonNull(listener, "listener"));
+  }
+
+  public void removeCommitListener(Runnable listener) {
+    commitListeners.remove(listener);
+  }
+
   public void saveCurrentProgram() {
     synchronized (executionLock) {
       var monitor = ghidraScript.getMonitor();
@@ -49,6 +60,7 @@ public final class GhidraSession {
           // There is no ambient transaction, or the transaction ended.
         }
         ghidraScript.saveProgram(currentProgram());
+        notifyCommitted();
       } catch (Exception error) {
         String detail = error.getMessage();
         if (detail == null || detail.isBlank()) {
@@ -107,10 +119,15 @@ public final class GhidraSession {
         return result;
       } finally {
         transactionDepth--;
+        boolean committed = false;
         try {
           ghidraScript.end(commit);
+          committed = commit;
         } finally {
           ghidraScript.start();
+        }
+        if (committed) {
+          notifyCommitted();
         }
       }
     }
@@ -120,6 +137,9 @@ public final class GhidraSession {
     Objects.requireNonNull(command, "command");
     synchronized (executionLock) {
       if (ghidraScript.runCommand(command)) {
+        if (transactionDepth == 0) {
+          notifyCommitted();
+        }
         return;
       }
     }
@@ -142,6 +162,12 @@ public final class GhidraSession {
       throw ex;
     } catch (Exception ex) {
       throw new TransactionExecutionException(ex.getMessage(), ex);
+    }
+  }
+
+  private void notifyCommitted() {
+    for (Runnable listener : commitListeners) {
+      listener.run();
     }
   }
 }

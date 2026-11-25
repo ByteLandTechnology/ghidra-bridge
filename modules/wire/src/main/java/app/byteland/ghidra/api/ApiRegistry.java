@@ -136,13 +136,29 @@ public final class ApiRegistry {
     return methodsByName.get(name);
   }
 
-  public Object dispatch(String name, Map<String, Object> params) throws Exception {
+  public ApiMethod<Map<String, Object>, Object> requireMethod(String name) {
     ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
     if (method == null) {
-      throw new ApiException(404, "unknown_method", "No such method: " + name, "/method");
+      throw new ApiException(
+          NOT_FOUND_STATUS, "unknown_method", "No such method: " + name, "/method");
     }
+    return method;
+  }
+
+  public Object dispatch(String name, Map<String, Object> params) throws Exception {
+    ApiMethod<Map<String, Object>, Object> method = requireMethod(name);
     Map<String, Object> decoded = method.decodeRequest(params);
-    return invokeDecoded(method, decoded, true);
+    Object response = executeDecoded(method, decoded);
+    return method.encodeResponse(decoded, response);
+  }
+
+  public Object executeDecoded(
+      ApiMethod<Map<String, Object>, Object> method, Map<String, Object> decoded) throws Exception {
+    ensureAllowedDuringAnalysis(method, decoded);
+    if (method.effects().requiresTransaction()) {
+      return bridgeServices.transactionRunner().run(() -> method.executeDecoded(decoded));
+    }
+    return method.executeDecoded(decoded);
   }
 
   Object dispatchWithoutTransaction(String name, Map<String, Object> params) throws Exception {
@@ -162,6 +178,15 @@ public final class ApiRegistry {
       Map<String, Object> decoded,
       boolean ownTransaction)
       throws Exception {
+    ensureAllowedDuringAnalysis(method, decoded);
+    if (method.effects().requiresTransaction() && ownTransaction) {
+      return bridgeServices.transactionRunner().run(() -> method.invokeDecoded(decoded));
+    }
+    return method.invokeDecoded(decoded);
+  }
+
+  private void ensureAllowedDuringAnalysis(
+      ApiMethod<Map<String, Object>, Object> method, Map<String, Object> decoded) {
     if (!allowedDuringAnalysis(method, decoded) && analysisRunning()) {
       if (ANALYSIS_START_METHOD.equals(method.name())) {
         throw new ApiException(
@@ -173,10 +198,6 @@ public final class ApiRegistry {
           "writes are unavailable while analysis is running",
           "/method");
     }
-    if (method.effects().requiresTransaction() && ownTransaction) {
-      return bridgeServices.transactionRunner().run(() -> method.invokeDecoded(decoded));
-    }
-    return method.invokeDecoded(decoded);
   }
 
   private void registerInterface() {

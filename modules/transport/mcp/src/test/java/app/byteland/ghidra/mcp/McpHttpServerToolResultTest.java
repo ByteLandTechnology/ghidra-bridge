@@ -16,6 +16,7 @@ import app.byteland.ghidra.service.ScanProgress;
 import app.byteland.ghidra.service.TransactionExecutionException;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
+import app.byteland.ghidra.service.analysis.AnalysisResource;
 import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
@@ -48,11 +49,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -270,6 +276,181 @@ class McpHttpServerToolResultTest {
     }
   }
 
+  @Test
+  void sessionAndAnalysisStatusAndInvalidCallsBypassSequenceLockDuringSlowDecompilation()
+      throws Exception {
+    CountDownLatch decompEntered = new CountDownLatch(1);
+    CountDownLatch releaseDecomp = new CountDownLatch(1);
+
+    try (ServerHarness harness = ServerHarness.startWithSlowDecompilation(decompEntered, releaseDecomp);
+        ExecutorService callers = Executors.newVirtualThreadPerTaskExecutor()) {
+      HttpClient client =
+          HttpClient.newBuilder()
+              .version(HttpClient.Version.HTTP_1_1)
+              .connectTimeout(Duration.ofSeconds(5))
+              .build();
+
+      // Warm 20 concurrent HTTP/1.1 keep-alive connections and tool paths before measurement.
+      measureConcurrentWave(
+          callers,
+          20,
+          index -> {
+            postStatelessToolCall(
+                client,
+                harness.endpoint(),
+                "warm-session-" + index,
+                "ghidra_bridge",
+                Map.of("operation", "get", "params", Map.of()));
+          });
+      postStatelessToolCall(
+          client,
+          harness.endpoint(),
+          "warm-analysis",
+          "ghidra_analysis",
+          Map.of("operation", "get", "params", Map.of()));
+      postStatelessToolCall(
+          client,
+          harness.endpoint(),
+          "warm-invalid",
+          "ghidra_memory",
+          Map.of("operation", "read", "params", Map.of("length", 0)));
+
+      Future<Map<String, Object>> slowDecomp =
+          callers.submit(
+              () ->
+                  postStatelessToolCall(
+                      client,
+                      harness.endpoint(),
+                      "slow-decomp",
+                      "ghidra_decompilation",
+                      Map.of(
+                          "operation",
+                          "get",
+                          "params",
+                          Map.of("selector", Map.of("entry", "0x100000")))));
+      try {
+        assertTrue(decompEntered.await(5, TimeUnit.SECONDS));
+
+        Future<Map<String, Object>> queuedProgramRead =
+            callers.submit(
+                () ->
+                    postStatelessToolCall(
+                        client,
+                        harness.endpoint(),
+                        "queued-mem",
+                        "ghidra_memory",
+                        Map.of(
+                            "operation",
+                            "read",
+                            "params",
+                            Map.of("selector", Map.of("address", "ram:00100000"), "length", 8))));
+        Thread.sleep(20);
+        assertFalse(queuedProgramRead.isDone());
+
+        long sessionMedianNanos =
+            measureConcurrentWave(
+                callers,
+                20,
+                index -> {
+                  Map<String, Object> rpc =
+                      postStatelessToolCall(
+                          client,
+                          harness.endpoint(),
+                          "sess-" + index,
+                          "ghidra_bridge",
+                          Map.of("operation", "get", "params", Map.of()));
+                  assertEquals(false, resultMap(rpc).get("isError"));
+                });
+        long analysisMedianNanos =
+            measureConcurrentWave(
+                callers,
+                20,
+                index -> {
+                  Map<String, Object> rpc =
+                      postStatelessToolCall(
+                          client,
+                          harness.endpoint(),
+                          "analysis-" + index,
+                          "ghidra_analysis",
+                          Map.of("operation", "get", "params", Map.of()));
+                  assertEquals(false, resultMap(rpc).get("isError"));
+                });
+        long invalidMedianNanos =
+            measureConcurrentWave(
+                callers,
+                20,
+                index -> {
+                  Map<String, Object> rpc =
+                      postStatelessToolCall(
+                          client,
+                          harness.endpoint(),
+                          "invalid-" + index,
+                          "ghidra_memory",
+                          Map.of("operation", "read", "params", Map.of("length", 0)));
+                  assertEquals(true, resultMap(rpc).get("isError"));
+                  Map<?, ?> structured = (Map<?, ?>) resultMap(rpc).get("structuredContent");
+                  assertEquals(400, structured.get("status"));
+                });
+
+        assertFalse(slowDecomp.isDone());
+        assertFalse(queuedProgramRead.isDone());
+
+        // Slow decompilation stays blocked for an additional 200 ms; lock-free HTTP calls complete
+        // orders of magnitude below that window.
+        long maxHttpMedianNanos = TimeUnit.MILLISECONDS.toNanos(50);
+        assertTrue(
+            sessionMedianNanos < maxHttpMedianNanos,
+            "ghidra_bridge get p50 nanos: " + sessionMedianNanos);
+        assertTrue(
+            analysisMedianNanos < maxHttpMedianNanos,
+            "ghidra_analysis get p50 nanos: " + analysisMedianNanos);
+        assertTrue(
+            invalidMedianNanos < maxHttpMedianNanos,
+            "invalid 400 p50 nanos: " + invalidMedianNanos);
+
+        Thread.sleep(200);
+        releaseDecomp.countDown();
+
+        assertEquals(false, resultMap(slowDecomp.get(5, TimeUnit.SECONDS)).get("isError"));
+        assertEquals(false, resultMap(queuedProgramRead.get(5, TimeUnit.SECONDS)).get("isError"));
+      } finally {
+        releaseDecomp.countDown();
+      }
+    }
+  }
+
+  @FunctionalInterface
+  private interface IndexedCall {
+    void run(int index) throws Exception;
+  }
+
+  private static long measureConcurrentWave(
+      ExecutorService callers, int concurrency, IndexedCall action) throws Exception {
+    CountDownLatch ready = new CountDownLatch(concurrency);
+    CountDownLatch startGate = new CountDownLatch(1);
+    List<Future<Long>> futures = new ArrayList<>(concurrency);
+    for (int i = 0; i < concurrency; i++) {
+      final int index = i;
+      futures.add(
+          callers.submit(
+              () -> {
+                ready.countDown();
+                assertTrue(startGate.await(5, TimeUnit.SECONDS));
+                long started = System.nanoTime();
+                action.run(index);
+                return System.nanoTime() - started;
+              }));
+    }
+    assertTrue(ready.await(5, TimeUnit.SECONDS));
+    startGate.countDown();
+    List<Long> values = new ArrayList<>(concurrency);
+    for (Future<Long> future : futures) {
+      values.add(future.get(5, TimeUnit.SECONDS));
+    }
+    Collections.sort(values);
+    return values.get(values.size() / 2);
+  }
+
   private static void assertDualContentParity(
       Map<String, Object> rpcEnvelope, boolean expectedError, boolean expectedStateless) {
     assertEquals("2.0", rpcEnvelope.get("jsonrpc"));
@@ -475,7 +656,15 @@ class McpHttpServerToolResultTest {
     }
 
     static ServerHarness start() throws IOException {
-      BridgeServices services = createStubServices();
+      return startWithServices(createStubServices(null, null));
+    }
+
+    static ServerHarness startWithSlowDecompilation(
+        CountDownLatch decompEntered, CountDownLatch releaseDecomp) throws IOException {
+      return startWithServices(createStubServices(decompEntered, releaseDecomp));
+    }
+
+    private static ServerHarness startWithServices(BridgeServices services) throws IOException {
       AgentDispatcher dispatcher =
           new AgentDispatcher(
               services, new AgentConfig(null, "127.0.0.1", 8765, "/ws/agent", null, "test", null));
@@ -512,13 +701,23 @@ class McpHttpServerToolResultTest {
       }
     }
 
-    private static BridgeServices createStubServices() {
+    private static BridgeServices createStubServices(
+        CountDownLatch decompEntered, CountDownLatch releaseDecomp) {
       DecompilationService decompilation =
           proxy(
               DecompilationService.class,
               (method, args) -> {
                 if ("close".equals(method)) return null;
                 assertEquals("decompileFunction", method);
+                if (decompEntered != null && releaseDecomp != null) {
+                  decompEntered.countDown();
+                  try {
+                    assertTrue(releaseDecomp.await(5, TimeUnit.SECONDS));
+                  } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                  }
+                }
                 return new DecompilationResource(
                     "ram:00100000",
                     "main",
@@ -618,6 +817,16 @@ class McpHttpServerToolResultTest {
               AnalysisService.class,
               (method, args) -> {
                 if ("close".equals(method)) return null;
+                if ("getStatus".equals(method)) {
+                  return new AnalysisResource(
+                      AnalysisResource.Kind.GHIDRA,
+                      AnalysisResource.Status.IDLE,
+                      true,
+                      null,
+                      null,
+                      null,
+                      null);
+                }
                 throw new AssertionError(method);
               });
       TransactionRunner tx =

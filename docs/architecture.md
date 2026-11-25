@@ -48,7 +48,7 @@ The wire module maintains the unified method catalog:
 
 The runtime module manages request execution and session lifecycle:
 - `AgentDispatcher` dispatches each request to the target method handler.
-- It runs one request at a time. `DispatchBarrier` tracks in-flight requests and rejects new requests during shutdown.
+- It serializes program operations, session mutations, and batch calls one at a time, and runs `interface.get`, `session.get`, and `analysis.get` without lock contention. `DispatchBarrier` tracks active requests and rejects new requests at shutdown.
 - It maintains session state and coordinates graceful shutdown.
 - **Constraint**: This module has no dependency on Ghidra classes.
 

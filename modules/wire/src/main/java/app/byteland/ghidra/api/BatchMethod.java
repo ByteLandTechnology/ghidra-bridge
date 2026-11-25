@@ -4,6 +4,7 @@ import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import app.byteland.ghidra.service.TransactionRunner;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -70,6 +71,10 @@ final class BatchMethod {
   }
 
   boolean allowedDuringAnalysis(Map<String, Object> request) {
+    if (request instanceof PreparedRequestMap prepared) {
+      return prepared.batch().items().stream()
+          .allMatch(item -> item.method().effects().allowedDuringAnalysis());
+    }
     if (!(request.get(ApiVocabulary.ITEMS) instanceof List<?> items)) return false;
     for (Object rawItem : items) {
       if (!(rawItem instanceof Map<?, ?> item)
@@ -104,8 +109,8 @@ final class BatchMethod {
               ApiVocabulary.INVALID_TYPE, target + " must be an object", target);
         }
         Map<String, Object> request = stringMap(raw);
-        prepareBatch(request);
-        return Collections.unmodifiableMap(request);
+        PreparedBatch preparedBatch = prepareBatch(request);
+        return new PreparedRequestMap(Collections.unmodifiableMap(request), preparedBatch);
       }
 
       @Override
@@ -187,7 +192,8 @@ final class BatchMethod {
   }
 
   private Map<String, Object> executeBatch(Map<String, Object> request) {
-    PreparedBatch batch = prepareBatch(request);
+    PreparedBatch batch =
+        request instanceof PreparedRequestMap prepared ? prepared.batch() : prepareBatch(request);
     return "all_or_none".equals(batch.transactionMode())
         ? executeAllOrNone(batch.items())
         : executePerItem(batch.items());
@@ -411,6 +417,40 @@ final class BatchMethod {
       String id, ApiMethod<Map<String, Object>, Object> method, Map<String, Object> request) {}
 
   private record PreparedBatch(List<PreparedItem> items, String transactionMode) {}
+
+  private static final class PreparedRequestMap extends AbstractMap<String, Object> {
+    private final Map<String, Object> delegate;
+    private final PreparedBatch batch;
+
+    private PreparedRequestMap(Map<String, Object> delegate, PreparedBatch batch) {
+      this.delegate = delegate;
+      this.batch = batch;
+    }
+
+    private PreparedBatch batch() {
+      return batch;
+    }
+
+    @Override
+    public int size() {
+      return delegate.size();
+    }
+
+    @Override
+    public boolean containsKey(Object key) {
+      return delegate.containsKey(key);
+    }
+
+    @Override
+    public Object get(Object key) {
+      return delegate.get(key);
+    }
+
+    @Override
+    public Set<Entry<String, Object>> entrySet() {
+      return delegate.entrySet();
+    }
+  }
 
   private static final class BatchRollback extends RuntimeException {
     private static final long serialVersionUID = 1L;

@@ -47,14 +47,23 @@ public record ApiMethod<Request, Response>(
   }
 
   public Request decodeRequest(Object params) {
-    return requestCodec.decode(params, "");
+    Request decoded = requestCodec.decode(params, "");
+    FieldProjection.check(decoded, fields, identityFields);
+    return decoded;
+  }
+
+  public Response executeDecoded(Request request) throws Exception {
+    FieldProjection.check(request, fields, identityFields);
+    return handler.handle(request);
+  }
+
+  public Object encodeResponse(Request request, Response response) {
+    Object encoded = responseCodec.encode(response);
+    return FieldProjection.apply(encoded, request, fields, identityFields);
   }
 
   public Object invokeDecoded(Request request) throws Exception {
-    FieldProjection.validate(request, fields, identityFields);
-    Response response = handler.handle(request);
-    Object encoded = responseCodec.encode(response);
-    return FieldProjection.apply(encoded, request, fields, identityFields);
+    return encodeResponse(request, executeDecoded(request));
   }
 
   @FunctionalInterface
@@ -123,6 +132,14 @@ public record ApiMethod<Request, Response>(
       }
       Set<String> selected = validate(request, knownFields, identityFields);
       return projectResponse(response, selected);
+    }
+
+    static void check(
+        Object request, Set<String> knownFields, List<String> identityFields) {
+      if (!(request instanceof Map<?, ?> params) || !params.containsKey("fields")) {
+        return;
+      }
+      validate(request, knownFields, identityFields);
     }
 
     static Set<String> validate(

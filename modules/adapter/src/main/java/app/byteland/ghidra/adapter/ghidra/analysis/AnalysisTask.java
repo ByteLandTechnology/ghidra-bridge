@@ -20,6 +20,7 @@ import java.util.function.BooleanSupplier;
 final class AnalysisTask {
   private final String id = UUID.randomUUID().toString();
   private final BooleanSupplier analyzed;
+  private final Runnable onCompletion;
   private final TaskBody body;
   private final AnalysisTaskMonitor monitor = new AnalysisTaskMonitor();
   private volatile AnalysisResource.Status status = AnalysisResource.Status.RUNNING;
@@ -27,16 +28,36 @@ final class AnalysisTask {
   private volatile Long completedAt;
 
   AnalysisTask(GhidraSession context, AutoAnalysisManager manager, AnalyzerSelection selection) {
+    this(
+        context,
+        manager,
+        selection,
+        () -> GhidraProgramUtilities.isAnalyzed(Objects.requireNonNull(context, "context").currentProgram()),
+        () -> {});
+  }
+
+  AnalysisTask(
+      GhidraSession context,
+      AutoAnalysisManager manager,
+      AnalyzerSelection selection,
+      BooleanSupplier analyzed,
+      Runnable onCompletion) {
     GhidraSession session = Objects.requireNonNull(context, "context");
     AutoAnalysisManager analysisManager = Objects.requireNonNull(manager, "manager");
     AnalyzerSelection analyzerSelection = Objects.requireNonNull(selection, "selection");
     Program program = session.currentProgram();
-    this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(program);
+    this.analyzed = Objects.requireNonNull(analyzed, "analyzed");
+    this.onCompletion = Objects.requireNonNull(onCompletion, "onCompletion");
     this.body = () -> performAnalysis(session, analysisManager, program, analyzerSelection);
   }
 
   AnalysisTask(BooleanSupplier analyzed, Runnable operation) {
+    this(analyzed, () -> {}, operation);
+  }
+
+  AnalysisTask(BooleanSupplier analyzed, Runnable onCompletion, Runnable operation) {
     this.analyzed = Objects.requireNonNull(analyzed, "analyzed");
+    this.onCompletion = Objects.requireNonNull(onCompletion, "onCompletion");
     Objects.requireNonNull(operation, "operation");
     this.body =
         () -> {
@@ -52,7 +73,11 @@ final class AnalysisTask {
     } catch (RuntimeException failure) {
       outcome = new TaskOutcome(AnalysisResource.Status.FAILED, errorMessage(failure));
     }
-    publish(outcome);
+    try {
+      onCompletion.run();
+    } finally {
+      publish(outcome);
+    }
   }
 
   private TaskOutcome performAnalysis(
