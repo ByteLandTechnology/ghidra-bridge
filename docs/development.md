@@ -6,6 +6,7 @@ This guide describes how to build, extend, and verify the Ghidra Bridge codebase
 
 - **Java Development Kit**: Use JDK 21.
 - **Ghidra**: Use Ghidra 12.1 or newer to compile adapters. CI uses Ghidra `12.1.4`.
+- **Ghidra Native Tools**: On macOS and Linux ARM64, run `./support/gradle/gradlew --no-daemon buildNatives` in your Ghidra folder before you run tests.
 - **Environment**: Set `GHIDRA_INSTALL_DIR` or `GHIDRA_HOME` when Ghidra is not in a standard location.
 - **Windows Git Checkout**: Set `git config core.autocrlf false` so generated contract files keep LF line endings.
 

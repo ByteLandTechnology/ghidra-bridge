@@ -2,7 +2,7 @@ name: Install Java and Ghidra
 description: >-
   This action installs JDK 21.
   It restores or downloads the specified Ghidra release.
-  It sets GHIDRA_INSTALL_DIR.
+  It builds Ghidra native tools when necessary and sets GHIDRA_INSTALL_DIR.
 
 inputs:
   ghidra-version:
@@ -30,7 +30,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/ghidra-dist
-        key: ghidra-${{ runner.os }}-${{ runner.arch }}-${{ inputs.ghidra-version }}-${{ inputs.ghidra-build-date }}
+        key: ghidra-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.ghidra-version }}-${{ inputs.ghidra-build-date }}
 
     - name: Download Ghidra
       if: steps.cache-ghidra.outputs.cache-hit != 'true'
@@ -103,7 +103,7 @@ runs:
         zip_path.unlink(missing_ok=True)
         PY
 
-    - name: Resolve GHIDRA_INSTALL_DIR
+    - name: Resolve GHIDRA_INSTALL_DIR and native tools
       shell: bash
       run: |
         set -euo pipefail
@@ -114,9 +114,14 @@ runs:
         "$python_cmd" - <<'PY'
         import os
         import pathlib
+        import platform
+        import shutil
+        import subprocess
         import sys
+        import time
 
-        dist_dir = pathlib.Path(os.environ["RUNNER_TEMP"]) / "ghidra-dist"
+        temp_root = pathlib.Path(os.environ["RUNNER_TEMP"])
+        dist_dir = temp_root / "ghidra-dist"
         candidates = (
             sorted(entry for entry in dist_dir.iterdir() if entry.is_dir())
             if dist_dir.is_dir()
@@ -124,7 +129,98 @@ runs:
         )
         if not candidates:
             sys.exit(f"Cannot find an extracted Ghidra directory under {dist_dir}")
-        install_dir = os.path.abspath(str(candidates[0]))
+        install_dir = pathlib.Path(os.path.abspath(str(candidates[0])))
+
+        runner_os = os.environ.get("RUNNER_OS") or platform.system()
+        runner_arch = os.environ.get("RUNNER_ARCH") or platform.machine()
+        os_map = {"Linux": "linux", "macOS": "mac", "Darwin": "mac", "Windows": "win"}
+        arch_map = {
+            "X64": "x86_64",
+            "x86_64": "x86_64",
+            "amd64": "x86_64",
+            "AMD64": "x86_64",
+            "ARM64": "arm_64",
+            "arm64": "arm_64",
+            "aarch64": "arm_64",
+        }
+        os_prefix = os_map.get(runner_os)
+        arch_suffix = arch_map.get(runner_arch)
+        if not os_prefix or not arch_suffix:
+            sys.exit(f"Unsupported runner platform: os={runner_os}, arch={runner_arch}")
+
+        is_windows = os_prefix == "win"
+        exe_suffix = ".exe" if is_windows else ""
+        platform_dirs = [f"{os_prefix}_{arch_suffix}"]
+        if is_windows and "win_x86_64" not in platform_dirs:
+            platform_dirs.append("win_x86_64")
+
+        required_binaries = (
+            ("Ghidra/Features/Decompiler", "decompile"),
+            ("GPL/DemanglerGnu", "demangler_gnu_v2_41"),
+        )
+
+        def has_binary(module_rel: str, binary_name: str) -> bool:
+            module_dir = install_dir / module_rel
+            for plat in platform_dirs:
+                for sub in ("build/os", "os"):
+                    candidate = module_dir / sub / plat / f"{binary_name}{exe_suffix}"
+                    if candidate.is_file():
+                        if not is_windows and not os.access(candidate, os.X_OK):
+                            candidate.chmod(candidate.stat().st_mode | 0o111)
+                        return True
+            return False
+
+        if not all(has_binary(mod, name) for mod, name in required_binaries):
+            gradle_dir = install_dir / "support" / "gradle"
+            wrapper_props = gradle_dir / "gradle-wrapper.properties"
+            if wrapper_props.is_file():
+                props_text = wrapper_props.read_text(encoding="utf-8")
+                props_text = props_text.replace("networkTimeout=10000", "networkTimeout=60000")
+                wrapper_props.write_text(props_text, encoding="utf-8")
+
+            gradlew = gradle_dir / ("gradlew.bat" if is_windows else "gradlew")
+            if not is_windows and gradlew.is_file():
+                gradlew.chmod(gradlew.stat().st_mode | 0o111)
+
+            gradle_home = temp_root / "ghidra-gradle-home"
+            build_env = os.environ.copy()
+            build_env["GRADLE_USER_HOME"] = str(gradle_home)
+            cmd = [str(gradlew), "-p", str(gradle_dir), "--no-daemon", "buildNatives"]
+
+            try:
+                for attempt in range(1, 4):
+                    result = subprocess.run(cmd, env=build_env)
+                    if result.returncode == 0:
+                        break
+                    if attempt == 3:
+                        sys.exit(result.returncode)
+                    time.sleep(2 * attempt)
+            finally:
+                shutil.rmtree(gradle_home, ignore_errors=True)
+                shutil.rmtree(gradle_dir / ".gradle", ignore_errors=True)
+                shutil.rmtree(gradle_dir / "build", ignore_errors=True)
+                for module_rel in (
+                    "Ghidra/Features/Decompiler",
+                    "Ghidra/Features/FileFormats",
+                    "GPL/DemanglerGnu",
+                ):
+                    build_dir = install_dir / module_rel / "build"
+                    if build_dir.is_dir():
+                        for entry in build_dir.iterdir():
+                            if entry.name != "os":
+                                if entry.is_dir():
+                                    shutil.rmtree(entry, ignore_errors=True)
+                                else:
+                                    entry.unlink(missing_ok=True)
+
+            missing = [
+                f"{mod}:{name}"
+                for mod, name in required_binaries
+                if not has_binary(mod, name)
+            ]
+            if missing:
+                sys.exit(f"Missing Ghidra native binaries after buildNatives: {missing}")
+
         with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
             env_file.write(f"GHIDRA_INSTALL_DIR={install_dir}\n")
         PY
