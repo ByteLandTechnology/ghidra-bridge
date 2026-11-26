@@ -267,6 +267,15 @@ class CallSiteAndGraphMethodsTest {
         (List<Map<String, Object>>) items.getFirst().get("destinations");
     assertEquals("CONDITIONAL_JUMP", destinations.get(0).get("type"));
     assertEquals("FALL_THROUGH", destinations.get(1).get("type"));
+
+    ApiException badBlockSelector =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "basic_block.list", Map.of("filter", Map.of("selector", Map.of()))));
+    assertEquals(400, badBlockSelector.status());
+    assertEquals("/filter/selector/kind", badBlockSelector.error().target());
   }
 
   @Test

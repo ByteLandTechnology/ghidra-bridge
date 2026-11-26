@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 final class AgentServerConnection implements AgentWebSocketServer.Connection {
+  private static final byte[] EMPTY_PAYLOAD = new byte[0];
+
   private final Socket socket;
   private final InputStream inputStream;
   private final OutputStream output;
@@ -101,6 +103,10 @@ final class AgentServerConnection implements AgentWebSocketServer.Connection {
     if (failure instanceof IOException ioFailure) {
       throw new UncheckedIOException("Failed to close WebSocket connection", ioFailure);
     }
+  }
+
+  void sendPing() throws IOException {
+    sendControlFrame(WebSocketFrames.PING_OPCODE, EMPTY_PAYLOAD);
   }
 
   void sendControlFrame(int opcode, byte[] payload) throws IOException {

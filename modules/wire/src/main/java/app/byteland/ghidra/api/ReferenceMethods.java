@@ -53,7 +53,7 @@ final class ReferenceMethods implements ApiMethodProvider {
           Object rawSelector = filter.get(ApiVocabulary.SELECTOR);
           FlowOverrideScope scope =
               rawSelector instanceof Map<?, ?>
-                  ? flowScope(object(filter, ApiVocabulary.SELECTOR))
+                  ? flowScope(object(filter, ApiVocabulary.SELECTOR), "/filter/selector")
                   : null;
           return registry
               .services()
