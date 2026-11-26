@@ -96,32 +96,42 @@ The server replies with an error envelope for a bad message and keeps the socket
 ### Handshake Errors
 
 The server rejects a bad upgrade request with an HTTP status before the socket opens:
-- `400`: Absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
+- `400`: Absent, blank, malformed, or duplicate `Host` header, absent upgrade headers, an unsupported WebSocket version, or a token in the query string.
 - `401`: Absent or invalid bearer token.
-- `403`: Disallowed, malformed, or duplicate `Origin` header.
+- `403`: Disallowed, malformed, or duplicate `Origin` header. On a loopback listener, `Host` must match `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host`, with no other port.
 - `404`: The request path does not match the configured `path`.
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
 
-### WebSocket Close Codes
+### Message Fragments, Keepalive, and Close Codes
+
+The server reassembles multi-frame RFC 6455 UTF-8 text messages up to 16 MiB and answers interleaved `PING` and `CLOSE` frames.
+When a socket read times out, the server sends a `PING` frame.
+If no `PONG` frame arrives before the timeout, the server closes the socket and frees the client slot.
 
 The server closes the socket with these status codes:
 - `1000`: Normal closure.
-- `1001`: The server stops.
-- `1003`: The client sent a fragmented text message or an unsupported frame.
+- `1001`: The server stops, or a keepalive ping gets no `PONG` before the timeout.
+- `1002`: Protocol error, such as unmasked client frames, reserved bits, fragmented control frames, or unexpected continuation frames.
+- `1003`: Unsupported frame type, such as binary data.
+- `1007`: Invalid UTF-8 text or close reason.
+- `1009`: Message payload exceeds the 16 MiB limit.
 
 ## Model Context Protocol (MCP)
 
 The bridge implements MCP Streamable HTTP protocol version `2026-07-28`.
-The server does not use MCP sessions and does not send server-sent events.
+Version `2026-07-28` requests are stateless and do not use MCP sessions.
+For legacy SSE clients, the server supports bounded SSE sessions.
 
 ### HTTP Request Rules
 
 The MCP HTTP server handles requests:
-- **POST**: Dispatches JSON-RPC 2.0 requests.
+- **POST**: Dispatches JSON-RPC 2.0 requests. Up to 32 POST requests can run at the same time; more requests return status `503`. The server closes a POST exchange if the request body read takes more than 10 seconds. For an active SSE session (`?sessionId=<id>`), POST sends the JSON-RPC response as a `message` event and returns status `202`. An unknown or expired `sessionId` returns status `404`.
+- **GET**: Opens a legacy compatibility SSE stream and sends an `endpoint` event. Up to 16 SSE sessions can stay open at the same time; more requests return status `503`.
+- **HEAD**: Returns status `200` with no body.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
-- **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
-- **Other methods**: The server returns status `405`.
+- **Other methods**: The server returns status `405` with `Allow: POST, GET, OPTIONS`.
+- **Host**: Every request must send one well-formed `Host` header, or the server returns status `400`. On a loopback listener, a `Host` header must match `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host`. Any port must match the listener port, or the server returns status `403`.
 - **Origin**: By default, an `Origin` header that is not loopback or the configured `host` returns status `403` with no CORS headers. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` to `scheme://host[:port]` entries to permit only listed origins. Set `none` to reject all `Origin` headers.
 - **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.
 - **Notifications**: A request without `id` returns status `202` with no body.

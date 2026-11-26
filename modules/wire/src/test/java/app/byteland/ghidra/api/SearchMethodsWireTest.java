@@ -207,6 +207,28 @@ class SearchMethodsWireTest {
         matchItems.get(0).get("bytes"));
     assertNotNull(findResult.get("next_cursor"));
 
+    Map<String, Object> projectedStrings =
+        (Map<String, Object>)
+            registry.dispatch(
+                "string.list",
+                Map.of("projection", Map.of("fields", List.of("value", "defined"))));
+    List<Map<String, Object>> projectedStringItems =
+        (List<Map<String, Object>>) projectedStrings.get("items");
+    assertEquals(
+        List.of(Map.of("address", "ram:00100010", "value", "hello", "defined", true)),
+        projectedStringItems);
+
+    Map<String, Object> projectedMatches =
+        (Map<String, Object>)
+            registry.dispatch(
+                "memory.find",
+                Map.of(
+                    "filter", Map.of("pattern", "48 8B ?? 10"),
+                    "projection", Map.of("fields", List.of("length"))));
+    List<Map<String, Object>> projectedMatchItems =
+        (List<Map<String, Object>>) projectedMatches.get("items");
+    assertEquals(List.of(Map.of("address", "ram:00100020", "length", 4)), projectedMatchItems);
+
     var missingFilter =
         ApiFailures.normalize(
             assertThrows(Exception.class, () -> registry.dispatch("memory.find", Map.of())));

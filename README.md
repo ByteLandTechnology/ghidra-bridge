@@ -44,8 +44,8 @@ The loader scripts locate `ghidra-bridge.jar` relative to their file path.
 1. Open a binary in the Ghidra CodeBrowser tool.
 2. Open the Script Manager window.
 3. Add `build/ghidra-script/` to your script directories.
-4. Run `Bridge.java` for WebSocket or `GhidraMcp.java` for MCP.
-5. Enter configuration arguments in the prompt window.
+4. Run `Bridge.java` for WebSocket or `GhidraMcp.java` for MCP in the `Ghidra Bridge` category.
+5. Read the bound endpoint URL, `session_id`, and `tool_prefix` in the Console window. The script starts automatically on `127.0.0.1` (`8765` or `8766`) and picks the next free port for extra tabs.
 
 ### Run in Ghidra Headless Mode
 
@@ -116,6 +116,17 @@ The bridge enforces strict security boundaries:
 - **Bearer Header**: Inbound requests must send `Authorization: Bearer <token>`.
 - **Query Token Rejection**: The server rejects tokens in URL query strings with HTTP 400.
 - **Log Privacy**: The server never writes secret tokens to log files or consoles.
+
+### Verify Release Archives
+
+Before you run release scripts in Ghidra, verify the SHA-256 checksum and [GitHub provenance attestation](https://cli.github.com/manual/gh_attestation_verify):
+
+```bash
+sha256sum -c ghidra-bridge-<version>.zip.sha256
+gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghidra-bridge
+```
+
+The attestation confirms that GitHub Actions built the archive from this repository.
 
 ## API and Transports
 
