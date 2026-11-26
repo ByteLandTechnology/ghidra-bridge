@@ -97,8 +97,33 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
 `verify` runs:
 - `check`: JUnit tests and checks across all 8 Java subprojects.
 - `verifyApiContracts`: Checks that tracked contracts match generated output.
+- `verifyMcpDocumentation`: Checks MCP tool contract rules and MCP documentation consistency.
 - `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra (`compileGeneratedScripts`).
 - `verifyArchitecture`: Checks that no module outside `adapter` and `launcher` imports `ghidra.*`.
+
+### Test Timeouts, Debugging, and Failure Reports
+
+Every Gradle `Test` task sets:
+- A **5-minute** Gradle task timeout (`Duration.ofMinutes(5)`).
+- **30-second** cooperative (`SAME_THREAD`) JUnit Jupiter timeouts for test and lifecycle methods (`junit.jupiter.execution.timeout.default=30s`, `junit.jupiter.execution.timeout.testable.method.default=30s`, `junit.jupiter.execution.timeout.lifecycle.method.default=30s`) with thread dumps (`junit.jupiter.execution.timeout.threaddump.enabled=true`).
+- `FULL` exception output with causes and stack traces. Gradle prints buffered `stdout` and `stderr` streams only when a test fails.
+
+`junit.jupiter.execution.timeout.mode` defaults to `disabled_on_debug`. Attach a debugger to disable JUnit timeouts:
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test --debug-jvm
+```
+
+To disable JUnit timeouts without a debugger:
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon -Djunit.jupiter.execution.timeout.mode=disabled :adapter:test
+```
+
+Test runs write failure reports to:
+- JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
+- JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
+- Headless regression failure log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
 
 ### Pre-Commit Hooks
 
@@ -138,7 +163,7 @@ python3 tests/release_archive_reproducibility.py
 
 ### Release Archives and Provenance
 
-Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, then build the deterministic release archive in `build/release/`. Run `tests/release_archive_reproducibility.py` to test archive reproducibility across delayed runs:
+Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, run Gradle verification with `--stacktrace`, and build the deterministic release archive and SHA-256 checksum in `build/release/`. Run `tests/release_archive_reproducibility.py` to test archive reproducibility across delayed runs:
 
 ```bash
 bash .github/scripts/package-release.sh

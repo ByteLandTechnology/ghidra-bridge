@@ -93,9 +93,10 @@ python3 tests/release_archive_reproducibility.py
 验证套件执行以下检查：
 - **仓库卫生**：`pre-commit` 与 `verify-repository-hygiene.sh` 拒绝空文件、重复文件和生成产物，校验 `docs/api.md` 的方法数量，并检查 GitHub Actions 是否固定为提交 SHA。
 - **提交消息**：`commit-msg` 钩子与拉取请求检查校验 Conventional Commit 标题、作用域、72 字符行宽以及 `- ` 列表正文。
-- **单元测试**：`check` 在所有 Java 模块上运行 JUnit 测试。
+- **单元测试**：`check` 运行所有 Java 模块的 JUnit 测试。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。
+- **MCP 文档一致性**：`verifyMcpDocumentation` 检查 `docs/mcp-tools.json`、九份多语言文档与 MCP Javadoc。
 - **生成脚本编译**：`compileGeneratedScripts` 确保生成的启动脚本编译通过。
 - **分发产物**：`verifyDistribution` 校验 `build/ghidra-script/` 的内容。
 
