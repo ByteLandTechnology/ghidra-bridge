@@ -11,14 +11,18 @@ import org.junit.jupiter.api.Test;
 
 class McpProgramEntryToolsTest {
   @Test
+  @SuppressWarnings("unchecked")
   void helpListsImportExportAndEntryPointOperationsUnderProgramWithReadOnlyTrue() {
     McpToolRegistry registry = new McpToolRegistry(ApiRegistry.catalog());
 
     Map<String, Object> domainHelp = registry.help(Map.of("domain", "ghidra_program"));
-    List<?> operations = (List<?>) domainHelp.get("operations");
-    assertTrue(operations.contains("import.list"));
-    assertTrue(operations.contains("export.list"));
-    assertTrue(operations.contains("entry_point.list"));
+    List<Map<String, Object>> operations =
+        (List<Map<String, Object>>) domainHelp.get("operations");
+    List<String> operationNames =
+        operations.stream().map(entry -> String.valueOf(entry.get("name"))).toList();
+    assertTrue(operationNames.contains("import.list"));
+    assertTrue(operationNames.contains("export.list"));
+    assertTrue(operationNames.contains("entry_point.list"));
 
     for (String operation : List.of("import.list", "export.list", "entry_point.list")) {
       assertNotNull(registry.findTool("ghidra_program", operation));

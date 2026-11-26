@@ -34,14 +34,13 @@ final class ProgramEntryQueries {
   private static final String ORDINAL_PREFIX = "Ordinal_";
 
   private final GhidraSession context;
-  private final Program program;
 
   ProgramEntryQueries(GhidraSession context) {
     this.context = context;
-    this.program = context.currentProgram();
   }
 
   Page<ImportResource> listImports(ImportQuery query) {
+    Program program = context.currentProgram();
     int limit = Page.clampLimit(query.limit());
     ProgramTextMatcher nameMatcher =
         ProgramTextMatcher.compile(query.name(), query.regex(), query.nameRegex(), "name");
@@ -73,7 +72,7 @@ final class ProgramEntryQueries {
           encodeImportCursor(canonicalAddress, library, name),
           new ImportCandidate(extAddress, canonicalAddress, library, name, symbol, location));
     }
-    return selector.finish(this::describeImport);
+    return selector.finish(candidate -> describeImport(program, candidate));
   }
 
   Page<ExportResource> listExports(ExportQuery query) {
@@ -85,6 +84,7 @@ final class ProgramEntryQueries {
   }
 
   private Page<ExportResource> listExternalEntries(ExportQuery query, boolean includeAliases) {
+    Program program = context.currentProgram();
     int limit = Page.clampLimit(query.limit());
     ProgramTextMatcher nameMatcher =
         ProgramTextMatcher.compile(query.name(), query.regex(), query.nameRegex(), "name");
@@ -99,7 +99,8 @@ final class ProgramEntryQueries {
     while (addresses.hasNext()) {
       Address address = addresses.next();
       if (cursor != null && address.compareTo(cursor.address()) < 0) continue;
-      List<EntryCandidate> atAddress = collectEntriesAt(address, symbolTable, includeAliases);
+      List<EntryCandidate> atAddress =
+          collectEntriesAt(program, address, symbolTable, includeAliases);
       for (EntryCandidate candidate : atAddress) {
         if (cursor != null
             && address.equals(cursor.address())
@@ -112,14 +113,14 @@ final class ProgramEntryQueries {
           nextCursor = CompositeCursor.key(last.address(), last.name());
           break outer;
         }
-        items.add(describeExport(candidate));
+        items.add(describeExport(program, candidate));
       }
     }
     return Page.of(items, limit, nextCursor);
   }
 
-  private List<EntryCandidate> collectEntriesAt(
-      Address address, SymbolTable symbolTable, boolean includeAliases) {
+  private static List<EntryCandidate> collectEntriesAt(
+      Program program, Address address, SymbolTable symbolTable, boolean includeAliases) {
     String canonicalAddress = AddressUtil.canonicalAddress(address);
     Function function = program.getFunctionManager().getFunctionAt(address);
     Symbol[] symbols = symbolTable.getSymbols(address);
@@ -160,7 +161,7 @@ final class ProgramEntryQueries {
     return entries;
   }
 
-  private ExportResource describeExport(EntryCandidate candidate) {
+  private static ExportResource describeExport(Program program, EntryCandidate candidate) {
     Function function = candidate.function();
     FunctionSummary functionSummary =
         function == null
@@ -216,7 +217,7 @@ final class ProgramEntryQueries {
     return nameMatcher == null || nameMatcher.matches(entry.name());
   }
 
-  private ImportResource describeImport(ImportCandidate candidate) {
+  private static ImportResource describeImport(Program program, ImportCandidate candidate) {
     ExternalLocation location = candidate.location();
     Symbol symbol = candidate.symbol();
     Function extFunction = resolveExternalFunction(symbol, location);

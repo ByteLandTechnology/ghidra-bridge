@@ -220,4 +220,89 @@ class ProgramEntryQueriesTest {
       assertTrue(resolvedPuts.external());
     }
   }
+
+  @Test
+  void switchesImportsAndExportsAcrossDynamicProgramHost() {
+    try (ProgramHolder alphaHolder = GhidraTestSupport.createX64Program("alpha_entries");
+        ProgramHolder betaHolder = GhidraTestSupport.createX64Program("beta_entries")) {
+      alphaHolder.inTransaction(
+          program -> {
+            Address base = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x10000L);
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    base,
+                    new ByteArrayInputStream(new byte[] {(byte) 0xc3}),
+                    1,
+                    TaskMonitor.DUMMY,
+                    false);
+            program
+                .getExternalManager()
+                .addExtFunction("libc.so.6", "alpha_import", null, SourceType.IMPORTED);
+            program.getSymbolTable().createLabel(base, "alpha_export", SourceType.USER_DEFINED);
+            program.getSymbolTable().addExternalEntryPoint(base);
+          });
+      betaHolder.inTransaction(
+          program -> {
+            Address base = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x20000L);
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    base,
+                    new ByteArrayInputStream(new byte[] {(byte) 0xc3}),
+                    1,
+                    TaskMonitor.DUMMY,
+                    false);
+            program
+                .getExternalManager()
+                .addExtFunction("libm.so.6", "beta_import", null, SourceType.IMPORTED);
+            program.getSymbolTable().createLabel(base, "beta_export", SourceType.USER_DEFINED);
+            program.getSymbolTable().addExternalEntryPoint(base);
+          });
+
+      java.util.concurrent.atomic.AtomicReference<ghidra.program.model.listing.Program> active =
+          new java.util.concurrent.atomic.AtomicReference<>(null);
+      app.byteland.ghidra.adapter.ghidra.GhidraSession session =
+          new app.byteland.ghidra.adapter.ghidra.GhidraSession(active::get);
+      ProgramServiceImpl programService = new ProgramServiceImpl(session);
+
+      active.set(alphaHolder.program());
+      assertEquals(
+          List.of("alpha_import"),
+          programService
+              .listImports(new ImportQuery(null, null, false, null, null, 10, null))
+              .items()
+              .stream()
+              .map(ImportResource::name)
+              .toList());
+      assertEquals(
+          List.of("alpha_export"),
+          programService
+              .listExports(new ExportQuery(null, null, false, null, null, 10, null))
+              .items()
+              .stream()
+              .map(ExportResource::name)
+              .toList());
+
+      active.set(betaHolder.program());
+      assertEquals(
+          List.of("beta_import"),
+          programService
+              .listImports(new ImportQuery(null, null, false, null, null, 10, null))
+              .items()
+              .stream()
+              .map(ImportResource::name)
+              .toList());
+      assertEquals(
+          List.of("beta_export"),
+          programService
+              .listExports(new ExportQuery(null, null, false, null, null, 10, null))
+              .items()
+              .stream()
+              .map(ExportResource::name)
+              .toList());
+    }
+  }
 }

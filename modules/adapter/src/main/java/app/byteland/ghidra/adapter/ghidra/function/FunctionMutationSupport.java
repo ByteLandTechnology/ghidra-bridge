@@ -60,7 +60,7 @@ final class FunctionMutationSupport {
   }
 
   static Function refreshFunction(GhidraSession context, Function function, String operation) {
-    Function updated = context.script().getFunctionAt(function.getEntryPoint());
+    Function updated = context.flatApi().getFunctionAt(function.getEntryPoint());
     if (updated == null) {
       throw new IllegalArgumentException("function not found after " + operation);
     }
