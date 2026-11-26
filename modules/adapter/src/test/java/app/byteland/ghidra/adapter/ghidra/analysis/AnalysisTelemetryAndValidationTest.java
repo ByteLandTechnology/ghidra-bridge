@@ -122,7 +122,7 @@ class AnalysisTelemetryAndValidationTest {
   void validatesAnalyzersAndBuildsBooleanOptionChanges() {
     assertFalse(AnalyzerSelection.from(null).hasSelection());
     assertNull(
-        AnalysisTask.prepareScriptAnalyzerSelection(
+        AnalysisTask.prepareAnalyzerSelection(
             Map.of(), ignored -> true, AnalyzerSelection.from(null)));
 
     assertThrows(IllegalArgumentException.class, () -> AnalyzerSelection.from(List.of()));
@@ -139,7 +139,7 @@ class AnalysisTelemetryAndValidationTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                AnalysisTask.prepareScriptAnalyzerSelection(
+                AnalysisTask.prepareAnalyzerSelection(
                     options,
                     registeredAnalyzers::contains,
                     AnalyzerSelection.from(List.of("NoSuchAnalyzer"))));
@@ -149,14 +149,14 @@ class AnalysisTelemetryAndValidationTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                AnalysisTask.prepareScriptAnalyzerSelection(
+                AnalysisTask.prepareAnalyzerSelection(
                     options,
                     registeredAnalyzers::contains,
                     AnalyzerSelection.from(List.of("NonBooleanAnalyzer"))));
     assertEquals("analyzer option is unavailable: NonBooleanAnalyzer", unavailable.getMessage());
 
     AnalysisTask.AnalysisOptionChange change =
-        AnalysisTask.prepareScriptAnalyzerSelection(
+        AnalysisTask.prepareAnalyzerSelection(
             options,
             registeredAnalyzers::contains,
             AnalyzerSelection.from(List.of("ASCII Strings")));
@@ -184,7 +184,7 @@ class AnalysisTelemetryAndValidationTest {
           @Override
           public AnalysisTask createTask(List<String> analyzers) {
             AnalyzerSelection selection = AnalyzerSelection.from(analyzers);
-            AnalysisTask.prepareScriptAnalyzerSelection(
+            AnalysisTask.prepareAnalyzerSelection(
                 currentOptions, validAnalyzers::contains, selection);
             return new AnalysisTask(
                 () -> true,
@@ -267,6 +267,74 @@ class AnalysisTelemetryAndValidationTest {
       assertEquals(AnalysisResource.Status.RUNNING, externalRun.status());
       assertNull(externalRun.message());
       assertNull(externalRun.error());
+    }
+  }
+
+  @Test
+  void isolatesPerTargetSnapshotsAndSkipsExecutorCreationOnInvalidAnalyzers() {
+    Object alpha = new Object();
+    Object beta = new Object();
+    AtomicReference<Object> activeTarget = new AtomicReference<>(alpha);
+    AtomicInteger executorsCreated = new AtomicInteger();
+
+    try (AnalysisServiceImpl service =
+        new AnalysisServiceImpl(
+            activeTarget::get,
+            target ->
+                new AnalysisServiceImpl.Backend() {
+                  @Override
+                  public boolean isAnalyzing() {
+                    return false;
+                  }
+
+                  @Override
+                  public AnalysisTask createTask(List<String> analyzers) {
+                    AnalyzerSelection selection = AnalyzerSelection.from(analyzers);
+                    AnalysisTask.prepareAnalyzerSelection(
+                        Map.of("ASCII Strings", "true"),
+                        "ASCII Strings"::equals,
+                        selection);
+                    return new AnalysisTask(
+                        () -> target == alpha,
+                        monitor ->
+                            monitor.setMessage(target == alpha ? "Alpha pass" : "Beta pass"));
+                  }
+
+                  @Override
+                  public boolean isAnalyzed() {
+                    return false;
+                  }
+
+                  @Override
+                  public void cancelQueuedTasks() {}
+
+                  @Override
+                  public void awaitIdle() {}
+                },
+            ignored -> {
+              executorsCreated.incrementAndGet();
+              return new DirectExecutorService(() -> {});
+            })) {
+      assertEquals(AnalysisResource.Status.IDLE, service.getStatus().status());
+      assertEquals(0, executorsCreated.get());
+
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> service.startAnalysis(List.of("UnknownAnalyzer")));
+      assertEquals(0, executorsCreated.get());
+
+      AnalysisResource alphaDone = service.startAnalysis(List.of("ASCII Strings"));
+      assertEquals(1, executorsCreated.get());
+      assertEquals(AnalysisResource.Status.COMPLETED, alphaDone.status());
+      assertEquals("Analysis completed", alphaDone.message());
+
+      activeTarget.set(beta);
+      assertEquals(AnalysisResource.Kind.GHIDRA, service.getStatus().kind());
+      assertEquals(1, executorsCreated.get());
+
+      service.releaseTarget(alpha);
+      activeTarget.set(alpha);
+      assertEquals(AnalysisResource.Kind.GHIDRA, service.getStatus().kind());
     }
   }
 
@@ -903,7 +971,8 @@ class AnalysisTelemetryAndValidationTest {
     }
   }
 
-  private static final class DirectExecutorService extends java.util.concurrent.AbstractExecutorService {
+  private static final class DirectExecutorService
+      extends java.util.concurrent.AbstractExecutorService {
     private final Runnable onExecute;
     private volatile boolean shutdown;
 

@@ -156,7 +156,9 @@ class AnalysisMethodsTest {
     IllegalArgumentException unknownAnalyzer =
         assertThrows(
             IllegalArgumentException.class,
-            () -> registry.dispatch("analysis.start", Map.of("analyzers", List.of("NoSuchAnalyzer"))));
+            () ->
+                registry.dispatch(
+                    "analysis.start", Map.of("analyzers", List.of("NoSuchAnalyzer"))));
     ApiFailures.Failure normalized = ApiFailures.normalize(unknownAnalyzer);
     assertEquals(400, normalized.status());
     assertEquals("invalid_request", normalized.error().code());
@@ -172,7 +174,8 @@ class AnalysisMethodsTest {
 
     ApiException emptyList =
         assertThrows(
-            ApiException.class, () -> registry.dispatch("analysis.start", Map.of("analyzers", List.of())));
+            ApiException.class,
+            () -> registry.dispatch("analysis.start", Map.of("analyzers", List.of())));
     assertEquals(400, emptyList.status());
 
     ApiException emptyString =

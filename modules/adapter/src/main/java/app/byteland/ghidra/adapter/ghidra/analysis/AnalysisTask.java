@@ -37,12 +37,15 @@ final class AnalysisTask {
   private volatile String error;
 
   AnalysisTask(
-      GhidraSession context, AutoAnalysisManager manager, AnalysisOptionChange optionChange) {
+      GhidraSession context,
+      Program program,
+      AutoAnalysisManager manager,
+      AnalysisOptionChange optionChange) {
     GhidraSession session = Objects.requireNonNull(context, "context");
+    Program targetProgram = Objects.requireNonNull(program, "program");
     AutoAnalysisManager analysisManager = Objects.requireNonNull(manager, "manager");
-    Program program = session.currentProgram();
-    this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(program);
-    this.body = () -> performAnalysis(session, analysisManager, program, optionChange);
+    this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(targetProgram);
+    this.body = () -> performAnalysis(session, analysisManager, targetProgram, optionChange);
   }
 
   AnalysisTask(BooleanSupplier analyzed, Consumer<AnalysisTaskMonitor> operation) {
@@ -97,7 +100,7 @@ final class AnalysisTask {
       }
       if (optionChange != null) {
         previousAnalysisOptions = optionChange.previous();
-        applyScriptAnalyzerSelection(context, program, optionChange.updates());
+        applyAnalyzerSelection(context, program, optionChange.updates());
       }
       if (monitor.isCancelled()) {
         terminalStatus = AnalysisResource.Status.CANCELLED;
@@ -126,7 +129,7 @@ final class AnalysisTask {
         }
       }
       String restoreError =
-          restoreScriptAnalyzerSelection(context, manager, program, previousAnalysisOptions);
+          restoreAnalyzerSelection(context, manager, program, previousAnalysisOptions);
       if (restoreError != null) {
         terminalStatus = AnalysisResource.Status.FAILED;
         terminalError = appendError(terminalError, restoreError);
@@ -137,11 +140,12 @@ final class AnalysisTask {
         return new TaskOutcome(AnalysisResource.Status.CANCELLED, null);
       }
       try {
-        context.withTransaction(
+        context.withProgramTransaction(
+            program,
             () -> {
-              GhidraProgramUtilities.markProgramAnalyzed(program);
-              return null;
-            });
+               GhidraProgramUtilities.markProgramAnalyzed(program);
+               return null;
+             });
       } catch (RuntimeException markFailure) {
         return new TaskOutcome(AnalysisResource.Status.FAILED, errorMessage(markFailure));
       }
@@ -193,22 +197,21 @@ final class AnalysisTask {
     status = outcome.status();
   }
 
-  static AnalysisOptionChange prepareScriptAnalyzerSelection(
-      GhidraSession context,
-      AutoAnalysisManager manager,
-      Program program,
-      AnalyzerSelection selection) {
+  static AnalysisOptionChange prepareAnalyzerSelection(
+      AutoAnalysisManager manager, Program program, AnalyzerSelection selection) {
+    Objects.requireNonNull(manager, "manager");
+    Objects.requireNonNull(program, "program");
     Objects.requireNonNull(selection, "selection");
     if (!selection.hasSelection()) {
       return null;
     }
-    return prepareScriptAnalyzerSelection(
-        context.script().getCurrentAnalysisOptionsAndValues(program),
+    return prepareAnalyzerSelection(
+        AnalysisOptionsSupport.readBooleanOptions(program),
         analyzer -> manager.getAnalyzer(analyzer) != null,
         selection);
   }
 
-  static AnalysisOptionChange prepareScriptAnalyzerSelection(
+  static AnalysisOptionChange prepareAnalyzerSelection(
       Map<String, String> currentOptions,
       Predicate<String> analyzerExists,
       AnalyzerSelection selection) {
@@ -246,18 +249,12 @@ final class AnalysisTask {
     return new AnalysisOptionChange(previous, updates);
   }
 
-  private static void applyScriptAnalyzerSelection(
+  private static void applyAnalyzerSelection(
       GhidraSession context, Program program, Map<String, String> updates) {
-    if (!updates.isEmpty()) {
-      context.withTransaction(
-          () -> {
-            context.script().setAnalysisOptions(program, updates);
-            return null;
-          });
-    }
+    AnalysisOptionsSupport.writeBooleanOptions(context, program, updates);
   }
 
-  private static String restoreScriptAnalyzerSelection(
+  private static String restoreAnalyzerSelection(
       GhidraSession context,
       AutoAnalysisManager manager,
       Program program,
@@ -266,11 +263,7 @@ final class AnalysisTask {
       return null;
     }
     try {
-      context.withTransaction(
-          () -> {
-            context.script().setAnalysisOptions(program, previousAnalysisOptions);
-            return null;
-          });
+      AnalysisOptionsSupport.writeBooleanOptions(context, program, previousAnalysisOptions);
       manager.initializeOptions();
       return null;
     } catch (RuntimeException ex) {
@@ -293,12 +286,27 @@ final class AnalysisTask {
     if (monitor.isCancelled()) {
       return;
     }
-    if (tool == null || tool.threadIsBackgroundTaskThread()) {
-      execution.accept(monitor);
-      return;
-    }
     if (program != null && program.isClosed()) {
       monitor.requestCancel();
+      return;
+    }
+    if (tool == null) {
+      if (program == null) {
+        execution.accept(monitor);
+        return;
+      }
+      int transactionId = program.startTransaction("Ghidra Bridge Analysis");
+      boolean commit = false;
+      try {
+        execution.accept(monitor);
+        commit = !program.hasTerminatedTransaction();
+      } finally {
+        program.endTransaction(transactionId, commit);
+      }
+      return;
+    }
+    if (tool.threadIsBackgroundTaskThread()) {
+      execution.accept(monitor);
       return;
     }
 
@@ -474,7 +482,7 @@ final class AnalysisTask {
             releaseNow = true;
           }
           case RUNNING -> {
-            // Wait until applyTo finishes so cleanup does not run concurrently with analysis.
+            // Wait until applyTo finishes so cleanup does not run at the same time as analysis.
           }
           case AWAITING_TASK_COMPLETED -> {
             phase = Phase.DONE;
