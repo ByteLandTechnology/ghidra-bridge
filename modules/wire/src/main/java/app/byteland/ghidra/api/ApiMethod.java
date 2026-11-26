@@ -46,25 +46,49 @@ public record ApiMethod<Request, Response>(
     return requestCodec.decode(params, "");
   }
 
-  public Object invokeDecoded(Request request) throws Exception {
-    Set<String> selected = FieldProjection.validate(request, fields, identityFields);
+  public void validateProjection(Request request) {
+    FieldProjection.validate(request, fields, identityFields);
+  }
+
+  Set<String> selectProjection(Request request) {
+    return FieldProjection.validate(request, fields, identityFields);
+  }
+
+  public Response invokeHandler(Request request) throws Exception {
+    return invokeHandler(request, selectProjection(request));
+  }
+
+  Response invokeHandler(Request request, Set<String> selected) throws Exception {
+    if (handler instanceof ProjectedHandler<Request, Response> projectedHandler) {
+      return projectedHandler.handleProjected(request, selected);
+    }
+    return handler.handle(request);
+  }
+
+  public Object encodeResponse(Request request, Response response) {
+    return encodeResponse(response, selectProjection(request));
+  }
+
+  Object encodeResponse(Response response, Set<String> selected) {
     if (selected == null) {
-      Response response =
-          handler instanceof ProjectedHandler<Request, Response> projectedHandler
-              ? projectedHandler.handleProjected(request, null)
-              : handler.handle(request);
       return responseCodec.encode(response);
     }
     Object projectedResponse =
-        handler instanceof ProjectedHandler<Request, Response> projectedHandler
-            ? projectedHandler.handleProjected(request, selected)
-            : FieldProjection.projectFallback(handler.handle(request), selected);
+        handler instanceof ProjectedHandler<?, ?>
+            ? response
+            : FieldProjection.projectFallback(response, selected);
     if (responseCodec instanceof JsonValueCodec valueCodec) {
       return valueCodec.encode(projectedResponse, selected);
     }
     @SuppressWarnings("unchecked")
     Response typed = (Response) projectedResponse;
     return responseCodec.encode(typed);
+  }
+
+  public Object invokeDecoded(Request request) throws Exception {
+    Set<String> selected = selectProjection(request);
+    Response response = invokeHandler(request, selected);
+    return encodeResponse(response, selected);
   }
 
   @FunctionalInterface

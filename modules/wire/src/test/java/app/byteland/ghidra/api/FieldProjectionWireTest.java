@@ -80,6 +80,18 @@ class FieldProjectionWireTest {
     assertEquals(1, requested.sizeCalls.get());
     assertEquals(2, requested.getCalls.get());
 
+    // Check that PreparedDispatch checks projection once and returns projected output.
+    ApiRegistry.PreparedDispatch prepared =
+        fixture.registry.prepareDispatch(
+            "symbol.get",
+            Map.of(
+                "selector",
+                Map.of("id", "7"),
+                "projection",
+                Map.of("fields", List.of("name"))));
+    Object rawPrepared = prepared.execute();
+    assertEquals(Map.of("id", "7", "name", "sym_7"), prepared.encodeResponse(rawPrepared));
+
     // Direct ApiMethod instances with a plain Handler also project and validate in one pass.
     Map<String, Object> flatInput =
         ApiSchemaCatalog.input(ApiSchemaCatalog.props("fields", ApiRegistry.fieldsSchema()));
@@ -388,7 +400,7 @@ class FieldProjectionWireTest {
         Map.of("projection", Map.of("fields", List.of("local_variables.storage"))));
     assertEquals(Set.of("locals"), fixture.lastIncludes.get());
 
-    // Check identityFields sort order and cursor continuity across projected pages.
+    // Check page order, identityFields, and cursor continuity across projected pages.
     Map<String, Object> firstProjectedPage =
         (Map<String, Object>)
             fixture.registry.dispatch(
@@ -402,8 +414,8 @@ class FieldProjectionWireTest {
         (List<Map<String, Object>>) firstProjectedPage.get("items");
     assertEquals(
         List.of(
-            Map.of("address", "ram:00401000", "id", "1", "name", "sym_1"),
-            Map.of("address", "ram:00401000", "id", "2", "name", "sym_2")),
+            Map.of("address", "ram:00401000", "id", "2", "name", "sym_2"),
+            Map.of("address", "ram:00401000", "id", "1", "name", "sym_1")),
         symbolItems);
     String nextCursor = (String) firstProjectedPage.get("next_cursor");
     assertNotNull(nextCursor);
@@ -422,8 +434,8 @@ class FieldProjectionWireTest {
     assertEquals("ram:00401008", fixture.lastSymbolCursor.get());
     assertEquals(
         List.of(
-            Map.of("address", "ram:00401000", "id", "1", "type", "function"),
-            Map.of("address", "ram:00401000", "id", "2", "type", "function")),
+            Map.of("address", "ram:00401000", "id", "2", "type", "function"),
+            Map.of("address", "ram:00401000", "id", "1", "type", "function")),
         secondProjectedPage.get("items"));
 
     // Check that batch.execute accepts projected read and list items.
@@ -915,7 +927,7 @@ class FieldProjectionWireTest {
                     case "listSymbols" -> {
                       SymbolService.SymbolQuery query = (SymbolService.SymbolQuery) args[0];
                       lastSymbolCursor.set(query.cursor());
-                      // Return out-of-order ids at the same address to check identity sort order.
+                      // Keep page order when two symbols share an address.
                       yield Page.scanned(List.of(symTwo, symOne), 2, "ram:00401008", scan);
                     }
                     default -> throw new AssertionError(name);
