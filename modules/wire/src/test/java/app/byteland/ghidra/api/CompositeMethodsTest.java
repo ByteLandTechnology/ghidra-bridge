@@ -3,13 +3,10 @@ package app.byteland.ghidra.api;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.ByteSequence;
-import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.ScanProgress;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
@@ -20,8 +17,6 @@ import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
-import app.byteland.ghidra.service.function.ControlFlowGraphResource;
-import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
 import app.byteland.ghidra.service.listing.CodeUnitResource;
@@ -30,7 +25,6 @@ import app.byteland.ghidra.service.listing.ListingService;
 import app.byteland.ghidra.service.listing.ListingWindowResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.ProgramService;
-import app.byteland.ghidra.service.reference.ReferenceContextResource;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolResource;
@@ -68,11 +62,16 @@ class CompositeMethodsTest {
                     new ByteSequence(ByteSequence.Encoding.HEX, "07000000", 4))),
             List.of(
                 new SymbolResource(
-                    "42", "entry_label", "ram:00401000", "Global", "Label", "USER_DEFINED", true,
+                    "42",
+                    "entry_label",
+                    "ram:00401000",
+                    "Global",
+                    "Label",
+                    "USER_DEFINED",
+                    true,
                     null)),
             List.of(),
-            List.of(
-                new CommentResource("ram:00401000", CommentResource.Type.EOL, "return site")),
+            List.of(new CommentResource("ram:00401000", CommentResource.Type.EOL, "return site")),
             List.of(
                 new ReferenceResource(
                     "ram:00400ff0", "ram:00401000", "UNCONDITIONAL_CALL", 0, true, "ANALYSIS")),
@@ -99,9 +98,7 @@ class CompositeMethodsTest {
               assertEquals("all", args[2]);
               observedCursor.set((String) args[3]);
               return window;
-            },
-            unusedHandler(),
-            unusedHandler());
+            });
 
     @SuppressWarnings("unchecked")
     Map<String, Object> first =
@@ -168,199 +165,8 @@ class CompositeMethodsTest {
     assertNotNull(firstBatchItem.get("result"));
   }
 
-  @Test
-  void controlFlowGraphGetValidatesSelectorAndProjectsFields() throws Exception {
-    ControlFlowGraphResource graph =
-        new ControlFlowGraphResource(
-            "ram:00401000",
-            "_ZN4demo3runEi",
-            "Global",
-            "demo::run(int)",
-            new FunctionResource.Body("ram:00401000", "ram:00401005", 6L),
-            true,
-            0,
-            List.of(
-                new ControlFlowGraphResource.BlockResource(
-                    "ram:00401000",
-                    List.of(
-                        new ControlFlowGraphResource.BlockInstructionResource("ram:00401000", 5),
-                        new ControlFlowGraphResource.BlockInstructionResource("ram:00401005", 1)))),
-            List.of(
-                new ControlFlowGraphResource.NodeResource(
-                    "block:0",
-                    "block",
-                    "ram:00401000",
-                    "ram:00401000",
-                    List.of("CALL 0x00402000", "RET"))),
-            List.of(),
-            new ScanProgress(
-                ScanProgress.Kind.ADDRESS,
-                "ram:00401000",
-                "ram:00401005",
-                "ram:00401000",
-                "ram:00401005",
-                true,
-                ScanProgress.StopReason.COMPLETED,
-                2L));
-
-    ApiRegistry registry =
-        createRegistry(
-            unusedHandler(),
-            (method, args) -> {
-              assertEquals("getControlFlowGraph", method);
-              assertEquals(null, args[0]);
-              assertEquals("ram:00401002", args[1]);
-              assertEquals(2048, args[2]);
-              assertEquals(25000, args[3]);
-              return graph;
-            },
-            unusedHandler());
-
-    @SuppressWarnings("unchecked")
-    Map<String, Object> full =
-        (Map<String, Object>)
-            registry.dispatch(
-                "control_flow_graph.get",
-                Map.of(
-                    "selector", Map.of("address", "ram:00401002"),
-                    "max_instructions", 2048,
-                    "scan", Map.of("timeout_ms", 25000)));
-    assertEquals("ram:00401000", full.get("entry"));
-    assertEquals("demo::run(int)", full.get("demangled_name"));
-    assertEquals(true, full.get("has_body"));
-    assertEquals(1, ((List<?>) full.get("blocks")).size());
-    assertEquals(1, ((List<?>) full.get("nodes")).size());
-
-    @SuppressWarnings("unchecked")
-    Map<String, Object> projected =
-        (Map<String, Object>)
-            registry.dispatch(
-                "control_flow_graph.get",
-                Map.of(
-                    "selector", Map.of("address", "ram:00401002"),
-                    "max_instructions", 2048,
-                    "scan", Map.of("timeout_ms", 25000),
-                    "projection", Map.of("fields", List.of("name", "has_body", "body.start"))));
-    assertEquals(
-        Map.of(
-            "entry", "ram:00401000",
-            "name", "_ZN4demo3runEi",
-            "has_body", true,
-            "body", Map.of("start", "ram:00401000")),
-        projected);
-
-    ApiException ambiguous =
-        assertThrows(
-            ApiException.class,
-            () ->
-                registry.dispatch(
-                    "control_flow_graph.get",
-                    Map.of(
-                        "selector",
-                        Map.of("entry", "ram:00401000", "address", "ram:00401002"))));
-    assertEquals(400, ambiguous.status());
-  }
-
-  @Test
-  void referenceContextListSupportsTargetFiltersCallerSummaryAndPagination() throws Exception {
-    ReferenceContextResource fromFn =
-        new ReferenceContextResource(
-            "ram:00401010",
-            "ram:00402000",
-            "UNCONDITIONAL_CALL",
-            0,
-            true,
-            "ANALYSIS",
-            "ram:00401010",
-            new ReferenceContextResource.CallerSummary(
-                "ram:00401000", "_ZN4demo6callerEv", "Global", "demo::caller()"));
-    ReferenceContextResource fromData =
-        new ReferenceContextResource(
-            "ram:00403000", "ram:00402000", "DATA", 0, true, "IMPORTED", null, null);
-
-    ApiRegistry registry =
-        createRegistry(
-            unusedHandler(),
-            unusedHandler(),
-            (method, args) -> {
-              assertEquals("listReferenceContext", method);
-              assertEquals(null, args[0]);
-              assertEquals("ram:00402000", args[1]);
-              assertEquals(null, args[2]);
-              assertEquals("UNCONDITIONAL_CALL", args[3]);
-              AddressScanOptions scan = (AddressScanOptions) args[4];
-              assertEquals(12000, scan.timeoutMs());
-              return Page.scanned(
-                  List.of(fromFn, fromData),
-                  (Integer) args[5],
-                  "[\"ram:00403000\",\"ram:00402000\",\"DATA\",0]",
-                  new ScanProgress(
-                      ScanProgress.Kind.ADDRESS,
-                      "ram:00402000",
-                      "ram:00402000",
-                      "ram:00401010",
-                      "ram:00403000",
-                      false,
-                      ScanProgress.StopReason.LIMIT,
-                      3L));
-            });
-
-    @SuppressWarnings("unchecked")
-    Map<String, Object> response =
-        (Map<String, Object>)
-            registry.dispatch(
-                "reference_context.list",
-                Map.of(
-                    "filter",
-                        Map.of("entry", "ram:00402000", "type", "UNCONDITIONAL_CALL"),
-                    "page", Map.of("limit", 2),
-                    "scan", Map.of("timeout_ms", 12000)));
-
-    @SuppressWarnings("unchecked")
-    List<Map<String, Object>> items = (List<Map<String, Object>>) response.get("items");
-    assertEquals(2, items.size());
-    assertEquals("ram:00401010", items.get(0).get("from"));
-    assertEquals("ram:00401010", items.get(0).get("call_site"));
-    assertEquals(
-        Map.of(
-            "entry", "ram:00401000",
-            "name", "_ZN4demo6callerEv",
-            "namespace", "Global",
-            "demangled_name", "demo::caller()"),
-        items.get(0).get("caller"));
-    assertEquals("ram:00403000", items.get(1).get("from"));
-    assertFalse(items.get(1).containsKey("caller"));
-    assertFalse(items.get(1).containsKey("call_site"));
-    assertNotNull(response.get("next_cursor"));
-
-    @SuppressWarnings("unchecked")
-    Map<String, Object> projectedRefs =
-        (Map<String, Object>)
-            registry.dispatch(
-                "reference_context.list",
-                Map.of(
-                    "filter", Map.of("entry", "ram:00402000", "type", "UNCONDITIONAL_CALL"),
-                    "page", Map.of("limit", 2),
-                    "scan", Map.of("timeout_ms", 12000),
-                    "projection", Map.of("fields", List.of("caller.entry"))));
-    @SuppressWarnings("unchecked")
-    List<Map<String, Object>> projectedRefItems =
-        (List<Map<String, Object>>) projectedRefs.get("items");
-    assertEquals(Map.of("entry", "ram:00401000"), projectedRefItems.get(0).get("caller"));
-    assertFalse(projectedRefItems.get(1).containsKey("caller"));
-
-    ApiException emptyFilter =
-        assertThrows(
-            ApiException.class,
-            () -> registry.dispatch("reference_context.list", Map.of("filter", Map.of())));
-    assertEquals(400, emptyFilter.status());
-  }
-
-  private static ApiRegistry createRegistry(
-      Handler listingHandler, Handler functionHandler, Handler referenceHandler) {
+  private static ApiRegistry createRegistry(Handler listingHandler) {
     ListingService listing = proxy(ListingService.class, listingHandler);
-    FunctionService functions = proxy(FunctionService.class, functionHandler);
-    ReferenceService references = proxy(ReferenceService.class, referenceHandler);
     AnalysisService analysis =
         proxy(
             AnalysisService.class,
@@ -389,10 +195,10 @@ class CompositeMethodsTest {
             unused(ProgramService.class),
             unused(AddressService.class),
             unused(CommentService.class),
-            references,
+            unused(ReferenceService.class),
             unused(MemoryService.class),
             listing,
-            functions,
+            unused(FunctionService.class),
             unused(GlobalVariableService.class),
             analysis,
             unused(DecompilationService.class),

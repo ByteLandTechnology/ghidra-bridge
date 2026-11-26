@@ -59,11 +59,11 @@ class ApiCatalogTest {
         publicMethods);
 
     ApiCatalog catalog = ApiRegistry.catalog();
-    assertEquals(59, catalog.methods().size());
+    assertEquals(57, catalog.methods().size());
     Map<String, Object> description = catalog.interfaceDescription();
     assertEquals(catalog.interfaceVersion(), description.get("interface_version"));
     List<?> methods = (List<?>) description.get("methods");
-    assertEquals(59, methods.size());
+    assertEquals(57, methods.size());
 
     for (ApiCatalog.MethodDescriptor descriptor : catalog.methods()) {
       Map<String, Object> contract = descriptor.contractValue();

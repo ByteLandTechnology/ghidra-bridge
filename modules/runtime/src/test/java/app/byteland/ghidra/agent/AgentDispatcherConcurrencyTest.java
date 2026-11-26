@@ -27,7 +27,6 @@ import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
-import app.byteland.ghidra.service.function.ControlFlowGraphResource;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService;
@@ -48,7 +47,6 @@ import app.byteland.ghidra.service.program.AddressSpaceResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
-import app.byteland.ghidra.service.reference.ReferenceContextResource;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolResource;
@@ -93,7 +91,7 @@ class AgentDispatcherConcurrencyTest {
               .filter(m -> Boolean.TRUE.equals(((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
               .map(MethodDescriptor::name)
               .toList();
-      assertEquals(32, catalogReadOnly.size(), "Catalog must expose all 32 read-only methods");
+      assertEquals(30, catalogReadOnly.size(), "Catalog must expose all 30 read-only methods");
 
       Map<String, Map<String, Object>> readCalls = validReadRequests();
       assertEquals(Set.copyOf(catalogReadOnly), readCalls.keySet());
@@ -191,7 +189,7 @@ class AgentDispatcherConcurrencyTest {
   void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(59, dispatcher.methodCatalog().methods().size());
+      assertEquals(57, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
       assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
@@ -727,7 +725,6 @@ class AgentDispatcherConcurrencyTest {
     calls.put("function.get", Map.of("selector", Map.of("entry", "ram:00100000")));
     calls.put("function.list", Map.of());
     calls.put("function_call.list", Map.of("filter", Map.of("entry", "ram:00100000")));
-    calls.put("control_flow_graph.get", Map.of("selector", Map.of("entry", "ram:00100000")));
     calls.put("analysis.get", Map.of());
     calls.put("decompilation.get", Map.of("selector", Map.of("entry", "ram:00100000")));
     calls.put("symbol.get", Map.of("selector", Map.of("id", "1")));
@@ -735,7 +732,6 @@ class AgentDispatcherConcurrencyTest {
     calls.put(
         "reference.list",
         Map.of("filter", Map.of("direction", "to", "to", "ram:00100000")));
-    calls.put("reference_context.list", Map.of("filter", Map.of("to", "ram:00100000")));
     calls.put(
         "comment.get",
         Map.of("selector", Map.of("address", "ram:00100000", "type", "eol")));
@@ -1120,50 +1116,14 @@ class AgentDispatcherConcurrencyTest {
     }
 
     private ReferenceService referenceService() {
-      return new ReferenceService() {
-        @Override
-        public Page<ReferenceResource> listReferences(
-            String fromRaw,
-            String toRaw,
-            String type,
-            String direction,
-            int limit,
-            String cursor) {
-          observe("reference.list", false);
-          return Page.of(
-              List.of(
-                  new ReferenceResource(
-                      "ram:00100010", "ram:00100000", "UNCONDITIONAL_CALL", 0, true, "DEFAULT")),
-              limit,
-              null);
-        }
-
-        @Override
-        public Page<ReferenceContextResource> listReferenceContext(
-            String toRaw,
-            String entryRaw,
-            String symbolIdRaw,
-            String type,
-            AddressScanOptions scan,
-            int limit,
-            String cursor) {
-          observe("reference_context.list", false);
-          return Page.scanned(
-              List.of(
-                  new ReferenceContextResource(
-                      "ram:00100010",
-                      "ram:00100000",
-                      "UNCONDITIONAL_CALL",
-                      0,
-                      true,
-                      "DEFAULT",
-                      "ram:00100010",
-                      new ReferenceContextResource.CallerSummary(
-                          "ram:00100000", "fn_main", "Global", null))),
-              limit,
-              null,
-              completedScan());
-        }
+      return (fromRaw, toRaw, type, direction, limit, cursor) -> {
+        observe("reference.list", false);
+        return Page.of(
+            List.of(
+                new ReferenceResource(
+                    "ram:00100010", "ram:00100000", "UNCONDITIONAL_CALL", 0, true, "DEFAULT")),
+            limit,
+            null);
       };
     }
 
@@ -1439,24 +1399,6 @@ class AgentDispatcherConcurrencyTest {
             String newName,
             DataTypeReference newDataType) {
           observe("function_local_variable.patch", true);
-        }
-
-        @Override
-        public ControlFlowGraphResource getControlFlowGraph(
-            String entryRaw, String addressRaw, int maxInstructions, int timeoutMs) {
-          observe("control_flow_graph.get", false);
-          return new ControlFlowGraphResource(
-              "ram:00100000",
-              "fn_main",
-              "Global",
-              null,
-              new FunctionResource.Body("ram:00100000", "ram:00100010", 17L),
-              false,
-              0,
-              List.of(),
-              List.of(),
-              List.of(),
-              completedScan());
         }
       };
     }

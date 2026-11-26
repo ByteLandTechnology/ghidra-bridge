@@ -1,6 +1,5 @@
 package app.byteland.ghidra.service.reference;
 
-import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 
 /**
@@ -13,18 +12,4 @@ public interface ReferenceService {
    */
   Page<ReferenceResource> listReferences(
       String fromRaw, String toRaw, String type, String direction, int limit, String cursor);
-
-  /**
-   * Returns one page of target references with call sites and caller summaries.
-   */
-  default Page<ReferenceContextResource> listReferenceContext(
-      String toRaw,
-      String entryRaw,
-      String symbolIdRaw,
-      String type,
-      AddressScanOptions scan,
-      int limit,
-      String cursor) {
-    throw new UnsupportedOperationException("listReferenceContext");
-  }
 }

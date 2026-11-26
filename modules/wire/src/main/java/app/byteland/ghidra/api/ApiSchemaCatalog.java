@@ -42,7 +42,6 @@ import static app.byteland.ghidra.api.ApiVocabulary.TYPE;
 import static app.byteland.ghidra.api.ApiVocabulary.VALUES;
 
 import app.byteland.ghidra.service.AddressScanOptions;
-import app.byteland.ghidra.service.function.ControlFlowGraphResource;
 import app.byteland.ghidra.service.listing.ListingWindowResource;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -482,7 +481,6 @@ final class ApiSchemaCatalog {
             "category_count",
             "data_type_count",
             ORDINAL,
-            "unresolved_jumps",
             "elapsed_ms")
         .contains(field)) {
       return WireSchema.integer(0, Long.MAX_VALUE);
@@ -502,7 +500,6 @@ final class ApiSchemaCatalog {
             HAS_NO_RETURN,
             HAS_VAR_ARGS,
             "has_custom_variable_storage",
-            "has_body",
             "external",
             "thunk",
             "primary",
@@ -648,18 +645,6 @@ final class ApiSchemaCatalog {
     if (MEMORY_BLOCK.equals(field)) return memoryBlockSummarySchema();
     if (FUNCTION.equals(field)) return functionSummarySchema();
     if (SYMBOL.equals(field)) return symbolSummarySchema();
-    if ("caller".equals(field)) return callerSummarySchema(projectable);
-    if ("blocks".equals(field)) {
-      return WireSchema.array(
-          controlFlowBlockSchema(), 0, ControlFlowGraphResource.MAX_MAX_INSTRUCTIONS);
-    }
-    if ("nodes".equals(field)) {
-      return WireSchema.array(controlFlowNodeSchema(), 0, Integer.MAX_VALUE);
-    }
-    if ("edges".equals(field)) {
-      return WireSchema.array(controlFlowEdgeSchema(), 0, Integer.MAX_VALUE);
-    }
-    if (ApiVocabulary.SCAN.equals(field)) return SCAN_PROGRESS_SCHEMA;
     return WireSchema.string();
   }
 
@@ -890,116 +875,5 @@ final class ApiSchemaCatalog {
             "incoming_references",
             "outgoing_references",
             ApiVocabulary.SCAN));
-  }
-
-  static Set<String> controlFlowGraphFields() {
-    return Set.of(
-        ENTRY,
-        NAME,
-        NAMESPACE,
-        "demangled_name",
-        BODY,
-        "body.start",
-        "body.end",
-        "body.num_addresses",
-        "has_body",
-        "unresolved_jumps",
-        "blocks",
-        "nodes",
-        "edges",
-        ApiVocabulary.SCAN);
-  }
-
-  static Map<String, Object> controlFlowGraphOutputSchema() {
-    return resourceSchema(controlFlowGraphFields(), List.of(ENTRY), true);
-  }
-
-  static Set<String> referenceContextFields() {
-    return Set.of(
-        ApiVocabulary.FROM,
-        "to",
-        TYPE,
-        SOURCE_TYPE,
-        OPERAND_INDEX,
-        "primary",
-        "call_site",
-        "caller",
-        "caller.entry",
-        "caller.name",
-        "caller.namespace",
-        "caller.demangled_name");
-  }
-
-  static Map<String, Object> callerSummarySchema(boolean projectable) {
-    Map<String, Map<String, Object>> properties =
-        props(
-            ENTRY,
-            WireSchema.nonBlankString(),
-            NAME,
-            WireSchema.nonBlankString(),
-            NAMESPACE,
-            WireSchema.string(),
-            "demangled_name",
-            WireSchema.string());
-    return projectable
-        ? nonEmptyObject(properties)
-        : WireSchema.object(properties, ENTRY, NAME);
-  }
-
-  private static Map<String, Object> controlFlowBlockSchema() {
-    Map<String, Object> blockInstruction =
-        WireSchema.object(
-            props(
-                ADDRESS,
-                WireSchema.nonBlankString(),
-                LENGTH,
-                WireSchema.integer(1, Integer.MAX_VALUE)),
-            ADDRESS,
-            LENGTH);
-    return WireSchema.object(
-        props(
-            ADDRESS,
-            WireSchema.nonBlankString(),
-            "instructions",
-            WireSchema.array(
-                blockInstruction, 1, ControlFlowGraphResource.MAX_MAX_INSTRUCTIONS)),
-        ADDRESS,
-        "instructions");
-  }
-
-  private static Map<String, Object> controlFlowNodeSchema() {
-    return WireSchema.object(
-        props(
-            "id",
-            WireSchema.nonBlankString(),
-            KIND,
-            WireSchema.stringEnum("block", "external"),
-            ADDRESS,
-            WireSchema.nonBlankString(),
-            ENTRY,
-            WireSchema.nonBlankString(),
-            "lines",
-            WireSchema.array(
-                WireSchema.string(), 0, ControlFlowGraphResource.MAX_MAX_INSTRUCTIONS)),
-        "id",
-        KIND,
-        ADDRESS);
-  }
-
-  private static Map<String, Object> controlFlowEdgeSchema() {
-    return WireSchema.object(
-        props(
-            ApiVocabulary.FROM,
-            WireSchema.nonBlankString(),
-            "to",
-            WireSchema.nonBlankString(),
-            "label",
-            WireSchema.string(),
-            KIND,
-            WireSchema.stringEnum("taken", "fallthrough", "flow")),
-        ApiVocabulary.FROM,
-        "to",
-        "label",
-        KIND);
   }
 }

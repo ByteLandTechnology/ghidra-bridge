@@ -329,26 +329,8 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
-    readWith(name, null, input, output, fields, identityFields, handler);
-  }
-
-  void readWith(
-      String name,
-      String description,
-      Map<String, Object> input,
-      Map<String, Object> output,
-      Set<String> fields,
-      List<String> identityFields,
-      ApiMethod.Handler<Map<String, Object>, Object> handler) {
     register(
-        name,
-        MethodEffects.readOnlyMethod(),
-        description,
-        input,
-        output,
-        fields,
-        identityFields,
-        handler);
+        name, MethodEffects.readOnlyMethod(), null, input, output, fields, identityFields, handler);
   }
 
   void scanWindow(

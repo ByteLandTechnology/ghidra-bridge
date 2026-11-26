@@ -104,6 +104,6 @@ if [[ "${#action_files[@]}" -gt 0 ]]; then
 fi
 
 method_count="$(grep -Ec '^\| `[^`]+` \|' docs/api.md || true)"
-[[ "$method_count" == "59" ]] || fail "docs/api.md documents $method_count methods; expected 59"
+[[ "$method_count" == "57" ]] || fail "docs/api.md documents $method_count methods; expected 57"
 
 echo "repository hygiene check passed"

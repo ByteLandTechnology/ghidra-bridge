@@ -101,17 +101,10 @@ public final class AddressUtil {
       }
     }
     try {
-      String spacePrefix = value.substring(0, idx);
-      AddressSpace namedSpace = addressFactory.getAddressSpace(spacePrefix);
-      if (namedSpace == null) {
-        return null;
-      }
-      String rest = value.substring(idx + 1);
-      String duplicatePrefix = spacePrefix.toLowerCase(Locale.ROOT) + ":";
-      if (rest.toLowerCase(Locale.ROOT).startsWith(duplicatePrefix)) {
-        rest = rest.substring(duplicatePrefix.length());
-      }
-      return namedSpace.getAddress(normalizeOffset(rest));
+      AddressSpace namedSpace = addressFactory.getAddressSpace(value.substring(0, idx));
+      return namedSpace == null
+          ? null
+          : namedSpace.getAddress(normalizeOffset(value.substring(idx + 1)));
     } catch (AddressFormatException ignored) {
       return null;
     }
