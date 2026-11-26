@@ -17,8 +17,12 @@ final class JsonValueCodec implements JsonCodec<Object> {
 
   @Override
   public Object encode(Object value) {
+    return validateOutput(value, valueSchema);
+  }
+
+  static Object validateOutput(Object value, Map<String, Object> schema) {
     try {
-      WireSchema.validate(value, valueSchema, "/result");
+      WireSchema.validate(value, schema, "/result");
     } catch (ApiException invalidResponse) {
       ApiException translated =
           new ApiException(
