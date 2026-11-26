@@ -1579,7 +1579,9 @@ class AgentDispatcherConcurrencyTest {
             String name,
             DataTypeReference baseType,
             int size,
-            FunctionSignature signature) {
+            FunctionSignature signature,
+            List<DataTypePatch.CompositeField> fields,
+            List<DataTypePatch.EnumValue> values) {
           observe("data_type.create", true);
         }
 
