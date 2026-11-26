@@ -77,6 +77,7 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
 `verify` runs:
 - `check`: JUnit tests and checks across all 8 Java subprojects.
 - `verifyApiContracts`: Checks that tracked contracts match generated output.
+- `verifyMcpDocumentation`: Checks MCP tool contract rules and MCP documentation consistency.
 - `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra (`compileGeneratedScripts`).
 - `verifyArchitecture`: Checks that no module outside `adapter` and `launcher` imports `ghidra.*`.
 
