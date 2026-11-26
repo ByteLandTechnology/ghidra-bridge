@@ -132,7 +132,7 @@ final class ReferenceContextQueries {
     }
     if (normalizedEntry != null) {
       Address entryAddress = context.parseAddress(normalizedEntry);
-      Function function = context.script().getFunctionAt(entryAddress);
+      Function function = context.currentProgram().getFunctionManager().getFunctionAt(entryAddress);
       if (function == null) {
         throw new NoSuchElementException("function not found: " + normalizedEntry);
       }

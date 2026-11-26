@@ -240,9 +240,14 @@ class CompositeMethodsTest {
                     "selector", Map.of("address", "ram:00401002"),
                     "max_instructions", 2048,
                     "scan", Map.of("timeout_ms", 25000),
-                    "projection", Map.of("fields", List.of("name", "has_body"))));
+                    "projection", Map.of("fields", List.of("name", "has_body", "body.start"))));
     assertEquals(
-        Map.of("entry", "ram:00401000", "name", "_ZN4demo3runEi", "has_body", true), projected);
+        Map.of(
+            "entry", "ram:00401000",
+            "name", "_ZN4demo3runEi",
+            "has_body", true,
+            "body", Map.of("start", "ram:00401000")),
+        projected);
 
     ApiException ambiguous =
         assertThrows(
@@ -286,7 +291,7 @@ class CompositeMethodsTest {
               AddressScanOptions scan = (AddressScanOptions) args[4];
               assertEquals(12000, scan.timeoutMs());
               return Page.scanned(
-                  List.of(fromData, fromFn),
+                  List.of(fromFn, fromData),
                   (Integer) args[5],
                   "[\"ram:00403000\",\"ram:00402000\",\"DATA\",0]",
                   new ScanProgress(
@@ -327,6 +332,22 @@ class CompositeMethodsTest {
     assertFalse(items.get(1).containsKey("caller"));
     assertFalse(items.get(1).containsKey("call_site"));
     assertNotNull(response.get("next_cursor"));
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> projectedRefs =
+        (Map<String, Object>)
+            registry.dispatch(
+                "reference_context.list",
+                Map.of(
+                    "filter", Map.of("entry", "ram:00402000", "type", "UNCONDITIONAL_CALL"),
+                    "page", Map.of("limit", 2),
+                    "scan", Map.of("timeout_ms", 12000),
+                    "projection", Map.of("fields", List.of("caller.entry"))));
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> projectedRefItems =
+        (List<Map<String, Object>>) projectedRefs.get("items");
+    assertEquals(Map.of("entry", "ram:00401000"), projectedRefItems.get(0).get("caller"));
+    assertFalse(projectedRefItems.get(1).containsKey("caller"));
 
     ApiException emptyFilter =
         assertThrows(

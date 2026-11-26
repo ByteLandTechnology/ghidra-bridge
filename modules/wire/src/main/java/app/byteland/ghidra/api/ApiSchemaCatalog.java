@@ -310,24 +310,32 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> functionSignatureSchema() {
+    return functionSignatureSchema(false);
+  }
+
+  static Map<String, Object> functionSignatureSchema(boolean projectable) {
     Map<String, Object> parameter =
         WireSchema.object(
             props(
                 NAME, WireSchema.string(),
                 DATA_TYPE, WireSchema.dataTypeReference()),
             DATA_TYPE);
-    return WireSchema.object(
+    Map<String, Map<String, Object>> properties =
         props(
             RETURN_TYPE, WireSchema.dataTypeReference(),
             PARAMETERS, WireSchema.array(parameter, 0, MAX_NESTED_ITEMS),
             CALLING_CONVENTION, WireSchema.nonBlankString(),
             HAS_VAR_ARGS, WireSchema.bool(),
-            HAS_NO_RETURN, WireSchema.bool()),
-        RETURN_TYPE,
-        PARAMETERS,
-        CALLING_CONVENTION,
-        HAS_VAR_ARGS,
-        HAS_NO_RETURN);
+            HAS_NO_RETURN, WireSchema.bool());
+    return projectable
+        ? nonEmptyObject(properties)
+        : WireSchema.object(
+            properties,
+            RETURN_TYPE,
+            PARAMETERS,
+            CALLING_CONVENTION,
+            HAS_VAR_ARGS,
+            HAS_NO_RETURN);
   }
 
   static Map<String, Object> dataTypePatchSchema() {
@@ -408,16 +416,33 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> resourceSchema(Set<String> fields, List<String> identityFields) {
-    return WireSchema.withDefinitions(objectSchema(fields, identityFields));
+    return resourceSchema(fields, identityFields, true);
   }
 
-  static Map<String, Object> objectSchema(Set<String> fields, List<String> identityFields) {
+  static Map<String, Object> resourceSchema(
+      Set<String> fields, List<String> identityFields, boolean projectable) {
+    return WireSchema.withDefinitions(objectSchema(fields, identityFields, projectable));
+  }
+
+  static Map<String, Object> objectSchema(
+      Set<String> fields, List<String> identityFields, boolean projectable) {
     Map<String, Map<String, Object>> properties = new LinkedHashMap<>();
     for (String path : fields) {
       String root = path.substring(0, path.indexOf('.') < 0 ? path.length() : path.indexOf('.'));
-      properties.putIfAbsent(root, outputFieldSchema(root));
+      properties.putIfAbsent(
+          root, outputFieldSchema(root, projectable && hasDottedChildren(fields, root)));
     }
     return WireSchema.object(properties, identityFields.toArray(String[]::new));
+  }
+
+  private static boolean hasDottedChildren(Set<String> fields, String root) {
+    String prefix = root + ".";
+    for (String path : fields) {
+      if (path.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static Map<String, Object> listSchema(Set<String> fields, List<String> identityFields) {
@@ -441,6 +466,10 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> outputFieldSchema(String field) {
+    return outputFieldSchema(field, false);
+  }
+
+  static Map<String, Object> outputFieldSchema(String field, boolean projectable) {
     if (Set.of(
             "count",
             LENGTH,
@@ -486,46 +515,45 @@ final class ApiSchemaCatalog {
     if (Set.of(RETURN_TYPE, DATA_TYPE, BASE_TYPE).contains(field)) {
       return WireSchema.dataTypeReference();
     }
-    if (BYTES.equals(field)) return byteSequenceSchema();
+    if (BYTES.equals(field)) return byteSequenceSchema(projectable);
     if ("return_storage".equals(field) || STORAGE.equals(field)) return storageSchema();
     if (BODY.equals(field)) {
-      return WireSchema.object(
+      Map<String, Map<String, Object>> properties =
           props(
               START,
               WireSchema.string(),
               END,
               WireSchema.string(),
               "num_addresses",
-              WireSchema.integer(0, Long.MAX_VALUE)),
-          START,
-          END,
-          "num_addresses");
+              WireSchema.integer(0, Long.MAX_VALUE));
+      return projectable
+          ? nonEmptyObject(properties)
+          : WireSchema.object(properties, START, END, "num_addresses");
     }
     if (PARAMETERS.equals(field)) {
+      Map<String, Map<String, Object>> properties =
+          props(
+              ORDINAL, WireSchema.integer(0, Integer.MAX_VALUE),
+              NAME, WireSchema.string(),
+              DATA_TYPE, WireSchema.dataTypeReference(),
+              STORAGE, storageSchema());
       return WireSchema.array(
-          WireSchema.object(
-              props(
-                  ORDINAL, WireSchema.integer(0, Integer.MAX_VALUE),
-                  NAME, WireSchema.string(),
-                  DATA_TYPE, WireSchema.dataTypeReference(),
-                  STORAGE, storageSchema()),
-              ORDINAL,
-              NAME,
-              DATA_TYPE,
-              STORAGE),
+          projectable
+              ? nonEmptyObject(properties)
+              : WireSchema.object(properties, ORDINAL, NAME, DATA_TYPE, STORAGE),
           0,
           MAX_NESTED_ITEMS);
     }
     if (LOCAL_VARIABLES.equals(field)) {
+      Map<String, Map<String, Object>> properties =
+          props(
+              NAME, WireSchema.string(),
+              DATA_TYPE, WireSchema.dataTypeReference(),
+              STORAGE, storageSchema());
       return WireSchema.array(
-          WireSchema.object(
-              props(
-                  NAME, WireSchema.string(),
-                  DATA_TYPE, WireSchema.dataTypeReference(),
-                  STORAGE, storageSchema()),
-              NAME,
-              DATA_TYPE,
-              STORAGE),
+          projectable
+              ? nonEmptyObject(properties)
+              : WireSchema.object(properties, NAME, DATA_TYPE, STORAGE),
           0,
           MAX_NESTED_ITEMS);
     }
@@ -570,7 +598,7 @@ final class ApiSchemaCatalog {
           MAX_NESTED_ITEMS);
     }
     if (SIGNATURE.equals(field)) {
-      return WireSchema.oneOf(WireSchema.string(), functionSignatureSchema());
+      return WireSchema.oneOf(WireSchema.string(), functionSignatureSchema(projectable));
     }
     if (Set.of("operands", "tags", "warnings").contains(field)) {
       return WireSchema.array(WireSchema.string(), 0, Integer.MAX_VALUE);
@@ -620,7 +648,7 @@ final class ApiSchemaCatalog {
     if (MEMORY_BLOCK.equals(field)) return memoryBlockSummarySchema();
     if (FUNCTION.equals(field)) return functionSummarySchema();
     if (SYMBOL.equals(field)) return symbolSummarySchema();
-    if ("caller".equals(field)) return callerSummarySchema();
+    if ("caller".equals(field)) return callerSummarySchema(projectable);
     if ("blocks".equals(field)) {
       return WireSchema.array(
           controlFlowBlockSchema(), 0, ControlFlowGraphResource.MAX_MAX_INSTRUCTIONS);
@@ -690,17 +718,21 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> byteSequenceSchema() {
-    return WireSchema.object(
+    return byteSequenceSchema(false);
+  }
+
+  static Map<String, Object> byteSequenceSchema(boolean projectable) {
+    Map<String, Map<String, Object>> properties =
         props(
             "encoding",
             WireSchema.stringEnum("hex", "base64"),
             "data",
             WireSchema.string(),
             LENGTH,
-            WireSchema.integer(0, Integer.MAX_VALUE)),
-        "encoding",
-        "data",
-        LENGTH);
+            WireSchema.integer(0, Integer.MAX_VALUE));
+    return projectable
+        ? nonEmptyObject(properties)
+        : WireSchema.object(properties, "encoding", "data", LENGTH);
   }
 
   static Set<String> memoryBlockFields() {
@@ -813,25 +845,27 @@ final class ApiSchemaCatalog {
             props(
                 ITEMS,
                 WireSchema.array(
-                    objectSchema(codeUnitFields(), List.of(ADDRESS)), 0, ApiRegistry.MAX_LIMIT),
+                    objectSchema(codeUnitFields(), List.of(ADDRESS), false),
+                    0,
+                    ApiRegistry.MAX_LIMIT),
                 "data_units",
                 WireSchema.array(
-                    objectSchema(dataUnitFields(), List.of(ADDRESS)),
+                    objectSchema(dataUnitFields(), List.of(ADDRESS), false),
                     0,
                     ListingWindowResource.MAX_DATA_UNITS),
                 "symbols",
                 WireSchema.array(
-                    objectSchema(symbolFields(), List.of("id")),
+                    objectSchema(symbolFields(), List.of("id"), false),
                     0,
                     ListingWindowResource.MAX_SYMBOLS),
                 "functions",
                 WireSchema.array(
-                    objectSchema(functionFields(), List.of(ENTRY)),
+                    objectSchema(functionFields(), List.of(ENTRY), false),
                     0,
                     ListingWindowResource.MAX_FUNCTIONS),
                 "comments",
                 WireSchema.array(
-                    objectSchema(commentFields(), List.of(ADDRESS, TYPE)),
+                    objectSchema(commentFields(), List.of(ADDRESS, TYPE), false),
                     0,
                     ListingWindowResource.MAX_COMMENTS),
                 "incoming_references",
@@ -877,17 +911,7 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> controlFlowGraphOutputSchema() {
-    return WireSchema.withDefinitions(
-        objectSchema(
-            controlFlowGraphFields(),
-            List.of(
-                ENTRY,
-                NAME,
-                "has_body",
-                "unresolved_jumps",
-                "blocks",
-                "nodes",
-                "edges")));
+    return resourceSchema(controlFlowGraphFields(), List.of(ENTRY), true);
   }
 
   static Set<String> referenceContextFields() {
@@ -906,8 +930,8 @@ final class ApiSchemaCatalog {
         "caller.demangled_name");
   }
 
-  static Map<String, Object> callerSummarySchema() {
-    return WireSchema.object(
+  static Map<String, Object> callerSummarySchema(boolean projectable) {
+    Map<String, Map<String, Object>> properties =
         props(
             ENTRY,
             WireSchema.nonBlankString(),
@@ -916,9 +940,10 @@ final class ApiSchemaCatalog {
             NAMESPACE,
             WireSchema.string(),
             "demangled_name",
-            WireSchema.string()),
-        ENTRY,
-        NAME);
+            WireSchema.string());
+    return projectable
+        ? nonEmptyObject(properties)
+        : WireSchema.object(properties, ENTRY, NAME);
   }
 
   private static Map<String, Object> controlFlowBlockSchema() {
