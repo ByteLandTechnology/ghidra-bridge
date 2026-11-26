@@ -23,18 +23,30 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -43,15 +55,21 @@ import java.util.function.Consumer;
  * HTTP server that exposes the bridge API as grouped MCP tools through Streamable HTTP and SSE.
  */
 public final class McpHttpServer implements AutoCloseable {
+  static final int MAX_CONCURRENT_REQUESTS = 32;
+  static final int MAX_SSE_SESSIONS = 16;
   static final int MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
   static final int MAX_TOOL_RESULT_BYTES = 8 * 1024 * 1024 + 65_536;
   static final int MAX_HTTP_RESPONSE_BYTES = 3 * MAX_TOOL_RESULT_BYTES + 4096;
+  static final Duration DEFAULT_BODY_READ_TIMEOUT = Duration.ofSeconds(10);
+  static final Duration DEFAULT_SSE_KEEPALIVE_INTERVAL = Duration.ofSeconds(15);
+  private static final int LISTEN_BACKLOG = 256;
   private static final int HTTP_PAYLOAD_TOO_LARGE = 413;
   private static final int JSONRPC_PARSE_ERROR = -32700;
   private static final int JSONRPC_INVALID_REQUEST = -32600;
   private static final int JSONRPC_METHOD_NOT_FOUND = -32601;
   private static final int JSONRPC_INVALID_PARAMS = -32602;
   private static final int JSONRPC_INTERNAL_ERROR = -32603;
+  private static final int JSONRPC_SERVER_BUSY = -32000;
   private static final int JSONRPC_UNAUTHORIZED = -32001;
   private static final int JSONRPC_RESOURCE_NOT_FOUND = -32002;
   private static final String MCP_PROTOCOL_VERSION = "2026-07-28";
@@ -69,7 +87,6 @@ public final class McpHttpServer implements AutoCloseable {
   private static final String NAME_FIELD = "name";
   private static final String URI_FIELD = "uri";
   private static final String SESSION_ID_PARAM = "sessionId";
-  private static final long DEFAULT_SSE_KEEPALIVE_MILLIS = TimeUnit.SECONDS.toMillis(15);
 
   private final McpConfig config;
   private final boolean loopbackListener;
@@ -77,11 +94,16 @@ public final class McpHttpServer implements AutoCloseable {
   private final InetAddress configuredHostLiteral;
   private final AgentDispatcher dispatcher;
   private final Consumer<String> requestLogSink;
-  private final long sseKeepaliveMillis;
   private final McpToolRegistry toolRegistry;
   private final String toolContractJson;
   private final HttpServer server;
   private final ExecutorService executor;
+  private final ExecutorService bodyReaderExecutor;
+  private final ScheduledExecutorService readTimeoutScheduler;
+  private final long bodyReadTimeoutMillis;
+  private final long sseKeepaliveMillis;
+  private final Semaphore requestPermits = new Semaphore(MAX_CONCURRENT_REQUESTS);
+  private final Semaphore sseSessionPermits = new Semaphore(MAX_SSE_SESSIONS);
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, SseSession> sseSessions = new ConcurrentHashMap<>();
@@ -93,7 +115,12 @@ public final class McpHttpServer implements AutoCloseable {
   public McpHttpServer(
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
-    this(config, dispatcher, requestLogSink, DEFAULT_SSE_KEEPALIVE_MILLIS);
+    this(
+        config,
+        dispatcher,
+        requestLogSink,
+        DEFAULT_BODY_READ_TIMEOUT,
+        DEFAULT_SSE_KEEPALIVE_INTERVAL);
   }
 
   McpHttpServer(
@@ -102,6 +129,39 @@ public final class McpHttpServer implements AutoCloseable {
       Consumer<String> requestLogSink,
       long sseKeepaliveMillis)
       throws IOException {
+    this(
+        config,
+        dispatcher,
+        requestLogSink,
+        DEFAULT_BODY_READ_TIMEOUT.toMillis(),
+        sseKeepaliveMillis);
+  }
+
+  McpHttpServer(
+      McpConfig config,
+      AgentDispatcher dispatcher,
+      Consumer<String> requestLogSink,
+      Duration bodyReadTimeout,
+      Duration sseKeepaliveInterval)
+      throws IOException {
+    this(
+        config,
+        dispatcher,
+        requestLogSink,
+        positiveDurationMillis(bodyReadTimeout, "bodyReadTimeout"),
+        positiveDurationMillis(sseKeepaliveInterval, "sseKeepaliveInterval"));
+  }
+
+  private McpHttpServer(
+      McpConfig config,
+      AgentDispatcher dispatcher,
+      Consumer<String> requestLogSink,
+      long bodyReadTimeoutMillis,
+      long sseKeepaliveMillis)
+      throws IOException {
+    if (bodyReadTimeoutMillis <= 0L) {
+      throw new IllegalArgumentException("bodyReadTimeoutMillis must be positive");
+    }
     if (sseKeepaliveMillis <= 0L) {
       throw new IllegalArgumentException("sseKeepaliveMillis must be positive");
     }
@@ -111,6 +171,7 @@ public final class McpHttpServer implements AutoCloseable {
     this.configuredHostLiteral = NetworkBinding.parseIpLiteral(this.normalizedConfiguredHost);
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.requestLogSink = Objects.requireNonNull(requestLogSink, "requestLogSink");
+    this.bodyReadTimeoutMillis = bodyReadTimeoutMillis;
     this.sseKeepaliveMillis = sseKeepaliveMillis;
     this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
     Map<String, Object> toolContract = new LinkedHashMap<>();
@@ -119,13 +180,61 @@ public final class McpHttpServer implements AutoCloseable {
     this.toolContractJson = JsonUtil.toJson(toolContract);
     this.server = createServer(config);
     this.executor = Executors.newVirtualThreadPerTaskExecutor();
+    this.bodyReaderExecutor = createBodyReaderExecutor();
+    this.readTimeoutScheduler = createReadTimeoutScheduler();
     this.server.setExecutor(executor);
     this.server.createContext(config.path(), new JsonRpcHandler());
   }
 
+  private static long positiveDurationMillis(Duration duration, String name) {
+    Objects.requireNonNull(duration, name);
+    if (duration.isZero() || duration.isNegative()) {
+      throw new IllegalArgumentException(name + " must be positive");
+    }
+    return Math.max(1L, duration.toMillis());
+  }
+
+  private static ExecutorService createBodyReaderExecutor() {
+    // `jdk.httpserver` synchronizes `LeftOverInputStream.read` and `Request$ReadStream.read`.
+    // On Java 21, an unbuffered body read on a virtual thread pins its carrier without
+    // `ForkJoinPool` compensation. Run unbuffered reads on a daemon pool of size
+    // `MAX_CONCURRENT_REQUESTS` so stalled `POST` bodies do not block carriers or later reads.
+    AtomicInteger threadNumber = new AtomicInteger(1);
+    ThreadPoolExecutor pool =
+        new ThreadPoolExecutor(
+            MAX_CONCURRENT_REQUESTS,
+            MAX_CONCURRENT_REQUESTS,
+            5L,
+            TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(MAX_CONCURRENT_REQUESTS),
+            runnable -> {
+              Thread thread =
+                  new Thread(runnable, "ghidra-mcp-body-reader-" + threadNumber.getAndIncrement());
+              thread.setDaemon(true);
+              return thread;
+            });
+    pool.allowCoreThreadTimeOut(true);
+    return pool;
+  }
+
+  private static ScheduledExecutorService createReadTimeoutScheduler() {
+    ScheduledThreadPoolExecutor scheduler =
+        new ScheduledThreadPoolExecutor(
+            1,
+            runnable -> {
+              Thread thread = new Thread(runnable, "ghidra-mcp-read-timeout");
+              thread.setDaemon(true);
+              return thread;
+            });
+    scheduler.setRemoveOnCancelPolicy(true);
+    scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+    return scheduler;
+  }
+
   private static HttpServer createServer(McpConfig config) throws IOException {
     try {
-      return HttpServer.create(new InetSocketAddress(config.host(), config.port()), 0);
+      return HttpServer.create(
+          new InetSocketAddress(config.host(), config.port()), LISTEN_BACKLOG);
     } catch (BindException error) {
       BindException friendly =
           new BindException(
@@ -150,6 +259,10 @@ public final class McpHttpServer implements AutoCloseable {
     return config.endpoint();
   }
 
+  int availableRequestPermits() {
+    return requestPermits.availablePermits();
+  }
+
   int activeSseSessionCount() {
     return sseSessions.size();
   }
@@ -165,6 +278,8 @@ public final class McpHttpServer implements AutoCloseable {
     }
     sseSessions.clear();
     ExecutorShutdown.shutdownAndAwait(executor);
+    ExecutorShutdown.shutdownAndAwait(bodyReaderExecutor);
+    ExecutorShutdown.shutdownAndAwait(readTimeoutScheduler);
     shutdownLatch.countDown();
   }
 
@@ -195,204 +310,290 @@ public final class McpHttpServer implements AutoCloseable {
     public void handle(HttpExchange exchange) throws IOException {
       RequestLog log = new RequestLog(requestLogSink);
       Object requestId = null;
-      try (exchange) {
-        try {
-          NetworkBinding.HostValidationResult hostValidation = validateHost(exchange);
-          if (!hostValidation.isValid()) {
-            int status = hostValidation.httpStatus();
-            log.method(exchange.getRequestMethod()).error().status(status);
-            writePlain(exchange, status, hostValidation.message());
-            return;
-          }
-          OriginValidation originValidation = validateOrigin(exchange);
-          if (!originValidation.allowed()) {
-            log.method(exchange.getRequestMethod()).error().status(403);
-            writePlain(exchange, 403, "Forbidden origin");
-            return;
-          }
-          addCommonHeaders(exchange, originValidation.origin());
+      boolean requestPermitAcquired = false;
+      boolean bodyRead = false;
+      boolean closeExchange = true;
+      try {
+        NetworkBinding.HostValidationResult hostValidation = validateHost(exchange);
+        if (!hostValidation.isValid()) {
+          int status = hostValidation.httpStatus();
+          log.method(exchange.getRequestMethod()).error().status(status);
+          writePlainResponse(exchange, status, hostValidation.message(), false);
+          return;
+        }
+        OriginValidation originValidation = validateOrigin(exchange);
+        if (!originValidation.allowed()) {
+          log.method(exchange.getRequestMethod()).error().status(403);
+          writePlainResponse(exchange, 403, "Forbidden origin", false);
+          return;
+        }
+        addCommonHeaders(exchange, originValidation.origin());
 
-          String requestMethod = exchange.getRequestMethod();
-          if (HTTP_OPTIONS_METHOD.equalsIgnoreCase(requestMethod)) {
-            log.method(HTTP_OPTIONS_METHOD).ok().status(204);
-            sendNoBody(exchange, 204);
-            return;
-          }
-          if ("HEAD".equalsIgnoreCase(requestMethod)) {
-            log.method("HEAD").ok().status(200);
-            sendNoBody(exchange, 200);
-            return;
-          }
+        String requestMethod = exchange.getRequestMethod();
+        if (HTTP_OPTIONS_METHOD.equalsIgnoreCase(requestMethod)) {
+          log.method(HTTP_OPTIONS_METHOD).ok().status(204);
+          sendNoBody(exchange, 204);
+          return;
+        }
+        if ("HEAD".equalsIgnoreCase(requestMethod)) {
+          log.method("HEAD").ok().status(200);
+          sendNoBody(exchange, 200);
+          return;
+        }
 
-          if (hasQueryToken(exchange.getRequestURI())) {
-            log.error().status(400);
-            writeJsonRpcError(
+        if (hasQueryToken(exchange.getRequestURI())) {
+          log.error().status(400);
+          writeJsonRpcErrorResponse(
+              exchange,
+              400,
+              null,
+              JSONRPC_INVALID_REQUEST,
+              "Query-string tokens are not supported",
+              false);
+          return;
+        }
+
+        if (!authorize(exchange)) {
+          exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
+          log.error().status(401);
+          writeJsonRpcErrorResponse(
+              exchange, 401, null, JSONRPC_UNAUTHORIZED, "Unauthorized", false);
+          return;
+        }
+
+        if (HTTP_GET_METHOD.equalsIgnoreCase(requestMethod)) {
+          handleSseGet(exchange, log);
+          return;
+        }
+
+        if (!HTTP_POST_METHOD.equalsIgnoreCase(requestMethod)) {
+          exchange.getResponseHeaders().set("Allow", "POST, GET, OPTIONS");
+          log.method(requestMethod).error().status(405);
+          writeJsonRpcErrorResponse(
+              exchange,
+              405,
+              null,
+              JSONRPC_INVALID_REQUEST,
+              "Only POST and GET (SSE) are supported for this MCP endpoint",
+              false);
+          return;
+        }
+
+        if (!requestPermits.tryAcquire()) {
+          exchange.getResponseHeaders().set("Connection", "close");
+          log.method(HTTP_POST_METHOD).error().status(503);
+          writeJsonRpcErrorResponse(
+              exchange, 503, null, JSONRPC_SERVER_BUSY, "Too many concurrent requests", false);
+          return;
+        }
+        requestPermitAcquired = true;
+
+        String sessionId = getQueryParameter(exchange.getRequestURI(), SESSION_ID_PARAM);
+        SseSession sseSession = null;
+        if (sessionId != null) {
+          sseSession = sseSessions.get(sessionId);
+          if (sseSession == null || !sseSession.isActive()) {
+            log.error().status(404);
+            writeJsonRpcErrorResponse(
                 exchange,
-                400,
+                404,
                 null,
                 JSONRPC_INVALID_REQUEST,
-                "Query-string tokens are not supported");
+                "SSE session not found or expired",
+                false);
             return;
           }
+        }
 
-          if (!authorize(exchange)) {
-            exchange.getResponseHeaders().set("WWW-Authenticate", "Bearer");
-            log.error().status(401);
-            writeJsonRpcError(exchange, 401, null, JSONRPC_UNAUTHORIZED, "Unauthorized");
-            return;
+        validateContentLength(exchange.getRequestHeaders());
+        if (!String.valueOf(firstHeader(exchange, "Content-Type")).startsWith("application/json")) {
+          throw new JsonRpcError(
+              415, null, JSONRPC_INVALID_REQUEST, "Content-Type must be application/json");
+        }
+        String rawBody = readRequestBody(exchange);
+        bodyRead = true;
+        Map<String, Object> request = parseRequest(rawBody);
+        validateJsonRpcEnvelope(request);
+        boolean statelessProtocol = usesStatelessProtocol(exchange, request);
+        if (statelessProtocol) {
+          validateMetadata(exchange, request);
+        } else {
+          validateInitializeProtocol(exchange, request);
+        }
+        Object id = request.get("id");
+        requestId = id;
+        Object response = handleRequest(request, id, log, statelessProtocol);
+        if (sseSession != null) {
+          if (response != null) {
+            sseSession.sendEvent("message", JsonUtil.toJson(response, MAX_HTTP_RESPONSE_BYTES));
           }
-
-          if (HTTP_GET_METHOD.equalsIgnoreCase(requestMethod)) {
-            handleSseGet(exchange, log);
-            return;
-          }
-
-          if (!HTTP_POST_METHOD.equalsIgnoreCase(requestMethod)) {
-            exchange.getResponseHeaders().set("Allow", "POST, GET, OPTIONS");
-            log.method(requestMethod).error().status(405);
-            writeJsonRpcError(
+          log.id(id).ok().status(202);
+          exchange.sendResponseHeaders(202, -1);
+          return;
+        }
+        if (response == null) {
+          log.id(id).ok().status(202);
+          exchange.sendResponseHeaders(202, -1);
+          return;
+        }
+        writeJson(exchange, 200, response);
+      } catch (UnreadRequestAbortedException abortedUnread) {
+        closeExchange = false;
+        throw abortedUnread;
+      } catch (ApiException error) {
+        log.error()
+            .status(error.status())
+            .id(requestId)
+            .cause(error.status() >= 500 ? rootMessage(error) : null);
+        if (error.status() == HTTP_PAYLOAD_TOO_LARGE) {
+          exchange.getResponseHeaders().set("Connection", "close");
+        }
+        Map<String, Object> errResponse =
+            mcpErrorResponse(
                 exchange,
-                405,
-                null,
-                JSONRPC_INVALID_REQUEST,
-                "Only POST and GET (SSE) are supported for this MCP endpoint");
-            return;
+                requestId,
+                JSONRPC_INTERNAL_ERROR,
+                error.getMessage(),
+                error.error().toMap());
+        String querySessionId = getQueryParameter(exchange.getRequestURI(), SESSION_ID_PARAM);
+        SseSession activeSse = querySessionId == null ? null : sseSessions.get(querySessionId);
+        if (activeSse != null && activeSse.isActive()) {
+          try {
+            activeSse.sendEvent(
+                "message", JsonUtil.toJson(errResponse, MAX_HTTP_RESPONSE_BYTES));
+          } catch (IOException ignored) {
           }
-
-          String sessionId = getQueryParameter(exchange.getRequestURI(), SESSION_ID_PARAM);
-          SseSession sseSession = null;
-          if (sessionId != null) {
-            sseSession = sseSessions.get(sessionId);
-            if (sseSession == null || !sseSession.isActive()) {
-              log.error().status(404);
-              writeJsonRpcError(
-                  exchange, 404, null, JSONRPC_INVALID_REQUEST, "SSE session not found or expired");
-              return;
-            }
+          exchange.sendResponseHeaders(202, -1);
+        } else {
+          try {
+            writeJsonResponse(exchange, error.status(), errResponse, bodyRead);
+          } catch (UnreadRequestAbortedException abortedUnread) {
+            closeExchange = false;
+            throw abortedUnread;
           }
-
-          validateContentLength(exchange.getRequestHeaders());
-          if (!String.valueOf(firstHeader(exchange, "Content-Type")).startsWith("application/json")) {
-            throw new JsonRpcError(415, null, JSONRPC_INVALID_REQUEST, "Content-Type must be application/json");
+        }
+      } catch (JsonRpcError error) {
+        log.error()
+            .status(error.httpStatus())
+            .id(error.id())
+            .cause(error.httpStatus() >= 500 ? rootMessage(error) : null);
+        if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
+          exchange.getResponseHeaders().set("Connection", "close");
+        }
+        Map<String, Object> errResponse =
+            error.code() == UNSUPPORTED_PROTOCOL_VERSION
+                ? mcpErrorResponse(
+                    exchange,
+                    error.id(),
+                    error.code(),
+                    error.getMessage(),
+                    Map.of(
+                        "requested",
+                        error.requestedVersion(),
+                        "supported",
+                        SUPPORTED_PROTOCOL_VERSIONS))
+                : mcpErrorResponse(exchange, error.id(), error.code(), error.getMessage(), null);
+        String querySessionId = getQueryParameter(exchange.getRequestURI(), SESSION_ID_PARAM);
+        SseSession activeSse = querySessionId == null ? null : sseSessions.get(querySessionId);
+        if (activeSse != null && activeSse.isActive()) {
+          try {
+            activeSse.sendEvent(
+                "message", JsonUtil.toJson(errResponse, MAX_HTTP_RESPONSE_BYTES));
+          } catch (IOException ignored) {
           }
-          Map<String, Object> request = parseRequest(readBody(exchange));
-          validateJsonRpcEnvelope(request);
-          boolean statelessProtocol = usesStatelessProtocol(exchange, request);
-          if (statelessProtocol) {
-            validateMetadata(exchange, request);
-          } else {
-            validateInitializeProtocol(exchange, request);
-          }
-          Object id = request.get("id");
-          requestId = id;
-          Object response = handleRequest(request, id, log, statelessProtocol);
-          if (sseSession != null) {
-            if (response != null) {
-              sseSession.sendEvent("message", JsonUtil.toJson(response, MAX_HTTP_RESPONSE_BYTES));
-            }
-            log.id(id).ok().status(202);
-            exchange.sendResponseHeaders(202, -1);
-            return;
-          }
-          if (response == null) {
-            log.id(id).ok().status(202);
-            exchange.sendResponseHeaders(202, -1);
-            return;
-          }
-          writeJson(exchange, 200, response);
-        } catch (ApiException error) {
-          log.error()
-              .status(error.status())
-              .id(requestId)
-              .cause(error.status() >= 500 ? rootMessage(error) : null);
-          Map<String, Object> errResponse =
-              mcpErrorResponse(
-                  exchange,
-                  requestId,
-                  JSONRPC_INTERNAL_ERROR,
-                  error.getMessage(),
-                  error.error().toMap());
-          String querySessionId = getQueryParameter(exchange.getRequestURI(), SESSION_ID_PARAM);
-          SseSession activeSse = querySessionId == null ? null : sseSessions.get(querySessionId);
-          if (activeSse != null && activeSse.isActive()) {
-            try {
-              activeSse.sendEvent(
-                  "message", JsonUtil.toJson(errResponse, MAX_HTTP_RESPONSE_BYTES));
-            } catch (IOException ignored) {}
-            exchange.sendResponseHeaders(202, -1);
-          } else {
-            writeJson(exchange, error.status(), errResponse);
-          }
-        } catch (JsonRpcError error) {
-          log.error()
-              .status(error.httpStatus())
-              .id(error.id())
-              .cause(error.httpStatus() >= 500 ? rootMessage(error) : null);
           if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
-            exchange.getResponseHeaders().set("Connection", "close");
-          }
-          Map<String, Object> errResponse = error.code() == UNSUPPORTED_PROTOCOL_VERSION
-              ? mcpErrorResponse(exchange, error.id(), error.code(), error.getMessage(),
-                  Map.of("requested", error.requestedVersion(), "supported", SUPPORTED_PROTOCOL_VERSIONS))
-              : mcpErrorResponse(exchange, error.id(), error.code(), error.getMessage(), null);
-          String querySessionId = getQueryParameter(exchange.getRequestURI(), SESSION_ID_PARAM);
-          SseSession activeSse = querySessionId == null ? null : sseSessions.get(querySessionId);
-          if (activeSse != null && activeSse.isActive()) {
-            try {
-              activeSse.sendEvent("message", JsonUtil.toJson(errResponse));
-            } catch (IOException ignored) {}
-            if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
-              writeJson(exchange, error.httpStatus(), errResponse);
-            } else {
-              exchange.sendResponseHeaders(202, -1);
-            }
+            closeExchange = false;
+            writePayloadTooLargeResponse(exchange, errResponse);
+          } else if (bodyRead || !hasRequestBody(exchange) || isCompleteBodyBuffered(exchange)) {
+            exchange.sendResponseHeaders(202, -1);
           } else {
-            writeJson(exchange, error.httpStatus(), errResponse);
+            exchange.getResponseHeaders().set("Connection", "close");
+            exchange.sendResponseHeaders(202, -1);
+            pauseBeforeUnreadClose();
+            closeExchange = false;
+            throw new UnreadRequestAbortedException();
           }
-        } catch (IOException | RuntimeException error) {
-          log.error().status(500).cause(rootMessage(error));
-          writeJsonRpcError(exchange, 500, null, JSONRPC_INTERNAL_ERROR, "Internal error");
-        } finally {
-          log.finish();
+        } else if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
+          closeExchange = false;
+          writePayloadTooLargeResponse(exchange, errResponse);
+        } else {
+          try {
+            writeJsonResponse(exchange, error.httpStatus(), errResponse, bodyRead);
+          } catch (UnreadRequestAbortedException abortedUnread) {
+            closeExchange = false;
+            throw abortedUnread;
+          }
+        }
+      } catch (BodyReadTimeoutException timeout) {
+        log.method(HTTP_POST_METHOD).error().status(408).cause("Request body read timed out");
+      } catch (IOException | RuntimeException error) {
+        log.error().status(500).cause(rootMessage(error));
+        try {
+          writeJsonRpcErrorResponse(
+              exchange, 500, null, JSONRPC_INTERNAL_ERROR, "Internal error", bodyRead);
+        } catch (UnreadRequestAbortedException abortedUnread) {
+          closeExchange = false;
+          throw abortedUnread;
+        } catch (IOException ignored) {
+          // The connection closed before the server could send the error response.
+        }
+      } finally {
+        if (requestPermitAcquired) {
+          requestPermits.release();
+        }
+        log.finish();
+        if (closeExchange) {
+          exchange.close();
         }
       }
     }
 
     private void handleSseGet(HttpExchange exchange, RequestLog log) throws IOException {
-      String sessionId = UUID.randomUUID().toString();
-      SseSession session;
-      try {
-        session = new SseSession(exchange);
-      } catch (IOException error) {
-        log.method(HTTP_GET_METHOD).error().status(500);
+      if (!sseSessionPermits.tryAcquire()) {
+        exchange.getResponseHeaders().set("Connection", "close");
+        log.method(HTTP_GET_METHOD).error().status(503);
+        writeJsonRpcError(
+            exchange, 503, null, JSONRPC_SERVER_BUSY, "Too many active SSE sessions");
         return;
       }
-      sseSessions.put(sessionId, session);
-      log.method(HTTP_GET_METHOD).ok().status(200);
-
       try {
-        String endpointUri = config.path() + "?" + SESSION_ID_PARAM + "=" + sessionId;
-        session.sendEvent("endpoint", endpointUri);
-
-        while (session.isActive() && !closed.get()) {
-          try {
-            if (session.awaitClose(sseKeepaliveMillis, TimeUnit.MILLISECONDS)) {
-              break;
-            }
-            if (closed.get()) {
-              break;
-            }
-            session.sendComment("keepalive");
-          } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            break;
-          }
+        String sessionId = UUID.randomUUID().toString();
+        SseSession session;
+        try {
+          session = new SseSession(exchange);
+        } catch (IOException error) {
+          log.method(HTTP_GET_METHOD).error().status(500);
+          return;
         }
-      } catch (IOException clientDisconnected) {
-        // The SSE client disconnected.
+        sseSessions.put(sessionId, session);
+        log.method(HTTP_GET_METHOD).ok().status(200);
+
+        try {
+          String endpointUri = config.path() + "?" + SESSION_ID_PARAM + "=" + sessionId;
+          session.sendEvent("endpoint", endpointUri);
+
+          while (session.isActive() && !closed.get()) {
+            try {
+              if (session.awaitClose(sseKeepaliveMillis, TimeUnit.MILLISECONDS)) {
+                break;
+              }
+              if (closed.get()) {
+                break;
+              }
+              session.sendComment("keepalive");
+            } catch (InterruptedException interrupted) {
+              Thread.currentThread().interrupt();
+              break;
+            }
+          }
+        } catch (IOException clientDisconnected) {
+          // The SSE client disconnected.
+        } finally {
+          sseSessions.remove(sessionId);
+          session.closeAndAwaitStream();
+        }
       } finally {
-        sseSessions.remove(sessionId);
-        session.closeAndAwaitStream();
+        sseSessionPermits.release();
       }
     }
   }
@@ -821,6 +1022,111 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static void discardRequestLog(String ignored) {}
 
+  private String readRequestBody(HttpExchange exchange) throws IOException {
+    if (closed.get()) {
+      exchange.close();
+      throw new IOException("MCP server is closed");
+    }
+    if (isCompleteBodyBuffered(exchange)) {
+      return readBody(exchange);
+    }
+    AtomicBoolean finished = new AtomicBoolean(false);
+    AtomicBoolean timedOut = new AtomicBoolean(false);
+    ScheduledFuture<?> timeoutTask;
+    try {
+      timeoutTask =
+          readTimeoutScheduler.schedule(
+              () -> {
+                if (finished.compareAndSet(false, true)) {
+                  timedOut.set(true);
+                  exchange.close();
+                }
+              },
+              bodyReadTimeoutMillis,
+              TimeUnit.MILLISECONDS);
+    } catch (RejectedExecutionException rejected) {
+      exchange.close();
+      throw new IOException("MCP server is shutting down", rejected);
+    }
+    Future<String> readFuture = null;
+    try {
+      readFuture = bodyReaderExecutor.submit(() -> readBody(exchange));
+      String body = readFuture.get();
+      if (!finished.compareAndSet(false, true)) {
+        throw new BodyReadTimeoutException(null);
+      }
+      return body;
+    } catch (RejectedExecutionException rejected) {
+      exchange.close();
+      throw new IOException("MCP server is shutting down", rejected);
+    } catch (InterruptedException interrupted) {
+      if (readFuture != null) {
+        readFuture.cancel(true);
+      }
+      exchange.close();
+      Thread.currentThread().interrupt();
+      throw new IOException("Interrupted while reading request body", interrupted);
+    } catch (ExecutionException failed) {
+      Throwable cause = failed.getCause();
+      if (timedOut.get()) {
+        throw new BodyReadTimeoutException(cause);
+      }
+      if (cause instanceof IOException ioError) {
+        throw ioError;
+      }
+      if (cause instanceof RuntimeException runtimeError) {
+        throw runtimeError;
+      }
+      throw new IOException("Failed to read request body", cause);
+    } finally {
+      finished.set(true);
+      timeoutTask.cancel(false);
+    }
+  }
+
+  private static boolean isCompleteBodyBuffered(HttpExchange exchange) throws IOException {
+    if (firstHeader(exchange, "Transfer-Encoding") != null) {
+      return false;
+    }
+    String rawContentLength = firstHeader(exchange, "Content-Length");
+    if (rawContentLength == null) {
+      return false;
+    }
+    long contentLength;
+    try {
+      contentLength = Long.parseLong(rawContentLength.trim());
+    } catch (NumberFormatException invalid) {
+      return false;
+    }
+    if (contentLength < 0L || contentLength > MAX_REQUEST_BODY_BYTES) {
+      return false;
+    }
+    return contentLength == 0L || exchange.getRequestBody().available() >= contentLength;
+  }
+
+  private void writePayloadTooLargeResponse(HttpExchange exchange, Object payload)
+      throws IOException {
+    ScheduledFuture<?> closeDeadline = null;
+    try {
+      closeDeadline =
+          readTimeoutScheduler.schedule(
+              exchange::close, bodyReadTimeoutMillis, TimeUnit.MILLISECONDS);
+    } catch (RejectedExecutionException ignored) {
+      // The server is stopping; send the response and close the exchange.
+    }
+    try {
+      writeJson(exchange, HTTP_PAYLOAD_TOO_LARGE, payload);
+    } finally {
+      try {
+        exchange.close();
+      } finally {
+        if (closeDeadline != null) {
+          closeDeadline.cancel(false);
+        }
+      }
+    }
+  }
+
   static void validateContentLength(Headers headers) {
     List<String> values = headers == null ? null : headers.get("Content-Length");
     if (values == null || values.isEmpty()) {
@@ -895,6 +1201,18 @@ public final class McpHttpServer implements AutoCloseable {
     writeJson(exchange, httpStatus, mcpErrorResponse(exchange, id, code, message, null));
   }
 
+  private void writeJsonRpcErrorResponse(
+      HttpExchange exchange,
+      int httpStatus,
+      Object id,
+      int code,
+      String message,
+      boolean bodyRead)
+      throws IOException {
+    writeJsonResponse(
+        exchange, httpStatus, mcpErrorResponse(exchange, id, code, message, null), bodyRead);
+  }
+
   private static Map<String, Object> mcpErrorResponse(
       HttpExchange exchange, Object id, int code, String message, Map<String, Object> data) {
     Map<String, Object> response = data == null
@@ -914,6 +1232,68 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static Map<String, Object> success(Object id, Object result) {
     return JsonRpc.success(id, result);
+  }
+
+  private void writeJsonResponse(
+      HttpExchange exchange, int statusCode, Object payload, boolean bodyRead) throws IOException {
+    if (bodyRead || !hasRequestBody(exchange) || isCompleteBodyBuffered(exchange)) {
+      writeJson(exchange, statusCode, payload);
+      return;
+    }
+    byte[] bytes = JsonUtil.toJson(payload, MAX_HTTP_RESPONSE_BYTES).getBytes(StandardCharsets.UTF_8);
+    exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+    exchange.getResponseHeaders().set("Connection", "close");
+    writeAndAbortUnread(exchange, statusCode, bytes);
+  }
+
+  private void writePlainResponse(
+      HttpExchange exchange, int statusCode, String payload, boolean bodyRead) throws IOException {
+    if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())
+        || bodyRead
+        || !hasRequestBody(exchange)
+        || isCompleteBodyBuffered(exchange)) {
+      writePlain(exchange, statusCode, payload);
+      return;
+    }
+    byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+    exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+    exchange.getResponseHeaders().set("Connection", "close");
+    writeAndAbortUnread(exchange, statusCode, bytes);
+  }
+
+  private void writeAndAbortUnread(HttpExchange exchange, int statusCode, byte[] bytes)
+      throws IOException {
+    exchange.sendResponseHeaders(statusCode, bytes.length);
+    OutputStream output = exchange.getResponseBody();
+    output.write(bytes);
+    output.flush();
+    pauseBeforeUnreadClose();
+    if (isCompleteBodyBuffered(exchange)) {
+      output.close();
+      return;
+    }
+    throw new UnreadRequestAbortedException();
+  }
+
+  private void pauseBeforeUnreadClose() {
+    if (!closed.get()) {
+      LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(50));
+    }
+  }
+
+  private static boolean hasRequestBody(HttpExchange exchange) {
+    if (firstHeader(exchange, "Transfer-Encoding") != null) {
+      return true;
+    }
+    String contentLength = firstHeader(exchange, "Content-Length");
+    if (contentLength == null) {
+      return false;
+    }
+    try {
+      return Long.parseLong(contentLength.trim()) > 0L;
+    } catch (NumberFormatException invalid) {
+      return true;
+    }
   }
 
   private static void writeJson(HttpExchange exchange, int statusCode, Object payload)
@@ -1185,6 +1565,24 @@ public final class McpHttpServer implements AutoCloseable {
     return null;
   }
 
+  private static final class BodyReadTimeoutException extends IOException {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    BodyReadTimeoutException(Throwable cause) {
+      super("Request body read timed out", cause);
+    }
+  }
+
+  private static final class UnreadRequestAbortedException extends IOException {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    UnreadRequestAbortedException() {
+      super("Closing exchange without draining unread request body");
+    }
+  }
+
   static final class SseSession implements AutoCloseable {
     private final HttpExchange exchange;
     private final OutputStream output;
@@ -1219,6 +1617,9 @@ public final class McpHttpServer implements AutoCloseable {
         sb.append("\n");
         output.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         output.flush();
+      } catch (IOException error) {
+        close();
+        throw error;
       } finally {
         writeLock.unlock();
       }
@@ -1233,6 +1634,9 @@ public final class McpHttpServer implements AutoCloseable {
         String payload = ": " + comment + "\n\n";
         output.write(payload.getBytes(StandardCharsets.UTF_8));
         output.flush();
+      } catch (IOException error) {
+        close();
+        throw error;
       } finally {
         writeLock.unlock();
       }
@@ -1270,7 +1674,6 @@ public final class McpHttpServer implements AutoCloseable {
       }
     }
 
-    @SuppressWarnings("PMD.AvoidCatchingGenericException")
     private void closeStream() {
       if (!streamClosed.compareAndSet(false, true)) {
         return;

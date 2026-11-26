@@ -17,8 +17,10 @@ The runtime JAR has zero third-party dependencies.
 ## Concurrency and Session Model
 
 The bridge binds to one active Ghidra program per session.
-Requests run in sequence in a single dispatch queue.
-The dispatcher executes only one operation at a time.
+Request validation, field projection checks, and response encoding run outside the dispatch lock.
+The dispatcher uses a fair read-write lock to coordinate program access:
+- Read-only operations and read-only `batch.execute` requests share the read lock and run concurrently across active HTTP sessions, backed by a bounded pool of decompiler processes.
+- Program mutations, mutating or mixed `batch.execute` requests, and `session.shutdown` acquire the fair write lock in sequence so writes do not starve and readers only see committed program data.
 
 Ghidra background analysis runs in a separate thread.
 While analysis runs:

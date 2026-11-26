@@ -117,12 +117,12 @@ class BatchMethodLimitTest {
             methods,
             new BatchMethod.BatchRuntime() {
               @Override
-              public Object invokeDecoded(
+              public Object invokeHandler(
                   ApiMethod<Map<String, Object>, Object> method,
                   Map<String, Object> request,
                   boolean ownTransaction)
                   throws Exception {
-                return method.invokeDecoded(request);
+                return method.invokeHandler(request);
               }
 
               @Override

@@ -46,7 +46,12 @@ public final class DecompilationServiceImpl implements DecompilationService {
     if (timeout < 1 || timeout > MAX_TIMEOUT_MS) {
       throw new IllegalArgumentException("timeoutMs must be in 1.." + MAX_TIMEOUT_MS);
     }
-    Function function = context.script().getFunctionAt(context.parseAddress(rawAddress));
+    var entry = context.parseAddress(rawAddress);
+    Program program = context.currentProgramOrNull();
+    Function function =
+        program != null
+            ? program.getListing().getFunctionAt(entry)
+            : context.script().getFunctionAt(entry);
     if (function == null) {
       throw new NoSuchElementException("function not found");
     }
@@ -96,7 +101,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
           function.getName(), effectiveFormat, completed,
-          (System.nanoTime() - startedAt) / 1_000_000L,
+          Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L),
           code, tokens, lines,
           comments == null ? null : comments.items(),
           comments == null ? null : comments.complete(), warnings);
