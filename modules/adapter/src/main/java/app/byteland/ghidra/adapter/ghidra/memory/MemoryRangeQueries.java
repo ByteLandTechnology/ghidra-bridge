@@ -40,6 +40,6 @@ final class MemoryRangeQueries {
   }
 
   private byte[] readBytes(Address start, int length) throws MemoryAccessException {
-    return context.script().getBytes(start, length);
+    return context.readBytes(start, length);
   }
 }
