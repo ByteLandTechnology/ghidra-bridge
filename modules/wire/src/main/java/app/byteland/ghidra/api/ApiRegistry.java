@@ -127,20 +127,69 @@ public final class ApiRegistry {
     return methodsByName.get(name);
   }
 
+  /**
+   * Represents a validated API request ready for handler execution and post-lock encoding.
+   *
+   * @param methodName target dotted method name
+   * @param readOnly true when the request can execute concurrently under a shared read lock
+   * @param execution handler delegate to run inside the dispatch lock
+   * @param encoder response encoder and projector to run outside the dispatch lock
+   */
+  public record PreparedDispatch(
+      String methodName, boolean readOnly, Execution execution, ResponseEncoder encoder) {
+    public Object execute() throws Exception {
+      return execution.run();
+    }
+
+    public Object encodeResponse(Object rawResponse) {
+      return encoder.encode(rawResponse);
+    }
+
+    @FunctionalInterface
+    public interface Execution {
+      Object run() throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ResponseEncoder {
+      Object encode(Object rawResponse);
+    }
+  }
+
+  public PreparedDispatch prepareDispatch(String name, Map<String, Object> params) {
+    if (name == null || name.isBlank()) {
+      throw ApiException.badRequest("missing_method", "method is required", "/method");
+    }
+    ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
+    if (method == null) {
+      throw new ApiException(404, "unknown_method", "No such method: " + name, "/method");
+    }
+    Map<String, Object> decoded = method.decodeRequest(params);
+    method.validateProjection(decoded);
+    boolean readOnly = isReadOnly(method, decoded);
+    return new PreparedDispatch(
+        name,
+        readOnly,
+        () -> invokeHandler(method, decoded, true),
+        rawResponse -> method.encodeResponse(decoded, rawResponse));
+  }
+
   public Object dispatch(String name, Map<String, Object> params) throws Exception {
     ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
     if (method == null) {
       throw new ApiException(404, "unknown_method", "No such method: " + name, "/method");
     }
     Map<String, Object> decoded = method.decodeRequest(params);
-    return invokeDecoded(method, decoded, true);
+    method.validateProjection(decoded);
+    Object rawResponse = invokeHandler(method, decoded, true);
+    return method.encodeResponse(decoded, rawResponse);
   }
 
   <T> T inTransaction(app.byteland.ghidra.service.TransactionRunner.Operation<T> operation) {
     return bridgeServices.transactionRunner().run(operation);
   }
 
-  private Object invokeDecoded(
+  private Object invokeHandler(
       ApiMethod<Map<String, Object>, Object> method,
       Map<String, Object> decoded,
       boolean ownTransaction)
@@ -157,9 +206,9 @@ public final class ApiRegistry {
           "/method");
     }
     if (method.effects().requiresTransaction() && ownTransaction) {
-      return bridgeServices.transactionRunner().run(() -> method.invokeDecoded(decoded));
+      return bridgeServices.transactionRunner().run(() -> method.invokeHandler(decoded));
     }
-    return method.invokeDecoded(decoded);
+    return method.invokeHandler(decoded);
   }
 
   private void registerInterface() {
@@ -227,7 +276,14 @@ public final class ApiRegistry {
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
     registerResource(
-        name, MethodEffects.readOnlyMethod(), description, input, fields, identityFields, handler);
+        name,
+        MethodEffects.readOnlyMethod(),
+        description,
+        input,
+        fields,
+        identityFields,
+        true,
+        handler);
   }
 
   private static Map<String, Object> interfaceSchema(int methodCount) {
@@ -338,8 +394,7 @@ public final class ApiRegistry {
         request -> {
           String resource = name.substring(0, name.indexOf('.'));
           PageRequest page = decodePage(request, resource);
-          return canonicalList(
-              resource, request, handler.handle(request, page), page, fields, identityFields);
+          return canonicalList(resource, request, handler.handle(request, page), page, fields);
         });
   }
 
@@ -388,7 +443,7 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
-    registerResource(name, effects, description, input, fields, identityFields, handler);
+    registerResource(name, effects, description, input, fields, identityFields, false, handler);
   }
 
   private void registerResource(
@@ -398,13 +453,14 @@ public final class ApiRegistry {
       Map<String, Object> input,
       Set<String> fields,
       List<String> identityFields,
+      boolean projectable,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
     register(
         name,
         effects,
         description,
         input,
-        ApiSchemaCatalog.resourceSchema(fields, identityFields),
+        ApiSchemaCatalog.resourceSchema(fields, identityFields, projectable),
         fields,
         identityFields,
         request -> WireValues.restrict(WireValues.resource(handler.handle(request)), fields));
@@ -428,7 +484,7 @@ public final class ApiRegistry {
                 Map.of(
                     ApiVocabulary.ITEMS,
                     WireSchema.array(
-                        ApiSchemaCatalog.resourceSchema(fields, identityFields),
+                        ApiSchemaCatalog.resourceSchema(fields, identityFields, false),
                         0,
                         Integer.MAX_VALUE)),
                 ApiVocabulary.ITEMS)),
@@ -436,8 +492,7 @@ public final class ApiRegistry {
         identityFields,
         request -> {
           Map<String, Object> normalizedList = WireValues.list(handler.handle(request));
-          return Map.of(
-              ApiVocabulary.ITEMS, restrictAndSortItems(normalizedList, fields, identityFields));
+          return Map.of(ApiVocabulary.ITEMS, restrictItems(normalizedList, fields));
         });
   }
 
@@ -447,12 +502,12 @@ public final class ApiRegistry {
             methodsByName,
             new BatchMethod.BatchRuntime() {
               @Override
-              public Object invokeDecoded(
+              public Object invokeHandler(
                   ApiMethod<Map<String, Object>, Object> method,
                   Map<String, Object> request,
                   boolean ownTransaction)
                   throws Exception {
-                return ApiRegistry.this.invokeDecoded(method, request, ownTransaction);
+                return ApiRegistry.this.invokeHandler(method, request, ownTransaction);
               }
 
               @Override
@@ -462,13 +517,13 @@ public final class ApiRegistry {
               }
             });
     BatchMethod.Registration registration = batchMethod.registration();
-    registerWithCodec(
+    registerWithCodecs(
         BatchMethod.NAME,
         registration.effects(),
         "Check a batch. Run its items in order. Use per_item to keep item errors."
             + " Use all_or_none to revert the batch after an error.",
         registration.requestCodec(),
-        registration.responseSchema(),
+        registration.responseCodec(),
         Set.of(),
         List.of(),
         registration.handler());
@@ -527,6 +582,26 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
+    registerWithCodecs(
+        name,
+        effects,
+        description,
+        requestCodec,
+        new JsonValueCodec(output),
+        fields,
+        identityFields,
+        handler);
+  }
+
+  private void registerWithCodecs(
+      String name,
+      MethodEffects effects,
+      String description,
+      JsonCodec<Map<String, Object>> requestCodec,
+      JsonCodec<Object> responseCodec,
+      Set<String> fields,
+      List<String> identityFields,
+      ApiMethod.Handler<Map<String, Object>, Object> handler) {
 
     ApiMethod<Map<String, Object>, Object> method =
         new ApiMethod<>(
@@ -534,13 +609,21 @@ public final class ApiRegistry {
             description != null ? description : defaultDescription(name),
             effects,
             requestCodec,
-            new JsonValueCodec(output),
+            responseCodec,
             fields,
             identityFields,
             handler);
     if (methodsByName.putIfAbsent(name, method) != null) {
       throw new IllegalStateException("duplicate API method: " + name);
     }
+  }
+
+  private boolean isReadOnly(
+      ApiMethod<Map<String, Object>, Object> method, Map<String, Object> request) {
+    if (method.effects().readOnly()) return true;
+    return BatchMethod.NAME.equals(method.name())
+        && batchMethod != null
+        && batchMethod.isReadOnly(request);
   }
 
   private boolean allowedDuringAnalysis(
@@ -601,11 +684,9 @@ public final class ApiRegistry {
       Map<String, Object> request,
       Page<?> raw,
       PageRequest page,
-      Set<String> fields,
-      List<String> identityFields) {
+      Set<String> fields) {
     Map<String, Object> result = WireValues.list(raw);
-    List<Map<String, Object>> normalizedItems =
-        restrictAndSortItems(result, fields, identityFields);
+    List<Map<String, Object>> normalizedItems = restrictItems(result, fields);
     Optional<Object> next = Optional.ofNullable(result.get("next_cursor"));
     result.put(ApiVocabulary.ITEMS, normalizedItems);
     result.remove("next_cursor");
@@ -623,41 +704,11 @@ public final class ApiRegistry {
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static List<Map<String, Object>> restrictAndSortItems(
-      Map<String, Object> normalizedList, Set<String> fields, List<String> identityFields) {
+  private static List<Map<String, Object>> restrictItems(
+      Map<String, Object> normalizedList, Set<String> fields) {
     List<Map<String, Object>> items =
         (List<Map<String, Object>>) (List<?>) normalizedList.get(ApiVocabulary.ITEMS);
-    return items.stream()
-        .map(item -> WireValues.restrict(item, fields))
-        .sorted((left, right) -> compareIdentity(left, right, identityFields))
-        .toList();
-  }
-
-  private static int compareIdentity(
-      Map<String, Object> left, Map<String, Object> right, List<String> identityFields) {
-    for (String field : identityFields) {
-      Object leftValue = left.get(field);
-      Object rightValue = right.get(field);
-      int compared;
-      if (sameReference(leftValue, rightValue)) {
-        compared = 0;
-      } else if (leftValue == null) {
-        compared = -1;
-      } else if (rightValue == null) {
-        compared = 1;
-      } else if (leftValue instanceof Number leftNumber
-          && rightValue instanceof Number rightNumber) {
-        compared = Long.compare(leftNumber.longValue(), rightNumber.longValue());
-      } else {
-        compared = String.valueOf(leftValue).compareTo(String.valueOf(rightValue));
-      }
-      if (compared != 0) return compared;
-    }
-    return 0;
-  }
-
-  private static boolean sameReference(Object left, Object right) {
-    return left == right;
+    return items.stream().map(item -> WireValues.restrict(item, fields)).toList();
   }
 
   private boolean analysisRunning() {
@@ -813,7 +864,17 @@ public final class ApiRegistry {
 
   static app.byteland.ghidra.service.listing.FlowOverrideScope flowScope(
       Map<String, Object> selector) {
-    return switch (text(selector, ApiVocabulary.KIND)) {
+    return flowScope(selector, "/selector");
+  }
+
+  static app.byteland.ghidra.service.listing.FlowOverrideScope flowScope(
+      Map<String, Object> selector, String target) {
+    String kind = selector == null ? null : optionalText(selector, ApiVocabulary.KIND);
+    if (kind == null) {
+      throw ApiException.badRequest(
+          ApiVocabulary.MISSING_FIELD, target + "/kind is required", target + "/kind");
+    }
+    return switch (kind) {
       case ApiVocabulary.ADDRESS ->
           new app.byteland.ghidra.service.listing.FlowOverrideScope.AddressScope(
               text(selector, ApiVocabulary.ADDRESS));
@@ -823,7 +884,9 @@ public final class ApiRegistry {
       case "range" ->
           new app.byteland.ghidra.service.listing.FlowOverrideScope.RangeScope(
               text(selector, ApiVocabulary.START), text(selector, ApiVocabulary.END));
-      default -> throw new AssertionError(selector.get(ApiVocabulary.KIND));
+      default ->
+          throw ApiException.badRequest(
+              "invalid_enum", target + "/kind has an unsupported value", target + "/kind");
     };
   }
 

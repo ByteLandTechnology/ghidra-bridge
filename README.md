@@ -117,6 +117,17 @@ The bridge enforces strict security boundaries:
 - **Query Token Rejection**: The server rejects tokens in URL query strings with HTTP 400.
 - **Log Privacy**: The server never writes secret tokens to log files or consoles.
 
+### Verify Release Archives
+
+Before you run release scripts in Ghidra, verify the SHA-256 checksum and [GitHub provenance attestation](https://cli.github.com/manual/gh_attestation_verify):
+
+```bash
+sha256sum -c ghidra-bridge-<version>.zip.sha256
+gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghidra-bridge
+```
+
+The attestation confirms that GitHub Actions built the archive from this repository.
+
 ## API and Transports
 
 The public API has 57 dotted methods, from `interface.get` to `batch.execute`.
