@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import sys
@@ -31,6 +32,7 @@ ALLOWED_SCOPES = frozenset(
         "build",
         "ci",
         "contracts",
+        "deps",
         "docs",
         "domain",
         "launcher",
@@ -55,6 +57,32 @@ FOOTER_START_RE = re.compile(
 )
 
 ATTRIBUTION_RE = re.compile(r"^co-authored-by\s*:", re.IGNORECASE)
+
+DEPENDABOT_BUMP_RE = re.compile(r"^(?:build|chore)\(deps\): bump [^\s].*(?<!\.)$")
+
+DEPENDABOT_HEADER_RE = re.compile(r"^(?:build|chore)\(deps\): [a-z].*(?<!\.)$")
+
+DEPENDABOT_TRAILER_RE = re.compile(
+    r"^(?:signed-off-by|co-authored-by):\s*dependabot\[bot\](?:\s|$)",
+    re.IGNORECASE,
+)
+
+
+def is_dependabot_commit(lines: list[str]) -> bool:
+    """Check whether the commit message comes from Dependabot."""
+    if any(
+        ATTRIBUTION_RE.match(line) and not DEPENDABOT_TRAILER_RE.match(line)
+        for line in lines[1:]
+    ):
+        return False
+    header = lines[0]
+    if DEPENDABOT_BUMP_RE.match(header):
+        return True
+    if DEPENDABOT_HEADER_RE.match(header):
+        if os.environ.get("GIT_AUTHOR_NAME") == "dependabot[bot]":
+            return True
+        return any(DEPENDABOT_TRAILER_RE.match(line) for line in lines[1:])
+    return False
 
 
 def strip_git_comments(raw_text: str) -> list[str]:
@@ -121,9 +149,11 @@ def validate_message(raw_text: str) -> list[str]:
 
     header = lines[0]
 
-    # Exempt Git merge commits and release-please release commits.
-    if re.match(r"^Merge\b", header) or re.match(
-        r"^chore\(main\): release\b", header
+    # Exempt Git merge, release-please, and Dependabot commits.
+    if (
+        re.match(r"^Merge\b", header)
+        or re.match(r"^chore\(main\): release\b", header)
+        or is_dependabot_commit(lines)
     ):
         return []
 

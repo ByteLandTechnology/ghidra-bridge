@@ -54,7 +54,7 @@ Follow these repository rules when you change code:
   - `feat`: increases the minor version, such as `1.6.0`.
   - `!` after the type or scope, or a `BREAKING CHANGE:` footer: increases the major version.
   - Other types, such as `docs`, `ci`, and `test`: do not start a release on their own.
-- Optional scopes: `domain`, `wire`, `contracts`, `runtime`, `adapter`, `transport`, `websocket` (or `transport:websocket`), `mcp` (or `transport:mcp`), `launcher`, `docs`, `build`, and `ci`. If a commit changes more than one scope, do not write a scope.
+- Optional scopes: `domain`, `wire`, `contracts`, `runtime`, `adapter`, `transport`, `websocket` (or `transport:websocket`), `mcp` (or `transport:mcp`), `launcher`, `docs`, `build`, `ci`, and `deps`. If a commit changes more than one scope, do not write a scope.
 - Start the summary with an imperative verb in lowercase letters, with no period at the end.
 - The body is optional for a small change that needs no explanation.
 - If you write a body, obey these rules:
@@ -65,7 +65,7 @@ Follow these repository rules when you change code:
   - Do not use nested lists.
   - If an item is too long, write a shorter sentence or divide it.
 - The body rules do not apply to footers.
-- Git `Merge` commits and `chore(main): release` commits from `release-please` are exempt from `commit-msg` rules.
+- Git `Merge` commits, `chore(main): release` commits from `release-please`, and Dependabot `build(deps): bump` commits are exempt from `commit-msg` rules.
 - Do not add attribution lines such as `Co-Authored-By` to commit messages or pull request text.
 - Each commit must compile and pass verification checks.
 
