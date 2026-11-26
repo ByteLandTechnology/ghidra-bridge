@@ -144,8 +144,8 @@ Call `interface.get` to discover all methods and schemas that the server support
 
 ### Model Context Protocol (MCP)
 
-MCP exposes the same operations, except `interface.get`, through 15 tools over Streamable HTTP:
-- `ghidra_help`: Discover domains, list operations, or view schemas.
+MCP exposes the same operations, except `interface.get`, through 15 tools over Streamable HTTP and SSE:
+- `ghidra_help`: Discover domains, list operations with schemas, or view one operation.
 - 14 Domain Tools: `ghidra_program`, `ghidra_memory`, `ghidra_function`, and other domain tools.
 
 Call a domain tool with an operation name and its parameters.
@@ -162,10 +162,10 @@ For example, the `program.get` method is the `get` operation of `ghidra_program`
 ```
 
 Requests that use `2026-07-28` must also send MCP metadata and headers.
-The server supports `initialize` clients with versions `2025-06-18` and `2025-11-25`.
+The server supports `initialize` clients with versions `2025-06-18` and `2025-11-25`, plus legacy SSE on `GET`.
 See the [Protocol Specification](docs/protocol.md).
 
-The MCP tool schema is also available at `ghidra-bridge://contracts/mcp-tools`.
+The MCP tool schema is also available at `ghidra-bridge://ghidra/contracts/mcp-tools`.
 
 ## Documentation Index
 
@@ -190,4 +190,5 @@ The `verify` task checks:
 - JUnit tests across all Java modules.
 - Architecture boundary rules.
 - Generated API contract drift.
+- MCP tool documentation consistency.
 - Generated script build and compilation.

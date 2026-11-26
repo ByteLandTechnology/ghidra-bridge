@@ -133,8 +133,8 @@ WebSocket 采用标准的 JSON-RPC 2.0 格式进行请求交互：
 
 ### Model Context Protocol (MCP)
 
-MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映射为 15 个工具：
-- `ghidra_help`：发现领域、列出操作或查看操作 Schema。
+MCP 通过 Streamable HTTP 与 SSE 将除 `interface.get` 以外的相同操作映射为 15 个工具：
+- `ghidra_help`：发现领域、列出带 Schema 的操作或查看单个操作。
 - 14 个领域工具：`ghidra_program`、`ghidra_memory`、`ghidra_function` 和其他领域工具。
 
 使用操作名及其参数调用领域工具。
@@ -151,10 +151,10 @@ MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映
 ```
 
 `2026-07-28` 请求还必须携带 MCP 元数据与头部。
-服务端支持版本为 `2025-06-18` 和 `2025-11-25` 的 `initialize` 客户端。
+服务端支持版本为 `2025-06-18` 和 `2025-11-25` 的 `initialize` 客户端，并在 `GET` 上支持旧式 SSE。
 详见[协议规范](docs/zh/protocol.md)。
 
-完整的 MCP 工具 Schema 亦可通过资源 `ghidra-bridge://contracts/mcp-tools` 获取。
+完整的 MCP 工具 Schema 亦可通过资源 `ghidra-bridge://ghidra/contracts/mcp-tools` 获取。
 
 ## 文档索引
 
@@ -176,6 +176,8 @@ MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映
 ```
 
 `verify` 任务将严格检查：
+- 所有 Java 模块的 JUnit 测试。
 - 架构隔离规则检查。
 - 生成的 API 契约无任何偏移漂移。
+- MCP 工具文档一致性。
 - 生成脚本的构建与编译。

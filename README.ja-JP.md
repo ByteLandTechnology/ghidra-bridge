@@ -133,8 +133,8 @@ WebSocket では標準的な JSON-RPC 2.0 形式でリクエストを送信し�
 
 ### Model Context Protocol (MCP)
 
-MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 15 個のツールとして公開します:
-- `ghidra_help`: ドメインの探索、操作一覧の取得、スキーマの確認。
+MCP は Streamable HTTP と SSE を介して、`interface.get` を除く同じ操作を 15 個のツールとして公開します:
+- `ghidra_help`: ドメインの探索、スキーマ付き操作一覧の取得、単一操作の確認。
 - 14 個のドメインツール: `ghidra_program`、`ghidra_memory`、`ghidra_function`、および他のドメインツール。
 
 操作名とパラメータを指定してドメインツールを呼び出します。
@@ -151,10 +151,10 @@ MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 
 ```
 
 `2026-07-28` のリクエストには MCP メタデータとヘッダーも必要です。
-サーバーはバージョン `2025-06-18` と `2025-11-25` の `initialize` クライアントをサポートします。
+サーバーはバージョン `2025-06-18` と `2025-11-25` の `initialize` クライアントに加え、`GET` での旧式 SSE もサポートします。
 詳細は[プロトコル仕様](docs/ja/protocol.md)を参照してください。
 
-完全な MCP ツールスキーマは `ghidra-bridge://contracts/mcp-tools` リソースからも取得可能です。
+完全な MCP ツールスキーマは `ghidra-bridge://ghidra/contracts/mcp-tools` リソースからも取得可能です。
 
 ## ドキュメント一覧
 
@@ -176,6 +176,8 @@ MCP は Streamable HTTP を介して、`interface.get` を除く同じ操作を 
 ```
 
 `verify` タスクは以下を厳格に検査します:
+- 全 Java モジュールの JUnit テスト。
 - アーキテクチャ分離ルールの遵守。
 - 生成された API コントラクトとの差分チェック。
+- MCP ツールドキュメントの整合性。
 - 生成スクリプトのビルドとコンパイル。

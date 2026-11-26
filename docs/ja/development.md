@@ -93,9 +93,10 @@ Ghidra をインストールしていない環境でモジュールのインポ�
 検証タスクは以下を厳格に検査します:
 - **ワークフローとシェルスクリプト**: `actionlint` と `shellcheck` が GitHub Actions ワークフロー、複合アクション、シェルスクリプトを検証します。
 - **リポジトリ衛生**: `verify-repository-hygiene.sh` が追跡ファイル、重複ファイル、URL、MCP ツール名を検証します。
-- **単体テスト**: `check` がすべての Java モジュールで JUnit テストを実行します。
+- **単体テスト**: `check` が全 Java モジュールの JUnit テストを実行します。
 - **アーキテクチャ境界**: `verifyArchitecture` により、adapter と launcher 以外での Ghidra クラスのインポートが禁止されます。
 - **規約ドリフト検出**: `verifyApiContracts` により、ドキュメント規約とコードの一致が確認されます。
+- **MCP ドキュメント整合性**: `verifyMcpDocumentation` が `docs/mcp-tools.json`、9 つのガイド、および MCP の Javadoc を検査します。
 - **スクリプトコンパイル**: `compileGeneratedScripts` により、生成された起動スクリプトが正常にコンパイルできることを確認します。
 - **配布物**: `verifyDistribution` が `build/ghidra-script/` の内容を検証します。
 

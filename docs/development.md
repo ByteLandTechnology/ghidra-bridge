@@ -106,8 +106,20 @@ The verification checks enforce these rules:
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
+- **MCP Documentation**: `verifyMcpDocumentation` checks `docs/mcp-tools.json`, the nine guides, and MCP Javadocs.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+
+### Test Timeouts, Debugging, and Failure Reports
+
+Every Gradle `Test` task sets:
+- **Task timeout**: 5 minutes (`Duration.ofMinutes(5)`).
+- **Method and lifecycle timeouts**: 30-second cooperative (`SAME_THREAD`) JUnit Jupiter timeouts (`junit.jupiter.execution.timeout.default=30s`, `junit.jupiter.execution.timeout.testable.method.default=30s`, and `junit.jupiter.execution.timeout.lifecycle.method.default=30s`) with thread dumps (`junit.jupiter.execution.timeout.threaddump.enabled=true`).
+- **Debugger mode**: `junit.jupiter.execution.timeout.mode=disabled_on_debug` disables JUnit timeouts when you attach a debugger with `--debug-jvm` (such as `./gradlew --no-daemon :adapter:test --debug-jvm`), or when you pass `-Djunit.jupiter.execution.timeout.mode=disabled`.
+- **Failure-only output and reports**: Gradle prints `FULL` exception stack traces, causes, and buffered `stdout` and `stderr` streams only when a test fails. On failure, check:
+  - JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
+  - JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
+  - Headless Ghidra regression log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
 
 ## Releases
 

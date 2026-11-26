@@ -127,7 +127,7 @@ WebSocket 消息严格遵循 JSON-RPC 2.0 协议规范。
 
 MCP HTTP 服务端按以下规则处理请求：
 - **POST**：分发处理 JSON-RPC 2.0 请求。最多允许 32 个 POST 请求同时执行，超出部分返回状态码 `503`。若请求体读取耗时超过 10 秒，服务端将关闭该 POST 连接。针对活跃的 SSE 会话（`?sessionId=<id>`），POST 将 JSON-RPC 响应作为 `message` 事件推送并返回状态码 `202`；未知或已过期的 `sessionId` 返回状态码 `404`。
-- **GET**：建立旧版兼容的 SSE 流并发送 `endpoint` 事件。最多允许 16 个 SSE 会话同时保持连接，超出部分返回状态码 `503`。
+- **GET**：建立旧版兼容的 `text/event-stream` SSE 会话，发送指向 `<path>?sessionId=<id>` 的 `endpoint` 事件并定期发送 `keepalive` 注释。最多允许 16 个 SSE 会话同时保持连接，超出部分返回状态码 `503`。
 - **HEAD**：返回状态码 `200`，且不含响应体。
 - **OPTIONS**：处理 CORS 预检请求并返回状态码 `204`。
 - **其他方法**：服务端返回状态码 `405` 并附带 `Allow: POST, GET, OPTIONS` 响应头。
@@ -191,8 +191,8 @@ MCP HTTP 服务端按以下规则处理请求：
   桥接在 `2026-07-28` 中保留此兼容方法。
 - `tools/list`：返回全部 15 个工具的 Schema 定义。
 - `tools/call`：执行具体的工具操作并返回结构化内容。
-- `resources/list`：列出可用资源，例如 `ghidra-bridge://contracts/mcp-tools`。
-- `resources/read`：读取资源内容。
+- `resources/list`：列出可用资源，例如 `ghidra-bridge://ghidra/contracts/mcp-tools`。
+- `resources/read`：从 `ghidra-bridge://<tool_prefix>/contracts/mcp-tools` 读取契约资源内容。对于默认 `ghidra` 前缀，也兼容读取 `ghidra-bridge://contracts/mcp-tools`。
 - `resources/templates/list`：返回空模板列表。
 
 其他方法返回 HTTP `404`，错误码 `-32601`。
@@ -209,26 +209,27 @@ MCP HTTP 服务端按以下规则处理请求：
 ### 工具调用规范
 
 MCP 将操作组织为 15 个工具：
-- `ghidra_help`：查找领域、列出可用操作及查看操作 Schema。
+- `ghidra_help`：查找领域、列出带 Schema 的可用操作及查看单个操作。
 - 14 个领域工具：`ghidra_bridge`、`ghidra_program`、`ghidra_address`、`ghidra_memory`、`ghidra_listing`、`ghidra_global_variable`、`ghidra_function`、`ghidra_analysis`、`ghidra_decompilation`、`ghidra_symbol`、`ghidra_reference`、`ghidra_comment`、`ghidra_data_type`、`ghidra_batch`。
 
 领域工具共公开 55 个方法。`interface.get` 仅通过 WebSocket 提供。
 
 ### 工具名前缀
 
-所有工具名都以前缀和一个下划线开头，默认前缀为 `ghidra`。
+所有工具名都以前缀和下划线开头，默认前缀为 `ghidra`。
 通过 `tool_prefix` 启动参数可以修改前缀，例如 `tool_prefix=sample`。
-此时工具名包括 `sample_help` 和 `sample_program`。
+此时工具名包括 `sample_help` 和 `sample_program`，契约资源 URI 为 `ghidra-bridge://sample/contracts/mcp-tools`。
 当一个 MCP 客户端接入多个桥接服务时，为每个桥接服务设置不同的前缀。
 
 前缀以字母开头，由 1 至 64 个字母、数字、`_` 或 `-` 组成。
 服务端拒绝使用其他前缀的工具名。
+在 `tools/call` 分发阶段，服务端仍兼容旧本地脚本使用的点分隔符形式。
 在 `ghidra_help` 中，`domain` 参数既接受完整工具名，也接受不带前缀的领域名，例如 `memory`。
 本文档中的示例均使用默认前缀。
 
 `ghidra_help` 接受可选的 `domain` 与 `operation` 参数：
 - 不带参数：返回领域工具列表。
-- 仅 `domain`：返回该领域工具的操作名列表。
+- 仅 `domain`：返回该领域内每个操作的 `name`、`method`、`description`、`effects` 与 `inputSchema`。
 - `domain` 与 `operation`：返回该操作的方法名、描述、副作用、`inputSchema` 与 `outputSchema`。
 
 调用具体操作时，向领域工具传递 `operation` 与 `params` 参数。
