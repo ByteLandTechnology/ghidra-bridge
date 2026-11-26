@@ -5,7 +5,10 @@ import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.mem.MemoryAccessException;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
 import ghidra.program.model.symbol.ReferenceManager;
@@ -148,6 +151,7 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public Iterable<Reference> references(Address address, boolean to) {
+    Objects.requireNonNull(address, "address");
     ReferenceManager manager = currentProgram().getReferenceManager();
     if (to) {
       return () -> {
@@ -160,7 +164,33 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public Reference reference(Address fromAddress, Address toAddress, int operandIndex) {
+    Objects.requireNonNull(fromAddress, "fromAddress");
+    Objects.requireNonNull(toAddress, "toAddress");
     return currentProgram().getReferenceManager().getReference(fromAddress, toAddress, operandIndex);
+  }
+
+  public byte[] readBytes(Address start, int length) throws MemoryAccessException {
+    Objects.requireNonNull(start, "start");
+    byte[] bytes = new byte[length];
+    currentProgram().getMemory().getBytes(start, bytes);
+    return bytes;
+  }
+
+  public Function functionAfter(Function function) {
+    return function == null ? null : functionAfter(function.getEntryPoint());
+  }
+
+  public Function functionAfter(Address address) {
+    Objects.requireNonNull(address, "address");
+    FunctionIterator iterator = currentProgram().getListing().getFunctions(address, true);
+    if (!iterator.hasNext()) {
+      return null;
+    }
+    Function candidate = iterator.next();
+    if (address.equals(candidate.getEntryPoint())) {
+      return iterator.hasNext() ? iterator.next() : null;
+    }
+    return candidate;
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
