@@ -56,7 +56,11 @@ public record ApiMethod<Request, Response>(
 
   public Object encodeResponse(Request request, Response response) {
     Object encoded = responseCodec.encode(response);
-    return FieldProjection.apply(encoded, request, fields, identityFields);
+    Object projected = FieldProjection.apply(encoded, request, fields, identityFields);
+    if (projected != encoded) {
+      JsonValueCodec.validateOutput(projected, responseCodec.schema());
+    }
+    return projected;
   }
 
   public Object invokeDecoded(Request request) throws Exception {
