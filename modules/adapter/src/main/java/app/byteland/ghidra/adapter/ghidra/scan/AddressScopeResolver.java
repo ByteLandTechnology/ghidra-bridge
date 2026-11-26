@@ -30,7 +30,7 @@ public final class AddressScopeResolver {
 
   private AddressSetView resolveFunction(String entryRaw) {
     Address entry = context.parseAddress(entryRaw);
-    Function function = context.script().getFunctionAt(entry);
+    Function function = context.currentProgram().getListing().getFunctionAt(entry);
     if (function == null) {
       throw new NoSuchElementException("no function at entry address");
     }

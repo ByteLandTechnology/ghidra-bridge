@@ -1,10 +1,11 @@
 package app.byteland.ghidra.agent;
 
 import java.util.Objects;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
- * Counts in-flight dispatches and rejects new dispatches after close.
- * Waits for in-flight dispatches to finish.
+ * Coordinates fair shared-read and exclusive-write execution, counts in-flight dispatches, and
+ * rejects new dispatches after close while waiting for active dispatches to finish.
  */
 final class DispatchBarrier {
   @FunctionalInterface
@@ -12,6 +13,7 @@ final class DispatchBarrier {
     T run() throws Exception;
   }
 
+  private final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock(true);
   private int activeDispatches;
   private boolean closing;
 
@@ -34,6 +36,44 @@ final class DispatchBarrier {
         }
       }
     }
+  }
+
+  <T> T runRead(CheckedOperation<T> operation) throws Exception {
+    Objects.requireNonNull(operation, "operation");
+    ReentrantReadWriteLock.ReadLock readLock = readWriteLock.readLock();
+    readLock.lock();
+    try {
+      return operation.run();
+    } finally {
+      readLock.unlock();
+    }
+  }
+
+  <T> T runWrite(CheckedOperation<T> operation) throws Exception {
+    Objects.requireNonNull(operation, "operation");
+    ReentrantReadWriteLock.WriteLock writeLock = readWriteLock.writeLock();
+    writeLock.lock();
+    try {
+      return operation.run();
+    } finally {
+      writeLock.unlock();
+    }
+  }
+
+  boolean isFair() {
+    return readWriteLock.isFair();
+  }
+
+  int readHoldCount() {
+    return readWriteLock.getReadHoldCount();
+  }
+
+  int readLockCount() {
+    return readWriteLock.getReadLockCount();
+  }
+
+  boolean isWriteLockedByCurrentThread() {
+    return readWriteLock.isWriteLockedByCurrentThread();
   }
 
   boolean closeAndAwait() {
