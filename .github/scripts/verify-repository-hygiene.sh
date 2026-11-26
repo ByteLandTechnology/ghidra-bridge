@@ -86,6 +86,23 @@ duplicate_files="$(
 )"
 [[ -z "$duplicate_files" ]] || fail "exact duplicate files are candidates for commit" "$duplicate_files"
 
+action_files=()
+while IFS= read -r candidate; do
+  [[ -n "$candidate" ]] || continue
+  action_files+=("$candidate")
+done < <(find .github/workflows .github/actions -type f \( -name '*.yml' -o -name '*.yaml' \) | LC_ALL=C sort)
+if [[ "${#action_files[@]}" -gt 0 ]]; then
+  uses_line_pattern='^[[:blank:]]*(-[[:blank:]]+)?uses:([[:blank:]]|$)'
+  local_action_pattern='\./[^[:blank:]#"'\'']+([[:blank:]]+#.*)?'
+  pinned_action_pattern='[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*@[0-9a-f]{40}[[:blank:]]+#[[:blank:]]+v[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9._-]+)?'
+  valid_uses_pattern="^[^:]+:[0-9]+:[[:blank:]]*(-[[:blank:]]+)?uses:[[:blank:]]+(${local_action_pattern}|${pinned_action_pattern})[[:blank:]]*$"
+  unpinned_actions="$(
+    grep -nHE "$uses_line_pattern" "${action_files[@]}" |
+      grep -Ev "$valid_uses_pattern" || true
+  )"
+  [[ -z "$unpinned_actions" ]] || fail "external GitHub Actions must pin a 40-character commit SHA and version comment" "$unpinned_actions"
+fi
+
 method_count="$(grep -Ec '^\| `[^`]+` \|' docs/api.md || true)"
 [[ "$method_count" == "59" ]] || fail "docs/api.md documents $method_count methods; expected 59"
 

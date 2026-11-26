@@ -23,7 +23,7 @@ final class FunctionLookupQueries implements FunctionResolver {
       throw new IllegalArgumentException("address is required");
     }
     Address address = context.parseAddress(rawAddress);
-    Function function = context.script().getFunctionAt(address);
+    Function function = context.currentProgram().getListing().getFunctionAt(address);
     if (function == null && address.isExternalAddress()) {
       function = resolveExternalFunction(address);
     }
