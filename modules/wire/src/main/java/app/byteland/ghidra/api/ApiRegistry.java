@@ -127,20 +127,69 @@ public final class ApiRegistry {
     return methodsByName.get(name);
   }
 
+  /**
+   * Represents a validated API request ready for handler execution and post-lock encoding.
+   *
+   * @param methodName target dotted method name
+   * @param readOnly true when the request can execute concurrently under a shared read lock
+   * @param execution handler delegate to run inside the dispatch lock
+   * @param encoder response encoder and projector to run outside the dispatch lock
+   */
+  public record PreparedDispatch(
+      String methodName, boolean readOnly, Execution execution, ResponseEncoder encoder) {
+    public Object execute() throws Exception {
+      return execution.run();
+    }
+
+    public Object encodeResponse(Object rawResponse) {
+      return encoder.encode(rawResponse);
+    }
+
+    @FunctionalInterface
+    public interface Execution {
+      Object run() throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ResponseEncoder {
+      Object encode(Object rawResponse);
+    }
+  }
+
+  public PreparedDispatch prepareDispatch(String name, Map<String, Object> params) {
+    if (name == null || name.isBlank()) {
+      throw ApiException.badRequest("missing_method", "method is required", "/method");
+    }
+    ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
+    if (method == null) {
+      throw new ApiException(404, "unknown_method", "No such method: " + name, "/method");
+    }
+    Map<String, Object> decoded = method.decodeRequest(params);
+    method.validateProjection(decoded);
+    boolean readOnly = isReadOnly(method, decoded);
+    return new PreparedDispatch(
+        name,
+        readOnly,
+        () -> invokeHandler(method, decoded, true),
+        rawResponse -> method.encodeResponse(decoded, rawResponse));
+  }
+
   public Object dispatch(String name, Map<String, Object> params) throws Exception {
     ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
     if (method == null) {
       throw new ApiException(404, "unknown_method", "No such method: " + name, "/method");
     }
     Map<String, Object> decoded = method.decodeRequest(params);
-    return invokeDecoded(method, decoded, true);
+    method.validateProjection(decoded);
+    Object rawResponse = invokeHandler(method, decoded, true);
+    return method.encodeResponse(decoded, rawResponse);
   }
 
   <T> T inTransaction(app.byteland.ghidra.service.TransactionRunner.Operation<T> operation) {
     return bridgeServices.transactionRunner().run(operation);
   }
 
-  private Object invokeDecoded(
+  private Object invokeHandler(
       ApiMethod<Map<String, Object>, Object> method,
       Map<String, Object> decoded,
       boolean ownTransaction)
@@ -157,9 +206,9 @@ public final class ApiRegistry {
           "/method");
     }
     if (method.effects().requiresTransaction() && ownTransaction) {
-      return bridgeServices.transactionRunner().run(() -> method.invokeDecoded(decoded));
+      return bridgeServices.transactionRunner().run(() -> method.invokeHandler(decoded));
     }
-    return method.invokeDecoded(decoded);
+    return method.invokeHandler(decoded);
   }
 
   private void registerInterface() {
@@ -447,12 +496,12 @@ public final class ApiRegistry {
             methodsByName,
             new BatchMethod.BatchRuntime() {
               @Override
-              public Object invokeDecoded(
+              public Object invokeHandler(
                   ApiMethod<Map<String, Object>, Object> method,
                   Map<String, Object> request,
                   boolean ownTransaction)
                   throws Exception {
-                return ApiRegistry.this.invokeDecoded(method, request, ownTransaction);
+                return ApiRegistry.this.invokeHandler(method, request, ownTransaction);
               }
 
               @Override
@@ -462,13 +511,13 @@ public final class ApiRegistry {
               }
             });
     BatchMethod.Registration registration = batchMethod.registration();
-    registerWithCodec(
+    registerWithCodecs(
         BatchMethod.NAME,
         registration.effects(),
         "Check a batch. Run its items in order. Use per_item to keep item errors."
             + " Use all_or_none to revert the batch after an error.",
         registration.requestCodec(),
-        registration.responseSchema(),
+        registration.responseCodec(),
         Set.of(),
         List.of(),
         registration.handler());
@@ -527,6 +576,26 @@ public final class ApiRegistry {
       Set<String> fields,
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Object> handler) {
+    registerWithCodecs(
+        name,
+        effects,
+        description,
+        requestCodec,
+        new JsonValueCodec(output),
+        fields,
+        identityFields,
+        handler);
+  }
+
+  private void registerWithCodecs(
+      String name,
+      MethodEffects effects,
+      String description,
+      JsonCodec<Map<String, Object>> requestCodec,
+      JsonCodec<Object> responseCodec,
+      Set<String> fields,
+      List<String> identityFields,
+      ApiMethod.Handler<Map<String, Object>, Object> handler) {
 
     ApiMethod<Map<String, Object>, Object> method =
         new ApiMethod<>(
@@ -534,13 +603,21 @@ public final class ApiRegistry {
             description != null ? description : defaultDescription(name),
             effects,
             requestCodec,
-            new JsonValueCodec(output),
+            responseCodec,
             fields,
             identityFields,
             handler);
     if (methodsByName.putIfAbsent(name, method) != null) {
       throw new IllegalStateException("duplicate API method: " + name);
     }
+  }
+
+  private boolean isReadOnly(
+      ApiMethod<Map<String, Object>, Object> method, Map<String, Object> request) {
+    if (method.effects().readOnly()) return true;
+    return BatchMethod.NAME.equals(method.name())
+        && batchMethod != null
+        && batchMethod.isReadOnly(request);
   }
 
   private boolean allowedDuringAnalysis(
