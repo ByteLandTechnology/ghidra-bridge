@@ -124,6 +124,45 @@ class ProgramServiceUndoRedoTest {
     }
   }
 
+  @Test
+  void supportsNamedTransactionsUndoAndRedoForDynamicProgramHost() throws Exception {
+    try (GhidraTestSupport.ProgramHolder holder =
+        GhidraTestSupport.createX64Program("dynamic-undo-test")) {
+      ProgramDB program = holder.program();
+      Address base = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x00100000L);
+      holder.inTransaction(
+          db ->
+              db.getMemory()
+                  .createInitializedBlock(
+                      "ram_block", base, 0x100, (byte) 0x90, TaskMonitor.DUMMY, false));
+      program.clearUndo();
+
+      GhidraSession session = new GhidraSession(() -> program);
+      try (BridgeServices services = GhidraServiceFactory.create(session, "gui-fallback")) {
+        services
+            .transactionRunner()
+            .run(
+                "comment.create",
+                () -> {
+                  services
+                      .commentService()
+                      .setComment("ram:00100000", CommentResource.Type.PRE, "dynamic comment");
+                  return null;
+                });
+        assertNull(program.getCurrentTransactionInfo());
+        assertEquals(List.of("comment.create"), services.programService().getHistory().undoList());
+
+        ProgramUndoRedoResult undone = services.programService().undo();
+        assertEquals("comment.create", undone.transactionName());
+        assertNull(program.getListing().getComment(CommentType.PRE, base));
+
+        ProgramUndoRedoResult redone = services.programService().redo();
+        assertEquals("comment.create", redone.transactionName());
+        assertEquals("dynamic comment", program.getListing().getComment(CommentType.PRE, base));
+      }
+    }
+  }
+
   private static final class ScriptWithOpenInitialTransaction extends GhidraScript {
     private ScriptWithOpenInitialTransaction(Program program) {
       set(program, TaskMonitor.DUMMY);

@@ -20,7 +20,7 @@ final class SymbolDemangling {
         "symbol.demangle",
         () -> {
       var program = context.currentProgram();
-      var monitor = context.script().getMonitor();
+      var monitor = context.flatApi().getMonitor();
       List<Symbol> candidates = new ArrayList<>();
       var symbols = program.getSymbolTable().getDefinedSymbols();
       while (symbols.hasNext()) {

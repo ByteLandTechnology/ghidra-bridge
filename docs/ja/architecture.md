@@ -70,10 +70,10 @@ modules/domain (サービスインターフェースとデータモデル)
 ### 6. `modules/transport/mcp`
 
 このモジュールは Model Context Protocol を実装します:
-- `McpHttpServer` がプロトコル `2026-07-28` に準拠する Streamable HTTP サーバーを実装します。
-- `McpToolRegistry` が 58 個の公開メソッドを 14 個のドメインツールおよび `ghidra.help` にマッピングします。
+- `McpHttpServer` がプロトコル `2026-07-28` に準拠する Streamable HTTP および SSE サーバーを実装します。
+- `McpToolRegistry` が 58 個の公開メソッドを 14 個のドメインツールおよび `ghidra_help` にマッピングします。
   `interface.get` は公開しません。
-- `ghidra-bridge://contracts/mcp-tools` にてツール規約リソースを提供します。
+- `ghidra-bridge://<tool_prefix>/contracts/mcp-tools` にてツール規約リソースを提供します。
 
 ### 7. `modules/launcher`
 
@@ -98,4 +98,5 @@ modules/domain (サービスインターフェースとデータモデル)
 - Gradle タスク `verifyArchitecture` が全モジュールのパッケージインポートを検査します。
 - `modules/adapter` と `modules/launcher` だけが、名前が `ghidra.` で始まるパッケージをインポートできます。
 - `verifyApiContracts` タスクは構築サンドボックスで契約を生成し、差分がある場合は失敗します。
+- `verifyMcpDocumentation` タスクは `docs/mcp-tools.json`、9 つのガイド、および MCP の Javadoc を検査します。
 - `./gradlew clean verify` を実行して、これらの規則を確認します。

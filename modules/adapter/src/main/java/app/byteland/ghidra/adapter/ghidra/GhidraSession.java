@@ -4,6 +4,7 @@ import app.byteland.ghidra.service.TransactionExecutionException;
 import app.byteland.ghidra.service.program.ProgramHistoryConflictException;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
+import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
@@ -16,6 +17,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Coordinates Ghidra program access, commands, and transaction lifecycles.
@@ -24,17 +28,28 @@ public final class GhidraSession {
   private static final String DEFAULT_TRANSACTION_NAME = "bridge.write";
   private static final String TEMPORARY_TRANSACTION_NAME = "bridge.temporary";
 
-  private final GhidraScript ghidraScript;
+  private final ProgramHost host;
   private final Object executionLock = new Object();
+  private final List<Consumer<Program>> programCloseListeners = new CopyOnWriteArrayList<>();
   private int transactionDepth;
+  private Program pinnedProgram;
 
   public GhidraSession(GhidraScript script) {
-    this.ghidraScript = Objects.requireNonNull(script, "script");
-    endAmbientScriptTransaction();
+    this(ProgramHost.forScript(Objects.requireNonNull(script, "script")));
   }
 
-  public GhidraScript script() {
-    return ghidraScript;
+  public GhidraSession(Supplier<Program> programSupplier) {
+    this(ProgramHost.forProgramSupplier(Objects.requireNonNull(programSupplier, "programSupplier")));
+  }
+
+  public GhidraSession(ProgramHost host) {
+    this.host = Objects.requireNonNull(host, "host");
+  }
+
+  public FlatProgramAPI flatApi() {
+    synchronized (executionLock) {
+      return host.flatApi(pinnedProgram);
+    }
   }
 
   public Program currentProgram() {
@@ -46,36 +61,48 @@ public final class GhidraSession {
   }
 
   public Program currentProgramOrNull() {
-    return ghidraScript.getCurrentProgram();
+    if (Thread.holdsLock(executionLock) && pinnedProgram != null) {
+      return pinnedProgram;
+    }
+    return host.currentProgramOrNull();
+  }
+
+  public void onProgramClosed(Consumer<Program> listener) {
+    programCloseListeners.add(Objects.requireNonNull(listener, "listener"));
+  }
+
+  public void notifyProgramClosed(Program program) {
+    if (program == null) {
+      return;
+    }
+    synchronized (executionLock) {
+      host.releaseProgram(program);
+    }
+    for (Consumer<Program> listener : programCloseListeners) {
+      listener.accept(program);
+    }
   }
 
   public void saveCurrentProgram() {
     synchronized (executionLock) {
-      var monitor = ghidraScript.getMonitor();
-      boolean restoreCancellation = monitor != null && monitor.isCancelled();
-      if (restoreCancellation) {
-        monitor.clearCancelled();
-      }
       try {
-        endAmbientScriptTransaction();
-        ghidraScript.saveProgram(currentProgram());
+        host.saveProgram(currentProgram());
       } catch (Exception error) {
         String detail = error.getMessage();
         if (detail == null || detail.isBlank()) {
           detail = error.getClass().getSimpleName();
         }
         throw new IllegalStateException("Unable to save current program: " + detail, error);
-      } finally {
-        endAmbientScriptTransaction();
-        if (restoreCancellation) {
-          monitor.cancel();
-        }
       }
     }
   }
 
   public Address parseAddress(String rawAddress) {
-    return AddressUtil.parseAddress(ghidraScript, rawAddress);
+    Program program = currentProgramOrNull();
+    if (program != null) {
+      return AddressUtil.parseAddress(program, rawAddress);
+    }
+    return AddressUtil.parseAddress(flatApi(), rawAddress);
   }
 
   public Iterable<Reference> references(Address address, boolean to) {
@@ -116,15 +143,26 @@ public final class GhidraSession {
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
-    return withTransaction(DEFAULT_TRANSACTION_NAME, operation, true);
+    return withTransaction(null, DEFAULT_TRANSACTION_NAME, operation, true);
   }
 
   public <T> T withTransaction(String description, TransactionalOperation<T> operation) {
-    return withTransaction(description, operation, true);
+    return withTransaction(null, description, operation, true);
+  }
+
+  public <T> T withProgramTransaction(Program program, TransactionalOperation<T> operation) {
+    return withTransaction(
+        Objects.requireNonNull(program, "program"), DEFAULT_TRANSACTION_NAME, operation, true);
+  }
+
+  public <T> T withProgramTransaction(
+      Program program, String description, TransactionalOperation<T> operation) {
+    return withTransaction(
+        Objects.requireNonNull(program, "program"), description, operation, true);
   }
 
   public <T> T withTemporaryChanges(TransactionalOperation<T> operation) {
-    return withTransaction(TEMPORARY_TRANSACTION_NAME, operation, false);
+    return withTransaction(null, TEMPORARY_TRANSACTION_NAME, operation, false);
   }
 
   public <T> T withProgramLock(ProgramOperation<T> operation) {
@@ -147,7 +185,7 @@ public final class GhidraSession {
       if (transactionDepth > 0) {
         throw ProgramHistoryConflictException.transactionInProgress();
       }
-      endAmbientScriptTransaction();
+      host.ensureIdle();
       Program program = currentProgram();
       if (program.getCurrentTransactionInfo() != null) {
         throw ProgramHistoryConflictException.transactionInProgress();
@@ -163,21 +201,26 @@ public final class GhidraSession {
   }
 
   private <T> T withTransaction(
-      String description, TransactionalOperation<T> operation, boolean commitChanges) {
+      Program explicitProgram,
+      String description,
+      TransactionalOperation<T> operation,
+      boolean commitChanges) {
     Objects.requireNonNull(operation, "operation");
-    String transactionName =
-        description == null || description.isBlank() ? DEFAULT_TRANSACTION_NAME : description;
+    String transactionName = ProgramHost.normalizeTransactionName(description);
     synchronized (executionLock) {
       if (transactionDepth > 0) {
         if (!commitChanges) {
           throw new IllegalStateException("Temporary changes require an independent transaction");
         }
+        if (explicitProgram != null && pinnedProgram != null && explicitProgram != pinnedProgram) {
+          throw new IllegalStateException("Nested transaction targets a different program");
+        }
         return runOperation(operation);
       }
 
-      endAmbientScriptTransaction();
-      Program program = currentProgramOrNull();
-      int transactionId = program == null ? -1 : program.startTransaction(transactionName);
+      Program targetProgram = host.resolveTransactionProgram(explicitProgram);
+      int transactionId = host.beginTransaction(targetProgram, transactionName);
+      pinnedProgram = targetProgram;
       transactionDepth++;
       boolean commit = false;
       try {
@@ -186,25 +229,21 @@ public final class GhidraSession {
         return result;
       } finally {
         transactionDepth--;
-        if (program != null) {
-          program.endTransaction(transactionId, commit);
-        }
+        pinnedProgram = null;
+        host.finishTransaction(targetProgram, transactionId, commit);
       }
-    }
-  }
-
-  private void endAmbientScriptTransaction() {
-    try {
-      ghidraScript.end(true);
-    } catch (Exception ignored) {
-      // No ambient script transaction is active.
     }
   }
 
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
     synchronized (executionLock) {
-      if (ghidraScript.runCommand(command)) {
+      if (transactionDepth == 0 && host.requiresCommandTransaction()) {
+        if (withTransaction(
+            commandTransactionName(command), () -> host.runCommand(currentProgram(), command))) {
+          return;
+        }
+      } else if (host.runCommand(currentProgramOrNull(), command)) {
         return;
       }
     }
@@ -213,6 +252,11 @@ public final class GhidraSession {
       status = "command failed";
     }
     throw new TransactionExecutionException(failurePrefix + ": " + status);
+  }
+
+  private static String commandTransactionName(Command<Program> command) {
+    String name = command.getName();
+    return name == null || name.isBlank() ? DEFAULT_TRANSACTION_NAME : name;
   }
 
   @FunctionalInterface

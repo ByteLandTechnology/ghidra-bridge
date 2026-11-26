@@ -70,10 +70,10 @@ modules/domain (领域服务接口与数据模型)
 ### 6. `modules/transport/mcp`
 
 该模块实现 Model Context Protocol 传输通道：
-- `McpHttpServer` 实现符合 `2026-07-28` 协议的 Streamable HTTP 服务。
-- `McpToolRegistry` 将 58 个点分方法映射为 14 个领域工具及 `ghidra.help`。
+- `McpHttpServer` 实现符合 `2026-07-28` 协议的 Streamable HTTP 与 SSE 服务。
+- `McpToolRegistry` 将 58 个点分方法映射为 14 个领域工具及 `ghidra_help`。
   它不发布 `interface.get`。
-- 在 `ghidra-bridge://contracts/mcp-tools` 提供静态工具契约资源。
+- 在 `ghidra-bridge://<tool_prefix>/contracts/mcp-tools` 提供工具契约资源。
 
 ### 7. `modules/launcher`
 
@@ -98,4 +98,5 @@ modules/domain (领域服务接口与数据模型)
 - Gradle `verifyArchitecture` 任务扫描并验证所有模块的包引用规则。
 - 只有 `modules/adapter` 与 `modules/launcher` 可以导入名称以 `ghidra.` 开头的包。
 - `verifyApiContracts` 任务在构建沙箱中生成契约，并在发现差异时使构建失败。
+- `verifyMcpDocumentation` 任务检查 `docs/mcp-tools.json`、九份多语言文档与 MCP Javadoc。
 - 运行 `./gradlew clean verify` 以检查这些规则。
