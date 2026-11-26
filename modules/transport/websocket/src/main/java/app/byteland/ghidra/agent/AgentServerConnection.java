@@ -8,12 +8,18 @@ import java.io.UncheckedIOException;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BooleanSupplier;
 
 final class AgentServerConnection implements AgentWebSocketServer.Connection {
   private static final byte[] EMPTY_PAYLOAD = new byte[0];
+  private static final int CLOSE_DRAIN_TIMEOUT_MILLIS = 75;
+  private static final int MAX_CLOSE_DRAIN_BYTES = 128 * 1024;
+  private static final int CLOSE_DRAIN_BUFFER_BYTES = 4096;
 
   private final Socket socket;
   private final InputStream inputStream;
@@ -47,6 +53,14 @@ final class AgentServerConnection implements AgentWebSocketServer.Connection {
 
   @Override
   public void close(int statusCode, String reason) {
+    closeInternal(statusCode, reason, null);
+  }
+
+  void closeFromRunner(int statusCode, String reason, BooleanSupplier continueDrain) {
+    closeInternal(statusCode, reason, Objects.requireNonNull(continueDrain, "continueDrain"));
+  }
+
+  private void closeInternal(int statusCode, String reason, BooleanSupplier continueDrain) {
     if (!state.compareAndSet(State.OPEN, State.CLOSING)) {
       abortCloseInProgress();
       return;
@@ -56,10 +70,12 @@ final class AgentServerConnection implements AgentWebSocketServer.Connection {
     payload.putShort((short) statusCode);
     payload.put(reasonBytes);
     Throwable failure = null;
+    boolean wroteCloseFrame = false;
     if (writeLock.tryLock()) {
       try {
         if (!socketCloseStarted.get()) {
           WebSocketFrames.writeFrame(output, WebSocketFrames.CLOSE_OPCODE, payload.array());
+          wroteCloseFrame = true;
         }
       } catch (IOException | RuntimeException writeFailure) {
         failure = writeFailure;
@@ -67,8 +83,49 @@ final class AgentServerConnection implements AgentWebSocketServer.Connection {
         writeLock.unlock();
       }
     }
+    if (wroteCloseFrame
+        && failure == null
+        && continueDrain != null
+        && continueDrain.getAsBoolean()
+        && !socketCloseStarted.get()) {
+      drainBeforeSocketClose(continueDrain);
+    }
     failure = closeSocketOnce(failure);
     throwCloseFailure(failure);
+  }
+
+  private void drainBeforeSocketClose(BooleanSupplier continueDrain) {
+    try {
+      if (!socket.isClosed() && !socket.isOutputShutdown()) {
+        socket.shutdownOutput();
+      }
+      if (!socket.isClosed() && !socket.isInputShutdown()) {
+        InputStream rawInput = socket.getInputStream();
+        byte[] buffer = new byte[CLOSE_DRAIN_BUFFER_BYTES];
+        int totalRead = 0;
+        long deadlineNanos =
+            System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(CLOSE_DRAIN_TIMEOUT_MILLIS);
+        while (totalRead < MAX_CLOSE_DRAIN_BYTES
+            && continueDrain.getAsBoolean()
+            && !socketCloseStarted.get()
+            && !socket.isClosed()) {
+          long remainingMillis =
+              TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
+          if (remainingMillis <= 0L) {
+            break;
+          }
+          socket.setSoTimeout((int) Math.max(1L, remainingMillis));
+          int step = Math.min(buffer.length, MAX_CLOSE_DRAIN_BYTES - totalRead);
+          int read = rawInput.read(buffer, 0, step);
+          if (read < 0) {
+            break;
+          }
+          totalRead += read;
+        }
+      }
+    } catch (IOException ignored) {
+      // Ignore read or close errors after the server sends the close frame.
+    }
   }
 
   private void abortCloseInProgress() {

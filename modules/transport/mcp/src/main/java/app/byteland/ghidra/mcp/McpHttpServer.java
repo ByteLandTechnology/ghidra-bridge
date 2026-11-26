@@ -59,6 +59,9 @@ public final class McpHttpServer implements AutoCloseable {
   static final Duration DEFAULT_BODY_READ_TIMEOUT = Duration.ofSeconds(10);
   static final Duration DEFAULT_SSE_KEEPALIVE_INTERVAL = Duration.ofSeconds(15);
   private static final int LISTEN_BACKLOG = 256;
+  private static final long UNREAD_CLOSE_GRACE_MILLIS = 350L;
+  private static final long PAYLOAD_TOO_LARGE_CLOSE_GRACE_MILLIS = 350L;
+  private static final long CLOSE_PARK_SLICE_MILLIS = 10L;
   private static final int HTTP_PAYLOAD_TOO_LARGE = 413;
   private static final int JSONRPC_PARSE_ERROR = -32700;
   private static final int JSONRPC_INVALID_REQUEST = -32600;
@@ -1219,8 +1222,22 @@ public final class McpHttpServer implements AutoCloseable {
   }
 
   private void pauseBeforeUnreadClose() {
-    if (!closed.get()) {
-      LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(50));
+    pauseBeforeClose(UNREAD_CLOSE_GRACE_MILLIS);
+  }
+
+  private void pauseBeforeClose(long durationMillis) {
+    long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(durationMillis);
+    while (!closed.get()) {
+      long remainingNanos = deadlineNanos - System.nanoTime();
+      if (remainingNanos <= 0L) {
+        return;
+      }
+      long sliceNanos =
+          Math.min(remainingNanos, TimeUnit.MILLISECONDS.toNanos(CLOSE_PARK_SLICE_MILLIS));
+      LockSupport.parkNanos(sliceNanos);
+      if (Thread.currentThread().isInterrupted()) {
+        return;
+      }
     }
   }
 
@@ -1247,8 +1264,8 @@ public final class McpHttpServer implements AutoCloseable {
     try (OutputStream output = exchange.getResponseBody()) {
       output.write(bytes);
       output.flush();
-      if (statusCode == HTTP_PAYLOAD_TOO_LARGE && !closed.get()) {
-        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(200));
+      if (statusCode == HTTP_PAYLOAD_TOO_LARGE) {
+        pauseBeforeClose(PAYLOAD_TOO_LARGE_CLOSE_GRACE_MILLIS);
       }
     }
   }

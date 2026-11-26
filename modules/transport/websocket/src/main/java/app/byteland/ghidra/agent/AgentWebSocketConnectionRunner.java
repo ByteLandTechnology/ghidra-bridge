@@ -308,11 +308,11 @@ final class AgentWebSocketConnectionRunner {
     }
   }
 
-  private static void closeWith(
+  private void closeWith(
       AgentServerConnection connection, CloseState closeState, int code, String reason) {
     closeState.code = code;
     closeState.reason = reason;
-    connection.close(code, reason);
+    connection.closeFromRunner(code, reason, running::get);
   }
 
   private static Duration requirePositiveDuration(Duration duration, String name) {

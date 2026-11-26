@@ -285,6 +285,42 @@ class AgentWebSocketFrameAndKeepaliveTest {
     }
   }
 
+  @Test
+  void deliversCloseFrameWhenTrailingBytesArriveAfterProtocolErrorAndAbortsDrainOnShutdown()
+      throws Exception {
+    RecordingHandler trailingHandler = new RecordingHandler();
+    try (ServerHandle handle =
+            startServer(trailingHandler, Duration.ofSeconds(5), Duration.ofSeconds(10));
+        RawWebSocketClient client = connectUpgraded(handle.port())) {
+      trailingHandler.awaitOpen();
+      client.writeSingleRawByte(0x80 | WebSocketFrames.PING_OPCODE);
+      client.writeSingleRawByte(0x80 | 126);
+      Thread.sleep(10L);
+      client.writeRawBytes(new byte[132]);
+
+      ServerFrame closeFrame = client.readUntilOpcode(WebSocketFrames.CLOSE_OPCODE);
+      assertEquals(1002, WebSocketFrames.closeStatus(closeFrame.payload()));
+      assertEquals(1002, trailingHandler.awaitCloseCode());
+    }
+
+    RecordingHandler shutdownHandler = new RecordingHandler();
+    ServerHandle handle =
+        startServer(shutdownHandler, Duration.ofSeconds(5), Duration.ofSeconds(10));
+    try (RawWebSocketClient client = connectUpgraded(handle.port())) {
+      shutdownHandler.awaitOpen();
+      client.writeOversizedHeaderOnly(WebSocketFrames.MAX_FRAME_PAYLOAD_BYTES + 1L);
+      ServerFrame closeFrame = client.readUntilOpcode(WebSocketFrames.CLOSE_OPCODE);
+      assertEquals(1009, WebSocketFrames.closeStatus(closeFrame.payload()));
+
+      long closeStartNanos = System.nanoTime();
+      handle.close();
+      long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - closeStartNanos);
+      assertTrue(elapsedMillis < 500L, "Expected fast server close, got " + elapsedMillis + " ms");
+    } finally {
+      handle.close();
+    }
+  }
+
   private static void assertCloseStatusForClientAction(
       int expectedStatus, ClientAction clientAction) throws Exception {
     RecordingHandler handler = new RecordingHandler();
@@ -430,6 +466,11 @@ class AgentWebSocketFrameAndKeepaliveTest {
 
     void writeSingleRawByte(int value) throws IOException {
       output.write(value);
+      output.flush();
+    }
+
+    void writeRawBytes(byte[] bytes) throws IOException {
+      output.write(bytes);
       output.flush();
     }
 
