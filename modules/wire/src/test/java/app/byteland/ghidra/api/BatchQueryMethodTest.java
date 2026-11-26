@@ -255,6 +255,30 @@ class BatchQueryMethodTest {
                         Map.of("id", "s2", "method", "session.get", "arguments", Map.of()))));
     assertEquals(2, ((List<?>) allOrNoneOk.get("items")).size());
     assertEquals(2, programReads.get());
+
+    // prepareDispatch marks batch.query as readOnly and encodes PendingBatchResponse rows.
+    ApiRegistry.PreparedDispatch prepared =
+        registry.prepareDispatch(
+            "batch.query",
+            Map.of(
+                "items",
+                List.of(
+                    Map.of(
+                        "id",
+                        "p3",
+                        "method",
+                        "program.get",
+                        "arguments",
+                        Map.of("projection", Map.of("fields", List.of("name")))))));
+    assertEquals(true, prepared.readOnly());
+    @SuppressWarnings("unchecked")
+    Map<String, Object> encodedPrepared =
+        (Map<String, Object>) prepared.encodeResponse(prepared.execute());
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> preparedItems =
+        (List<Map<String, Object>>) encodedPrepared.get("items");
+    assertEquals(Map.of("name", "sample.bin"), preparedItems.get(0).get("result"));
+    assertEquals(3, programReads.get());
   }
 
   @FunctionalInterface
