@@ -315,6 +315,14 @@ final class CppSymbolPrewarmer {
       return;
     }
 
+    final long syncedTargetMod = targetMod;
+    Boolean stillUnmodified =
+        session.tryCollectForPrewarm(
+            program, () -> program.getModificationNumber() == syncedTargetMod, null);
+    if (!Boolean.TRUE.equals(stillUnmodified)) {
+      return;
+    }
+
     synchronized (stateLock) {
       if (!closed && !atCapacity && program.getModificationNumber() == targetMod) {
         hasSyncedModification = true;

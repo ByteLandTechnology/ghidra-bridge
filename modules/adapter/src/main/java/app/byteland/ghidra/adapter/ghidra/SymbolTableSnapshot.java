@@ -183,20 +183,30 @@ public final class SymbolTableSnapshot {
     if (cancelled.getAsBoolean() || !cursor.finished) {
       return Outcome.ABORTED;
     }
-    if (!session.canCacheSnapshots()) {
-      clearSnapshot.run();
-      return Outcome.SKIPPED;
-    }
-    if (program.getModificationNumber() != expectedMod) {
-      clearSnapshot.run();
-      return Outcome.MODIFIED;
-    }
-    if (!cache.reserveSnapshotBytes(runningBytes, built.size())) {
-      clearSnapshot.run();
-      return Outcome.SKIPPED;
-    }
-    publisher.accept(new SymbolTableSnapshot(program, expectedMod, cursor.singleSpace, built));
-    return Outcome.BUILT;
+    final AddressSpace resolvedSpace = cursor.singleSpace;
+    final long snapshotBytes = runningBytes;
+    return session.tryCollectForPrewarm(
+        program,
+        () -> {
+          if (cancelled.getAsBoolean()) {
+            return Outcome.ABORTED;
+          }
+          if (!session.canCacheSnapshots()) {
+            clearSnapshot.run();
+            return Outcome.SKIPPED;
+          }
+          if (program.getModificationNumber() != expectedMod) {
+            clearSnapshot.run();
+            return Outcome.MODIFIED;
+          }
+          if (!cache.reserveSnapshotBytes(snapshotBytes, built.size())) {
+            clearSnapshot.run();
+            return Outcome.SKIPPED;
+          }
+          publisher.accept(new SymbolTableSnapshot(program, expectedMod, resolvedSpace, built));
+          return Outcome.BUILT;
+        },
+        Outcome.ABORTED);
   }
 
   private static SnapshotBatch collectBatchLocked(
