@@ -84,10 +84,10 @@ public final class ScriptSymbolRenamer {
       String failurePrefix) {
     try {
       if (namespace == null || namespace.isGlobal()) {
-        return context.script().createLabel(address, name, makePrimary, SourceType.USER_DEFINED);
+        return context.flatApi().createLabel(address, name, makePrimary, SourceType.USER_DEFINED);
       }
       return context
-          .script()
+          .flatApi()
           .createLabel(address, name, namespace, makePrimary, SourceType.USER_DEFINED);
     } catch (InvalidInputException ex) {
       throw new IllegalArgumentException(failurePrefix + ": " + ex.getMessage(), ex);

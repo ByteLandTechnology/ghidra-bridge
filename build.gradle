@@ -1,3 +1,13 @@
+import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
+import org.gradle.api.tasks.testing.TestDescriptor
+import org.gradle.api.tasks.testing.TestListener
+import org.gradle.api.tasks.testing.TestOutputEvent
+import org.gradle.api.tasks.testing.TestOutputListener
+import org.gradle.api.tasks.testing.TestResult
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
 plugins {
     id 'java-base'
 }
@@ -37,6 +47,65 @@ subprojects {
     }
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
+        timeout.set(Duration.ofMinutes(5))
+        [
+            'junit.jupiter.execution.timeout.default': '30s',
+            'junit.jupiter.execution.timeout.testable.method.default': '30s',
+            'junit.jupiter.execution.timeout.lifecycle.method.default': '30s',
+            'junit.jupiter.execution.timeout.thread.mode.default': 'SAME_THREAD',
+            'junit.jupiter.execution.timeout.mode': 'disabled_on_debug',
+            'junit.jupiter.execution.timeout.threaddump.enabled': 'true',
+        ].each { String key, String defaultValue ->
+            systemProperty key, providers.systemProperty(key).getOrElse(defaultValue)
+        }
+        testLogging {
+            events TestLogEvent.FAILED
+            exceptionFormat = TestExceptionFormat.FULL
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
+            showStandardStreams = false
+        }
+        def bufferedStdout = new ConcurrentHashMap<Object, StringBuffer>()
+        def bufferedStderr = new ConcurrentHashMap<Object, StringBuffer>()
+        addTestOutputListener({ TestDescriptor descriptor, TestOutputEvent event ->
+            def target = event.destination == TestOutputEvent.Destination.StdErr ? bufferedStderr : bufferedStdout
+            target.computeIfAbsent(descriptor.id) { new StringBuffer() }.append(event.message)
+        } as TestOutputListener)
+        def printBufferedStreamsOnFailure = { TestDescriptor descriptor, TestResult result ->
+            def stdoutText = bufferedStdout.remove(descriptor.id)
+            def stderrText = bufferedStderr.remove(descriptor.id)
+            if (result.resultType == TestResult.ResultType.FAILURE) {
+                def label = descriptor.className ? "${descriptor.className}.${descriptor.name}" : descriptor.name
+                if (stdoutText != null && stdoutText.length() > 0) {
+                    logger.lifecycle("\nStandard output (${label}):\n${stdoutText.toString().stripTrailing()}")
+                }
+                if (stderrText != null && stderrText.length() > 0) {
+                    logger.lifecycle("\nStandard error (${label}):\n${stderrText.toString().stripTrailing()}")
+                }
+            }
+            if (descriptor.parent == null) {
+                bufferedStdout.clear()
+                bufferedStderr.clear()
+            }
+        }
+        addTestListener(new TestListener() {
+            @Override
+            void beforeSuite(TestDescriptor suite) {}
+
+            @Override
+            void afterSuite(TestDescriptor suite, TestResult result) {
+                printBufferedStreamsOnFailure(suite, result)
+            }
+
+            @Override
+            void beforeTest(TestDescriptor testDescriptor) {}
+
+            @Override
+            void afterTest(TestDescriptor testDescriptor, TestResult result) {
+                printBufferedStreamsOnFailure(testDescriptor, result)
+            }
+        })
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
@@ -272,8 +341,16 @@ tasks.register('verifyArchitecture') {
 
 def javaSubprojects = subprojects.findAll { it.path != ':transport' }
 
+tasks.register('verifyMcpDocumentation', JavaExec) {
+    group = 'verification'
+    dependsOn project(':transport:mcp').tasks.named('classes'), 'verifyApiContracts'
+    classpath = project(':transport:mcp').sourceSets.main.runtimeClasspath
+    mainClass = 'app.byteland.ghidra.mcp.McpContractGenerator'
+    args '--verify', rootDir.absolutePath
+}
+
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'check', 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'check', 'verifyApiContracts', 'verifyMcpDocumentation', 'verifyDistribution', 'verifyArchitecture'
     dependsOn javaSubprojects.collect { [it.tasks.named('testClasses'), it.tasks.named('javadoc')] }
 }

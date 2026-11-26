@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * Configuration parameters for the MCP Streamable HTTP server.
  *
  * <p>{@code toolPrefix} is the first part of every tool name. An example is {@code ghidra} in
- * {@code ghidra.program}. Give each server a different prefix. Then one client can connect to
+ * {@code ghidra_program}. Give each server a different prefix. Then one client can connect to
  * several servers without tool name conflicts.
  *
  * @param host listen host address
@@ -255,7 +255,7 @@ public record McpConfig(
 
   /**
    * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores,
-   * or hyphens. A dot is not permitted because it separates the prefix from the domain.
+   * or hyphens. An underscore separates the prefix from the domain, and dots are not permitted.
    *
    * @param prefix candidate tool prefix
    * @return validated tool prefix

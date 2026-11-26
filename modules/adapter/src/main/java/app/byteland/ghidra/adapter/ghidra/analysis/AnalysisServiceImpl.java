@@ -7,7 +7,9 @@ import app.byteland.ghidra.service.analysis.AnalysisService;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.program.model.listing.Program;
 import ghidra.program.util.GhidraProgramUtilities;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -17,11 +19,8 @@ import java.util.concurrent.Executors;
  */
 public final class AnalysisServiceImpl implements AnalysisService {
   private final GhidraSession context;
-  private final Program program;
-  private final AutoAnalysisManager manager;
-  private final ExecutorService executor;
   private final Object lock = new Object();
-  private AnalysisTask currentTask;
+  private final Map<Program, ProgramAnalysisState> states = new IdentityHashMap<>();
   private boolean closed;
 
   /**
@@ -31,29 +30,31 @@ public final class AnalysisServiceImpl implements AnalysisService {
    */
   public AnalysisServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
-    this.program = context.currentProgram();
-    this.manager = AutoAnalysisManager.getAnalysisManager(program);
-    this.executor = Executors.newSingleThreadExecutor(new AnalysisThreadFactory(program.getName()));
   }
 
   @Override
   public AnalysisResource startAnalysis(List<String> analyzers) {
+    Program program = context.currentProgram();
     synchronized (lock) {
-      boolean bridgeRunning = currentTask != null && currentTask.isRunning();
-      switch (AnalysisStatusPolicy.start(closed, bridgeRunning, manager.isAnalyzing())) {
+      if (closed) {
+        throw new IllegalStateException("analysis service is closed");
+      }
+      ProgramAnalysisState state = stateFor(program);
+      boolean bridgeRunning = state.currentTask != null && state.currentTask.isRunning();
+      switch (AnalysisStatusPolicy.start(false, bridgeRunning, state.manager.isAnalyzing())) {
         case REJECT_CLOSED -> throw new IllegalStateException("analysis service is closed");
         case RETURN_BRIDGE -> {
-          return currentTask.snapshot();
+          return state.currentTask.snapshot();
         }
         case RETURN_GHIDRA -> {
-          return globalStatus(AnalysisResource.Status.RUNNING);
+          return globalStatus(program, AnalysisResource.Status.RUNNING);
         }
         case START_BRIDGE -> {
           AnalyzerSelection selection = AnalyzerSelection.from(analyzers);
-          AnalysisTask task = new AnalysisTask(context, manager, selection);
-          executor.execute(task::run);
-          currentTask = task;
-          return currentTask.snapshot();
+          AnalysisTask task = new AnalysisTask(context, program, state.manager, selection);
+          state.executor.execute(task::run);
+          state.currentTask = task;
+          return state.currentTask.snapshot();
         }
       }
       throw new AssertionError("unreachable analysis start decision");
@@ -62,7 +63,12 @@ public final class AnalysisServiceImpl implements AnalysisService {
 
   @Override
   public AnalysisResource getStatus() {
+    Program program = context.currentProgram();
     synchronized (lock) {
+      ProgramAnalysisState state = states.get(program);
+      AutoAnalysisManager manager =
+          state != null ? state.manager : AutoAnalysisManager.getAnalysisManager(program);
+      AnalysisTask currentTask = state != null ? state.currentTask : null;
       boolean bridgeRunning = currentTask != null && currentTask.isRunning();
       boolean ghidraRunning = manager.isAnalyzing();
       return switch (AnalysisStatusPolicy.status(
@@ -70,8 +76,27 @@ public final class AnalysisServiceImpl implements AnalysisService {
         case BRIDGE -> currentTask.snapshot();
         case GHIDRA ->
             globalStatus(
+                program,
                 ghidraRunning ? AnalysisResource.Status.RUNNING : AnalysisResource.Status.IDLE);
       };
+    }
+  }
+
+  /**
+   * Cancels and releases background analysis resources for a closed program.
+   *
+   * @param program closed Ghidra program, or {@code null}
+   */
+  public void releaseProgram(Program program) {
+    if (program == null) {
+      return;
+    }
+    ProgramAnalysisState state;
+    synchronized (lock) {
+      state = states.remove(program);
+    }
+    if (state != null) {
+      stopState(state);
     }
   }
 
@@ -84,20 +109,31 @@ public final class AnalysisServiceImpl implements AnalysisService {
    */
   @Override
   public void close() {
-    AnalysisTask task;
+    List<ProgramAnalysisState> activeStates;
     synchronized (lock) {
       closed = true;
-      task = currentTask;
+      activeStates = List.copyOf(states.values());
+      states.clear();
     }
-    if (task != null) {
-      task.cancel();
+    for (ProgramAnalysisState state : activeStates) {
+      stopState(state);
     }
-    manager.cancelQueuedTasks();
-    ExecutorShutdown.shutdownAndAwait(executor);
-    AnalysisManagerWait.awaitIdle(manager);
   }
 
-  private AnalysisResource globalStatus(AnalysisResource.Status state) {
+  private ProgramAnalysisState stateFor(Program program) {
+    return states.computeIfAbsent(program, ProgramAnalysisState::new);
+  }
+
+  private static void stopState(ProgramAnalysisState state) {
+    if (state.currentTask != null) {
+      state.currentTask.cancel();
+    }
+    state.manager.cancelQueuedTasks();
+    ExecutorShutdown.shutdownAndAwait(state.executor);
+    AnalysisManagerWait.awaitIdle(state.manager);
+  }
+
+  private static AnalysisResource globalStatus(Program program, AnalysisResource.Status state) {
     return new AnalysisResource(
         AnalysisResource.Kind.GHIDRA,
         state,
@@ -106,5 +142,17 @@ public final class AnalysisServiceImpl implements AnalysisService {
         null,
         null,
         null);
+  }
+
+  private static final class ProgramAnalysisState {
+    private final AutoAnalysisManager manager;
+    private final ExecutorService executor;
+    private AnalysisTask currentTask;
+
+    private ProgramAnalysisState(Program program) {
+      this.manager = AutoAnalysisManager.getAnalysisManager(program);
+      this.executor =
+          Executors.newSingleThreadExecutor(new AnalysisThreadFactory(program.getName()));
+    }
   }
 }
