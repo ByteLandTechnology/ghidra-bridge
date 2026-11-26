@@ -75,7 +75,10 @@ public final class McpHttpServer implements AutoCloseable {
       List.of(MCP_PROTOCOL_VERSION, INITIALIZE_PROTOCOL_VERSION, "2025-06-18", "2025-03-26", "2024-11-05");
   private static final int HEADER_MISMATCH = -32020;
   private static final int UNSUPPORTED_PROTOCOL_VERSION = -32022;
-  private static final String MCP_TOOLS_RESOURCE_URI = "ghidra-bridge://contracts/mcp-tools";
+  private static final String LEGACY_MCP_TOOLS_RESOURCE_URI =
+      "ghidra-bridge://contracts/mcp-tools";
+  private static final String SCOPED_RESOURCE_URI_PREFIX = "ghidra-bridge://";
+  private static final String SCOPED_RESOURCE_URI_SUFFIX = "/contracts/mcp-tools";
   private static final String HTTP_GET_METHOD = "GET";
   private static final String HTTP_OPTIONS_METHOD = "OPTIONS";
   private static final String HTTP_POST_METHOD = "POST";
@@ -90,6 +93,7 @@ public final class McpHttpServer implements AutoCloseable {
   private final AgentDispatcher dispatcher;
   private final Consumer<String> requestLogSink;
   private final McpToolRegistry toolRegistry;
+  private final String mcpToolsResourceUri;
   private final String toolContractJson;
   private final HttpServer server;
   private final ExecutorService executor;
@@ -169,6 +173,8 @@ public final class McpHttpServer implements AutoCloseable {
     this.bodyReadTimeoutMillis = bodyReadTimeoutMillis;
     this.sseKeepaliveMillis = sseKeepaliveMillis;
     this.toolRegistry = new McpToolRegistry(dispatcher.methodCatalog(), config.toolPrefix());
+    this.mcpToolsResourceUri =
+        SCOPED_RESOURCE_URI_PREFIX + config.toolPrefix() + SCOPED_RESOURCE_URI_SUFFIX;
     Map<String, Object> toolContract = new LinkedHashMap<>();
     toolContract.put("protocol_version", MCP_PROTOCOL_VERSION);
     toolContract.put("tools", toolRegistry.listTools());
@@ -666,7 +672,7 @@ public final class McpHttpServer implements AutoCloseable {
 
   private Map<String, Object> mcpToolsResource() {
     Map<String, Object> resource = new LinkedHashMap<>();
-    resource.put(URI_FIELD, MCP_TOOLS_RESOURCE_URI);
+    resource.put(URI_FIELD, mcpToolsResourceUri);
     resource.put(NAME_FIELD, "mcp-tools");
     resource.put("title", "Ghidra Bridge MCP tool contract");
     resource.put("description", "The current callable Ghidra Bridge tool catalog and schemas.");
@@ -677,13 +683,17 @@ public final class McpHttpServer implements AutoCloseable {
   private Map<String, Object> readResource(
       Object id, Map<String, Object> params, boolean statelessProtocol) {
     String uri = requireString(params.get(URI_FIELD), URI_FIELD, id);
-    if (!MCP_TOOLS_RESOURCE_URI.equals(uri)) {
+    boolean matchesScoped = mcpToolsResourceUri.equals(uri);
+    boolean matchesLegacyDefault =
+        McpConfig.DEFAULT_TOOL_PREFIX.equals(config.toolPrefix())
+            && LEGACY_MCP_TOOLS_RESOURCE_URI.equals(uri);
+    if (!matchesScoped && !matchesLegacyDefault) {
       throw new JsonRpcError(statelessProtocol ? 400 : 404, id,
           statelessProtocol ? JSONRPC_INVALID_PARAMS : JSONRPC_RESOURCE_NOT_FOUND,
           "Resource not found: " + uri);
     }
     Map<String, Object> content = new LinkedHashMap<>();
-    content.put(URI_FIELD, MCP_TOOLS_RESOURCE_URI);
+    content.put(URI_FIELD, uri);
     content.put("mimeType", "application/json");
     content.put("text", toolContractJson);
     return statelessProtocol

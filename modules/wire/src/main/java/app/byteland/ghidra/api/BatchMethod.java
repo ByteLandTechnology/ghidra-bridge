@@ -300,8 +300,8 @@ final class BatchMethod {
         @SuppressWarnings("unchecked")
         Map<String, Object> arguments = (Map<String, Object>) rawArguments;
         Map<String, Object> decodedArguments = target.decodeRequest(arguments);
-        target.validateProjection(decodedArguments);
-        prepared.add(new PreparedItem(id, target, decodedArguments));
+        Set<String> selectedFields = target.selectProjection(decodedArguments);
+        prepared.add(new PreparedItem(id, target, decodedArguments, selectedFields));
       } catch (ApiException error) {
         Map<String, Object> violation = new LinkedHashMap<>();
         String targetPath = error.error().target();
@@ -365,7 +365,8 @@ final class BatchMethod {
     List<PendingRow> rows = new ArrayList<>();
     for (PreparedItem item : items) {
       try {
-        Object rawResult = runtime.invokeHandler(item.method(), item.request(), true);
+        Object rawResult =
+            runtime.invokeHandler(item.method(), item.request(), item.selectedFields(), true);
         rows.add(PendingRow.success(item, rawResult));
       } catch (Exception error) {
         rows.add(PendingRow.failure(item.id(), error));
@@ -391,8 +392,10 @@ final class BatchMethod {
     List<Map<String, Object>> encoded = new ArrayList<>(items.size());
     for (PreparedItem item : items) {
       try {
-        Object rawResult = runtime.invokeHandler(item.method(), item.request(), false);
-        encoded.add(successRow(item.id(), item.method().encodeResponse(item.request(), rawResult)));
+        Object rawResult =
+            runtime.invokeHandler(item.method(), item.request(), item.selectedFields(), false);
+        encoded.add(
+            successRow(item.id(), item.method().encodeResponse(rawResult, item.selectedFields())));
       } catch (Exception error) {
         throw new BatchRollback(item.id(), error);
       }
@@ -405,7 +408,10 @@ final class BatchMethod {
     for (PreparedItem item : items) {
       try {
         temporary.add(
-            PendingRow.success(item, runtime.invokeHandler(item.method(), item.request(), false)));
+            PendingRow.success(
+                item,
+                runtime.invokeHandler(
+                    item.method(), item.request(), item.selectedFields(), false)));
       } catch (Exception error) {
         throw new BatchRollback(item.id(), error);
       }
@@ -449,7 +455,10 @@ final class BatchMethod {
   }
 
   private record PreparedItem(
-      String id, ApiMethod<Map<String, Object>, Object> method, Map<String, Object> request) {}
+      String id,
+      ApiMethod<Map<String, Object>, Object> method,
+      Map<String, Object> request,
+      Set<String> selectedFields) {}
 
   private record PreparedBatch(
       List<PreparedItem> items,
@@ -500,7 +509,8 @@ final class BatchMethod {
           try {
             encoded.add(
                 successRow(
-                    item.id(), item.method().encodeResponse(item.request(), row.rawResult())));
+                    item.id(),
+                    item.method().encodeResponse(row.rawResult(), item.selectedFields())));
           } catch (Exception error) {
             throw translateBatchRollback(item.id(), error, error);
           }
@@ -508,7 +518,8 @@ final class BatchMethod {
           try {
             encoded.add(
                 successRow(
-                    item.id(), item.method().encodeResponse(item.request(), row.rawResult())));
+                    item.id(),
+                    item.method().encodeResponse(row.rawResult(), item.selectedFields())));
           } catch (Exception error) {
             encoded.add(errorRow(item.id(), error));
           }
@@ -543,6 +554,7 @@ final class BatchMethod {
     Object invokeHandler(
         ApiMethod<Map<String, Object>, Object> method,
         Map<String, Object> request,
+        Set<String> selectedFields,
         boolean ownTransaction)
         throws Exception;
 

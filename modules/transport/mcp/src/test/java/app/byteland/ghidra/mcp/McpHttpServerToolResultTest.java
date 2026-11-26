@@ -222,9 +222,9 @@ class McpHttpServerToolResultTest {
               .build();
       HttpResponse<InputStream> sseStream =
           client.send(sseRequest, HttpResponse.BodyHandlers.ofInputStream());
-      assertEquals(200, sseStream.statusCode());
-
       try (InputStream sseBody = sseStream.body()) {
+        assertEquals(200, sseStream.statusCode());
+
         BlockingQueue<SseEvent> events = new LinkedBlockingQueue<>();
         Thread readerThread =
             new Thread(() -> readSseEvents(sseBody, events), "mcp-sse-test-reader");
@@ -281,7 +281,7 @@ class McpHttpServerToolResultTest {
     try (ServerHarness harness = ServerHarness.start();
         HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
 
-      // 1. tools/list publishes discriminator and default metadata on domain tools.
+      // 1. tools/list publishes compact default metadata and ghidra_help publishes discriminators.
       Map<String, Object> listResp =
           postRawStateless(
               client,
@@ -308,10 +308,33 @@ class McpHttpServerToolResultTest {
               .findFirst()
               .orElseThrow();
       Map<String, Object> memorySchema = (Map<String, Object>) memoryTool.get("inputSchema");
-      assertEquals(Map.of("propertyName", "operation"), memorySchema.get("discriminator"));
+      assertFalse(memorySchema.containsKey("oneOf"));
       Map<String, Object> memoryProps = (Map<String, Object>) memorySchema.get("properties");
-      assertEquals(
-          Map.of(), ((Map<String, Object>) memoryProps.get("params")).get("default"));
+      Map<String, Object> memoryParams = (Map<String, Object>) memoryProps.get("params");
+      assertEquals(Map.of(), memoryParams.get("default"));
+      Map<String, Object> memoryParamProps =
+          (Map<String, Object>) memoryParams.get("properties");
+      assertEquals(256, ((Map<String, Object>) memoryParamProps.get("length")).get("default"));
+      assertEquals("hex", ((Map<String, Object>) memoryParamProps.get("encoding")).get("default"));
+
+      Map<String, Object> helpDomainResp =
+          postStatelessToolCall(
+              client, harness.endpoint(), "help-dt", "ghidra_help", Map.of("domain", "data_type"));
+      Map<String, Object> helpStructured =
+          (Map<String, Object>) resultMap(helpDomainResp).get("structuredContent");
+      List<Map<String, Object>> dtOperations =
+          (List<Map<String, Object>>) helpStructured.get("operations");
+      Map<String, Object> dtCreate =
+          dtOperations.stream()
+              .filter(item -> "create".equals(item.get("name")))
+              .findFirst()
+              .orElseThrow();
+      Map<String, Object> dtCreateSchema = (Map<String, Object>) dtCreate.get("inputSchema");
+      Map<String, Object> dtCreateProps =
+          (Map<String, Object>) dtCreateSchema.get("properties");
+      Map<String, Object> dtResourceSchema =
+          (Map<String, Object>) dtCreateProps.get("resource");
+      assertEquals(Map.of("propertyName", "kind"), dtResourceSchema.get("discriminator"));
 
       // 2. Non-object arguments return HTTP 200 isError=true status=400 target=/arguments (never 500).
       Map<String, Object> nonObjectArgs =

@@ -95,15 +95,14 @@ final class MemoryMethods implements ApiMethodProvider {
         memoryFields,
         List.of(ApiVocabulary.ADDRESS),
         request ->
-            WireValues.resource(
-                registry
-                    .services()
-                    .memoryService()
-                    .readMemoryRange(
-                        text(selector(request), ApiVocabulary.ADDRESS),
-                        integer(request, ApiVocabulary.LENGTH, 256),
-                        byteEncoding(
-                            optionalText(request, ApiVocabulary.ENCODING, ApiVocabulary.HEX)))));
+            registry
+                .services()
+                .memoryService()
+                .readMemoryRange(
+                    text(selector(request), ApiVocabulary.ADDRESS),
+                    integer(request, ApiVocabulary.LENGTH, 256),
+                    byteEncoding(
+                        optionalText(request, ApiVocabulary.ENCODING, ApiVocabulary.HEX))));
     registry.writeResult(
         "memory.write",
         MethodEffects.mutation(true, true),

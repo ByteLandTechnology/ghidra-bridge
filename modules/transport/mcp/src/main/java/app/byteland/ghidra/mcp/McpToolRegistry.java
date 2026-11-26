@@ -5,7 +5,6 @@ import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
 import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.api.WireSchema;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,60 +107,28 @@ final class McpToolRegistry {
             "type", "string",
             "description", "The operation to perform",
             "enum", List.copyOf(operations.keySet())));
-    properties.put(
-        PARAMS_FIELD,
-        WireSchema.withDefault(
-            Map.of("type", "object", "description", "Parameters for the operation"), Map.of()));
+    properties.put(PARAMS_FIELD, McpParamsSchema.build(domain, operations.values()));
 
-    List<Map<String, Object>> branches = new ArrayList<>(operations.size());
-    boolean usesDefinitions = false;
-    for (Map.Entry<String, MethodDescriptor> entry : operations.entrySet()) {
-      String opName = entry.getKey();
-      Map<String, Object> methodSchema = entry.getValue().inputSchema();
-      if (methodSchema.containsKey("$defs")) {
-        usesDefinitions = true;
-      }
-      Map<String, Object> opParamsSchema = withoutDefinitions(methodSchema);
-      boolean paramsRequired = opParamsSchema.containsKey("required");
-      if (!paramsRequired) {
-        opParamsSchema = WireSchema.withDefault(opParamsSchema, Map.of());
-      }
-      Map<String, Map<String, Object>> branchProps = new LinkedHashMap<>();
-      branchProps.put(OPERATION_FIELD, Map.of("type", "string", "const", opName));
-      branchProps.put(PARAMS_FIELD, opParamsSchema);
-      branches.add(
-          paramsRequired
-              ? WireSchema.object(branchProps, OPERATION_FIELD, PARAMS_FIELD)
-              : WireSchema.object(branchProps, OPERATION_FIELD));
-    }
-
-    Map<String, Object> tagged = WireSchema.taggedOneOf(OPERATION_FIELD, branches);
-    Map<String, Object> rawInputSchema = new LinkedHashMap<>();
-    rawInputSchema.put("type", "object");
-    rawInputSchema.put("additionalProperties", false);
-    rawInputSchema.put("properties", properties);
-    rawInputSchema.put("required", List.of(OPERATION_FIELD));
-    rawInputSchema.put("discriminator", tagged.get("discriminator"));
-    rawInputSchema.put("oneOf", tagged.get("oneOf"));
-    Map<String, Object> inputSchema =
-        usesDefinitions
-            ? Collections.unmodifiableMap(WireSchema.withDefinitions(rawInputSchema))
-            : Collections.unmodifiableMap(rawInputSchema);
+    Map<String, Object> inputSchema = new LinkedHashMap<>();
+    inputSchema.put("type", "object");
+    inputSchema.put("properties", Map.copyOf(properties));
+    inputSchema.put("required", List.of(OPERATION_FIELD));
+    inputSchema.put("additionalProperties", false);
 
     String purpose = "listing".equals(domain)
-        ? "for code units, instructions, and flow overrides" : "for " + domain + " data";
+        ? "for code units, data units, instructions, and flow overrides" : "for " + domain + " data";
+    boolean readOnlyHint =
+        operations.values().stream().allMatch(op -> effectFlag(op, "read_only"));
+    boolean destructiveHint =
+        operations.values().stream().anyMatch(op -> effectFlag(op, "destructive"));
+    boolean idempotentHint =
+        operations.values().stream().allMatch(op -> effectFlag(op, "idempotent"));
     return Map.of("name", toolName(domain),
         "description", "Use this tool " + purpose + ". Select an operation: "
             + String.join(", ", operations.keySet()) + ".",
-        "inputSchema", inputSchema,
-        "annotations", Map.of("readOnlyHint", false, "destructiveHint", true,
-            "idempotentHint", false, "openWorldHint", false));
-  }
-
-  private static Map<String, Object> withoutDefinitions(Map<String, Object> schema) {
-    Map<String, Object> copy = new LinkedHashMap<>(schema);
-    copy.remove("$defs");
-    return Collections.unmodifiableMap(copy);
+        "inputSchema", Map.copyOf(inputSchema),
+        "annotations", Map.of("readOnlyHint", readOnlyHint, "destructiveHint", destructiveHint,
+            "idempotentHint", idempotentHint, "openWorldHint", false));
   }
 
   List<Map<String, Object>> listTools() { return listedTools; }
@@ -276,8 +243,11 @@ final class McpToolRegistry {
     }
     Object operationValue = arguments.get(OPERATION_FIELD);
     if (operationValue == null) {
-      return Map.of(
-          "domain", toolName(domain), "operations", List.copyOf(operations.keySet()));
+      List<Map<String, Object>> operationEntries =
+          operations.entrySet().stream()
+              .map(entry -> domainOperationHelp(entry.getKey(), entry.getValue()))
+              .toList();
+      return Map.of("domain", toolName(domain), "operations", operationEntries);
     }
     String rawOperation = operationValue.toString();
     MethodDescriptor descriptor = operations.get(rawOperation);
@@ -290,7 +260,27 @@ final class McpToolRegistry {
     return Map.of("domain", toolName(domain), "operation", rawOperation,
         "method", descriptor.name(), "description", descriptor.description(),
         "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
-        "effects", descriptor.contractValue().get("effects"));
+        "effects", effectsOf(descriptor));
+  }
+
+  private static Map<String, Object> domainOperationHelp(
+      String operationName, MethodDescriptor descriptor) {
+    Map<String, Object> info = new LinkedHashMap<>();
+    info.put("name", operationName);
+    info.put("method", descriptor.name());
+    info.put("description", descriptor.description());
+    info.put("effects", effectsOf(descriptor));
+    info.put("inputSchema", descriptor.inputSchema());
+    return Map.copyOf(info);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> effectsOf(MethodDescriptor descriptor) {
+    return (Map<String, Object>) descriptor.contractValue().get("effects");
+  }
+
+  private static boolean effectFlag(MethodDescriptor descriptor, String key) {
+    return Boolean.TRUE.equals(effectsOf(descriptor).get(key));
   }
 
   private Map<String, Object> validateArgumentsObject(
