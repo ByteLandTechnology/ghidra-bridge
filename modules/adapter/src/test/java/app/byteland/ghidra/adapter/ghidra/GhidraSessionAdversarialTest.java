@@ -201,50 +201,54 @@ class GhidraSessionAdversarialTest {
     int threads = 20;
     int opsPerThread = 100;
     ExecutorService executor = Executors.newFixedThreadPool(threads);
-    CountDownLatch startLatch = new CountDownLatch(1);
-    List<Future<?>> futures = new ArrayList<>();
-    AtomicInteger successfulTransactions = new AtomicInteger(0);
+    try {
+      CountDownLatch startLatch = new CountDownLatch(1);
+      List<Future<?>> futures = new ArrayList<>();
+      AtomicInteger successfulTransactions = new AtomicInteger(0);
 
-    for (int t = 0; t < threads; t++) {
-      final int threadId = t;
-      futures.add(executor.submit(() -> {
-        try {
-          startLatch.await();
-          for (int i = 0; i < opsPerThread; i++) {
-            final int opIndex = i;
-            int mode = (threadId + opIndex) % 4;
-            switch (mode) {
-              case 0 -> {
-                String res = session.withTransaction(() -> "success_" + threadId + "_" + opIndex);
-                assertNotNull(res);
-                successfulTransactions.incrementAndGet();
-              }
-              case 1 -> {
-                assertThrows(IllegalArgumentException.class, () ->
-                    session.withTransaction(() -> { throw new IllegalArgumentException("fail"); }));
-              }
-              case 2 -> {
-                assertThrows(TransactionExecutionException.class, () ->
-                    session.withTransaction(() -> { throw new IOException("io fail"); }));
-              }
-              case 3 -> {
-                var cmd = new TestCommand(true, "ok");
-                session.runCommand(cmd, "run");
+      for (int t = 0; t < threads; t++) {
+        final int threadId = t;
+        futures.add(executor.submit(() -> {
+          try {
+            assertTrue(startLatch.await(10, TimeUnit.SECONDS), "Timed out waiting for startLatch");
+            for (int i = 0; i < opsPerThread; i++) {
+              final int opIndex = i;
+              int mode = (threadId + opIndex) % 4;
+              switch (mode) {
+                case 0 -> {
+                  String res = session.withTransaction(() -> "success_" + threadId + "_" + opIndex);
+                  assertNotNull(res);
+                  successfulTransactions.incrementAndGet();
+                }
+                case 1 -> {
+                  assertThrows(IllegalArgumentException.class, () ->
+                      session.withTransaction(() -> { throw new IllegalArgumentException("fail"); }));
+                }
+                case 2 -> {
+                  assertThrows(TransactionExecutionException.class, () ->
+                      session.withTransaction(() -> { throw new IOException("io fail"); }));
+                }
+                case 3 -> {
+                  var cmd = new TestCommand(true, "ok");
+                  session.runCommand(cmd, "run");
+                }
               }
             }
+          } catch (Exception e) {
+            throw new RuntimeException(e);
           }
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }));
-    }
+        }));
+      }
 
-    startLatch.countDown();
-    for (Future<?> f : futures) {
-      f.get(10, TimeUnit.SECONDS);
+      startLatch.countDown();
+      for (Future<?> f : futures) {
+        f.get(10, TimeUnit.SECONDS);
+      }
+      executor.shutdown();
+      assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+    } finally {
+      executor.shutdownNow();
     }
-    executor.shutdown();
-    assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
 
     // Verify that the session remains operational and unlocked.
     String finalCheck = session.withTemporaryChanges(() -> "verified_operational");

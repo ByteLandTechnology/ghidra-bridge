@@ -19,16 +19,15 @@ import java.util.List;
 import java.util.Objects;
 
 public final class ProgramServiceImpl implements ProgramService {
-  private final Program program;
   private final GhidraSession context;
 
   public ProgramServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
-    this.program = context.currentProgram();
   }
 
   @Override
   public ProgramResource getProgram() {
+    Program program = context.currentProgram();
     return new ProgramResource(
         program.getName(),
         program.getExecutablePath(),
@@ -40,13 +39,13 @@ public final class ProgramServiceImpl implements ProgramService {
         String.valueOf(program.getCompilerSpec().getCompilerSpecID()),
         ProgramTimestamps.createdTimestamp(program),
         ProgramTimestamps.modifiedTimestamp(program),
-        functionCount(),
-        symbolCount());
+        functionCount(program),
+        symbolCount(program));
   }
 
   @Override
   public Page<AddressSpaceResource> getAddressSpaces(int limit, String cursor) {
-    var addressFactory = program.getAddressFactory();
+    var addressFactory = context.currentProgram().getAddressFactory();
     var defaultSpace = addressFactory.getDefaultAddressSpace();
     List<AddressSpaceResource> list = new ArrayList<>();
     for (AddressSpace space : addressFactory.getAddressSpaces()) {
@@ -65,6 +64,7 @@ public final class ProgramServiceImpl implements ProgramService {
 
   @Override
   public ProgramLanguageResource getLanguageInfo() {
+    Program program = context.currentProgram();
     Language language = program.getLanguage();
     CompilerSpec compilerSpec = program.getCompilerSpec();
     if (language == null || compilerSpec == null) {
@@ -110,11 +110,11 @@ public final class ProgramServiceImpl implements ProgramService {
     return AddressSpaceResource.Kind.OTHER;
   }
 
-  private int functionCount() {
+  private static int functionCount(Program program) {
     return program.getFunctionManager().getFunctionCount();
   }
 
-  private int symbolCount() {
+  private static int symbolCount(Program program) {
     return program.getSymbolTable().getNumSymbols();
   }
 }

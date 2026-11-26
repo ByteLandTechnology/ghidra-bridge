@@ -425,13 +425,17 @@ final class ApiSchemaCatalog {
 
   static Map<String, Object> objectSchema(
       Set<String> fields, List<String> identityFields, boolean projectable) {
+    FieldSelection selection = FieldSelection.from(fields);
     Map<String, Map<String, Object>> properties = new LinkedHashMap<>();
-    for (String path : fields) {
-      String root = path.substring(0, path.indexOf('.') < 0 ? path.length() : path.indexOf('.'));
-      properties.putIfAbsent(
-          root, outputFieldSchema(root, projectable && hasDottedChildren(fields, root)));
+    for (Map.Entry<String, FieldSelection> entry : selection.children().entrySet()) {
+      String root = entry.getKey();
+      Map<String, Object> fieldSchema =
+          outputFieldSchema(root, projectable && hasDottedChildren(fields, root));
+      properties.put(root, WireSchema.project(fieldSchema, entry.getValue()));
     }
-    return WireSchema.object(properties, identityFields.toArray(String[]::new));
+    List<String> required =
+        identityFields.stream().filter(selection::containsKey).toList();
+    return WireSchema.object(properties, required.toArray(String[]::new));
   }
 
   private static boolean hasDottedChildren(Set<String> fields, String root) {

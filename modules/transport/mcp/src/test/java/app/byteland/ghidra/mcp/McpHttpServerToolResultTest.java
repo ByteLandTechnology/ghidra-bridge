@@ -2,6 +2,7 @@ package app.byteland.ghidra.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -215,58 +216,62 @@ class McpHttpServerToolResultTest {
       // produces identical content[0].text and structuredContent for success and error calls.
       HttpRequest sseRequest =
           HttpRequest.newBuilder(URI.create(harness.endpoint()))
+              .timeout(Duration.ofSeconds(10))
               .header("Accept", "text/event-stream")
               .GET()
               .build();
       HttpResponse<InputStream> sseStream =
           client.send(sseRequest, HttpResponse.BodyHandlers.ofInputStream());
-      assertEquals(200, sseStream.statusCode());
+      try (InputStream sseBody = sseStream.body()) {
+        assertEquals(200, sseStream.statusCode());
 
-      BlockingQueue<SseEvent> events = new LinkedBlockingQueue<>();
-      Thread readerThread =
-          new Thread(() -> readSseEvents(sseStream.body(), events), "mcp-sse-test-reader");
-      readerThread.setDaemon(true);
-      readerThread.start();
+        BlockingQueue<SseEvent> events = new LinkedBlockingQueue<>();
+        Thread readerThread =
+            new Thread(() -> readSseEvents(sseBody, events), "mcp-sse-test-reader");
+        readerThread.setDaemon(true);
+        readerThread.start();
 
-      SseEvent endpointEvent = events.poll(5, TimeUnit.SECONDS);
-      assertEquals("endpoint", endpointEvent.event());
-      URI sessionUri = URI.create(harness.endpoint()).resolve(endpointEvent.data());
+        SseEvent endpointEvent = events.poll(5, TimeUnit.SECONDS);
+        assertNotNull(endpointEvent, "Timed out waiting for SSE endpoint event");
+        assertEquals("endpoint", endpointEvent.event());
+        URI sessionUri = URI.create(harness.endpoint()).resolve(endpointEvent.data());
 
-      postSseToolCall(
-          client,
-          sessionUri,
-          "sse-decomp",
-          "ghidra_decompilation",
-          Map.of("operation", "get", "params", Map.of("selector", Map.of("entry", "0x100000"))));
-      SseEvent sseDecompMsg = events.poll(5, TimeUnit.SECONDS);
-      assertEquals("message", sseDecompMsg.event());
-      Map<String, Object> decompSse = JsonUtil.parseObject(sseDecompMsg.data());
-      assertDualContentParity(decompSse, false, false);
-      assertEquals(
-          resultMap(decompHttp).get("structuredContent"),
-          resultMap(decompSse).get("structuredContent"));
-      assertEquals(
-          firstContentText(resultMap(decompHttp)), firstContentText(resultMap(decompSse)));
+        postSseToolCall(
+            client,
+            sessionUri,
+            "sse-decomp",
+            "ghidra_decompilation",
+            Map.of("operation", "get", "params", Map.of("selector", Map.of("entry", "0x100000"))));
+        SseEvent sseDecompMsg = events.poll(5, TimeUnit.SECONDS);
+        assertNotNull(sseDecompMsg, "Timed out waiting for SSE decompilation message");
+        assertEquals("message", sseDecompMsg.event());
+        Map<String, Object> decompSse = JsonUtil.parseObject(sseDecompMsg.data());
+        assertDualContentParity(decompSse, false, false);
+        assertEquals(
+            resultMap(decompHttp).get("structuredContent"),
+            resultMap(decompSse).get("structuredContent"));
+        assertEquals(
+            firstContentText(resultMap(decompHttp)), firstContentText(resultMap(decompSse)));
 
-      postSseToolCall(
-          client,
-          sessionUri,
-          "sse-err",
-          "ghidra_memory",
-          Map.of(
-              "operation",
-              "read",
-              "params",
-              Map.of("selector", Map.of("address", "ram:deadbeef"), "length", 4)));
-      SseEvent sseErrMsg = events.poll(5, TimeUnit.SECONDS);
-      assertEquals("message", sseErrMsg.event());
-      Map<String, Object> errorSse = JsonUtil.parseObject(sseErrMsg.data());
-      assertDualContentParity(errorSse, true, false);
-      assertEquals(
-          resultMap(errorHttp).get("structuredContent"),
-          resultMap(errorSse).get("structuredContent"));
-
-      sseStream.body().close();
+        postSseToolCall(
+            client,
+            sessionUri,
+            "sse-err",
+            "ghidra_memory",
+            Map.of(
+                "operation",
+                "read",
+                "params",
+                Map.of("selector", Map.of("address", "ram:deadbeef"), "length", 4)));
+        SseEvent sseErrMsg = events.poll(5, TimeUnit.SECONDS);
+        assertNotNull(sseErrMsg, "Timed out waiting for SSE error message");
+        assertEquals("message", sseErrMsg.event());
+        Map<String, Object> errorSse = JsonUtil.parseObject(sseErrMsg.data());
+        assertDualContentParity(errorSse, true, false);
+        assertEquals(
+            resultMap(errorHttp).get("structuredContent"),
+            resultMap(errorSse).get("structuredContent"));
+      }
     }
   }
 
@@ -314,6 +319,7 @@ class McpHttpServerToolResultTest {
 
     HttpRequest request =
         HttpRequest.newBuilder(URI.create(endpoint))
+            .timeout(Duration.ofSeconds(10))
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2026-07-28")
             .header("Mcp-Method", "tools/call")
@@ -336,6 +342,7 @@ class McpHttpServerToolResultTest {
 
     HttpRequest request =
         HttpRequest.newBuilder(sessionUri)
+            .timeout(Duration.ofSeconds(10))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(JsonUtil.toJson(requestBody)))
             .build();
