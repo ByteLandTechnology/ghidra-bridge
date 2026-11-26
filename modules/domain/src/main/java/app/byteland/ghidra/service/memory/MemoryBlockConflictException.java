@@ -1,6 +1,7 @@
 package app.byteland.ghidra.service.memory;
 
 import app.byteland.ghidra.service.DomainException;
+import java.io.Serial;
 import java.util.Objects;
 
 /**
@@ -8,6 +9,7 @@ import java.util.Objects;
  */
 public final class MemoryBlockConflictException extends RuntimeException
     implements DomainException {
+  @Serial
   private static final long serialVersionUID = 1L;
   private final String errorCode;
   private final String errorTarget;

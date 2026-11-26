@@ -5,11 +5,20 @@ import ghidra.app.decompiler.DecompileOptions;
 import ghidra.program.model.listing.Program;
 
 final class DecompilerPoolFactory {
+  static final int MIN_POOL_SIZE = 2;
+  static final int MAX_POOL_SIZE = 4;
+
   private DecompilerPoolFactory() {}
 
   static LeasePool<DecompInterface> create(Program program) {
     return new LeasePool<>(
-        1, () -> createDecompiler(program), DecompilerPoolFactory::destroyDecompiler);
+        poolSize(Runtime.getRuntime().availableProcessors()),
+        () -> createDecompiler(program),
+        DecompilerPoolFactory::destroyDecompiler);
+  }
+
+  static int poolSize(int availableProcessors) {
+    return Math.clamp(availableProcessors, MIN_POOL_SIZE, MAX_POOL_SIZE);
   }
 
   private static DecompInterface createDecompiler(Program program) {

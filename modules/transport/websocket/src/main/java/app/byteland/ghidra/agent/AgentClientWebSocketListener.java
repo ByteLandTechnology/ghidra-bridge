@@ -69,10 +69,11 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
     resetBuffer();
     try {
       messageHandler.handleMessage(channelRef.get(), message);
-    } catch (RuntimeException failure) {
+    } catch (AgentClientChannels.ChannelSendException failure) {
       // The reply did not transmit, so the connection is lost.
-      // An aborted WebSocket calls neither onClose nor onError. Thus, end the session here.
+      // Abort the WebSocket so HttpClient.close does not block.
       AgentClient.logTransportError("WebSocket client message failed", failure);
+      abortQuietly(webSocket);
       disconnected();
       return null;
     }
@@ -99,6 +100,7 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
   @Override
   public void onError(WebSocket webSocket, Throwable error) {
     AgentClient.logTransportError("WebSocket client connection error", error);
+    abortQuietly(webSocket);
     disconnected();
   }
 
@@ -124,6 +126,9 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
   }
 
   private static void abortQuietly(WebSocket webSocket) {
+    if (webSocket == null) {
+      return;
+    }
     try {
       webSocket.abort();
     } catch (RuntimeException ignored) {

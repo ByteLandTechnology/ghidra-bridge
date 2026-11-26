@@ -1,12 +1,14 @@
 package app.byteland.ghidra.service.program;
 
 import app.byteland.ghidra.service.DomainException;
+import java.io.Serial;
 import java.util.Objects;
 
 /**
  * Reports a conflict when a program mutation cannot complete.
  */
 public final class ProgramConflictException extends RuntimeException implements DomainException {
+  @Serial
   private static final long serialVersionUID = 1L;
   private final String errorCode;
   private final String errorTarget;
