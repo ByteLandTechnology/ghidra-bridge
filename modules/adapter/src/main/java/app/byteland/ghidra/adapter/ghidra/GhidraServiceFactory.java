@@ -16,10 +16,8 @@ import app.byteland.ghidra.adapter.ghidra.symbol.SymbolServiceImpl;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
-import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeService;
-import app.byteland.ghidra.service.decompilation.DecompilationService;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
 import app.byteland.ghidra.service.listing.ListingService;
@@ -45,16 +43,34 @@ public final class GhidraServiceFactory {
   public static BridgeServices create(GhidraScript script) {
     Objects.requireNonNull(script, "script");
     GhidraSession context = new GhidraSession(script);
-    DecompilerPool decompilerPool = DecompilerPool.create(context.currentProgram());
+    return create(context, context.currentProgram().getName());
+  }
+
+  /**
+   * Creates a service bundle for a dynamic or script GhidraSession.
+   *
+   * @param context active GhidraSession
+   * @param fallbackProgramName name used when no program is open yet
+   * @return bridge services instance
+   */
+  public static BridgeServices create(GhidraSession context, String fallbackProgramName) {
+    Objects.requireNonNull(context, "context");
+    String fallback =
+        fallbackProgramName == null || fallbackProgramName.isBlank()
+            ? "ghidra-bridge"
+            : fallbackProgramName;
+    DecompilerPool decompilerPool = DecompilerPool.forSession(context);
 
     ProgramService programService = new ProgramServiceImpl(context);
     FunctionService functionService = new FunctionServiceImpl(context, decompilerPool);
     GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
     MemoryService memoryService = new MemoryServiceImpl(context);
     ListingService listingService = new ListingServiceImpl(context);
-    DecompilationService decompilationService =
+    DecompilationServiceImpl decompilationService =
         DecompilationServiceImpl.withPool(context, decompilerPool);
-    AnalysisService analysisService = new AnalysisServiceImpl(context);
+    AnalysisServiceImpl analysisService = new AnalysisServiceImpl(context);
+    context.onProgramClosed(decompilationService::releaseProgram);
+    context.onProgramClosed(analysisService::releaseProgram);
     SymbolService symbolService = new SymbolServiceImpl(context);
     ReferenceService referenceService = new ReferenceServiceImpl(context);
     CommentService commentService = new CommentServiceImpl(context);
@@ -80,6 +96,10 @@ public final class GhidraServiceFactory {
             return context.withTransaction(operation::execute);
           }
         },
-        context.currentProgram().getName());
+        fallback,
+        () -> {
+          var program = context.currentProgramOrNull();
+          return program == null ? fallback : program.getName();
+        });
   }
 }

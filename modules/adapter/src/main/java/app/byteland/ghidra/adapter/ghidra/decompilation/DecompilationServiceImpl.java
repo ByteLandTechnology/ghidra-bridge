@@ -24,7 +24,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
 
   public DecompilationServiceImpl(GhidraSession context) {
     this(
-        DecompilerPool.create(Objects.requireNonNull(context, "context").currentProgram()),
+        DecompilerPool.forSession(Objects.requireNonNull(context, "context")),
         context);
   }
 
@@ -63,11 +63,16 @@ public final class DecompilationServiceImpl implements DecompilationService {
     Function function =
         program != null
             ? program.getListing().getFunctionAt(entry)
-            : context.script().getFunctionAt(entry);
+            : context.flatApi().getFunctionAt(entry);
     if (function == null) {
       throw new NoSuchElementException("function not found");
     }
     return decompile(function, timeout, format, includeComments);
+  }
+
+  /** Closes and removes the decompiler pool for a closed program. */
+  public void releaseProgram(Program program) {
+    decompilerPool.releaseProgram(program);
   }
 
   @Override

@@ -1,5 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra.decompilation;
 
+import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
@@ -9,16 +10,21 @@ import ghidra.program.model.listing.Program;
 import ghidra.program.model.pcode.HighFunction;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Shares a bounded pool of {@link DecompInterface} objects across session services. */
+/** Shares bounded {@link DecompInterface} pools across session services. */
 public final class DecompilerPool implements AutoCloseable {
-  private final LeasePool<DecompInterface> pool;
+  private final LeasePool<DecompInterface> injectedPool;
   private final Supplier<Program> fallbackProgram;
+  private final Object poolLock = new Object();
+  private final Map<Program, LeasePool<DecompInterface>> programPools = new IdentityHashMap<>();
+  private boolean closed;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
   private final Map<DecompInterface, CacheState> cacheStates =
@@ -30,7 +36,12 @@ public final class DecompilerPool implements AutoCloseable {
   }
 
   DecompilerPool(LeasePool<DecompInterface> pool, Supplier<Program> fallbackProgram) {
-    this.pool = Objects.requireNonNull(pool, "pool");
+    this.injectedPool = Objects.requireNonNull(pool, "pool");
+    this.fallbackProgram = Objects.requireNonNull(fallbackProgram, "fallbackProgram");
+  }
+
+  private DecompilerPool(Supplier<Program> fallbackProgram) {
+    this.injectedPool = null;
     this.fallbackProgram = Objects.requireNonNull(fallbackProgram, "fallbackProgram");
   }
 
@@ -40,9 +51,16 @@ public final class DecompilerPool implements AutoCloseable {
     return new DecompilerPool(DecompilerPoolFactory.create(program), () -> program);
   }
 
+  /** Creates a decompiler pool that keeps one bounded pool for each open program. */
+  public static DecompilerPool forSession(GhidraSession context) {
+    Objects.requireNonNull(context, "context");
+    return new DecompilerPool(context::currentProgramOrNull);
+  }
+
   /** Decompiles {@code function} with a bounded timeout and comment display mode. */
   public DecompileResults decompile(Function function, int timeoutMs, boolean includeComments) {
     Objects.requireNonNull(function, "function");
+    LeasePool<DecompInterface> pool = poolFor(function.getProgram());
     try (LeasePool.Lease<DecompInterface> lease = pool.acquire()) {
       int timeoutSeconds = GhidraTimeout.secondsForMilliseconds(timeoutMs);
       DecompInterface decompiler = lease.value();
@@ -67,9 +85,55 @@ public final class DecompilerPool implements AutoCloseable {
     return results != null && results.decompileCompleted() ? results.getHighFunction() : null;
   }
 
+  /** Closes and removes the decompiler pool for a closed program. */
+  public void releaseProgram(Program program) {
+    if (program == null) {
+      return;
+    }
+    LeasePool<DecompInterface> pool;
+    synchronized (poolLock) {
+      pool = programPools.remove(program);
+    }
+    if (pool != null) {
+      pool.close();
+    }
+  }
+
   @Override
   public void close() {
-    pool.close();
+    List<LeasePool<DecompInterface>> pools;
+    synchronized (poolLock) {
+      closed = true;
+      pools = List.copyOf(programPools.values());
+      programPools.clear();
+    }
+    if (injectedPool != null) {
+      injectedPool.close();
+    }
+    for (LeasePool<DecompInterface> pool : pools) {
+      pool.close();
+    }
+  }
+
+  private LeasePool<DecompInterface> poolFor(Program program) {
+    if (injectedPool != null) {
+      synchronized (poolLock) {
+        if (closed) {
+          throw new IllegalStateException("decompilation service is closed");
+        }
+        return injectedPool;
+      }
+    }
+    Program target = program != null ? program : fallbackProgram.get();
+    if (target == null) {
+      throw new IllegalStateException("No current program is open in Ghidra");
+    }
+    synchronized (poolLock) {
+      if (closed) {
+        throw new IllegalStateException("decompilation service is closed");
+      }
+      return programPools.computeIfAbsent(target, DecompilerPoolFactory::create);
+    }
   }
 
   /** Sends display options only when the comment mode of the pooled decompiler changes. */

@@ -71,4 +71,29 @@ class DecompilerPoolTest {
     pool.close();
     assertEquals(1, destroyed.get());
   }
+
+  @Test
+  void closedPoolRejectsAcquireAndIgnoresNullProgramRelease() {
+    DecompilerPool pool =
+        new DecompilerPool(
+            1,
+            DecompInterface::new,
+            decompiler -> {});
+    Function function =
+        (Function)
+            Proxy.newProxyInstance(
+                Function.class.getClassLoader(),
+                new Class<?>[] {Function.class},
+                (proxy, method, args) -> {
+                  if (method.getName().equals("getProgram")) {
+                    return null;
+                  }
+                  throw new AssertionError("Unexpected Function." + method.getName());
+                });
+
+    pool.releaseProgram(null);
+    pool.close();
+    org.junit.jupiter.api.Assertions.assertThrows(
+        IllegalStateException.class, () -> pool.decompile(function, 1_000, false));
+  }
 }
