@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
@@ -27,6 +26,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Proxy;
 import java.net.BindException;
 import java.net.InetAddress;
@@ -41,6 +41,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,6 +92,9 @@ class McpHttpServerOriginTest {
 
   @AfterEach
   void tearDown() {
+    if (client != null) {
+      client.close();
+    }
     if (server != null) {
       server.close();
     }
@@ -101,7 +106,7 @@ class McpHttpServerOriginTest {
   @Test
   void rejectsUntrustedCrossOriginPreflightAndToolCallWithoutCorsHeaders() throws Exception {
     HttpRequest preflightReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", "https://untrusted.example")
             .header("Access-Control-Request-Method", "POST")
             .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
@@ -114,7 +119,7 @@ class McpHttpServerOriginTest {
     assertEquals("Forbidden origin", preflightResp.body());
 
     HttpRequest postReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", "https://untrusted.example")
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2026-07-28")
@@ -132,7 +137,7 @@ class McpHttpServerOriginTest {
   @Test
   void rejectsCrossOriginGetSseAndHeadRequestsWithoutCorsHeaders() throws Exception {
     HttpRequest getReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", "https://untrusted.example")
             .header("Accept", "text/event-stream")
             .GET()
@@ -143,7 +148,7 @@ class McpHttpServerOriginTest {
     assertEquals("Forbidden origin", getResp.body());
 
     HttpRequest headReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", "https://untrusted.example")
             .method("HEAD", HttpRequest.BodyPublishers.noBody())
             .build();
@@ -192,7 +197,7 @@ class McpHttpServerOriginTest {
       })
   void rejectsDisallowedAndMalformedOrigins(String badOrigin) throws Exception {
     HttpRequest postReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", badOrigin)
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2026-07-28")
@@ -209,7 +214,7 @@ class McpHttpServerOriginTest {
   @Test
   void rejectsMultipleOriginHeaderLines() throws Exception {
     HttpRequest twoOriginsMixed =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", "http://127.0.0.1:8766")
             .header("Origin", "https://untrusted.example")
             .header("Content-Type", "application/json")
@@ -224,7 +229,7 @@ class McpHttpServerOriginTest {
     assertNoCorsHeaders(mixedResp);
 
     HttpRequest twoOriginsLoopback =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", "http://localhost:3000")
             .header("Origin", "http://127.0.0.1:8766")
             .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
@@ -239,7 +244,7 @@ class McpHttpServerOriginTest {
   @Test
   void allowsRequestsWithoutOriginAndDoesNotEmitWildcardAllowOrigin() throws Exception {
     HttpRequest postReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2026-07-28")
             .header("Mcp-Method", "tools/call")
@@ -253,7 +258,7 @@ class McpHttpServerOriginTest {
     assertTrue(postResp.body().contains("sample.bin"));
 
     HttpRequest headReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .method("HEAD", HttpRequest.BodyPublishers.noBody())
             .build();
     HttpResponse<String> headResp = client.send(headReq, HttpResponse.BodyHandlers.ofString());
@@ -277,7 +282,7 @@ class McpHttpServerOriginTest {
       })
   void allowsLoopbackOriginsAcrossPreflightPostAndSse(String allowedOrigin) throws Exception {
     HttpRequest preflightReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", allowedOrigin)
             .header("Access-Control-Request-Method", "POST")
             .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
@@ -291,7 +296,7 @@ class McpHttpServerOriginTest {
     assertEquals("Origin", preflightResp.headers().firstValue("Vary").orElse(null));
 
     HttpRequest postReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", allowedOrigin)
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2026-07-28")
@@ -309,20 +314,30 @@ class McpHttpServerOriginTest {
   @Test
   void allowsLoopbackGetSseStreamWithValidatedOrigin() throws Exception {
     HttpRequest getReq =
-        HttpRequest.newBuilder(endpoint)
+        requestBuilder(endpoint)
             .header("Origin", "http://localhost:3000")
             .header("Accept", "text/event-stream")
             .GET()
             .build();
     HttpResponse<InputStream> resp = client.send(getReq, HttpResponse.BodyHandlers.ofInputStream());
-    try (InputStream body = resp.body();
-        BufferedReader reader =
-            new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
+    try (InputStream body = resp.body()) {
       assertEquals(200, resp.statusCode());
       assertEquals(
           "http://localhost:3000",
           resp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
-      String eventLine = reader.readLine();
+      BufferedReader reader =
+          new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8));
+      String eventLine =
+          CompletableFuture.supplyAsync(
+                  () -> {
+                    try {
+                      return reader.readLine();
+                    } catch (IOException e) {
+                      throw new UncheckedIOException(e);
+                    }
+                  },
+                  runnable -> Thread.ofVirtual().name("mcp-origin-sse-reader").start(runnable))
+              .get(5, TimeUnit.SECONDS);
       assertEquals("event: endpoint", eventLine);
     }
   }
@@ -382,7 +397,7 @@ class McpHttpServerOriginTest {
       String matchingOrigin = "http://" + nonLoopbackHost + ":" + customPort;
 
       HttpRequest allowedPreflight =
-          HttpRequest.newBuilder(customEndpoint)
+          requestBuilder(customEndpoint)
               .header("Origin", matchingOrigin)
               .header("Access-Control-Request-Method", "POST")
               .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
@@ -395,7 +410,7 @@ class McpHttpServerOriginTest {
           preflightResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
 
       HttpRequest allowedPost =
-          HttpRequest.newBuilder(customEndpoint)
+          requestBuilder(customEndpoint)
               .header("Origin", matchingOrigin)
               .header("Authorization", "Bearer secret-token")
               .header("Content-Type", "application/json")
@@ -412,7 +427,7 @@ class McpHttpServerOriginTest {
           postResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
 
       HttpRequest untrustedPostWithToken =
-          HttpRequest.newBuilder(customEndpoint)
+          requestBuilder(customEndpoint)
               .header("Origin", "https://untrusted.example")
               .header("Authorization", "Bearer secret-token")
               .header("Content-Type", "application/json")
@@ -444,6 +459,10 @@ class McpHttpServerOriginTest {
       }
     }
     return null;
+  }
+
+  private static HttpRequest.Builder requestBuilder(URI uri) {
+    return HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10));
   }
 
   private static void assertNoCorsHeaders(HttpResponse<?> response) {
@@ -523,9 +542,7 @@ class McpHttpServerOriginTest {
             unused(DataTypeService.class),
             transactions,
             "sample.bin");
-    AgentConfig agentConfig =
-        new AgentConfig("ws://127.0.0.1:19999/ws/agent", null, null, null, null, "test-session", null);
-    return new AgentDispatcher(services, agentConfig);
+    return new AgentDispatcher(services, "test-session");
   }
 
   private interface Invocation {

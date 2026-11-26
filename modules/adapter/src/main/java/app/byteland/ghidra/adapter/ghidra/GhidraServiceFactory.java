@@ -44,14 +44,32 @@ public final class GhidraServiceFactory {
   public static BridgeServices create(GhidraScript script) {
     Objects.requireNonNull(script, "script");
     GhidraSession context = new GhidraSession(script);
+    return create(context, context.currentProgram().getName());
+  }
+
+  /**
+   * Creates a service bundle for a dynamic or script GhidraSession.
+   *
+   * @param context active GhidraSession
+   * @param fallbackProgramName name used when no program is open yet
+   * @return bridge services instance
+   */
+  public static BridgeServices create(GhidraSession context, String fallbackProgramName) {
+    Objects.requireNonNull(context, "context");
+    String fallback =
+        fallbackProgramName == null || fallbackProgramName.isBlank()
+            ? "ghidra-bridge"
+            : fallbackProgramName;
 
     ProgramService programService = new ProgramServiceImpl(context);
     FunctionService functionService = new FunctionServiceImpl(context);
     GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
     MemoryService memoryService = new MemoryServiceImpl(context);
     ListingService listingService = new ListingServiceImpl(context);
-    DecompilationService decompilationService = new DecompilationServiceImpl(context);
-    AnalysisService analysisService = new AnalysisServiceImpl(context);
+    DecompilationServiceImpl decompilationService = new DecompilationServiceImpl(context);
+    AnalysisServiceImpl analysisService = new AnalysisServiceImpl(context);
+    context.onProgramClosed(decompilationService::releaseProgram);
+    context.onProgramClosed(analysisService::releaseProgram);
     SymbolService symbolService = new SymbolServiceImpl(context);
     ReferenceService referenceService = new ReferenceServiceImpl(context);
     CommentService commentService = new CommentServiceImpl(context);
@@ -77,6 +95,10 @@ public final class GhidraServiceFactory {
             return context.withTransaction(operation::execute);
           }
         },
-        context.currentProgram().getName());
+        fallback,
+        () -> {
+          var program = context.currentProgramOrNull();
+          return program == null ? fallback : program.getName();
+        });
   }
 }

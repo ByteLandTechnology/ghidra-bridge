@@ -101,7 +101,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `session_id` | 程序名 | 当前活跃会话的唯一标识字符串。 |
 | `token` | 随机生成 (WS 服务端) / *(无)* | Bearer 认证所需的共享密钥 Token。`Bridge.java` 在交互式服务端模式下未指定该参数时会自动生成 256 位随机安全会话 Token。 |
 | `ws_url` | *(无)* | 出站客户端模式中的远程 WebSocket URL。 |
-| `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra.program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
+| `tool_prefix` | `ghidra` | 仅限 MCP。所有工具名的前缀，例如 `ghidra_program` 中的 `ghidra`。同一客户端接入多个服务端时，为每个服务端设置不同的值。 |
 | `allowed_origins` | 回环与 `host` | 仅限 MCP。以逗号分隔的允许浏览器来源列表（`scheme://host[:port]`），或设为 `none` 以拒绝所有 `Origin` 头部；优先级高于 `GHIDRA_MCP_ALLOWED_ORIGINS`，包含非回环来源时必须配置 `token`。 |
 | `jar` | *(自动)* | 当 `ghidra-bridge.jar` 不在脚本文件旁边时使用的路径。 |
 | `exit_deadline_sec` | *(无)* | 仅出站模式。会话结束后若 Ghidra 在该秒数内仍未退出，则强制停止 JVM。活动保存会先完成。仅用于由宿主启动的 headless Ghidra。 |
@@ -133,16 +133,16 @@ WebSocket 采用标准的 JSON-RPC 2.0 格式进行请求交互：
 
 ### Model Context Protocol (MCP)
 
-MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映射为 15 个工具：
-- `ghidra.help`：发现领域、列出操作或查看操作 Schema。
-- 14 个领域工具：`ghidra.program`、`ghidra.memory`、`ghidra.function` 和其他领域工具。
+MCP 通过 Streamable HTTP 与 SSE 将除 `interface.get` 以外的相同操作映射为 15 个工具：
+- `ghidra_help`：发现领域、列出带 Schema 的操作或查看单个操作。
+- 14 个领域工具：`ghidra_program`、`ghidra_memory`、`ghidra_function` 和其他领域工具。
 
 使用操作名及其参数调用领域工具。
-例如，`program.get` 方法对应 `ghidra.program` 的 `get` 操作：
+例如，`program.get` 方法对应 `ghidra_program` 的 `get` 操作：
 
 ```json
 {
-  "name": "ghidra.program",
+  "name": "ghidra_program",
   "arguments": {
     "operation": "get",
     "params": {}
@@ -151,10 +151,10 @@ MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映
 ```
 
 `2026-07-28` 请求还必须携带 MCP 元数据与头部。
-服务端支持版本为 `2025-06-18` 和 `2025-11-25` 的 `initialize` 客户端。
+服务端支持版本为 `2025-06-18` 和 `2025-11-25` 的 `initialize` 客户端，并在 `GET` 上支持旧式 SSE。
 详见[协议规范](docs/zh/protocol.md)。
 
-完整的 MCP 工具 Schema 亦可通过资源 `ghidra-bridge://contracts/mcp-tools` 获取。
+完整的 MCP 工具 Schema 亦可通过资源 `ghidra-bridge://ghidra/contracts/mcp-tools` 获取。
 
 ## 文档索引
 
@@ -176,6 +176,8 @@ MCP 通过 Streamable HTTP 协议将除 `interface.get` 以外的相同操作映
 ```
 
 `verify` 任务将严格检查：
+- 所有 Java 模块的 JUnit 测试。
 - 架构隔离规则检查。
 - 生成的 API 契约无任何偏移漂移。
+- MCP 工具文档一致性。
 - 生成脚本的构建与编译。
