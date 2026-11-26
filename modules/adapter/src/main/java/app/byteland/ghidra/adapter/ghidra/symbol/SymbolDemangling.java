@@ -28,7 +28,7 @@ final class SymbolDemangling {
     return context.withTransaction(
         () -> {
           var program = context.currentProgram();
-          var monitor = context.script().getMonitor();
+          var monitor = context.flatApi().getMonitor();
           List<Symbol> candidates = new ArrayList<>();
           var symbols = program.getSymbolTable().getDefinedSymbols();
           while (symbols.hasNext()) {
@@ -68,7 +68,7 @@ final class SymbolDemangling {
   }
 
   private static void warmMissingOutsideLock(GhidraSession context, Program program) {
-    TaskMonitor monitor = context.script().getMonitor();
+    TaskMonitor monitor = context.flatApi().getMonitor();
     List<WarmTarget> targets = new ArrayList<>();
     var symbols = program.getSymbolTable().getDefinedSymbols();
     while (symbols.hasNext()) {

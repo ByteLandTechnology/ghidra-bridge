@@ -15,10 +15,8 @@ import app.byteland.ghidra.adapter.ghidra.symbol.SymbolServiceImpl;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
-import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeService;
-import app.byteland.ghidra.service.decompilation.DecompilationService;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
 import app.byteland.ghidra.service.listing.ListingService;
@@ -30,7 +28,7 @@ import ghidra.app.script.GhidraScript;
 import java.util.Objects;
 
 /**
- * Creates bridge service implementations for a Ghidra script session.
+ * Creates bridge service implementations for a Ghidra script or GUI session.
  */
 public final class GhidraServiceFactory {
   private GhidraServiceFactory() {}
@@ -54,8 +52,32 @@ public final class GhidraServiceFactory {
 
   static BridgeServices create(GhidraSession context) {
     Objects.requireNonNull(context, "context");
-    DecompilationService decompilationService = null;
-    AnalysisService analysisService = null;
+    String programName;
+    try {
+      programName = context.currentProgram().getName();
+    } catch (RuntimeException failure) {
+      context.close();
+      throw failure;
+    }
+    return create(context, programName);
+  }
+
+  /**
+   * Creates a service bundle for a dynamic or script GhidraSession.
+   *
+   * @param context active GhidraSession
+   * @param fallbackProgramName name used when no program is open yet
+   * @return bridge services instance
+   */
+  public static BridgeServices create(GhidraSession context, String fallbackProgramName) {
+    Objects.requireNonNull(context, "context");
+    String fallback =
+        fallbackProgramName == null || fallbackProgramName.isBlank()
+            ? "ghidra-bridge"
+            : fallbackProgramName;
+
+    DecompilationServiceImpl decompilationService = null;
+    AnalysisServiceImpl analysisService = null;
     boolean initialized = false;
     try {
       ProgramService programService = new ProgramServiceImpl(context);
@@ -65,13 +87,14 @@ public final class GhidraServiceFactory {
       ListingService listingService = new ListingServiceImpl(context);
       decompilationService = new DecompilationServiceImpl(context);
       analysisService = new AnalysisServiceImpl(context);
+      context.onProgramClosed(decompilationService::releaseProgram);
+      context.onProgramClosed(analysisService::releaseProgram);
       SymbolService symbolService = new SymbolServiceImpl(context);
       ReferenceService referenceService = new ReferenceServiceImpl(context);
       CommentService commentService = new CommentServiceImpl(context);
       AddressService addressService = new AddressServiceImpl(context);
       DataTypeService dataTypeService = new DataTypeServiceImpl(context);
 
-      String programName = context.currentProgram().getName();
       context.startCppSymbolPrewarm();
       BridgeServices services =
           new BridgeServices(
@@ -93,7 +116,11 @@ public final class GhidraServiceFactory {
                   return context.withTransaction(operation::execute);
                 }
               },
-              programName);
+              fallback,
+              () -> {
+                var program = context.currentProgramOrNull();
+                return program == null ? fallback : program.getName();
+              });
       initialized = true;
       return services;
     } finally {

@@ -60,18 +60,17 @@ final class CppSymbolPrewarmer {
       if (closed || started) {
         return;
       }
-      Program program = session.currentProgramOrNull();
-      if (program == null) {
-        return;
-      }
+      Program program = session.peekCurrentProgramOrNull();
       String programName =
-          Proxy.isProxyClass(program.getClass()) ? "program" : program.getName();
+          program == null || Proxy.isProxyClass(program.getClass())
+              ? "session"
+              : program.getName();
       if (programName == null || programName.isBlank()) {
-        programName = "program";
+        programName = "session";
       }
       final String threadSuffix = programName;
       started = true;
-      active = true;
+      active = program != null && !Proxy.isProxyClass(program.getClass());
       executor =
           Executors.newSingleThreadExecutor(
               runnable -> {
@@ -150,8 +149,12 @@ final class CppSymbolPrewarmer {
   boolean awaitQuiescence(Duration timeout) throws InterruptedException {
     Objects.requireNonNull(timeout, "timeout");
     long deadlineNanos = System.nanoTime() + Math.max(0L, timeout.toNanos());
-    synchronized (stateLock) {
-      while (!closed && started && needsOrRunningScanLocked()) {
+    while (true) {
+      session.syncActiveProgramIfIdle();
+      synchronized (stateLock) {
+        if (closed || !started || !needsOrRunningScanLocked()) {
+          return true;
+        }
         if (!active) {
           stateLock.notifyAll();
         }
@@ -162,7 +165,6 @@ final class CppSymbolPrewarmer {
         long waitMillis = Math.max(1L, TimeUnit.NANOSECONDS.toMillis(remainingNanos));
         stateLock.wait(Math.min(waitMillis, PAUSE_POLL_MS));
       }
-      return true;
     }
   }
 
@@ -203,9 +205,12 @@ final class CppSymbolPrewarmer {
     if (atCapacity) {
       return false;
     }
-    Program program = session.currentProgramOrNull();
+    Program program = session.peekCurrentProgramOrNull();
     if (program == null || Proxy.isProxyClass(program.getClass())) {
       return false;
+    }
+    if (!session.isIndexedProgram(program)) {
+      return true;
     }
     long modNumber = program.getModificationNumber();
     if (!hasSyncedModification || syncedModificationNumber != modNumber) {
@@ -215,7 +220,7 @@ final class CppSymbolPrewarmer {
   }
 
   private boolean needsSnapshotRebuildLocked(Program program, long modNumber) {
-    return session.canCacheSnapshots()
+    return session.canCacheSnapshots(program)
         && !snapshotSkippedForSyncedMod
         && !owner.hasSymbolSnapshotFor(program, modNumber);
   }
@@ -223,17 +228,28 @@ final class CppSymbolPrewarmer {
   private void runLoop() {
     try {
       while (!closed && !Thread.currentThread().isInterrupted()) {
-        Program program;
-        long targetMod;
-        boolean symbolsAlreadySynced;
+        session.syncActiveProgramIfIdle();
+        Program program = null;
+        long targetMod = 0L;
+        boolean symbolsAlreadySynced = false;
+        boolean resyncNeeded = false;
         synchronized (stateLock) {
           while (!closed && !Thread.currentThread().isInterrupted()) {
-            program = session.currentProgramOrNull();
+            program = session.peekCurrentProgramOrNull();
             if (program == null || atCapacity || Proxy.isProxyClass(program.getClass())) {
               active = false;
               stateLock.notifyAll();
-              stateLock.wait(PAUSE_POLL_MS);
+              if (atCapacity) {
+                stateLock.wait();
+              } else {
+                stateLock.wait(PAUSE_POLL_MS);
+              }
               continue;
+            }
+            if (!session.isIndexedProgram(program)) {
+              active = false;
+              resyncNeeded = true;
+              break;
             }
             if (session.isPausedForPrewarm(program)) {
               active = false;
@@ -255,12 +271,21 @@ final class CppSymbolPrewarmer {
           if (closed || Thread.currentThread().isInterrupted()) {
             return;
           }
-          program = session.currentProgramOrNull();
-          if (program == null || Proxy.isProxyClass(program.getClass())) {
-            continue;
+          if (!resyncNeeded) {
+            program = session.peekCurrentProgramOrNull();
+            if (program == null
+                || Proxy.isProxyClass(program.getClass())
+                || !session.isIndexedProgram(program)) {
+              resyncNeeded = true;
+            } else {
+              targetMod = program.getModificationNumber();
+              symbolsAlreadySynced =
+                  hasSyncedModification && syncedModificationNumber == targetMod;
+            }
           }
-          targetMod = program.getModificationNumber();
-          symbolsAlreadySynced = hasSyncedModification && syncedModificationNumber == targetMod;
+        }
+        if (resyncNeeded) {
+          continue;
         }
 
         runSinglePass(program, targetMod, symbolsAlreadySynced);

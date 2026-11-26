@@ -5,6 +5,7 @@ import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
 import ghidra.app.util.demangler.DemanglerUtil;
 import ghidra.framework.cmd.Command;
+import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
@@ -17,53 +18,73 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
  * Coordinates Ghidra program access, commands, transaction lifecycles, and session C++ indexing.
  */
 public final class GhidraSession implements AutoCloseable {
-  private final GhidraScript ghidraScript;
+  private final ProgramHost host;
   private final BooleanSupplier analyzingSupplier;
   private final boolean allowProxySnapshots;
   private final ReentrantLock executionLock = new ReentrantLock();
+  private final List<Consumer<Program>> programCloseListeners = new CopyOnWriteArrayList<>();
   private final AtomicInteger bridgeAnalysisDepth = new AtomicInteger();
+  private final Object analysisProgramsLock = new Object();
+  private final Map<Program, Integer> analyzingPrograms = new IdentityHashMap<>();
+  private volatile boolean hasAnalyzingPrograms;
   private final CppSymbolIndex cppSymbols;
   private volatile WeakReference<Program> indexedProgram = new WeakReference<>(null);
   private volatile int transactionDepth;
+  private Program pinnedProgram;
 
   public GhidraSession(GhidraScript script) {
-    this(
-        script,
-        defaultAnalyzingSupplier(Objects.requireNonNull(script, "script")),
-        false,
-        null,
-        null);
+    this(ProgramHost.forScript(Objects.requireNonNull(script, "script")));
+  }
+
+  public GhidraSession(Supplier<Program> programSupplier) {
+    this(ProgramHost.forProgramSupplier(Objects.requireNonNull(programSupplier, "programSupplier")));
+  }
+
+  public GhidraSession(ProgramHost host) {
+    this(host, null, false, null, null);
   }
 
   public GhidraSession(
       GhidraScript script, CppSymbolIndexConfig indexConfig, CppDemangler demangler) {
     this(
-        script,
-        defaultAnalyzingSupplier(Objects.requireNonNull(script, "script")),
+        ProgramHost.forScript(Objects.requireNonNull(script, "script")),
+        indexConfig,
+        demangler);
+  }
+
+  public GhidraSession(
+      ProgramHost host, CppSymbolIndexConfig indexConfig, CppDemangler demangler) {
+    this(
+        host,
+        null,
         false,
         Objects.requireNonNull(indexConfig, "indexConfig"),
         Objects.requireNonNull(demangler, "demangler"));
   }
 
   private GhidraSession(
-      GhidraScript script,
+      ProgramHost host,
       BooleanSupplier analyzingSupplier,
       boolean allowProxySnapshots,
       CppSymbolIndexConfig customConfig,
       CppDemangler customDemangler) {
-    this.ghidraScript = Objects.requireNonNull(script, "script");
-    this.analyzingSupplier = Objects.requireNonNull(analyzingSupplier, "analyzingSupplier");
+    this.host = Objects.requireNonNull(host, "host");
+    this.analyzingSupplier = analyzingSupplier;
     this.allowProxySnapshots = allowProxySnapshots;
     this.cppSymbols =
         customConfig == null
@@ -72,25 +93,20 @@ public final class GhidraSession implements AutoCloseable {
                 this,
                 customConfig,
                 customDemangler != null ? customDemangler : DemanglerUtil::demangle);
-    Program initial = ghidraScript.getCurrentProgram();
+    Program initial = host.currentProgramOrNull();
     if (initial != null) {
       this.indexedProgram = new WeakReference<>(initial);
       CppSymbolNames.bindSessionIndex(initial, this.cppSymbols);
     }
   }
 
-  private static BooleanSupplier defaultAnalyzingSupplier(GhidraScript script) {
-    return () -> {
-      Program program = script.getCurrentProgram();
-      return program != null
-          && !Proxy.isProxyClass(program.getClass())
-          && AutoAnalysisManager.hasAutoAnalysisManager(program)
-          && AutoAnalysisManager.getAnalysisManager(program).isAnalyzing();
-    };
-  }
-
-  public GhidraScript script() {
-    return ghidraScript;
+  public FlatProgramAPI flatApi() {
+    executionLock.lock();
+    try {
+      return host.flatApi(pinnedProgram);
+    } finally {
+      executionLock.unlock();
+    }
   }
 
   public CppSymbolIndex cppSymbols() {
@@ -113,18 +129,39 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public boolean isAnalyzing() {
-    return bridgeAnalysisDepth.get() > 0 || analyzingSupplier.getAsBoolean();
+    return isAnalyzing(currentProgramOrNull());
+  }
+
+  boolean isAnalyzing(Program program) {
+    if (bridgeAnalysisDepth.get() > 0) {
+      return true;
+    }
+    if (analyzingSupplier != null && analyzingSupplier.getAsBoolean()) {
+      return true;
+    }
+    if (program == null) {
+      return false;
+    }
+    if (hasAnalyzingPrograms && isBridgeAnalyzingProgram(program)) {
+      return true;
+    }
+    return !Proxy.isProxyClass(program.getClass())
+        && AutoAnalysisManager.hasAutoAnalysisManager(program)
+        && AutoAnalysisManager.getAnalysisManager(program).isAnalyzing();
   }
 
   public boolean canCacheSnapshots() {
-    Program program = currentProgramOrNull();
+    return canCacheSnapshots(currentProgramOrNull());
+  }
+
+  boolean canCacheSnapshots(Program program) {
     if (program == null) {
       return false;
     }
     if (!allowProxySnapshots && Proxy.isProxyClass(program.getClass())) {
       return false;
     }
-    return !isAnalyzing();
+    return !isAnalyzing(program);
   }
 
   public boolean holdsExecutionLock() {
@@ -142,11 +179,58 @@ public final class GhidraSession implements AutoCloseable {
     cppSymbols.onSessionStateChanged();
   }
 
+  public void onAnalysisStarted(Program program) {
+    if (program == null) {
+      onAnalysisStarted();
+      return;
+    }
+    synchronized (analysisProgramsLock) {
+      analyzingPrograms.merge(program, 1, Integer::sum);
+      hasAnalyzingPrograms = true;
+    }
+    if (indexedProgram.refersTo(program)) {
+      cppSymbols.invalidateSnapshots();
+      cppSymbols.onSessionStateChanged();
+    }
+  }
+
+  public void onAnalysisFinished(Program program) {
+    if (program == null) {
+      onAnalysisFinished();
+      return;
+    }
+    synchronized (analysisProgramsLock) {
+      Integer count = analyzingPrograms.get(program);
+      if (count != null) {
+        if (count <= 1) {
+          analyzingPrograms.remove(program);
+        } else {
+          analyzingPrograms.put(program, count - 1);
+        }
+      }
+      hasAnalyzingPrograms = !analyzingPrograms.isEmpty();
+    }
+    if (indexedProgram.refersTo(program)) {
+      cppSymbols.invalidateSnapshots();
+      cppSymbols.onSessionStateChanged();
+    }
+  }
+
+  private boolean isBridgeAnalyzingProgram(Program program) {
+    synchronized (analysisProgramsLock) {
+      return analyzingPrograms.containsKey(program);
+    }
+  }
+
   @Override
   public void close() {
+    synchronized (analysisProgramsLock) {
+      analyzingPrograms.clear();
+      hasAnalyzingPrograms = false;
+    }
     Program bound = indexedProgram.get();
     CppSymbolNames.unbindSessionIndex(bound, cppSymbols);
-    Program current = currentProgramOrNull();
+    Program current = host.currentProgramOrNull();
     if (current != bound) {
       CppSymbolNames.unbindSessionIndex(current, cppSymbols);
     }
@@ -162,34 +246,61 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public Program currentProgramOrNull() {
-    return ghidraScript.getCurrentProgram();
+    if (executionLock.isHeldByCurrentThread() && pinnedProgram != null) {
+      return pinnedProgram;
+    }
+    Program current = host.currentProgramOrNull();
+    if (!indexedProgram.refersTo(current) && canSyncActiveProgramNow()) {
+      syncActiveProgram();
+    }
+    return current;
+  }
+
+  public void onProgramClosed(Consumer<Program> listener) {
+    programCloseListeners.add(Objects.requireNonNull(listener, "listener"));
+  }
+
+  public void notifyProgramClosed(Program program) {
+    if (program == null) {
+      return;
+    }
+    synchronized (analysisProgramsLock) {
+      analyzingPrograms.remove(program);
+      hasAnalyzingPrograms = !analyzingPrograms.isEmpty();
+    }
+    executionLock.lock();
+    try {
+      host.releaseProgram(program);
+    } finally {
+      executionLock.unlock();
+    }
+    synchronized (cppSymbols) {
+      CppSymbolNames.unbindSessionIndex(program, cppSymbols);
+      if (indexedProgram.refersTo(program)) {
+        cppSymbols.resetForProgramSwitch();
+        indexedProgram = new WeakReference<>(null);
+      }
+    }
+    if (host.currentProgramOrNull() != program) {
+      syncActiveProgram();
+    }
+    cppSymbols.onSessionStateChanged();
+    for (Consumer<Program> listener : programCloseListeners) {
+      listener.accept(program);
+    }
   }
 
   public void saveCurrentProgram() {
     executionLock.lock();
     try {
-      var monitor = ghidraScript.getMonitor();
-      boolean restoreCancellation = monitor != null && monitor.isCancelled();
-      if (restoreCancellation) {
-        monitor.clearCancelled();
-      }
       try {
-        try {
-          ghidraScript.end(true);
-        } catch (Exception ignored) {
-          // There is no ambient transaction, or the transaction ended.
-        }
-        ghidraScript.saveProgram(currentProgram());
+        host.saveProgram(currentProgram());
       } catch (Exception error) {
         String detail = error.getMessage();
         if (detail == null || detail.isBlank()) {
           detail = error.getClass().getSimpleName();
         }
         throw new IllegalStateException("Unable to save current program: " + detail, error);
-      } finally {
-        if (restoreCancellation) {
-          monitor.cancel();
-        }
       }
     } finally {
       unlockAndNotify();
@@ -197,7 +308,11 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public Address parseAddress(String rawAddress) {
-    return AddressUtil.parseAddress(ghidraScript, rawAddress);
+    Program program = currentProgramOrNull();
+    if (program != null) {
+      return AddressUtil.parseAddress(program, rawAddress);
+    }
+    return AddressUtil.parseAddress(flatApi(), rawAddress);
   }
 
   public Iterable<Reference> references(Address address, boolean to) {
@@ -238,14 +353,19 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
-    return withTransaction(operation, true);
+    return withTransaction(null, operation, true);
+  }
+
+  public <T> T withProgramTransaction(Program program, TransactionalOperation<T> operation) {
+    return withTransaction(Objects.requireNonNull(program, "program"), operation, true);
   }
 
   public <T> T withTemporaryChanges(TransactionalOperation<T> operation) {
-    return withTransaction(operation, false);
+    return withTransaction(null, operation, false);
   }
 
-  private <T> T withTransaction(TransactionalOperation<T> operation, boolean commitChanges) {
+  private <T> T withTransaction(
+      Program explicitProgram, TransactionalOperation<T> operation, boolean commitChanges) {
     Objects.requireNonNull(operation, "operation");
     executionLock.lock();
     try {
@@ -253,11 +373,18 @@ public final class GhidraSession implements AutoCloseable {
         if (!commitChanges) {
           throw new IllegalStateException("Temporary changes require an independent transaction");
         }
+        if (explicitProgram != null && pinnedProgram != null && explicitProgram != pinnedProgram) {
+          throw new IllegalStateException("Nested transaction targets a different program");
+        }
         return runOperation(operation);
       }
 
-      ghidraScript.end(true);
-      ghidraScript.start();
+      if (explicitProgram == null) {
+        syncActiveProgram();
+      }
+      Program targetProgram = host.resolveTransactionProgram(explicitProgram);
+      int transactionId = host.beginTransaction(targetProgram);
+      pinnedProgram = targetProgram;
       transactionDepth++;
       boolean commit = false;
       try {
@@ -266,12 +393,11 @@ public final class GhidraSession implements AutoCloseable {
         return result;
       } finally {
         transactionDepth--;
+        pinnedProgram = null;
         try {
-          ghidraScript.end(commit);
+          host.finishTransaction(targetProgram, transactionId, commit);
         } finally {
-          try {
-            ghidraScript.start();
-          } finally {
+          if (targetProgram == null || indexedProgram.refersTo(targetProgram)) {
             cppSymbols.invalidateSnapshots();
           }
         }
@@ -285,12 +411,18 @@ public final class GhidraSession implements AutoCloseable {
     Objects.requireNonNull(command, "command");
     executionLock.lock();
     try {
-      try {
-        if (ghidraScript.runCommand(command)) {
+      if (transactionDepth == 0 && host.requiresCommandTransaction()) {
+        if (withTransaction(() -> host.runCommand(currentProgram(), command))) {
           return;
         }
-      } finally {
-        cppSymbols.invalidateSnapshots();
+      } else {
+        try {
+          if (host.runCommand(currentProgramOrNull(), command)) {
+            return;
+          }
+        } finally {
+          cppSymbols.invalidateSnapshots();
+        }
       }
     } finally {
       unlockAndNotify();
@@ -302,23 +434,38 @@ public final class GhidraSession implements AutoCloseable {
     throw new TransactionExecutionException(failurePrefix + ": " + status);
   }
 
+  Program peekCurrentProgramOrNull() {
+    if (executionLock.isHeldByCurrentThread() && pinnedProgram != null) {
+      return pinnedProgram;
+    }
+    return host.currentProgramOrNull();
+  }
+
+  boolean isIndexedProgram(Program program) {
+    return indexedProgram.refersTo(program);
+  }
+
+  void syncActiveProgramIfIdle() {
+    syncActiveProgram();
+  }
+
   boolean isPausedForPrewarm(Program program) {
     return transactionDepth > 0
         || executionLock.isLocked()
-        || isAnalyzing()
+        || isAnalyzing(program)
         || !indexedProgram.refersTo(program);
   }
 
   <T> T tryCollectForPrewarm(Program program, Supplier<T> collector, T pausedValue) {
     syncActiveProgram();
-    if (transactionDepth > 0 || isAnalyzing() || !indexedProgram.refersTo(program)) {
+    if (transactionDepth > 0 || isAnalyzing(program) || !indexedProgram.refersTo(program)) {
       return pausedValue;
     }
     if (!executionLock.tryLock()) {
       return pausedValue;
     }
     try {
-      if (transactionDepth > 0 || isAnalyzing() || !indexedProgram.refersTo(program)) {
+      if (transactionDepth > 0 || isAnalyzing(program) || !indexedProgram.refersTo(program)) {
         return pausedValue;
       }
       return collector.get();
@@ -327,10 +474,22 @@ public final class GhidraSession implements AutoCloseable {
     }
   }
 
+  private boolean canSyncActiveProgramNow() {
+    return transactionDepth == 0
+        && (!executionLock.isLocked() || executionLock.isHeldByCurrentThread());
+  }
+
   private void syncActiveProgram() {
-    Program current = currentProgramOrNull();
+    if (!canSyncActiveProgramNow()) {
+      return;
+    }
+    Program current = host.currentProgramOrNull();
     if (!indexedProgram.refersTo(current)) {
       synchronized (cppSymbols) {
+        if (!canSyncActiveProgramNow()) {
+          return;
+        }
+        current = host.currentProgramOrNull();
         if (!indexedProgram.refersTo(current)) {
           Program previous = indexedProgram.get();
           if (previous != null) {
@@ -349,6 +508,7 @@ public final class GhidraSession implements AutoCloseable {
   private void unlockAndNotify() {
     executionLock.unlock();
     if (!executionLock.isHeldByCurrentThread()) {
+      syncActiveProgram();
       cppSymbols.onSessionStateChanged();
     }
   }

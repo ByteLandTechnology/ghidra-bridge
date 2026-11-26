@@ -968,6 +968,34 @@ class CppSymbolIndexTest {
       } finally {
         endAmbientTransaction(switchingScript);
       }
+
+      AtomicReference<Program> dynamicProgram = new AtomicReference<>(null);
+      GhidraSession dynamicSession = new GhidraSession(dynamicProgram::get);
+      try (BridgeServices dynamicServices =
+          GhidraServiceFactory.create(dynamicSession, "gui-fallback")) {
+        assertEquals("gui-fallback", dynamicServices.currentProgramName());
+        assertTrue(dynamicSession.cppSymbols().awaitPrewarm(Duration.ofSeconds(2)));
+        assertEquals(0, dynamicSession.cppSymbols().entryCount());
+
+        dynamicProgram.set(first.program());
+        assertEquals("cpp_switch_one", dynamicServices.currentProgramName());
+        assertTrue(dynamicSession.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
+        assertEquals(1, dynamicSession.cppSymbols().entryCount());
+        assertEquals(dynamicSession.cppSymbols(), CppSymbolNames.sessionIndexFor(first.program()));
+
+        dynamicProgram.set(second.program());
+        dynamicSession.notifyProgramClosed(first.program());
+        assertNull(CppSymbolNames.sessionIndexFor(first.program()));
+        assertTrue(dynamicSession.cppSymbols().awaitPrewarm(Duration.ofSeconds(10)));
+        assertEquals(dynamicSession.cppSymbols(), CppSymbolNames.sessionIndexFor(second.program()));
+        assertEquals(1, dynamicSession.cppSymbols().entryCount());
+
+        dynamicProgram.set(null);
+        dynamicSession.notifyProgramClosed(second.program());
+        assertNull(CppSymbolNames.sessionIndexFor(second.program()));
+        assertEquals(0, dynamicSession.cppSymbols().entryCount());
+        assertEquals(0L, dynamicSession.cppSymbols().estimatedBytes());
+      }
     }
   }
 
