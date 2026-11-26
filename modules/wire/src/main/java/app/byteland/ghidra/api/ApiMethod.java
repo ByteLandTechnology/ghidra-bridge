@@ -47,16 +47,31 @@ public record ApiMethod<Request, Response>(
     return requestCodec.decode(params, "");
   }
 
-  public Object invokeDecoded(Request request) throws Exception {
+  public void validateProjection(Request request) {
     FieldProjection.validate(request, fields, identityFields);
-    Response response;
+  }
+
+  public Response invokeHandler(Request request) throws Exception {
     try {
-      response = handler.handle(request);
+      return handler.handle(request);
     } catch (Exception error) {
       throw rebaseExecutionFailure(error, requestCodec.schema());
     }
+  }
+
+  public Object encodeResponse(Request request, Response response) {
     Object encoded = responseCodec.encode(response);
-    return FieldProjection.apply(encoded, request, fields, identityFields);
+    Object projected = FieldProjection.apply(encoded, request, fields, identityFields);
+    if (projected != encoded) {
+      JsonValueCodec.validateOutput(projected, responseCodec.schema());
+    }
+    return projected;
+  }
+
+  public Object invokeDecoded(Request request) throws Exception {
+    validateProjection(request);
+    Response response = invokeHandler(request);
+    return encodeResponse(request, response);
   }
 
   private static Exception rebaseExecutionFailure(

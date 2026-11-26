@@ -875,6 +875,7 @@
                         "type": "string"
                       "bytes":
                         "additionalProperties": !!bool "false"
+                        "minProperties": !!int "1"
                         "properties":
                           "data":
                             "type": "string"
@@ -887,11 +888,9 @@
                             "maximum": !!int "2147483647"
                             "minimum": !!int "0"
                             "type": "integer"
-                        "required":
-                        - "encoding"
-                        - "data"
-                        - "length"
                         "type": "object"
+                    "required":
+                    - "address"
                     "type": "object"
                   - "additionalProperties": !!bool "false"
                     "properties":
@@ -2544,6 +2543,7 @@
                     "properties":
                       "body":
                         "additionalProperties": !!bool "false"
+                        "minProperties": !!int "1"
                         "properties":
                           "end":
                             "type": "string"
@@ -2553,10 +2553,6 @@
                             "type": "integer"
                           "start":
                             "type": "string"
-                        "required":
-                        - "start"
-                        - "end"
-                        - "num_addresses"
                         "type": "object"
                       "calling_convention":
                         "type": "string"
@@ -2579,6 +2575,7 @@
                       "local_variables":
                         "items":
                           "additionalProperties": !!bool "false"
+                          "minProperties": !!int "1"
                           "properties":
                             "data_type":
                               "$ref": "#/$defs/data_type_reference"
@@ -2614,10 +2611,6 @@
                                 - "kind"
                                 - "register"
                                 "type": "object"
-                          "required":
-                          - "name"
-                          - "data_type"
-                          - "storage"
                           "type": "object"
                         "maxItems": !!int "1000"
                         "minItems": !!int "0"
@@ -2633,6 +2626,7 @@
                       "parameters":
                         "items":
                           "additionalProperties": !!bool "false"
+                          "minProperties": !!int "1"
                           "properties":
                             "data_type":
                               "$ref": "#/$defs/data_type_reference"
@@ -2672,11 +2666,6 @@
                                 - "kind"
                                 - "register"
                                 "type": "object"
-                          "required":
-                          - "ordinal"
-                          - "name"
-                          - "data_type"
-                          - "storage"
                           "type": "object"
                         "maxItems": !!int "1000"
                         "minItems": !!int "0"
@@ -2885,6 +2874,7 @@
                           "properties":
                             "body":
                               "additionalProperties": !!bool "false"
+                              "minProperties": !!int "1"
                               "properties":
                                 "end":
                                   "type": "string"
@@ -2894,10 +2884,6 @@
                                   "type": "integer"
                                 "start":
                                   "type": "string"
-                              "required":
-                              - "start"
-                              - "end"
-                              - "num_addresses"
                               "type": "object"
                             "calling_convention":
                               "type": "string"
@@ -2920,6 +2906,7 @@
                             "local_variables":
                               "items":
                                 "additionalProperties": !!bool "false"
+                                "minProperties": !!int "1"
                                 "properties":
                                   "data_type":
                                     "$ref": "#/$defs/data_type_reference"
@@ -2955,10 +2942,6 @@
                                       - "kind"
                                       - "register"
                                       "type": "object"
-                                "required":
-                                - "name"
-                                - "data_type"
-                                - "storage"
                                 "type": "object"
                               "maxItems": !!int "1000"
                               "minItems": !!int "0"
@@ -2974,6 +2957,7 @@
                             "parameters":
                               "items":
                                 "additionalProperties": !!bool "false"
+                                "minProperties": !!int "1"
                                 "properties":
                                   "data_type":
                                     "$ref": "#/$defs/data_type_reference"
@@ -3013,11 +2997,6 @@
                                       - "kind"
                                       - "register"
                                       "type": "object"
-                                "required":
-                                - "ordinal"
-                                - "name"
-                                - "data_type"
-                                - "storage"
                                 "type": "object"
                               "maxItems": !!int "1000"
                               "minItems": !!int "0"
@@ -5835,6 +5814,7 @@
                         "oneOf":
                         - "type": "string"
                         - "additionalProperties": !!bool "false"
+                          "minProperties": !!int "1"
                           "properties":
                             "calling_convention":
                               "minLength": !!int "1"
@@ -5859,12 +5839,6 @@
                               "type": "array"
                             "return_type":
                               "$ref": "#/$defs/data_type_reference"
-                          "required":
-                          - "return_type"
-                          - "parameters"
-                          - "calling_convention"
-                          - "has_var_args"
-                          - "has_no_return"
                           "type": "object"
                       "size":
                         "maximum": !!int "9223372036854775807"
@@ -6064,6 +6038,7 @@
                               "oneOf":
                               - "type": "string"
                               - "additionalProperties": !!bool "false"
+                                "minProperties": !!int "1"
                                 "properties":
                                   "calling_convention":
                                     "minLength": !!int "1"
@@ -6088,12 +6063,6 @@
                                     "type": "array"
                                   "return_type":
                                     "$ref": "#/$defs/data_type_reference"
-                                "required":
-                                - "return_type"
-                                - "parameters"
-                                - "calling_convention"
-                                - "has_var_args"
-                                - "has_no_return"
                                 "type": "object"
                             "size":
                               "maximum": !!int "9223372036854775807"
@@ -9327,6 +9296,8 @@
                           - "start"
                           - "end"
                           "type": "object"
+                    "required":
+                    - "selector"
                     "type": "object"
                   "page":
                     "additionalProperties": !!bool "false"
@@ -14602,6 +14573,8 @@
                                       - "start"
                                       - "end"
                                       "type": "object"
+                                "required":
+                                - "selector"
                                 "type": "object"
                               "page":
                                 "additionalProperties": !!bool "false"
@@ -18725,6 +18698,8 @@
                             - "start"
                             - "end"
                             "type": "object"
+                      "required":
+                      - "selector"
                       "type": "object"
                     "page":
                       "additionalProperties": !!bool "false"
@@ -23095,6 +23070,7 @@
           "oneOf":
           - "type": "string"
           - "additionalProperties": !!bool "false"
+            "minProperties": !!int "1"
             "properties":
               "calling_convention":
                 "minLength": !!int "1"
@@ -23119,12 +23095,6 @@
                 "type": "array"
               "return_type":
                 "$ref": "#/$defs/data_type_reference"
-            "required":
-            - "return_type"
-            - "parameters"
-            - "calling_convention"
-            - "has_var_args"
-            - "has_no_return"
             "type": "object"
         "size":
           "maximum": !!int "9223372036854775807"
@@ -23442,6 +23412,7 @@
                 "oneOf":
                 - "type": "string"
                 - "additionalProperties": !!bool "false"
+                  "minProperties": !!int "1"
                   "properties":
                     "calling_convention":
                       "minLength": !!int "1"
@@ -23466,12 +23437,6 @@
                       "type": "array"
                     "return_type":
                       "$ref": "#/$defs/data_type_reference"
-                  "required":
-                  - "return_type"
-                  - "parameters"
-                  - "calling_convention"
-                  - "has_var_args"
-                  - "has_no_return"
                   "type": "object"
               "size":
                 "maximum": !!int "9223372036854775807"
@@ -25467,6 +25432,8 @@
                 - "start"
                 - "end"
                 "type": "object"
+          "required":
+          - "selector"
           "type": "object"
         "page":
           "additionalProperties": !!bool "false"
@@ -26681,6 +26648,7 @@
       "properties":
         "body":
           "additionalProperties": !!bool "false"
+          "minProperties": !!int "1"
           "properties":
             "end":
               "type": "string"
@@ -26690,10 +26658,6 @@
               "type": "integer"
             "start":
               "type": "string"
-          "required":
-          - "start"
-          - "end"
-          - "num_addresses"
           "type": "object"
         "calling_convention":
           "type": "string"
@@ -26716,6 +26680,7 @@
         "local_variables":
           "items":
             "additionalProperties": !!bool "false"
+            "minProperties": !!int "1"
             "properties":
               "data_type":
                 "$ref": "#/$defs/data_type_reference"
@@ -26751,10 +26716,6 @@
                   - "kind"
                   - "register"
                   "type": "object"
-            "required":
-            - "name"
-            - "data_type"
-            - "storage"
             "type": "object"
           "maxItems": !!int "1000"
           "minItems": !!int "0"
@@ -26770,6 +26731,7 @@
         "parameters":
           "items":
             "additionalProperties": !!bool "false"
+            "minProperties": !!int "1"
             "properties":
               "data_type":
                 "$ref": "#/$defs/data_type_reference"
@@ -26809,11 +26771,6 @@
                   - "kind"
                   - "register"
                   "type": "object"
-            "required":
-            - "ordinal"
-            - "name"
-            - "data_type"
-            - "storage"
             "type": "object"
           "maxItems": !!int "1000"
           "minItems": !!int "0"
@@ -27180,6 +27137,7 @@
             "properties":
               "body":
                 "additionalProperties": !!bool "false"
+                "minProperties": !!int "1"
                 "properties":
                   "end":
                     "type": "string"
@@ -27189,10 +27147,6 @@
                     "type": "integer"
                   "start":
                     "type": "string"
-                "required":
-                - "start"
-                - "end"
-                - "num_addresses"
                 "type": "object"
               "calling_convention":
                 "type": "string"
@@ -27215,6 +27169,7 @@
               "local_variables":
                 "items":
                   "additionalProperties": !!bool "false"
+                  "minProperties": !!int "1"
                   "properties":
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
@@ -27250,10 +27205,6 @@
                         - "kind"
                         - "register"
                         "type": "object"
-                  "required":
-                  - "name"
-                  - "data_type"
-                  - "storage"
                   "type": "object"
                 "maxItems": !!int "1000"
                 "minItems": !!int "0"
@@ -27269,6 +27220,7 @@
               "parameters":
                 "items":
                   "additionalProperties": !!bool "false"
+                  "minProperties": !!int "1"
                   "properties":
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
@@ -27308,11 +27260,6 @@
                         - "kind"
                         - "register"
                         "type": "object"
-                  "required":
-                  - "ordinal"
-                  - "name"
-                  - "data_type"
-                  - "storage"
                   "type": "object"
                 "maxItems": !!int "1000"
                 "minItems": !!int "0"
@@ -30766,6 +30713,7 @@
           "type": "string"
         "bytes":
           "additionalProperties": !!bool "false"
+          "minProperties": !!int "1"
           "properties":
             "data":
               "type": "string"
@@ -30778,11 +30726,9 @@
               "maximum": !!int "2147483647"
               "minimum": !!int "0"
               "type": "integer"
-          "required":
-          - "encoding"
-          - "data"
-          - "length"
           "type": "object"
+      "required":
+      - "address"
       "type": "object"
   "memory.write":
     "description": "Write hex or base64 bytes at an address."
