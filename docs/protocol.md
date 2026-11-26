@@ -120,15 +120,17 @@ The server closes the socket with these status codes:
 ## Model Context Protocol (MCP)
 
 The bridge implements MCP Streamable HTTP protocol version `2026-07-28`.
-The server does not use MCP sessions and does not send server-sent events.
+Version `2026-07-28` requests are stateless and do not use MCP sessions.
+For legacy SSE clients, the server supports bounded SSE sessions.
 
 ### HTTP Request Rules
 
 The MCP HTTP server handles requests:
-- **POST**: Dispatches JSON-RPC 2.0 requests.
+- **POST**: Dispatches JSON-RPC 2.0 requests. Up to 32 POST requests can run at the same time; more requests return status `503`. The server closes a POST exchange if the request body read takes more than 10 seconds. For an active SSE session (`?sessionId=<id>`), POST sends the JSON-RPC response as a `message` event and returns status `202`. An unknown or expired `sessionId` returns status `404`.
+- **GET**: Opens a legacy compatibility SSE stream and sends an `endpoint` event. Up to 16 SSE sessions can stay open at the same time; more requests return status `503`.
+- **HEAD**: Returns status `200` with no body.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
-- **GET**: The server returns status `405` with `Allow: POST, OPTIONS`.
-- **Other methods**: The server returns status `405`.
+- **Other methods**: The server returns status `405` with `Allow: POST, GET, OPTIONS`.
 - **Host**: Every request must send one well-formed `Host` header, or the server returns status `400`. On a loopback listener, a `Host` header must match `127.0.0.1`, `[::1]`, `localhost`, or the configured literal `host`. Any port must match the listener port, or the server returns status `403`.
 - **Origin**: By default, an `Origin` header that is not loopback or the configured `host` returns status `403` with no CORS headers. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` to `scheme://host[:port]` entries to permit only listed origins. Set `none` to reject all `Origin` headers.
 - **Content Type**: A POST request must send `Content-Type: application/json`. Other values return status `415`.

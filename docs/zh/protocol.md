@@ -120,15 +120,17 @@ WebSocket 消息严格遵循 JSON-RPC 2.0 协议规范。
 ## Model Context Protocol (MCP)
 
 桥接服务实现 MCP Streamable HTTP 协议，版本号为 `2026-07-28`。
-服务端不使用 MCP 会话，也不发送服务端推送事件（SSE）。
+`2026-07-28` 版本请求为无状态请求，不使用 MCP 会话。
+针对旧版 SSE 客户端，服务端支持有上限的 SSE 会话。
 
 ### HTTP 交互规范
 
 MCP HTTP 服务端按以下规则处理请求：
-- **POST**：分发处理 JSON-RPC 2.0 请求。
+- **POST**：分发处理 JSON-RPC 2.0 请求。最多允许 32 个 POST 请求同时执行，超出部分返回状态码 `503`。若请求体读取耗时超过 10 秒，服务端将关闭该 POST 连接。针对活跃的 SSE 会话（`?sessionId=<id>`），POST 将 JSON-RPC 响应作为 `message` 事件推送并返回状态码 `202`；未知或已过期的 `sessionId` 返回状态码 `404`。
+- **GET**：建立旧版兼容的 SSE 流并发送 `endpoint` 事件。最多允许 16 个 SSE 会话同时保持连接，超出部分返回状态码 `503`。
+- **HEAD**：返回状态码 `200`，且不含响应体。
 - **OPTIONS**：处理 CORS 预检请求并返回状态码 `204`。
-- **GET**：服务端直接返回状态码 `405` 并附带 `Allow: POST, OPTIONS` 响应头。
-- **其他方法**：服务端返回状态码 `405`。
+- **其他方法**：服务端返回状态码 `405` 并附带 `Allow: POST, GET, OPTIONS` 响应头。
 - **Host**：每个请求必须携带唯一且格式合法的 `Host` 头部，否则返回状态码 `400`。在回环监听地址上，若 `Host` 头部不是 `127.0.0.1`、`[::1]`、`localhost` 或配置的字面量 IP `host`（无端口或与监听端口一致），返回状态码 `403`。
 - **Origin**：默认情况下，非回环且不匹配已配置 `host` 的 `Origin` 头部返回状态码 `403`，且不附带任何 CORS 响应头。可通过 `allowed_origins` 或 `GHIDRA_MCP_ALLOWED_ORIGINS` 配置 `scheme://host[:port]` 列表以仅放行指定来源（返回 `Access-Control-Allow-Origin` 与 `Vary: Origin`），或设为 `none` 拒绝所有携带 `Origin` 头部的请求。
 - **内容类型**：POST 请求必须发送 `Content-Type: application/json`，否则返回状态码 `415`。
