@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.adapter.ghidra.GhidraServiceFactory;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
 import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport.ProgramHolder;
@@ -14,6 +15,9 @@ import app.byteland.ghidra.service.memory.MemoryBlockResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.memory.MemoryService.MemoryBlockCreateRequest;
+import app.byteland.ghidra.service.program.ProgramResource;
+import ghidra.program.model.listing.Program;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class MemoryMutationsTest {
@@ -159,6 +163,78 @@ class MemoryMutationsTest {
             assertEquals(409, overlap.status());
             assertEquals("memory_block_conflict", overlap.code());
           });
+    }
+  }
+
+  @Test
+  void rebaseAndCreateMemoryBlockFollowActiveProgramSwitch() {
+    try (ProgramHolder alphaHolder = GhidraTestSupport.createX64Program("alpha.bin");
+        ProgramHolder betaHolder = GhidraTestSupport.createX64Program("beta.bin")) {
+      AtomicReference<Program> active = new AtomicReference<>(alphaHolder.program());
+      GhidraSession session = new GhidraSession(active::get);
+      try (var services = GhidraServiceFactory.create(session, "fallback.bin")) {
+        services
+            .transactionRunner()
+            .run(
+                () -> {
+                  services
+                      .memoryService()
+                      .createMemoryBlock(
+                          new MemoryBlockCreateRequest(
+                              "ALPHA_SRAM",
+                              "0x20000000",
+                              256L,
+                              false,
+                              null,
+                              null,
+                              true,
+                              true,
+                              false,
+                              false,
+                              false,
+                              null));
+                  ProgramResource rebasedAlpha =
+                      services.programService().rebaseProgram("0x08000000");
+                  assertEquals("alpha.bin", rebasedAlpha.name());
+                  assertTrue(rebasedAlpha.imageBase().endsWith("08000000"));
+                  return null;
+                });
+
+        active.set(betaHolder.program());
+        services
+            .transactionRunner()
+            .run(
+                () -> {
+                  services
+                      .memoryService()
+                      .createMemoryBlock(
+                          new MemoryBlockCreateRequest(
+                              "BETA_SRAM",
+                              "0x30000000",
+                              512L,
+                              false,
+                              null,
+                              null,
+                              true,
+                              true,
+                              false,
+                              true,
+                              false,
+                              null));
+                  ProgramResource rebasedBeta =
+                      services.programService().rebaseProgram("0x10000000");
+                  assertEquals("beta.bin", rebasedBeta.name());
+                  assertTrue(rebasedBeta.imageBase().endsWith("10000000"));
+                  return null;
+                });
+
+        assertEquals(0x08000000L, alphaHolder.program().getImageBase().getOffset());
+        assertEquals(0x10000000L, betaHolder.program().getImageBase().getOffset());
+        assertTrue(alphaHolder.program().getMemory().getBlock("ALPHA_SRAM") != null);
+        assertTrue(alphaHolder.program().getMemory().getBlock("BETA_SRAM") == null);
+        assertTrue(betaHolder.program().getMemory().getBlock("BETA_SRAM") != null);
+        assertTrue(betaHolder.program().getMemory().getBlock("ALPHA_SRAM") == null);
+      }
     }
   }
 }

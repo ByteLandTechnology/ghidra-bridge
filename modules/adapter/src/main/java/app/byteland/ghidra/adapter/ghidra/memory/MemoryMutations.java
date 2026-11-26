@@ -156,7 +156,7 @@ final class MemoryMutations {
 
   private void writeBytes(Address start, byte[] bytes) {
     try {
-      context.script().setBytes(start, bytes);
+      context.flatApi().setBytes(start, bytes);
     } catch (MemoryAccessException ex) {
       throw new TransactionExecutionException("unable to write memory: " + ex.getMessage(), ex);
     }
