@@ -237,8 +237,7 @@ final class WireValues {
     return plan;
   }
 
-  private static Map<String, Object> normalizeRecord(
-      Object recordValue, ProjectedComponent[] plan) {
+  private static Map<String, Object> normalizeRecord(Object recordValue, ProjectedComponent[] plan) {
     Map<String, Object> result = LinkedHashMap.newLinkedHashMap(plan.length);
     for (ProjectedComponent component : plan) {
       Object componentValue = invokeAccessor(component.meta(), recordValue);

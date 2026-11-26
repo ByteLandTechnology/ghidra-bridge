@@ -207,9 +207,7 @@ public final class ApiRegistry {
           "/method");
     }
     if (method.effects().requiresTransaction() && ownTransaction) {
-      return bridgeServices
-          .transactionRunner()
-          .run(() -> method.invokeHandler(decoded, selected));
+      return bridgeServices.transactionRunner().run(() -> method.invokeHandler(decoded, selected));
     }
     return method.invokeHandler(decoded, selected);
   }
@@ -626,7 +624,9 @@ public final class ApiRegistry {
                   selected != null
                       ? WireValues.list(rawPage, selected)
                       : WireValues.listRestrictingRoots(rawPage, allowedRoots);
-              return Map.of(ApiVocabulary.ITEMS, normalizedItems(normalizedList));
+              return Map.of(
+                  ApiVocabulary.ITEMS,
+                  Collections.unmodifiableList((List<?>) normalizedList.get(ApiVocabulary.ITEMS)));
             });
   }
 
@@ -825,7 +825,8 @@ public final class ApiRegistry {
         selected != null
             ? WireValues.list(raw, selected)
             : WireValues.listRestrictingRoots(raw, allowedRoots);
-    List<Map<String, Object>> normalizedItems = normalizedItems(result);
+    List<?> normalizedItems =
+        Collections.unmodifiableList((List<?>) result.get(ApiVocabulary.ITEMS));
     Optional<Object> next = Optional.ofNullable(result.get("next_cursor"));
     result.put(ApiVocabulary.ITEMS, normalizedItems);
     result.remove("next_cursor");
@@ -840,13 +841,6 @@ public final class ApiRegistry {
               resource, sessionId, fingerprint, String.valueOf(next.orElseThrow())));
     }
     return result;
-  }
-
-  @SuppressWarnings(ApiVocabulary.UNCHECKED)
-  private static List<Map<String, Object>> normalizedItems(Map<String, Object> normalizedList) {
-    List<Map<String, Object>> items =
-        (List<Map<String, Object>>) (List<?>) normalizedList.get(ApiVocabulary.ITEMS);
-    return Collections.unmodifiableList(items);
   }
 
   private boolean analysisRunning() {
@@ -1041,20 +1035,6 @@ public final class ApiRegistry {
   static List<String> stringList(Object value) {
     if (!(value instanceof List<?> list)) return null;
     return list.stream().map(String.class::cast).toList();
-  }
-
-  static Set<String> requestedIncludes(Map<String, Object> request) {
-    Object raw = request.get(ApiVocabulary.FIELDS);
-    if (!(raw instanceof List<?> fields))
-      return Set.of(ApiVocabulary.PARAMETERS, ApiVocabulary.LOCALS);
-    Set<String> includes = new LinkedHashSet<>();
-    for (Object field : fields) {
-      String path = String.valueOf(field);
-      if (path.startsWith(ApiVocabulary.PARAMETERS)) includes.add(ApiVocabulary.PARAMETERS);
-      if (path.startsWith("local_variables")) includes.add(ApiVocabulary.LOCALS);
-      if (path.startsWith("calls")) includes.add("calls");
-    }
-    return includes;
   }
 
   static Set<String> requestedIncludes(Set<String> selectedFields) {

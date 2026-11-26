@@ -42,16 +42,12 @@ public record ApiMethod<Request, Response>(
     Objects.requireNonNull(handler, "handler");
   }
 
-  public Object invoke(Object params) throws Exception {
-    return invokeDecoded(decodeRequest(params));
-  }
-
   public Request decodeRequest(Object params) {
     return requestCodec.decode(params, "");
   }
 
   public void validateProjection(Request request) {
-    selectProjection(request);
+    FieldProjection.validate(request, fields, identityFields);
   }
 
   Set<String> selectProjection(Request request) {
@@ -59,7 +55,7 @@ public record ApiMethod<Request, Response>(
   }
 
   public Response invokeHandler(Request request) throws Exception {
-    return invokeHandler(request, null);
+    return invokeHandler(request, selectProjection(request));
   }
 
   Response invokeHandler(Request request, Set<String> selected) throws Exception {
@@ -70,20 +66,17 @@ public record ApiMethod<Request, Response>(
   }
 
   public Object encodeResponse(Request request, Response response) {
-    return encodeResponse(response, selectProjection(request), true);
+    return encodeResponse(response, selectProjection(request));
   }
 
   Object encodeResponse(Response response, Set<String> selected) {
-    return encodeResponse(response, selected, !(handler instanceof ProjectedHandler<?, ?>));
-  }
-
-  private Object encodeResponse(
-      Response response, Set<String> selected, boolean applyFallbackProjection) {
     if (selected == null) {
       return responseCodec.encode(response);
     }
     Object projectedResponse =
-        applyFallbackProjection ? FieldProjection.projectFallback(response, selected) : response;
+        handler instanceof ProjectedHandler<?, ?>
+            ? response
+            : FieldProjection.projectFallback(response, selected);
     if (responseCodec instanceof JsonValueCodec valueCodec) {
       return valueCodec.encode(projectedResponse, selected);
     }

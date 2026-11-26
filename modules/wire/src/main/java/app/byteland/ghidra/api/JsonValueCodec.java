@@ -38,7 +38,7 @@ final class JsonValueCodec implements JsonCodec<Object> {
     if (cached != null) {
       return cached;
     }
-    Map<String, Object> derived = WireSchema.projectResponse(valueSchema, projectedFields);
+    Map<String, Object> derived = WireSchema.projectOutput(valueSchema, projectedFields);
     if (projectedSchemas.size() < MAX_CACHED_PROJECTIONS) {
       projectedSchemas.putIfAbsent(Set.copyOf(projectedFields), derived);
     }

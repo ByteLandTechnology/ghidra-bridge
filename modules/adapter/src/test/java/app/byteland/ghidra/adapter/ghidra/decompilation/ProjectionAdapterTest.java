@@ -538,7 +538,7 @@ class ProjectionAdapterTest {
     assertNull(resolved.symbol());
     assertNull(resolved.codeUnit());
 
-    // ProgramServiceImpl skips functionCount and symbolCount when omitted.
+    // ProgramServiceImpl skips functionCount and symbolCount and follows active-program switches.
     Program countGuardedProgram =
         proxy(
             Program.class,
@@ -549,12 +549,25 @@ class ProjectionAdapterTest {
                       throw new AssertionError(m.getName() + " must be skipped under projection");
                   default -> defaultValue(m.getReturnType());
                 });
-    ProgramServiceImpl programService =
-        new ProgramServiceImpl(new GhidraSession(new StubScript(countGuardedProgram)));
+    Program switchedProgram =
+        proxy(
+            Program.class,
+            (p, m, a) ->
+                switch (m.getName()) {
+                  case "getName" -> "switched.bin";
+                  case "getFunctionManager", "getSymbolTable" ->
+                      throw new AssertionError(m.getName() + " must be skipped under projection");
+                  default -> defaultValue(m.getReturnType());
+                });
+    java.util.concurrent.atomic.AtomicReference<Program> activeProgram =
+        new java.util.concurrent.atomic.AtomicReference<>(countGuardedProgram);
+    ProgramServiceImpl programService = new ProgramServiceImpl(new GhidraSession(activeProgram::get));
     ProgramResource prog = programService.getProgram(Set.of("name"));
     assertEquals("fast.bin", prog.name());
     assertEquals(0L, prog.functionCount());
     assertEquals(0L, prog.symbolCount());
+    activeProgram.set(switchedProgram);
+    assertEquals("switched.bin", programService.getProgram(Set.of("name")).name());
   }
 
   @Test

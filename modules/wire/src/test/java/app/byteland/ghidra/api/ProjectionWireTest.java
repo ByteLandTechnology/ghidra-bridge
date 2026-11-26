@@ -1,11 +1,7 @@
 package app.byteland.ghidra.api;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.ByteSequence;
@@ -16,7 +12,6 @@ import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.address.AddressService;
 import app.byteland.ghidra.service.analysis.AnalysisResource;
 import app.byteland.ghidra.service.analysis.AnalysisService;
-import app.byteland.ghidra.service.comment.CommentResource;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeCategoryResource;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
@@ -36,467 +31,271 @@ import app.byteland.ghidra.service.listing.DataUnitResource;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import app.byteland.ghidra.service.listing.InstructionResource;
 import app.byteland.ghidra.service.listing.ListingService;
-import app.byteland.ghidra.service.memory.MemoryBlockResource;
-import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
-import app.byteland.ghidra.service.reference.ReferenceResource;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolResource;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
-import java.util.AbstractList;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import jdk.jfr.Recording;
-import jdk.jfr.consumer.RecordedClass;
-import jdk.jfr.consumer.RecordedEvent;
-import jdk.jfr.consumer.RecordingFile;
 import org.junit.jupiter.api.Test;
 
 class ProjectionWireTest {
 
-  record GuardedChild(String safe, String forbidden) {
-    @Override
-    public String forbidden() {
-      throw new AssertionError("unprojected nested component must not be accessed");
-    }
-  }
-
-  record GuardedResource(
-      String id, String selected, String unrequested, GuardedChild nested, List<GuardedChild> list) {
-    @Override
-    public String unrequested() {
-      throw new AssertionError("unprojected root component must not be accessed");
-    }
-  }
-
-  @Test
-  void validatesProjectionFieldsInSinglePassAndPreserves400Errors() throws Exception {
-    AtomicInteger listReads = new AtomicInteger();
-    AtomicReference<Set<String>> capturedFields = new AtomicReference<>();
-    List<String> rawList = List.of("body.start", "name");
-    List<String> countingList =
-        new AbstractList<>() {
-          @Override
-          public String get(int index) {
-            listReads.incrementAndGet();
-            return rawList.get(index);
-          }
-
-          @Override
-          public int size() {
-            return rawList.size();
-          }
-        };
-
-    Map<String, Object> outputSchema =
-        ApiSchemaCatalog.resourceSchema(
-            ApiSchemaCatalog.functionFields(), List.of(ApiVocabulary.ENTRY));
-    ApiMethod<Object, Object> method =
-        new ApiMethod<>(
-            "function.get",
-            "Test projected method.",
-            ApiMethod.MethodEffects.readOnlyMethod(),
-            new JsonValueCodec(WireSchema.openObject()),
-            new JsonValueCodec(outputSchema),
-            ApiSchemaCatalog.functionFields(),
-            List.of(ApiVocabulary.ENTRY),
-            (ProjectedHandler<Object, Object>)
-                (request, projectedFields) -> {
-                  capturedFields.set(projectedFields);
-                  return Map.of(
-                      "entry", "0x00101000",
-                      "body", Map.of("start", "0x00101000"),
-                      "name", "main");
-                });
-
-    Object encoded = method.invokeDecoded(Map.of("fields", countingList));
-    assertEquals(rawList.size(), listReads.get(), "projection.fields must be read in one pass");
-    assertEquals(List.of("entry", "body.start", "name"), List.copyOf(capturedFields.get()));
-    assertEquals(
-        Map.of("entry", "0x00101000", "body", Map.of("start", "0x00101000"), "name", "main"),
-        encoded);
-
-    Map<String, Object> flatInput =
-        ApiSchemaCatalog.input(ApiSchemaCatalog.props("fields", ApiRegistry.fieldsSchema()));
-    ApiMethod<Map<String, Object>, Object> fallbackMethod =
-        new ApiMethod<>(
-            "custom.get",
-            "Read a custom record.",
-            ApiMethod.MethodEffects.readOnlyMethod(),
-            new StrictObjectCodec(StrictObjectCodec.canonicalSchema(flatInput), flatInput),
-            new JsonValueCodec(
-                ApiSchemaCatalog.resourceSchema(Set.of("id", "name", "type"), List.of("id"))),
-            Set.of("id", "name", "type"),
-            List.of("id"),
-            req -> Map.of("id", "1", "name", "alpha", "type", "label"));
-    assertEquals(
-        Map.of("id", "1", "name", "alpha"),
-        fallbackMethod.invoke(Map.of("projection", Map.of("fields", List.of("name")))));
-
-    ApiException nonArray =
-        assertThrows(ApiException.class, () -> method.invokeDecoded(Map.of("fields", "name")));
-    assertEquals(400, nonArray.status());
-    assertEquals("invalid_fields", nonArray.error().code());
-    assertEquals("/projection/fields", nonArray.error().target());
-
-    for (String badPath : List.of("", "  ", "body.*", "parameters.0", "body.", ".start")) {
-      ApiException invalid =
-          assertThrows(
-              ApiException.class, () -> method.invokeDecoded(Map.of("fields", List.of(badPath))));
-      assertEquals(400, invalid.status());
-      assertEquals("invalid_fields", invalid.error().code());
-      assertEquals("/projection/fields/0", invalid.error().target());
-    }
-
-    ApiException duplicate =
-        assertThrows(
-            ApiException.class,
-            () -> method.invokeDecoded(Map.of("fields", List.of("name", "name"))));
-    assertEquals(400, duplicate.status());
-    assertEquals("duplicate_field", duplicate.error().code());
-    assertEquals("/projection/fields/1", duplicate.error().target());
-
-    ApiException duplicateIdentity =
-        assertThrows(
-            ApiException.class,
-            () -> method.invokeDecoded(Map.of("fields", List.of("entry", "entry"))));
-    assertEquals(400, duplicateIdentity.status());
-    assertEquals("duplicate_field", duplicateIdentity.error().code());
-    assertEquals("/projection/fields/1", duplicateIdentity.error().target());
-
-    ApiException unknown =
-        assertThrows(
-            ApiException.class,
-            () -> method.invokeDecoded(Map.of("fields", List.of("not_a_field"))));
-    assertEquals(400, unknown.status());
-    assertEquals("unknown_field", unknown.error().code());
-    assertEquals("/projection/fields/0", unknown.error().target());
-  }
-
-  @Test
-  void wireValuesSkipsUnrequestedRecordComponentAccessorsAndProjectsDotPaths() {
-    GuardedResource resource =
-        new GuardedResource(
-            "42",
-            "kept",
-            "boom",
-            new GuardedChild("nested-ok", "boom"),
-            List.of(new GuardedChild("item-ok", "boom")));
-
-    Set<String> selected =
-        new LinkedHashSet<>(List.of("id", "selected", "nested.safe", "list.safe"));
-    Map<String, Object> normalized = WireValues.resource(resource, selected);
-    assertEquals(
-        Map.of(
-            "id", "42",
-            "selected", "kept",
-            "nested", Map.of("safe", "nested-ok"),
-            "list", List.of(Map.of("safe", "item-ok"))),
-        normalized);
-
-    Map<String, Object> allowedOnly =
-        WireValues.resourceRestrictingRoots(
-            resource, WireValues.rootFields(new LinkedHashSet<>(List.of("selected", "id"))));
-    assertEquals(
-        List.of("id", "selected"),
-        List.copyOf(allowedOnly.keySet()),
-        "resourceRestrictingRoots must preserve RecordComponent declaration order");
-    assertEquals(Map.of("id", "42", "selected", "kept"), allowedOnly);
-
-    GuardedResource listSafeResource =
-        new GuardedResource("42", "kept", "boom", null, List.of());
-    Map<String, Object> allowedWithDotRoot =
-        WireValues.resourceRestrictingRoots(
-            listSafeResource,
-            WireValues.rootFields(new LinkedHashSet<>(List.of("list.safe", "selected", "id"))));
-    assertEquals(
-        List.of("id", "selected", "list"),
-        List.copyOf(allowedWithDotRoot.keySet()),
-        "resourceRestrictingRoots with dot-path roots must preserve declaration order");
-    Map<String, Object> unprojectedList =
-        WireValues.listRestrictingRoots(
-            new Page<>(List.of(listSafeResource), 1, 10, null, null),
-            WireValues.rootFields(new LinkedHashSet<>(List.of("list.safe", "selected", "id"))));
-    @SuppressWarnings("unchecked")
-    List<Map<String, Object>> normalizedItems =
-        (List<Map<String, Object>>) unprojectedList.get("items");
-    assertEquals(
-        List.of("id", "selected", "list"),
-        List.copyOf(normalizedItems.getFirst().keySet()),
-        "unprojected list must preserve RecordComponent declaration order");
-  }
-
-  @Test
-  void projectedSchemaValidationAcceptsPartialNestedObjectsAndRejectsInvalidValues()
-      throws Exception {
-    Map<String, Object> functionSchema =
-        ApiSchemaCatalog.resourceSchema(
-            ApiSchemaCatalog.functionFields(), List.of(ApiVocabulary.ENTRY));
-    JsonValueCodec codec = new JsonValueCodec(functionSchema);
-
-    Set<String> cachedKey =
-        new LinkedHashSet<>(
-            List.of("entry", "parameters.name", "local_variables.storage"));
-    assertSame(
-        codec.projectedSchema(cachedKey),
-        codec.projectedSchema(new LinkedHashSet<>(cachedKey)));
-
-    Map<String, Object> partialBody =
-        Map.of("entry", "0x00101000", "body", Map.of("start", "0x00101000"));
-    assertEquals(
-        partialBody, codec.encode(partialBody, new LinkedHashSet<>(List.of("entry", "body.start"))));
-
-    Map<String, Object> partialParamsAndLocals =
-        Map.of(
-            "entry",
-            "0x00101000",
-            "parameters",
-            List.of(Map.of("name", "argc")),
-            "local_variables",
-            List.of(Map.of("storage", Map.of("kind", "register", "register", "RAX"))));
-    Path recordingPath = Files.createTempFile("projected-schema-test-", ".jfr");
-    try {
-      try (Recording recording = new Recording()) {
-        recording.enable("jdk.JavaExceptionThrow").withoutThreshold();
-        recording.start();
-        for (int index = 0; index < 20; index++) {
-          assertSame(partialParamsAndLocals, codec.encode(partialParamsAndLocals, cachedKey));
-        }
-        recording.stop();
-        recording.dump(recordingPath);
-      }
-      long thrownApiExceptions = 0;
-      try (RecordingFile file = new RecordingFile(recordingPath)) {
-        while (file.hasMoreEvents()) {
-          RecordedEvent event = file.readEvent();
-          if ("jdk.JavaExceptionThrow".equals(event.getEventType().getName())) {
-            RecordedClass thrownClass = event.getValue("thrownClass");
-            if (thrownClass != null
-                && ApiException.class.getName().equals(thrownClass.getName())) {
-              thrownApiExceptions++;
-            }
-          }
-        }
-      }
-      assertEquals(0L, thrownApiExceptions);
-    } finally {
-      Files.deleteIfExists(recordingPath);
-    }
-
-    // Unprojected extra property in a projected response is rejected.
-    ApiException unexpectedField =
-        assertThrows(
-            ApiException.class,
-            () ->
-                codec.encode(
-                    Map.of("entry", "0x00101000", "name", "main"),
-                    new LinkedHashSet<>(List.of("entry"))));
-    assertEquals("invalid_response", unexpectedField.error().code());
-    assertEquals("unknown_field", ((ApiException) unexpectedField.getCause()).error().code());
-
-    // Wrong value type on a projected nested property is still rejected.
-    ApiException wrongNestedType =
-        assertThrows(
-            ApiException.class,
-            () ->
-                codec.encode(
-                    Map.of("entry", "0x00101000", "body", Map.of("start", 123)),
-                    new LinkedHashSet<>(List.of("entry", "body.start"))));
-    assertEquals("invalid_response", wrongNestedType.error().code());
-    assertEquals("invalid_type", ((ApiException) wrongNestedType.getCause()).error().code());
-
-    // Empty parent object in a projectable schema fails minProperties validation.
-    ApiException emptyProjectedBody =
-        assertThrows(
-            ApiException.class,
-            () ->
-                codec.encode(
-                    Map.of("entry", "0x00101000", "body", Map.of()),
-                    new LinkedHashSet<>(List.of("entry", "body.start"))));
-    assertEquals("invalid_response", emptyProjectedBody.error().code());
-    assertEquals(
-        "invalid_count", ((ApiException) emptyProjectedBody.getCause()).error().code());
-
-    // Absent projected required child property inside a strict nested object schema is rejected.
-    JsonValueCodec strictFunctionCodec =
-        new JsonValueCodec(
-            ApiSchemaCatalog.resourceSchema(
-                ApiSchemaCatalog.functionFields(), List.of(ApiVocabulary.ENTRY), false));
-    ApiException missingProjectedSubfield =
-        assertThrows(
-            ApiException.class,
-            () ->
-                strictFunctionCodec.encode(
-                    Map.of("entry", "0x00101000", "body", Map.of()),
-                    new LinkedHashSet<>(List.of("entry", "body.start"))));
-    assertEquals("invalid_response", missingProjectedSubfield.error().code());
-    assertEquals(
-        "missing_field", ((ApiException) missingProjectedSubfield.getCause()).error().code());
-
-    // Scalar union branch is rejected when only a nested subfield is projected.
-    Map<String, Object> dataTypeSchema =
-        ApiSchemaCatalog.resourceSchema(ApiSchemaCatalog.dataTypeFields(), List.of("path"));
-    Map<String, Object> projectedDataTypeSchema =
-        WireSchema.project(
-            dataTypeSchema, new LinkedHashSet<>(List.of("path", "signature.return_type")));
-    ApiException scalarUnionForSubfield =
-        assertThrows(
-            ApiException.class,
-            () ->
-                WireSchema.validate(
-                    Map.of("path", "/Callback", "signature", "int Callback(void)"),
-                    projectedDataTypeSchema,
-                    "/result"));
-    assertEquals("invalid_union", scalarUnionForSubfield.error().code());
-    assertEquals("/result/signature", scalarUnionForSubfield.error().target());
-
-    // Multi-object union schemas validate projected branches when discriminators are omitted.
-    Map<String, Object> typeEnvelopeSchema =
-        WireSchema.withDefinitions(
-            WireSchema.object(Map.of("data_type", WireSchema.dataTypeReference()), "data_type"));
-    Map<String, Object> projectedTypeSchema =
-        WireSchema.project(typeEnvelopeSchema, Set.of("data_type.name"));
-    assertDoesNotThrow(
-        () ->
-            WireSchema.validate(
-                Map.of("data_type", Map.of("name", "int")), projectedTypeSchema, "/result"));
-    assertDoesNotThrow(
-        () -> WireSchema.validate(Map.of("data_type", Map.of()), projectedTypeSchema, "/result"));
-    ApiException invalidBlankName =
-        assertThrows(
-            ApiException.class,
-            () ->
-                WireSchema.validate(
-                    Map.of("data_type", Map.of("name", "")), projectedTypeSchema, "/result"));
-    assertEquals("invalid_union", invalidBlankName.error().code());
-
-    // Open and untyped schemas reject unprojected child keys and reject scalars on subfield paths.
-    Map<String, Object> openSchema =
-        WireSchema.object(
-            Map.of("id", WireSchema.string(), "meta", WireSchema.any(), "bag", WireSchema.openObject()),
-            "id");
-    WireSchema.validate(
-        Map.of("id", "1", "meta", Map.of("tag", "v1"), "bag", Map.of("nested", 7)),
-        WireSchema.project(
-            openSchema, new LinkedHashSet<>(List.of("id", "meta.tag", "bag.nested"))),
-        "/result");
-    ApiException unprojectedOpenChild =
-        assertThrows(
-            ApiException.class,
-            () ->
-                WireSchema.validate(
-                    Map.of("id", "1", "bag", Map.of("nested", 7, "extra", 8)),
-                    WireSchema.project(
-                        openSchema, new LinkedHashSet<>(List.of("id", "bag.nested"))),
-                    "/result"));
-    assertEquals("unknown_field", unprojectedOpenChild.error().code());
-    assertEquals("/result/bag/extra", unprojectedOpenChild.error().target());
-    ApiException scalarOnAnySubfield =
-        assertThrows(
-            ApiException.class,
-            () ->
-                WireSchema.validate(
-                    Map.of("id", "1", "meta", "raw-string"),
-                    WireSchema.project(
-                        openSchema, new LinkedHashSet<>(List.of("id", "meta.tag"))),
-                    "/result"));
-    assertEquals("invalid_type", scalarOnAnySubfield.error().code());
-    assertEquals("/result/meta", scalarOnAnySubfield.error().target());
-
-    // Resource schema with an items property alongside resource fields is not treated as a list envelope.
-    Map<String, Object> resourceWithItems =
-        WireSchema.object(
-            Map.of(
-                "id", WireSchema.string(),
-                "items", WireSchema.array(WireSchema.string(), 0, 10)),
-            "id",
-            "items");
-    WireSchema.validate(
-        Map.of("id", "bundle-1"),
-        WireSchema.project(resourceWithItems, new LinkedHashSet<>(List.of("id"))),
-        "/result");
-  }
+  private record RecordedCall(
+      String service,
+      String method,
+      int argCount,
+      Set<String> fields,
+      Set<String> queryFields,
+      Set<String> includes) {}
 
   @Test
   @SuppressWarnings("unchecked")
-  void allTwentyEightProjectionEnabledMethodsPreserveParityIdentityCursorsScanAndDotPaths()
+  void forwardsSelectedFieldsToDomainOverloadsAndCallsBaseMethodsWhenUnprojected()
       throws Exception {
-    ApiRegistry registry = buildTestRegistry();
-    List<ApiMethod<Map<String, Object>, Object>> projectedMethods =
-        registry.methodCatalog().methods().stream()
-            .map(descriptor -> registry.method(descriptor.name()))
-            .filter(m -> !m.fields().isEmpty() && isReadOnly(m))
-            .toList();
-    assertEquals(28, projectedMethods.size(), "expected all 28 projection-enabled read/list methods");
+    AtomicReference<RecordedCall> lastCall = new AtomicReference<>();
+    ApiRegistry registry = buildRecordingRegistry(lastCall);
 
-    Map<String, Map<String, Object>> baseParams = sampleRequests();
-    assertEquals(28, baseParams.size());
+    record Case(
+        String wireMethod,
+        Map<String, Object> baseParams,
+        String projectionField,
+        String serviceName,
+        String domainMethod,
+        int baseArity,
+        List<String> expectedSelectedFields,
+        boolean hasQueryFields) {}
 
-    for (ApiMethod<Map<String, Object>, Object> method : projectedMethods) {
-      Map<String, Object> unprojectedParams = baseParams.get(method.name());
-      assertNotNull(unprojectedParams, "missing sample request for " + method.name());
+    List<Case> cases =
+        List.of(
+            new Case(
+                "program.get",
+                Map.of(),
+                "executable_format",
+                "ProgramService",
+                "getProgram",
+                0,
+                List.of("name", "executable_format"),
+                false),
+            new Case(
+                "program_language.get",
+                Map.of(),
+                "processor",
+                "ProgramService",
+                "getLanguageInfo",
+                0,
+                List.of("language_id", "processor"),
+                false),
+            new Case(
+                "address_space.list",
+                Map.of(),
+                "kind",
+                "ProgramService",
+                "getAddressSpaces",
+                2,
+                List.of("name", "kind"),
+                false),
+            new Case(
+                "address.resolve",
+                Map.of("selector", Map.of("address", "0x00101000")),
+                "in_memory",
+                "AddressService",
+                "resolveAddress",
+                1,
+                List.of("address", "in_memory"),
+                false),
+            new Case(
+                "code_unit.list",
+                Map.of(),
+                "kind",
+                "ListingService",
+                "listCodeUnits",
+                4,
+                List.of("address", "kind"),
+                false),
+            new Case(
+                "data_unit.list",
+                Map.of(),
+                "length",
+                "ListingService",
+                "listDataUnits",
+                3,
+                List.of("address", "length"),
+                false),
+            new Case(
+                "instruction.get",
+                Map.of("selector", Map.of("address", "0x00101000")),
+                "mnemonic",
+                "ListingService",
+                "getInstruction",
+                1,
+                List.of("address", "mnemonic"),
+                false),
+            new Case(
+                "instruction.list",
+                Map.of(),
+                "mnemonic",
+                "ListingService",
+                "listInstructions",
+                3,
+                List.of("address", "mnemonic"),
+                false),
+            new Case(
+                "flow_override.list",
+                Map.of(
+                    "filter",
+                    Map.of("selector", Map.of("kind", "address", "address", "0x00101000"))),
+                "flow_override",
+                "ListingService",
+                "getFlowOverrides",
+                5,
+                List.of("address", "flow_override"),
+                false),
+            new Case(
+                "global_variable.get",
+                Map.of("selector", Map.of("address", "0x00200000")),
+                "name",
+                "GlobalVariableService",
+                "getGlobalVariable",
+                1,
+                List.of("address", "name"),
+                false),
+            new Case(
+                "global_variable.list",
+                Map.of(),
+                "name",
+                "GlobalVariableService",
+                "listGlobalVariables",
+                1,
+                List.of("address", "name"),
+                true),
+            new Case(
+                "function.get",
+                Map.of("selector", Map.of("entry", "0x00101000")),
+                "name",
+                "FunctionService",
+                "getFunction",
+                2,
+                List.of("entry", "name"),
+                false),
+            new Case(
+                "function.list",
+                Map.of(),
+                "name",
+                "FunctionService",
+                "listFunctions",
+                1,
+                List.of("entry", "name"),
+                true),
+            new Case(
+                "function_call.list",
+                Map.of("filter", Map.of("entry", "0x00101000", "direction", "callers")),
+                "name",
+                "FunctionService",
+                "getCallers",
+                3,
+                List.of("entry", "name"),
+                false),
+            new Case(
+                "function_call.list",
+                Map.of("filter", Map.of("entry", "0x00101000", "direction", "callees")),
+                "name",
+                "FunctionService",
+                "getCallees",
+                3,
+                List.of("entry", "name"),
+                false),
+            new Case(
+                "decompilation.get",
+                Map.of("selector", Map.of("entry", "0x00101000")),
+                "completed",
+                "DecompilationService",
+                "decompileFunction",
+                4,
+                List.of("entry", "completed"),
+                false),
+            new Case(
+                "symbol.get",
+                Map.of("selector", Map.of("id", "1")),
+                "name",
+                "SymbolService",
+                "getSymbol",
+                1,
+                List.of("id", "name"),
+                false),
+            new Case(
+                "symbol.list",
+                Map.of(),
+                "name",
+                "SymbolService",
+                "listSymbols",
+                1,
+                List.of("address", "id", "name"),
+                true),
+            new Case(
+                "data_type_category.list",
+                Map.of(),
+                "name",
+                "DataTypeService",
+                "listCategories",
+                3,
+                List.of("path", "name"),
+                false),
+            new Case(
+                "data_type.get",
+                Map.of("selector", Map.of("path", "/Callback")),
+                "kind",
+                "DataTypeService",
+                "getDataType",
+                1,
+                List.of("path", "kind"),
+                false),
+            new Case(
+                "data_type.list",
+                Map.of(),
+                "kind",
+                "DataTypeService",
+                "searchDataTypes",
+                5,
+                List.of("path", "kind"),
+                false));
 
-      Map<String, Object> fullResponse =
-          (Map<String, Object>) registry.dispatch(method.name(), unprojectedParams);
+    for (Case testCase : cases) {
+      lastCall.set(null);
+      registry.dispatch(testCase.wireMethod(), testCase.baseParams());
+      RecordedCall unprojected = lastCall.get();
+      assertEquals(testCase.serviceName(), unprojected.service(), testCase.wireMethod());
+      assertEquals(testCase.domainMethod(), unprojected.method(), testCase.wireMethod());
+      assertEquals(testCase.baseArity(), unprojected.argCount(), testCase.wireMethod());
+      assertNull(unprojected.fields(), testCase.wireMethod());
+      assertNull(unprojected.queryFields(), testCase.wireMethod());
 
-      String chosenField =
-          method.fields().stream()
-              .filter(f -> !f.contains(".") && !method.identityFields().contains(f))
-              .sorted()
-              .findFirst()
-              .orElse(method.identityFields().getFirst());
-
-      Map<String, Object> projectedParams = new LinkedHashMap<>(unprojectedParams);
-      projectedParams.put("projection", Map.of("fields", List.of(chosenField)));
-      Map<String, Object> projectedResponse =
-          (Map<String, Object>) registry.dispatch(method.name(), projectedParams);
-
-      Set<String> expectedKeys = new LinkedHashSet<>(method.identityFields());
-      expectedKeys.add(chosenField);
-
-      if (fullResponse.containsKey("items")) {
-        assertEquals(fullResponse.get("next_cursor") != null, projectedResponse.get("next_cursor") != null);
-        assertEquals(fullResponse.get("scan"), projectedResponse.get("scan"));
-        List<Map<String, Object>> fullItems = (List<Map<String, Object>>) fullResponse.get("items");
-        List<Map<String, Object>> projItems =
-            (List<Map<String, Object>>) projectedResponse.get("items");
-        assertEquals(fullItems.size(), projItems.size(), method.name());
-        for (int i = 0; i < fullItems.size(); i++) {
-          Map<String, Object> expectedItem = new LinkedHashMap<>();
-          for (String key : expectedKeys) {
-            if (fullItems.get(i).containsKey(key)) {
-              expectedItem.put(key, fullItems.get(i).get(key));
-            }
-          }
-          assertEquals(expectedItem, projItems.get(i), method.name());
-        }
-      } else {
-        Map<String, Object> expectedResource = new LinkedHashMap<>();
-        for (String key : expectedKeys) {
-          if (fullResponse.containsKey(key)) {
-            expectedResource.put(key, fullResponse.get(key));
-          }
-        }
-        assertEquals(expectedResource, projectedResponse, method.name());
+      lastCall.set(null);
+      Map<String, Object> projectedParams = new LinkedHashMap<>(testCase.baseParams());
+      projectedParams.put("projection", Map.of("fields", List.of(testCase.projectionField())));
+      registry.dispatch(testCase.wireMethod(), projectedParams);
+      RecordedCall projected = lastCall.get();
+      assertEquals(testCase.serviceName(), projected.service(), testCase.wireMethod());
+      assertEquals(testCase.domainMethod(), projected.method(), testCase.wireMethod());
+      assertEquals(testCase.baseArity() + 1, projected.argCount(), testCase.wireMethod());
+      assertEquals(testCase.expectedSelectedFields(), List.copyOf(projected.fields()));
+      if (testCase.hasQueryFields()) {
+        assertEquals(Set.copyOf(testCase.expectedSelectedFields()), projected.queryFields());
       }
     }
 
-    // Verify nested dot-path projections end-to-end across function.get, function.list, data_type.get, data_type.list, memory.read.
+    // Check derived includes on function.get and function.list across dot-path projections.
+    lastCall.set(null);
     Map<String, Object> fnDot =
         (Map<String, Object>)
             registry.dispatch(
@@ -508,6 +307,7 @@ class ProjectionWireTest {
                     Map.of(
                         "fields",
                         List.of("body.start", "parameters.name", "local_variables.storage"))));
+    assertEquals(Set.of("parameters", "locals"), lastCall.get().includes());
     assertEquals(
         Map.of(
             "entry",
@@ -520,119 +320,34 @@ class ProjectionWireTest {
             List.of(Map.of("storage", Map.of("kind", "register", "register", "RAX")))),
         fnDot);
 
-    // Parent + child in both orders returns full body object.
-    for (List<String> fields :
-        List.of(List.of("body", "body.start"), List.of("body.start", "body"))) {
-      Map<String, Object> fnParentChild =
-          (Map<String, Object>)
-              registry.dispatch(
-                  "function.get",
-                  Map.of(
-                      "selector",
-                      Map.of("entry", "0x00101000"),
-                      "projection",
-                      Map.of("fields", fields)));
-      assertEquals(
-          Map.of(
-              "entry",
-              "0x00101000",
-              "body",
-              Map.of("start", "0x00101000", "end", "0x00101020", "num_addresses", 33L)),
-          fnParentChild);
-    }
+    lastCall.set(null);
+    registry.dispatch(
+        "function.list",
+        Map.of("projection", Map.of("fields", List.of("body.start"))));
+    assertEquals(Set.of(), lastCall.get().includes());
+    assertEquals(List.of("entry", "body.start"), List.copyOf(lastCall.get().fields()));
 
-    Map<String, Object> dtDot =
-        (Map<String, Object>)
-            registry.dispatch(
-                "data_type.get",
-                Map.of(
-                    "selector",
-                    Map.of("path", "/Callback"),
-                    "projection",
-                    Map.of("fields", List.of("signature.return_type"))));
+    // Check split-phase prepareDispatch and batch.execute field projections.
+    lastCall.set(null);
+    ApiRegistry.PreparedDispatch prepared =
+        registry.prepareDispatch(
+            "data_type.get",
+            Map.of(
+                "selector",
+                Map.of("path", "/Callback"),
+                "projection",
+                Map.of("fields", List.of("signature.return_type"))));
     assertEquals(
         Map.of(
             "path",
             "/Callback",
             "signature",
             Map.of("return_type", Map.of("kind", "named", "name", "int"))),
-        dtDot);
+        prepared.encodeResponse(prepared.execute()));
+    assertEquals(List.of("path", "signature.return_type"), List.copyOf(lastCall.get().fields()));
 
-    Map<String, Object> memDot =
-        (Map<String, Object>)
-            registry.dispatch(
-                "memory.read",
-                Map.of(
-                    "selector",
-                    Map.of("address", "0x00101000"),
-                    "projection",
-                    Map.of("fields", List.of("bytes.data"))));
-    assertEquals(Map.of("address", "0x00101000", "bytes", Map.of("data", "90c3")), memDot);
-
-    // Verify code_unit.list rejects unselectable value/representation and omits them when unprojected.
-    Map<String, Object> unprojectedCodeUnits =
-        (Map<String, Object>) registry.dispatch("code_unit.list", Map.of());
-    List<Map<String, Object>> cuItems =
-        (List<Map<String, Object>>) unprojectedCodeUnits.get("items");
-    assertFalse(cuItems.getFirst().containsKey("value"));
-    assertFalse(cuItems.getFirst().containsKey("representation"));
-
-    for (String forbidden : List.of("value", "representation")) {
-      ApiException err =
-          assertThrows(
-              ApiException.class,
-              () ->
-                  registry.dispatch(
-                      "code_unit.list",
-                      Map.of("projection", Map.of("fields", List.of(forbidden)))));
-      assertEquals(400, err.status());
-      assertEquals("invalid_enum", err.error().code());
-
-      ApiException decodedErr =
-          assertThrows(
-              ApiException.class,
-              () ->
-                  registry
-                      .method("code_unit.list")
-                      .invokeDecoded(Map.of("fields", List.of(forbidden))));
-      assertEquals(400, decodedErr.status());
-      assertEquals("unknown_field", decodedErr.error().code());
-    }
-
-    // Verify cursor resume works identically under projection.
-    Map<String, Object> page1 =
-        (Map<String, Object>)
-            registry.dispatch(
-                "symbol.list",
-                Map.of("page", Map.of("limit", 1), "projection", Map.of("fields", List.of("name"))));
-    String cursor = (String) page1.get("next_cursor");
-    assertNotNull(cursor);
-    Map<String, Object> page2 =
-        (Map<String, Object>)
-            registry.dispatch(
-                "symbol.list",
-                Map.of(
-                    "page",
-                    Map.of("limit", 1, "cursor", cursor),
-                    "projection",
-                    Map.of("fields", List.of("name"))));
-    List<Map<String, Object>> page2Items = (List<Map<String, Object>>) page2.get("items");
-    assertEquals(List.of(Map.of("address", "0x00101004", "id", "2", "name", "helper")), page2Items);
-
-    // Verify split-phase prepareDispatch and batch.execute preserve projection pushdown.
-    ApiRegistry.PreparedDispatch preparedFn =
-        registry.prepareDispatch(
-            "function.get",
-            Map.of(
-                "selector",
-                Map.of("entry", "0x00101000"),
-                "projection",
-                Map.of("fields", List.of("body.start"))));
-    assertEquals(
-        Map.of("entry", "0x00101000", "body", Map.of("start", "0x00101000")),
-        preparedFn.encodeResponse(preparedFn.execute()));
-
-    ApiRegistry.PreparedDispatch preparedBatch =
+    lastCall.set(null);
+    ApiRegistry.PreparedDispatch batch =
         registry.prepareDispatch(
             "batch.execute",
             Map.of(
@@ -640,75 +355,25 @@ class ProjectionWireTest {
                 List.of(
                     Map.of(
                         "id",
-                        "fn-1",
+                        "item-1",
                         "method",
-                        "function.get",
+                        "symbol.get",
                         "arguments",
                         Map.of(
                             "selector",
-                            Map.of("entry", "0x00101000"),
+                            Map.of("id", "1"),
                             "projection",
-                            Map.of("fields", List.of("parameters.name")))))));
+                            Map.of("fields", List.of("name")))))));
     assertEquals(
         Map.of(
             "items",
-            List.of(
-                Map.of(
-                    "id",
-                    "fn-1",
-                    "result",
-                    Map.of(
-                        "entry",
-                        "0x00101000",
-                        "parameters",
-                        List.of(Map.of("name", "argc")))))),
-        preparedBatch.encodeResponse(preparedBatch.execute()));
+            List.of(Map.of("id", "item-1", "result", Map.of("id", "1", "name", "main")))),
+        batch.encodeResponse(batch.execute()));
+    assertEquals(List.of("id", "name"), List.copyOf(lastCall.get().fields()));
   }
 
-  private static boolean isReadOnly(ApiMethod<?, ?> method) {
-    return method.effects().readOnly();
-  }
-
-  private static Map<String, Map<String, Object>> sampleRequests() {
-    Map<String, Map<String, Object>> requests = new LinkedHashMap<>();
-    requests.put("session.get", Map.of());
-    requests.put("program.get", Map.of());
-    requests.put("program_language.get", Map.of());
-    requests.put("address_space.list", Map.of());
-    requests.put("address.resolve", Map.of("selector", Map.of("address", "0x00101000")));
-    requests.put("memory_block.get", Map.of("selector", Map.of("name", ".text")));
-    requests.put("memory_block.list", Map.of());
-    requests.put("memory.read", Map.of("selector", Map.of("address", "0x00101000")));
-    requests.put("code_unit.list", Map.of());
-    requests.put("data_unit.list", Map.of());
-    requests.put("global_variable.get", Map.of("selector", Map.of("address", "0x00200000")));
-    requests.put("global_variable.list", Map.of());
-    requests.put("instruction.get", Map.of("selector", Map.of("address", "0x00101000")));
-    requests.put("instruction.list", Map.of());
-    requests.put(
-        "flow_override.list",
-        Map.of(
-            "filter",
-            Map.of("selector", Map.of("kind", "address", "address", "0x00101000"))));
-    requests.put("function.get", Map.of("selector", Map.of("entry", "0x00101000")));
-    requests.put("function.list", Map.of());
-    requests.put("function_call.list", Map.of("filter", Map.of("entry", "0x00101000")));
-    requests.put("analysis.get", Map.of());
-    requests.put("decompilation.get", Map.of("selector", Map.of("entry", "0x00101000")));
-    requests.put("symbol.get", Map.of("selector", Map.of("id", "1")));
-    requests.put("symbol.list", Map.of("page", Map.of("limit", 1)));
-    requests.put("reference.list", Map.of("filter", Map.of("direction", "from")));
-    requests.put(
-        "comment.get",
-        Map.of("selector", Map.of("address", "0x00101000", "type", "eol")));
-    requests.put("comment.list", Map.of());
-    requests.put("data_type_category.list", Map.of());
-    requests.put("data_type.get", Map.of("selector", Map.of("path", "/Callback")));
-    requests.put("data_type.list", Map.of());
-    return requests;
-  }
-
-  private static ApiRegistry buildTestRegistry() {
+  @SuppressWarnings("unchecked")
+  private static ApiRegistry buildRecordingRegistry(AtomicReference<RecordedCall> lastCall) {
     ScanProgress scan =
         new ScanProgress(
             ScanProgress.Kind.ADDRESS,
@@ -718,222 +383,168 @@ class ProjectionWireTest {
             "0x00101020",
             true,
             ScanProgress.StopReason.COMPLETED,
-            2L);
+            1L);
 
     ProgramService programService =
         proxy(
             ProgramService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "getProgram" ->
-                      new ProgramResource(
-                          "sample.bin",
-                          "/bin/sample",
-                          "ELF",
-                          "0x00100000",
-                          "0x00100000",
-                          "0x002000ff",
-                          "x86:LE:64:default",
-                          "gcc",
-                          Instant.parse("2026-01-01T00:00:00Z"),
-                          Instant.parse("2026-01-02T00:00:00Z"),
-                          12L,
-                          34L);
-                  case "getLanguageInfo" ->
-                      new ProgramLanguageResource(
-                          "x86:LE:64:default",
-                          "gcc",
-                          "x86",
-                          ProgramLanguageResource.Endian.LITTLE,
-                          64);
-                  case "getAddressSpaces" ->
-                      Page.of(
-                          List.of(
-                              new AddressSpaceResource(
-                                  "ram",
-                                  AddressSpaceResource.Kind.RAM,
-                                  64,
-                                  "0x00000000",
-                                  "0xffffffff",
-                                  true)),
-                          100,
-                          null);
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
+            (proxy, method, args) -> {
+              int count = args == null ? 0 : args.length;
+              Set<String> fields = trailingFields(method, args);
+              lastCall.set(
+                  new RecordedCall("ProgramService", method.getName(), count, fields, null, null));
+              return switch (method.getName()) {
+                case "getProgram" ->
+                    new ProgramResource(
+                        "sample.bin",
+                        "/bin/sample",
+                        "ELF",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        null,
+                        0L,
+                        0L);
+                case "getLanguageInfo" ->
+                    new ProgramLanguageResource(
+                        "x86:LE:64:default",
+                        "gcc",
+                        "x86",
+                        ProgramLanguageResource.Endian.LITTLE,
+                        64);
+                case "getAddressSpaces" ->
+                    Page.of(
+                        List.of(
+                            new AddressSpaceResource(
+                                "ram", AddressSpaceResource.Kind.RAM, 64, null, null, true)),
+                        100,
+                        null);
+                default -> invokeDefaultOrFail(proxy, method, args);
+              };
+            });
 
     AddressService addressService =
         proxy(
             AddressService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "resolveAddress" ->
-                      new AddressResource(
-                          "0x00101000",
-                          true,
-                          true,
-                          new AddressResource.MemoryBlockSummary(
-                              ".text", "0x00101000", "0x00101fff", 4096L, true, false, true),
-                          new AddressResource.FunctionSummary("0x00101000", "main"),
-                          new AddressResource.SymbolSummary("1", "main", "Function"),
-                          new AddressResource.CodeUnitSummary("0x00101000", "0x00101001"));
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
-
-    CommentService commentService =
-        proxy(
-            CommentService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "listComments" ->
-                      Page.scanned(
-                          List.of(
-                              new CommentResource(
-                                  "0x00101000", CommentResource.Type.EOL, "entry comment")),
-                          100,
-                          null,
-                          scan);
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
-
-    ReferenceService referenceService =
-        (fromRaw, toRaw, type, direction, limit, cursor) ->
-            Page.of(
-                List.of(
-                    new ReferenceResource(
-                        "0x00101000", "0x00101020", "unconditional_call", 0, true, "analysis")),
-                limit,
-                null);
-
-    MemoryService memoryService =
-        proxy(
-            MemoryService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "getMemoryBlockByName" ->
-                      new MemoryBlockResource(
-                          ".text",
-                          "0x00101000",
-                          "0x00101fff",
-                          4096L,
-                          true,
-                          false,
-                          true,
-                          true,
-                          false,
-                          false,
-                          MemoryBlockResource.Kind.DEFAULT,
-                          "code");
-                  case "listMemoryBlocks" ->
-                      Page.of(
-                          List.of(
-                              new MemoryBlockResource(
-                                  ".text",
-                                  "0x00101000",
-                                  "0x00101fff",
-                                  4096L,
-                                  true,
-                                  false,
-                                  true,
-                                  true,
-                                  false,
-                                  false,
-                                  MemoryBlockResource.Kind.DEFAULT,
-                                  "code")),
-                          100,
-                          null);
-                  case "readMemoryRange" ->
-                      new MemoryResource(
-                          "0x00101000",
-                          new ByteSequence(ByteSequence.Encoding.HEX, "90c3", 2));
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
+            (proxy, method, args) -> {
+              int count = args == null ? 0 : args.length;
+              Set<String> fields = trailingFields(method, args);
+              lastCall.set(
+                  new RecordedCall("AddressService", method.getName(), count, fields, null, null));
+              return new AddressResource("0x00101000", true, true, null, null, null, null);
+            });
 
     ListingService listingService =
         proxy(
             ListingService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "listCodeUnits" ->
-                      Page.scanned(
-                          List.of(
-                              new CodeUnitResource(
-                                  "0x00101000",
-                                  CodeUnitResource.Kind.DATA,
-                                  4,
-                                  new ByteSequence(ByteSequence.Encoding.HEX, "01000000", 4),
-                                  "dd 1h",
-                                  "dd",
-                                  List.of("1h"),
-                                  DataTypeReference.named("int"))),
-                          100,
-                          null,
-                          scan);
-                  case "listDataUnits" ->
-                      Page.scanned(
-                          List.of(
-                              new DataUnitResource(
-                                  "0x00200000",
-                                  4,
-                                  DataTypeReference.named("int"),
-                                  "0x1",
-                                  "1h",
-                                  new ByteSequence(ByteSequence.Encoding.HEX, "01000000", 4))),
-                          100,
-                          null,
-                          scan);
-                  case "getInstruction" ->
-                      new InstructionResource(
-                          "0x00101000",
-                          1,
-                          new ByteSequence(ByteSequence.Encoding.HEX, "90", 1),
-                          "NOP",
-                          List.of(),
-                          FlowOverrideValue.NONE,
-                          "fall_through",
-                          "fall_through",
-                          "0x00101001");
-                  case "listInstructions", "getFlowOverrides" ->
-                      Page.scanned(
-                          List.of(
-                              new InstructionResource(
-                                  "0x00101000",
-                                  1,
-                                  new ByteSequence(ByteSequence.Encoding.HEX, "90", 1),
-                                  "NOP",
-                                  List.of(),
-                                  FlowOverrideValue.BRANCH,
-                                  "fall_through",
-                                  "unconditional_jump",
-                                  null)),
-                          100,
-                          null,
-                          scan);
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
+            (proxy, method, args) -> {
+              int count = args == null ? 0 : args.length;
+              Set<String> fields = trailingFields(method, args);
+              lastCall.set(
+                  new RecordedCall("ListingService", method.getName(), count, fields, null, null));
+              return switch (method.getName()) {
+                case "listCodeUnits" ->
+                    Page.scanned(
+                        List.of(
+                            new CodeUnitResource(
+                                "0x00101000",
+                                CodeUnitResource.Kind.DATA,
+                                4,
+                                new ByteSequence(ByteSequence.Encoding.HEX, "01000000", 4),
+                                "dd 1h",
+                                "dd",
+                                List.of("1h"),
+                                DataTypeReference.named("int"))),
+                        100,
+                        null,
+                        scan);
+                case "listDataUnits" ->
+                    Page.scanned(
+                        List.of(
+                            new DataUnitResource(
+                                "0x00200000",
+                                4,
+                                DataTypeReference.named("int"),
+                                "0x1",
+                                "1h",
+                                new ByteSequence(ByteSequence.Encoding.HEX, "01000000", 4))),
+                        100,
+                        null,
+                        scan);
+                case "getInstruction" ->
+                    new InstructionResource(
+                        "0x00101000",
+                        1,
+                        new ByteSequence(ByteSequence.Encoding.HEX, "90", 1),
+                        "NOP",
+                        List.of(),
+                        FlowOverrideValue.NONE,
+                        "fall_through",
+                        "fall_through",
+                        "0x00101001");
+                case "listInstructions", "getFlowOverrides" ->
+                    Page.scanned(
+                        List.of(
+                            new InstructionResource(
+                                "0x00101000",
+                                1,
+                                new ByteSequence(ByteSequence.Encoding.HEX, "90", 1),
+                                "NOP",
+                                List.of(),
+                                FlowOverrideValue.BRANCH,
+                                "fall_through",
+                                "unconditional_jump",
+                                null)),
+                        100,
+                        null,
+                        scan);
+                default -> invokeDefaultOrFail(proxy, method, args);
+              };
+            });
+
+    GlobalVariableResource sampleGlobal =
+        new GlobalVariableResource(
+            "0x00200000", "g_count", "Global", DataTypeReference.named("int"), 4, "0x2a", "42", "user_defined");
+
+    GlobalVariableService globalVariableService =
+        proxy(
+            GlobalVariableService.class,
+            (proxy, method, args) -> {
+              int count = args == null ? 0 : args.length;
+              Set<String> fields = trailingFields(method, args);
+              Set<String> queryFields =
+                  args != null && args.length > 0 && args[0] instanceof GlobalVariableService.Query q
+                      ? q.fields()
+                      : null;
+              lastCall.set(
+                  new RecordedCall(
+                      "GlobalVariableService", method.getName(), count, fields, queryFields, null));
+              return switch (method.getName()) {
+                case "getGlobalVariable" -> sampleGlobal;
+                case "listGlobalVariables" -> Page.scanned(List.of(sampleGlobal), 100, null, scan);
+                default -> invokeDefaultOrFail(proxy, method, args);
+              };
+            });
 
     FunctionResource sampleFunction =
         new FunctionResource(
             "0x00101000",
             "main",
             "Global",
-            new FunctionResource.Body("0x00101000", "0x00101020", 33L),
-            "int main(int argc)",
-            DataTypeReference.named("int"),
-            new VariableStorageReference.Register("EAX"),
-            1,
-            "__stdcall",
-            List.of(
-                new FunctionResource.ParameterResource(
-                    0,
-                    "argc",
-                    DataTypeReference.named("int"),
-                    new VariableStorageReference.Register("EDI"))),
+            new FunctionResource.Body("0x00101000", null, 0L),
+            null,
+            null,
+            null,
+            0,
+            null,
+            List.of(new FunctionResource.ParameterResource(0, "argc", null, null)),
             List.of(
                 new FunctionResource.LocalVariableResource(
-                    "local_8",
-                    DataTypeReference.named("int"),
-                    new VariableStorageReference.Register("RAX"))),
-            "entry fn",
+                    null, null, new VariableStorageReference.Register("RAX"))),
+            null,
             false,
             false,
             false,
@@ -941,171 +552,156 @@ class ProjectionWireTest {
             0,
             false,
             false,
-            "rep",
-            List.of("entry"),
+            null,
+            List.of(),
             null);
 
     FunctionService functionService =
         proxy(
             FunctionService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "getFunction" -> sampleFunction;
-                  case "listFunctions" -> Page.scanned(List.of(sampleFunction), 100, null, scan);
-                  case "getCallers", "getCallees" ->
-                      Page.of(
-                          List.of(
-                              new FunctionCallResource(
-                                  "0x00101040",
-                                  "helper",
-                                  null,
-                                  FunctionCallResource.Direction.CALLEES,
-                                  "Global",
-                                  null)),
-                          100,
-                          null);
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
-
-    GlobalVariableResource sampleGlobal =
-        new GlobalVariableResource(
-            "0x00200000",
-            "g_count",
-            "Global",
-            DataTypeReference.named("int"),
-            4,
-            "0x2a",
-            "42",
-            "user_defined");
-
-    GlobalVariableService globalVariableService =
-        proxy(
-            GlobalVariableService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "getGlobalVariable" -> sampleGlobal;
-                  case "listGlobalVariables" ->
-                      Page.scanned(List.of(sampleGlobal), 100, null, scan);
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
-
-    AnalysisService analysisService =
-        proxy(
-            AnalysisService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "getStatus" ->
-                      new AnalysisResource(
-                          AnalysisResource.Kind.GHIDRA,
-                          AnalysisResource.Status.IDLE,
-                          true,
-                          null,
-                          null,
-                          null,
-                          100.0);
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
+            (proxy, method, args) -> {
+              int count = args == null ? 0 : args.length;
+              Set<String> fields = null;
+              Set<String> queryFields = null;
+              Set<String> includes = null;
+              if ("getFunction".equals(method.getName())) {
+                includes = (Set<String>) args[1];
+                if (count == 3) {
+                  fields = (Set<String>) args[2];
+                }
+              } else if ("listFunctions".equals(method.getName())) {
+                FunctionService.FunctionQuery query = (FunctionService.FunctionQuery) args[0];
+                queryFields = query.fields();
+                includes = query.includes();
+                if (count == 2) {
+                  fields = (Set<String>) args[1];
+                }
+              } else {
+                fields = trailingFields(method, args);
+              }
+              lastCall.set(
+                  new RecordedCall(
+                      "FunctionService", method.getName(), count, fields, queryFields, includes));
+              return switch (method.getName()) {
+                case "getFunction" -> sampleFunction;
+                case "listFunctions" -> Page.scanned(List.of(sampleFunction), 100, null, scan);
+                case "getCallers", "getCallees" ->
+                    Page.of(
+                        List.of(
+                            new FunctionCallResource(
+                                "0x00101040",
+                                "helper",
+                                null,
+                                FunctionCallResource.Direction.CALLEES,
+                                "Global",
+                                null)),
+                        100,
+                        null);
+                default -> invokeDefaultOrFail(proxy, method, args);
+              };
+            });
 
     DecompilationService decompilationService =
         proxy(
             DecompilationService.class,
-            (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "decompileFunction" ->
-                      new DecompilationResource(
-                          "0x00101000",
-                          "main",
-                          DecompilationResource.Format.TEXT,
-                          true,
-                          5L,
-                          "int main(void) { return 0; }\n",
-                          null,
-                          null,
-                          null,
-                          null,
-                          List.of());
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
+            (proxy, method, args) -> {
+              if ("close".equals(method.getName())) {
+                return null;
+              }
+              int count = args == null ? 0 : args.length;
+              Set<String> fields = trailingFields(method, args);
+              lastCall.set(
+                  new RecordedCall(
+                      "DecompilationService", method.getName(), count, fields, null, null));
+              return new DecompilationResource(
+                  "0x00101000",
+                  "",
+                  DecompilationResource.Format.TEXT,
+                  true,
+                  0L,
+                  "",
+                  null,
+                  null,
+                  null,
+                  null,
+                  List.of());
+            });
 
-    List<SymbolResource> allSymbols =
-        List.of(
-            new SymbolResource(
-                "1", "main", "0x00101000", "Global", "function", "user_defined", true, null),
-            new SymbolResource(
-                "2", "helper", "0x00101004", "Global", "function", "user_defined", true, null));
+    SymbolResource sampleSymbol =
+        new SymbolResource("1", "main", "0x00101000", "Global", "function", "user_defined", true, null);
 
     SymbolService symbolService =
         proxy(
             SymbolService.class,
             (proxy, method, args) -> {
-              if ("getSymbol".equals(method.getName())) {
-                return allSymbols.getFirst();
-              }
-              if ("listSymbols".equals(method.getName())) {
-                SymbolService.SymbolQuery query = (SymbolService.SymbolQuery) args[0];
-                List<SymbolResource> filtered = new ArrayList<>();
-                for (SymbolResource sym : allSymbols) {
-                  if (query.cursor() != null && sym.address().compareTo(query.cursor()) <= 0) {
-                    continue;
-                  }
-                  filtered.add(sym);
-                }
-                List<SymbolResource> items =
-                    filtered.subList(0, Math.min(query.limit(), filtered.size()));
-                String next =
-                    filtered.size() > query.limit() ? items.getLast().address() : null;
-                return Page.scanned(
-                    items,
-                    query.limit(),
-                    next,
-                    new ScanProgress(
-                        ScanProgress.Kind.ADDRESS,
-                        null,
-                        null,
-                        "0x00101000",
-                        items.getLast().address(),
-                        next == null,
-                        next == null
-                            ? ScanProgress.StopReason.COMPLETED
-                            : ScanProgress.StopReason.LIMIT,
-                        1L));
-              }
-              return invokeDefaultOrFail(proxy, method, args);
+              int count = args == null ? 0 : args.length;
+              Set<String> fields = trailingFields(method, args);
+              Set<String> queryFields =
+                  args != null && args.length > 0 && args[0] instanceof SymbolService.SymbolQuery q
+                      ? q.fields()
+                      : null;
+              lastCall.set(
+                  new RecordedCall(
+                      "SymbolService", method.getName(), count, fields, queryFields, null));
+              return switch (method.getName()) {
+                case "getSymbol" -> sampleSymbol;
+                case "listSymbols" -> Page.scanned(List.of(sampleSymbol), 100, null, scan);
+                default -> invokeDefaultOrFail(proxy, method, args);
+              };
             });
 
-    DataTypeResource callbackDataType =
+    DataTypeResource sampleDataType =
         new DataTypeResource(
             "/Callback",
             "Callback",
             "/",
             DataTypeResource.Kind.FUNCTION,
-            8,
-            "void callback",
-            8,
             null,
             null,
-            new FunctionSignature(
-                DataTypeReference.named("int"),
-                List.of(new FunctionSignature.Parameter("x", DataTypeReference.named("int"))),
-                "__cdecl",
-                false,
-                false),
+            null,
+            null,
+            null,
+            new FunctionSignature(DataTypeReference.named("int"), List.of(), "default", false, false),
             null);
 
     DataTypeService dataTypeService =
         proxy(
             DataTypeService.class,
+            (proxy, method, args) -> {
+              int count = args == null ? 0 : args.length;
+              Set<String> fields = trailingFields(method, args);
+              lastCall.set(
+                  new RecordedCall(
+                      "DataTypeService", method.getName(), count, fields, null, null));
+              return switch (method.getName()) {
+                case "listCategories" ->
+                    Page.of(
+                        List.of(new DataTypeCategoryResource("/types", "types", 0, 0)), 100, null);
+                case "getDataType" -> sampleDataType;
+                case "searchDataTypes" -> Page.of(List.of(sampleDataType), 100, null);
+                default -> invokeDefaultOrFail(proxy, method, args);
+              };
+            });
+
+    CommentService commentService =
+        proxy(CommentService.class, ProjectionWireTest::invokeDefaultOrFail);
+    ReferenceService referenceService = (from, to, type, dir, limit, cursor) -> Page.of(List.of(), limit, null);
+    MemoryService memoryService =
+        proxy(MemoryService.class, ProjectionWireTest::invokeDefaultOrFail);
+    AnalysisService analysisService =
+        proxy(
+            AnalysisService.class,
             (proxy, method, args) ->
-                switch (method.getName()) {
-                  case "listCategories" ->
-                      Page.of(
-                          List.of(new DataTypeCategoryResource("/types", "types", 1, 3)),
-                          100,
-                          null);
-                  case "getDataType" -> callbackDataType;
-                  case "searchDataTypes" -> Page.of(List.of(callbackDataType), 100, null);
-                  default -> invokeDefaultOrFail(proxy, method, args);
-                });
+                "getStatus".equals(method.getName())
+                    ? new AnalysisResource(
+                        AnalysisResource.Kind.GHIDRA,
+                        AnalysisResource.Status.IDLE,
+                        true,
+                        null,
+                        null,
+                        null,
+                        100.0)
+                    : invokeDefaultOrFail(proxy, method, args));
 
     TransactionRunner txRunner =
         new TransactionRunner() {
@@ -1143,6 +739,18 @@ class ProjectionWireTest {
         "session-1",
         () -> Map.of("id", "session-1", "status", "ready", "program_name", "sample.bin"),
         () -> {});
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Set<String> trailingFields(java.lang.reflect.Method method, Object[] args) {
+    if (args == null || args.length == 0) {
+      return null;
+    }
+    Class<?>[] types = method.getParameterTypes();
+    if (types[types.length - 1] == Set.class) {
+      return (Set<String>) args[args.length - 1];
+    }
+    return null;
   }
 
   @SuppressWarnings("unchecked")

@@ -5,7 +5,6 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -230,7 +229,7 @@ public final class WireSchema {
     return project(schema, FieldSelection.from(selectedFields), false);
   }
 
-  static Map<String, Object> projectResponse(
+  static Map<String, Object> projectOutput(
       Map<String, Object> schema, Set<String> selectedFields) {
     Objects.requireNonNull(schema, "schema");
     if (selectedFields == null) {
@@ -244,7 +243,7 @@ public final class WireSchema {
   }
 
   private static Map<String, Object> project(
-      Map<String, Object> schema, FieldSelection selection, boolean preserveRootRequired) {
+      Map<String, Object> schema, FieldSelection selection, boolean preserveContract) {
     Objects.requireNonNull(schema, "schema");
     if (selection == null || selection.selectsAll()) {
       return schema;
@@ -252,8 +251,8 @@ public final class WireSchema {
     Map<String, Map<String, Object>> definitions = schemaDefinitions(schema);
     Map<String, Object> projected =
         isListEnvelope(schema, selection)
-            ? projectListEnvelope(schema, selection, definitions, preserveRootRequired)
-            : projectNode(schema, selection, definitions, preserveRootRequired);
+            ? projectListEnvelope(schema, selection, definitions, preserveContract)
+            : projectNode(schema, selection, definitions, preserveContract);
     if (schema.containsKey(ApiVocabulary.DEFINITIONS)
         && !projected.containsKey(ApiVocabulary.DEFINITIONS)) {
       Map<String, Object> withDefs = new LinkedHashMap<>(projected);
@@ -276,13 +275,6 @@ public final class WireSchema {
     if (!(schema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties)) {
       return false;
     }
-    for (Object key : properties.keySet()) {
-      if (!ApiVocabulary.ITEMS.equals(key)
-          && !ApiVocabulary.NEXT_CURSOR.equals(key)
-          && !ApiVocabulary.SCAN.equals(key)) {
-        return false;
-      }
-    }
     return properties.get(ApiVocabulary.ITEMS) instanceof Map<?, ?> itemsSchema
         && ApiVocabulary.ARRAY.equals(itemsSchema.get(ApiVocabulary.TYPE));
   }
@@ -292,7 +284,7 @@ public final class WireSchema {
       Map<String, Object> schema,
       FieldSelection selection,
       Map<String, Map<String, Object>> definitions,
-      boolean preserveItemRootRequired) {
+      boolean preserveContract) {
     Map<String, Object> properties =
         new LinkedHashMap<>((Map<String, Object>) schema.get(ApiVocabulary.PROPERTIES));
     Map<String, Object> itemsArraySchema =
@@ -300,8 +292,7 @@ public final class WireSchema {
     Map<String, Object> itemSchema =
         (Map<String, Object>) itemsArraySchema.getOrDefault(ApiVocabulary.ITEMS, Map.of());
     itemsArraySchema.put(
-        ApiVocabulary.ITEMS,
-        projectNode(itemSchema, selection, definitions, preserveItemRootRequired));
+        ApiVocabulary.ITEMS, projectNode(itemSchema, selection, definitions, preserveContract));
     properties.put(ApiVocabulary.ITEMS, Collections.unmodifiableMap(itemsArraySchema));
     Map<String, Object> projected = new LinkedHashMap<>(schema);
     projected.put(ApiVocabulary.PROPERTIES, Collections.unmodifiableMap(properties));
@@ -313,14 +304,14 @@ public final class WireSchema {
       Map<String, Object> schema,
       FieldSelection selection,
       Map<String, Map<String, Object>> definitions,
-      boolean preserveRequired) {
+      boolean preserveContract) {
     if (selection.selectsAll()) {
       return schema;
     }
     Object ref = schema.get(ApiVocabulary.REFERENCE);
     if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
       return projectNode(
-          resolveReference(reference, definitions), selection, definitions, preserveRequired);
+          resolveReference(reference, definitions), selection, definitions, preserveContract);
     }
     if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?>
         || schema.get(ANY_OF) instanceof List<?>) {
@@ -328,24 +319,30 @@ public final class WireSchema {
           schema.get(ApiVocabulary.ONE_OF) instanceof List<?> oneOfList
               ? oneOfList
               : (List<?>) schema.get(ANY_OF);
-      LinkedHashSet<Map<String, Object>> uniqueAlternatives =
-          LinkedHashSet.newLinkedHashSet(unionBranches.size());
-      int objectBranchCount = 0;
-      boolean droppedBranch = false;
-      for (Object rawAlternative : unionBranches) {
-        Map<String, Object> branchSchema = (Map<String, Object>) rawAlternative;
-        if (!isNestedSelectionCapable(branchSchema, definitions)) {
-          droppedBranch = true;
-          continue;
+      if (preserveContract && schema.containsKey(ApiVocabulary.ONE_OF)) {
+        List<Map<String, Object>> projectedAlternatives = new ArrayList<>(unionBranches.size());
+        for (Object rawAlternative : unionBranches) {
+          projectedAlternatives.add(
+              projectNode(
+                  (Map<String, Object>) rawAlternative, selection, definitions, true));
         }
+        Map<String, Object> projected = new LinkedHashMap<>(schema);
+        projected.put(ApiVocabulary.ONE_OF, List.copyOf(projectedAlternatives));
+        return Collections.unmodifiableMap(projected);
+      }
+      java.util.LinkedHashSet<Map<String, Object>> uniqueAlternatives =
+          java.util.LinkedHashSet.newLinkedHashSet(unionBranches.size());
+      int objectBranchCount = 0;
+      for (Object rawAlternative : unionBranches) {
         Map<String, Object> projectedAlternative =
-            projectNode(branchSchema, selection, definitions, preserveRequired);
+            projectNode(
+                (Map<String, Object>) rawAlternative, selection, definitions, preserveContract);
         if (uniqueAlternatives.add(projectedAlternative)
             && isObjectCapableSchema(projectedAlternative)) {
           objectBranchCount++;
         }
       }
-      if (uniqueAlternatives.size() == 1 && !droppedBranch) {
+      if (uniqueAlternatives.size() == 1) {
         return uniqueAlternatives.iterator().next();
       }
       Map<String, Object> projected = new LinkedHashMap<>(schema);
@@ -357,9 +354,6 @@ public final class WireSchema {
       return Collections.unmodifiableMap(projected);
     }
     Object type = schema.get(ApiVocabulary.TYPE);
-    if (type == null) {
-      return projectNode(openObject(), selection, definitions, false);
-    }
     if (ApiVocabulary.OBJECT.equals(type)) {
       Map<String, Object> properties =
           (Map<String, Object>) schema.getOrDefault(ApiVocabulary.PROPERTIES, Map.of());
@@ -369,40 +363,31 @@ public final class WireSchema {
         if (child != null) {
           projectedProperties.put(
               entry.getKey(),
-              projectNode((Map<String, Object>) entry.getValue(), child, definitions, false));
-        }
-      }
-      boolean openAdditional =
-          !Boolean.FALSE.equals(schema.get(ApiVocabulary.ADDITIONAL_PROPERTIES));
-      if (openAdditional) {
-        for (FieldSelection.Entry entry : selection.entries()) {
-          if (!projectedProperties.containsKey(entry.key())) {
-            projectedProperties.put(
-                entry.key(), projectNode(any(), entry.selection(), definitions, false));
-          }
+              projectNode(
+                  (Map<String, Object>) entry.getValue(), child, definitions, preserveContract));
         }
       }
       Map<String, Object> projected = new LinkedHashMap<>(schema);
-      projected.put(ApiVocabulary.ADDITIONAL_PROPERTIES, false);
       projected.put(ApiVocabulary.PROPERTIES, Collections.unmodifiableMap(projectedProperties));
-      if (!preserveRequired && schema.get(ApiVocabulary.REQUIRED) instanceof List<?> required) {
-        List<String> projectedRequired = new ArrayList<>();
-        for (Object item : required) {
-          String key = String.valueOf(item);
-          if (selection.containsKey(key)) {
-            projectedRequired.add(key);
+      if (!preserveContract) {
+        if (schema.get(ApiVocabulary.REQUIRED) instanceof List<?> required) {
+          List<String> projectedRequired = new ArrayList<>();
+          for (Object item : required) {
+            String key = String.valueOf(item);
+            if (selection.containsKey(key)) {
+              projectedRequired.add(key);
+            }
+          }
+          if (projectedRequired.isEmpty()) {
+            projected.remove(ApiVocabulary.REQUIRED);
+          } else {
+            projected.put(ApiVocabulary.REQUIRED, List.copyOf(projectedRequired));
           }
         }
-        if (projectedRequired.isEmpty()) {
-          projected.remove(ApiVocabulary.REQUIRED);
-        } else {
-          projected.put(ApiVocabulary.REQUIRED, List.copyOf(projectedRequired));
+        if (schema.get(ApiVocabulary.MIN_PROPERTIES) instanceof Number minProps
+            && minProps.intValue() > projectedProperties.size()) {
+          projected.put(ApiVocabulary.MIN_PROPERTIES, projectedProperties.size());
         }
-      }
-      if (!preserveRequired
-          && schema.get(ApiVocabulary.MIN_PROPERTIES) instanceof Number minProps
-          && minProps.intValue() > projectedProperties.size()) {
-        projected.put(ApiVocabulary.MIN_PROPERTIES, projectedProperties.size());
       }
       return Collections.unmodifiableMap(projected);
     }
@@ -411,7 +396,8 @@ public final class WireSchema {
       Map<String, Object> projected = new LinkedHashMap<>(schema);
       projected.put(
           ApiVocabulary.ITEMS,
-          projectNode((Map<String, Object>) itemSchema, selection, definitions, preserveRequired));
+          projectNode(
+              (Map<String, Object>) itemSchema, selection, definitions, preserveContract));
       return Collections.unmodifiableMap(projected);
     }
     return schema;
@@ -438,19 +424,16 @@ public final class WireSchema {
     }
     if (schema.get(ANY_OF) instanceof List<?> anyAlternatives) {
       ValidationFailure firstFailure = null;
-      boolean matched = false;
       for (Object rawAlternative : anyAlternatives) {
         Map<String, Object> alternative = (Map<String, Object>) rawAlternative;
-        PointerCursor branchCursor = !matched && firstFailure == null ? cursor : null;
+        PointerCursor branchCursor = firstFailure == null ? cursor : null;
         ValidationFailure failure = evaluate(value, alternative, branchCursor, definitions);
         if (failure == null) {
-          matched = true;
-        } else if (firstFailure == null) {
+          return null;
+        }
+        if (firstFailure == null) {
           firstFailure = failure;
         }
-      }
-      if (matched) {
-        return null;
       }
       if (cursor == null) {
         return ValidationFailure.PROBE_FAILURE;
@@ -648,20 +631,6 @@ public final class WireSchema {
       return numberRangeFailure(cursor, minimum, maximum);
     }
     return null;
-  }
-
-  private static boolean isNestedSelectionCapable(
-      Map<String, Object> schema, Map<String, Map<String, Object>> definitions) {
-    Object ref = schema.get(ApiVocabulary.REFERENCE);
-    if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
-      return isNestedSelectionCapable(resolveReference(reference, definitions), definitions);
-    }
-    Object type = schema.get(ApiVocabulary.TYPE);
-    return type == null
-        || ApiVocabulary.OBJECT.equals(type)
-        || ApiVocabulary.ARRAY.equals(type)
-        || schema.containsKey(ApiVocabulary.ONE_OF)
-        || schema.containsKey(ANY_OF);
   }
 
   private static boolean isObjectCapableSchema(Map<String, Object> schema) {

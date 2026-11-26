@@ -19,12 +19,10 @@ import java.util.Objects;
 import java.util.Set;
 
 public final class ProgramServiceImpl implements ProgramService {
-  private final Program program;
   private final GhidraSession context;
 
   public ProgramServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
-    this.program = context.currentProgram();
   }
 
   @Override
@@ -34,6 +32,7 @@ public final class ProgramServiceImpl implements ProgramService {
 
   @Override
   public ProgramResource getProgram(Set<String> fields) {
+    Program program = context.currentProgram();
     return new ProgramResource(
         FieldProjections.allows(fields, "name") ? program.getName() : null,
         FieldProjections.allows(fields, "executable_path") ? program.getExecutablePath() : null,
@@ -61,8 +60,8 @@ public final class ProgramServiceImpl implements ProgramService {
         FieldProjections.allows(fields, "modified_at")
             ? ProgramTimestamps.modifiedTimestamp(program)
             : null,
-        FieldProjections.allows(fields, "function_count") ? functionCount() : 0L,
-        FieldProjections.allows(fields, "symbol_count") ? symbolCount() : 0L);
+        FieldProjections.allows(fields, "function_count") ? functionCount(program) : 0L,
+        FieldProjections.allows(fields, "symbol_count") ? symbolCount(program) : 0L);
   }
 
   @Override
@@ -73,7 +72,7 @@ public final class ProgramServiceImpl implements ProgramService {
   @Override
   public Page<AddressSpaceResource> getAddressSpaces(
       int limit, String cursor, Set<String> fields) {
-    var addressFactory = program.getAddressFactory();
+    var addressFactory = context.currentProgram().getAddressFactory();
     boolean needDefault = FieldProjections.allows(fields, "default");
     var defaultSpace = needDefault ? addressFactory.getDefaultAddressSpace() : null;
     List<SpaceEntry> entries = new ArrayList<>();
@@ -108,6 +107,7 @@ public final class ProgramServiceImpl implements ProgramService {
 
   @Override
   public ProgramLanguageResource getLanguageInfo(Set<String> fields) {
+    Program program = context.currentProgram();
     Language language = program.getLanguage();
     CompilerSpec compilerSpec = program.getCompilerSpec();
     if (language == null || compilerSpec == null) {
@@ -161,11 +161,11 @@ public final class ProgramServiceImpl implements ProgramService {
     return AddressSpaceResource.Kind.OTHER;
   }
 
-  private int functionCount() {
+  private static int functionCount(Program program) {
     return program.getFunctionManager().getFunctionCount();
   }
 
-  private int symbolCount() {
+  private static int symbolCount(Program program) {
     return program.getSymbolTable().getNumSymbols();
   }
 
