@@ -85,12 +85,13 @@ pre-commit install --install-hooks
 pre-commit run --all-files
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
+python3 tests/release_archive_reproducibility.py
 ```
 
 [AGENTS.md](../../AGENTS.md) のリポジトリ規則および[コミットメッセージ規則](../../AGENTS.md#commit-messages)に従ってください。Linux x86-64 では、CI は `verify` の後に `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` も実行します。
 
 検証タスクは以下を厳格に検査します:
-- **リポジトリ衛生**: `pre-commit` と `verify-repository-hygiene.sh` が空ファイル、重複ファイル、生成物を拒否し、`docs/api.md` のメソッド数を確認します。
+- **リポジトリ衛生**: `pre-commit` と `verify-repository-hygiene.sh` が空ファイル、重複ファイル、生成物を拒否し、`docs/api.md` のメソッド数および GitHub Actions のコミット SHA 固定を確認します。
 - **コミットメッセージ**: `commit-msg` フックとプルリクエスト検査が Conventional Commit ヘッダー、スコープ、72 文字制限、`- ` リスト本文を検証します。
 - **単体テスト**: `check` により、すべての Java モジュールで JUnit テストを実行します。
 - **アーキテクチャ境界**: `verifyArchitecture` により、adapter と launcher 以外での Ghidra クラスのインポートが禁止されます。
