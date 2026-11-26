@@ -51,9 +51,9 @@ class AgentWebSocketServerTest {
   @DisplayName("Bearer-authenticated client receives 101 while unauthenticated socket trickles header bytes")
   void testBearerClientReceives101WhileUnauthenticatedSocketTrickles() throws Exception {
     RecordingHandler handler = new RecordingHandler();
-    try (StartedServer started = startDefaultServer(TOKEN, handler);
-        HttpClient httpClient =
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
+    HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    WebSocket ws = null;
+    try (StartedServer started = startDefaultServer(TOKEN, handler)) {
       int port = started.port();
       String token = TOKEN;
       TestWebSocketListener listener = new TestWebSocketListener();
@@ -71,7 +71,7 @@ class AgentWebSocketServerTest {
           unauthOut.flush();
         }
         // Valid Bearer-authenticated client must receive `HTTP/1.1 101 Switching Protocols`, not 409 Conflict.
-        WebSocket ws =
+        ws =
             httpClient
                 .newWebSocketBuilder()
                 .header("Authorization", "Bearer " + token)
@@ -83,7 +83,13 @@ class AgentWebSocketServerTest {
         ws.sendText("ping-check", true).get(5, TimeUnit.SECONDS);
         assertEquals("echo:ping-check", listener.messages.poll(5, TimeUnit.SECONDS));
         ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+        listener.closeLatch.await(2, TimeUnit.SECONDS);
       }
+    } finally {
+      if (ws != null) {
+        ws.abort();
+      }
+      closeHttpClient(httpClient);
     }
   }
 
@@ -192,14 +198,15 @@ class AgentWebSocketServerTest {
   @DisplayName("Preserves single-client exclusivity with 409 for authenticated second client and 401 for unauthenticated")
   void testSingleClientExclusivityAndRecoveryAfterDisconnect() throws Exception {
     RecordingHandler handler = new RecordingHandler();
-    try (StartedServer started = startDefaultServer(TOKEN, handler);
-        HttpClient httpClient =
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
+    HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    WebSocket first = null;
+    WebSocket third = null;
+    try (StartedServer started = startDefaultServer(TOKEN, handler)) {
       int port = started.port();
       URI uri = URI.create("ws://127.0.0.1:" + port + "/ws/agent");
 
       TestWebSocketListener firstListener = new TestWebSocketListener();
-      WebSocket first =
+      first =
           httpClient
               .newWebSocketBuilder()
               .header("Authorization", "Bearer " + TOKEN)
@@ -241,10 +248,11 @@ class AgentWebSocketServerTest {
 
       first.sendClose(WebSocket.NORMAL_CLOSURE, "bye").get(5, TimeUnit.SECONDS);
       assertTrue(handler.firstCloseLatch.await(5, TimeUnit.SECONDS));
+      firstListener.closeLatch.await(2, TimeUnit.SECONDS);
 
       // After first session closes, another authenticated client can connect.
       TestWebSocketListener thirdListener = new TestWebSocketListener();
-      WebSocket third =
+      third =
           httpClient
               .newWebSocketBuilder()
               .header("Authorization", "Bearer " + TOKEN)
@@ -252,6 +260,15 @@ class AgentWebSocketServerTest {
               .get(5, TimeUnit.SECONDS);
       assertTrue(thirdListener.openLatch.await(5, TimeUnit.SECONDS));
       third.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+      thirdListener.closeLatch.await(2, TimeUnit.SECONDS);
+    } finally {
+      if (first != null) {
+        first.abort();
+      }
+      if (third != null) {
+        third.abort();
+      }
+      closeHttpClient(httpClient);
     }
   }
 
@@ -324,10 +341,10 @@ class AgentWebSocketServerTest {
   @DisplayName("Bounds concurrent pending sockets and recovers once a pending slot frees")
   void testBoundedPendingSocketsRejectsExcessAndRecovers() throws Exception {
     RecordingHandler handler = new RecordingHandler();
+    HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    WebSocket ws = null;
     try (StartedServer started =
-            startCustomServer(TOKEN, handler, Duration.ofSeconds(5), 2);
-        HttpClient httpClient =
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
+        startCustomServer(TOKEN, handler, Duration.ofSeconds(5), 2)) {
       int port = started.port();
 
       try (Socket pending2 = openPartialHandshake(port)) {
@@ -339,12 +356,18 @@ class AgentWebSocketServerTest {
         TestWebSocketListener listener = new TestWebSocketListener();
 
         // Retry briefly if the freed handshake slot cleanup races on the connection thread.
-        WebSocket ws = connectWithSlotReleaseRetry(httpClient, port, listener);
+        ws = connectWithSlotReleaseRetry(httpClient, port, listener);
         assertNotNull(ws);
         assertTrue(listener.openLatch.await(5, TimeUnit.SECONDS));
         ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+        listener.closeLatch.await(2, TimeUnit.SECONDS);
         assertFalse(pending2.isClosed());
       }
+    } finally {
+      if (ws != null) {
+        ws.abort();
+      }
+      closeHttpClient(httpClient);
     }
   }
 
@@ -694,8 +717,24 @@ class AgentWebSocketServerTest {
     public void onServerError(Throwable error) {}
   }
 
+  private static void closeHttpClient(HttpClient client) {
+    if (client == null) {
+      return;
+    }
+    client.shutdown();
+    try {
+      if (!client.awaitTermination(Duration.ofSeconds(2))) {
+        client.shutdownNow();
+      }
+    } catch (InterruptedException interrupted) {
+      client.shutdownNow();
+      Thread.currentThread().interrupt();
+    }
+  }
+
   private static final class TestWebSocketListener implements WebSocket.Listener {
     private final CountDownLatch openLatch = new CountDownLatch(1);
+    private final CountDownLatch closeLatch = new CountDownLatch(1);
     private final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
     private final StringBuilder partial = new StringBuilder();
 
@@ -714,6 +753,18 @@ class AgentWebSocketServerTest {
       }
       webSocket.request(1);
       return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+      closeLatch.countDown();
+      return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public void onError(WebSocket webSocket, Throwable error) {
+      webSocket.abort();
+      closeLatch.countDown();
     }
   }
 }

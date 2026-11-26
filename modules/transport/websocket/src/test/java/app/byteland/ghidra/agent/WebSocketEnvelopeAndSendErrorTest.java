@@ -146,59 +146,63 @@ class WebSocketEnvelopeAndSendErrorTest {
       BlockingQueue<String> incoming = new LinkedBlockingQueue<>();
       AtomicBoolean closed = new AtomicBoolean(false);
       CountDownLatch closeLatch = new CountDownLatch(1);
-      try (HttpClient httpClient =
-          HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
-        WebSocket clientSocket =
+      HttpClient httpClient =
+          HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+      WebSocket clientSocket = null;
+      boolean closeHandshakeComplete = false;
+      try {
+        clientSocket =
             httpClient
                 .newWebSocketBuilder()
                 .buildAsync(
                     URI.create("ws://127.0.0.1:" + started.port() + "/ws/agent"),
                     new QueueWebSocketListener(incoming, closed, closeLatch))
                 .get(5, TimeUnit.SECONDS);
-        boolean closeHandshakeComplete = false;
-        try {
-          assertReadyNotification(incoming.poll(5, TimeUnit.SECONDS), "inbound-session");
+        assertReadyNotification(incoming.poll(5, TimeUnit.SECONDS), "inbound-session");
 
-          sendClientText(clientSocket, REQ_NULL_PARAM);
-          Map<String, Object> nullParamErr =
-              assertMethodError(
-                  incoming.poll(5, TimeUnit.SECONDS), "req-null-param", "invalid_type");
-          assertEquals("/projection", nullParamErr.get("target"));
+        sendClientText(clientSocket, REQ_NULL_PARAM);
+        Map<String, Object> nullParamErr =
+            assertMethodError(
+                incoming.poll(5, TimeUnit.SECONDS), "req-null-param", "invalid_type");
+        assertEquals("/projection", nullParamErr.get("target"));
 
-          sendClientText(clientSocket, NOTIF_NULL_PARAM);
+        sendClientText(clientSocket, NOTIF_NULL_PARAM);
 
-          sendClientText(clientSocket, ERR_BLANK);
-          assertProtocolError(incoming.poll(5, TimeUnit.SECONDS), -32600);
+        sendClientText(clientSocket, ERR_BLANK);
+        assertProtocolError(incoming.poll(5, TimeUnit.SECONDS), -32600);
 
-          sendClientText(clientSocket, ERR_NULL_DATA);
-          assertProtocolError(incoming.poll(5, TimeUnit.SECONDS), -32600);
+        sendClientText(clientSocket, ERR_NULL_DATA);
+        assertProtocolError(incoming.poll(5, TimeUnit.SECONDS), -32600);
 
-          sendClientText(clientSocket, ERR_DATA_ENTRY);
+        sendClientText(clientSocket, ERR_DATA_ENTRY);
 
-          // Check nullable schema fields on the same socket.
-          sendClientText(
-              clientSocket,
-              "{\"jsonrpc\":\"2.0\",\"id\":\"req-nullable-comment\",\"method\":\"function.patch\",\"params\":{\"selector\":{\"entry\":\"ram:00100000\"},\"patch\":{\"comment\":null}}}");
-          Map<String, Object> patchReply =
-              JsonUtil.parseObject(incoming.poll(5, TimeUnit.SECONDS));
-          assertEquals("req-nullable-comment", patchReply.get("id"));
-          @SuppressWarnings("unchecked")
-          Map<String, Object> patchResult = (Map<String, Object>) patchReply.get("result");
-          assertNotNull(patchResult);
-          assertEquals("ram:00100000", patchResult.get("entry"));
+        // Check nullable schema fields on the same socket.
+        sendClientText(
+            clientSocket,
+            "{\"jsonrpc\":\"2.0\",\"id\":\"req-nullable-comment\",\"method\":\"function.patch\",\"params\":{\"selector\":{\"entry\":\"ram:00100000\"},\"patch\":{\"comment\":null}}}");
+        Map<String, Object> patchReply =
+            JsonUtil.parseObject(incoming.poll(5, TimeUnit.SECONDS));
+        assertEquals("req-nullable-comment", patchReply.get("id"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> patchResult = (Map<String, Object>) patchReply.get("result");
+        assertNotNull(patchResult);
+        assertEquals("ram:00100000", patchResult.get("entry"));
 
-          sendClientText(clientSocket, FOLLOWUP_SESSION_GET);
-          assertSessionFollowup(incoming.poll(5, TimeUnit.SECONDS), "inbound-session");
-          assertFalse(closed.get());
-          assertNull(incoming.poll(100, TimeUnit.MILLISECONDS));
+        sendClientText(clientSocket, FOLLOWUP_SESSION_GET);
+        assertSessionFollowup(incoming.poll(5, TimeUnit.SECONDS), "inbound-session");
+        assertFalse(closed.get());
+        assertNull(incoming.poll(100, TimeUnit.MILLISECONDS));
 
-          clientSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
-          assertTrue(closeLatch.await(5, TimeUnit.SECONDS));
-          closeHandshakeComplete = true;
-        } finally {
-          if (!closeHandshakeComplete) {
-            clientSocket.abort();
-          }
+        clientSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+        assertTrue(closeLatch.await(5, TimeUnit.SECONDS));
+        closeHandshakeComplete = true;
+      } finally {
+        if (clientSocket != null && !closeHandshakeComplete) {
+          clientSocket.abort();
+        }
+        httpClient.shutdown();
+        if (!httpClient.awaitTermination(Duration.ofSeconds(2))) {
+          httpClient.shutdownNow();
         }
       }
       cancel.set(true);
