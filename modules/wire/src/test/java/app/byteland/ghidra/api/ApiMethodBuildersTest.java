@@ -215,9 +215,9 @@ class ApiMethodBuildersTest {
                 Map.of(
                     "page", Map.of("limit", 2),
                     "projection", Map.of("fields", List.of("start"))));
-    List<?> sortedBlocks = (List<?>) firstPage.get("items");
-    assertEquals(".bss", ((Map<?, ?>) sortedBlocks.get(0)).get("name"));
-    assertEquals(".rodata", ((Map<?, ?>) sortedBlocks.get(1)).get("name"));
+    List<?> blocks = (List<?>) firstPage.get("items");
+    assertEquals(".rodata", ((Map<?, ?>) blocks.get(0)).get("name"));
+    assertEquals(".bss", ((Map<?, ?>) blocks.get(1)).get("name"));
     String blockNextCursor = (String) firstPage.get("next_cursor");
     assertTrue(blockNextCursor != null && !blockNextCursor.isBlank());
     assertFalse(firstPage.containsKey("scan"));
@@ -238,9 +238,9 @@ class ApiMethodBuildersTest {
             registry.dispatch(
                 "comment.list",
                 Map.of("scan", Map.of("range", Map.of("start", "0x1000", "end", "0x2000"))));
-    List<?> sortedComments = (List<?>) scannedPage.get("items");
-    assertEquals("0x1000", ((Map<?, ?>) sortedComments.get(0)).get("address"));
-    assertEquals("0x1010", ((Map<?, ?>) sortedComments.get(1)).get("address"));
+    List<?> commentsOut = (List<?>) scannedPage.get("items");
+    assertEquals("0x1010", ((Map<?, ?>) commentsOut.get(0)).get("address"));
+    assertEquals("0x1000", ((Map<?, ?>) commentsOut.get(1)).get("address"));
     Map<?, ?> scanOut = (Map<?, ?>) scannedPage.get("scan");
     assertEquals("limit", scanOut.get("stop_reason"));
     String commentNextCursor = (String) scannedPage.get("next_cursor");
@@ -288,7 +288,7 @@ class ApiMethodBuildersTest {
         Set.of("address", "bytes", "bytes.encoding", "bytes.data", "bytes.length"),
         readMethod.fields());
     assertEquals(
-        ApiSchemaCatalog.resourceSchema(readMethod.fields()),
+        ApiSchemaCatalog.resourceSchema(readMethod.fields(), readMethod.identityFields()),
         readMethod.responseCodec().schema());
 
     @SuppressWarnings("unchecked")
