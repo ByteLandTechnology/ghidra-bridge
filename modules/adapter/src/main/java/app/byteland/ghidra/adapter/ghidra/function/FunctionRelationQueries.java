@@ -7,6 +7,7 @@ import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.Program;
 import ghidra.util.task.TaskMonitor;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,6 +46,7 @@ final class FunctionRelationQueries {
       return selectRelationsBounded(function, callers, limit, cursor);
     }
 
+    Program snapshotProgram = context.currentProgramOrNull();
     QuerySnapshotCache snapshots = context.querySnapshots();
     long clearEpoch = snapshots.clearEpoch();
     long modNumber = context.modificationNumber();
@@ -64,7 +66,8 @@ final class FunctionRelationQueries {
       if (!context.canCacheSnapshots()) {
         return selectRelationsBounded(function, callers, limit, cursor);
       }
-      if (context.modificationNumber() == modNumber) {
+      if (context.currentProgramOrNull() == snapshotProgram
+          && context.modificationNumber() == modNumber) {
         snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }

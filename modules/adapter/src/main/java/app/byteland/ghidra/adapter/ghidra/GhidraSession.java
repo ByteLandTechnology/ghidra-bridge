@@ -4,6 +4,7 @@ import app.byteland.ghidra.service.TransactionExecutionException;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
+import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
@@ -18,54 +19,74 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Coordinates Ghidra program access, commands, and transaction lifecycles.
  */
 public final class GhidraSession implements AutoCloseable {
-  private final GhidraScript ghidraScript;
+  private final ProgramHost host;
   private final QuerySnapshotCache querySnapshots;
   private final BooleanSupplier analyzingSupplier;
   private final boolean allowProxySnapshots;
   private final Object executionLock = new Object();
+  private final List<Consumer<Program>> programCloseListeners = new CopyOnWriteArrayList<>();
   private volatile WeakReference<Program> snapshotProgram = new WeakReference<>(null);
   private int transactionDepth;
+  private Program pinnedProgram;
 
   public GhidraSession(GhidraScript script) {
-    this(
-        script,
-        new QuerySnapshotCache(),
-        () -> {
-          Program program = script.getCurrentProgram();
-          return program != null
-              && !Proxy.isProxyClass(program.getClass())
-              && AutoAnalysisManager.hasAutoAnalysisManager(program)
-              && AutoAnalysisManager.getAnalysisManager(program).isAnalyzing();
-        },
-        false);
+    this(ProgramHost.forScript(Objects.requireNonNull(script, "script")));
+  }
+
+  public GhidraSession(Supplier<Program> programSupplier) {
+    this(ProgramHost.forProgramSupplier(Objects.requireNonNull(programSupplier, "programSupplier")));
+  }
+
+  public GhidraSession(ProgramHost host) {
+    this(host, new QuerySnapshotCache(), null, false);
   }
 
   public GhidraSession(
       GhidraScript script,
       QuerySnapshotCache querySnapshots,
       BooleanSupplier analyzingSupplier) {
-    this(script, querySnapshots, analyzingSupplier, true);
+    this(
+        ProgramHost.forScript(Objects.requireNonNull(script, "script")),
+        querySnapshots,
+        Objects.requireNonNull(analyzingSupplier, "analyzingSupplier"),
+        true);
+  }
+
+  public GhidraSession(
+      ProgramHost host,
+      QuerySnapshotCache querySnapshots,
+      BooleanSupplier analyzingSupplier) {
+    this(
+        host,
+        querySnapshots,
+        Objects.requireNonNull(analyzingSupplier, "analyzingSupplier"),
+        true);
   }
 
   private GhidraSession(
-      GhidraScript script,
+      ProgramHost host,
       QuerySnapshotCache querySnapshots,
       BooleanSupplier analyzingSupplier,
       boolean allowProxySnapshots) {
-    this.ghidraScript = Objects.requireNonNull(script, "script");
+    this.host = Objects.requireNonNull(host, "host");
     this.querySnapshots = Objects.requireNonNull(querySnapshots, "querySnapshots");
-    this.analyzingSupplier = Objects.requireNonNull(analyzingSupplier, "analyzingSupplier");
+    this.analyzingSupplier = analyzingSupplier;
     this.allowProxySnapshots = allowProxySnapshots;
   }
 
-  public GhidraScript script() {
-    return ghidraScript;
+  public FlatProgramAPI flatApi() {
+    synchronized (executionLock) {
+      return host.flatApi(pinnedProgram);
+    }
   }
 
   public QuerySnapshotCache querySnapshots() {
@@ -87,7 +108,14 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public boolean isAnalyzing() {
-    return analyzingSupplier.getAsBoolean();
+    if (analyzingSupplier != null) {
+      return analyzingSupplier.getAsBoolean();
+    }
+    Program program = currentProgramOrNull();
+    return program != null
+        && !Proxy.isProxyClass(program.getClass())
+        && AutoAnalysisManager.hasAutoAnalysisManager(program)
+        && AutoAnalysisManager.getAnalysisManager(program).isAnalyzing();
   }
 
   public boolean canCacheSnapshots() {
@@ -103,7 +131,10 @@ public final class GhidraSession implements AutoCloseable {
 
   @Override
   public void close() {
-    querySnapshots.clear();
+    synchronized (querySnapshots) {
+      querySnapshots.clear();
+      snapshotProgram = new WeakReference<>(null);
+    }
   }
 
   public Program currentProgram() {
@@ -115,39 +146,56 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public Program currentProgramOrNull() {
-    return ghidraScript.getCurrentProgram();
+    if (Thread.holdsLock(executionLock) && pinnedProgram != null) {
+      return pinnedProgram;
+    }
+    return host.currentProgramOrNull();
+  }
+
+  public void onProgramClosed(Consumer<Program> listener) {
+    programCloseListeners.add(Objects.requireNonNull(listener, "listener"));
+  }
+
+  public void notifyProgramClosed(Program program) {
+    if (program == null) {
+      return;
+    }
+    synchronized (executionLock) {
+      host.releaseProgram(program);
+    }
+    if (snapshotProgram.refersTo(program)) {
+      synchronized (querySnapshots) {
+        if (snapshotProgram.refersTo(program)) {
+          querySnapshots.clear();
+          snapshotProgram = new WeakReference<>(null);
+        }
+      }
+    }
+    for (Consumer<Program> listener : programCloseListeners) {
+      listener.accept(program);
+    }
   }
 
   public void saveCurrentProgram() {
     synchronized (executionLock) {
-      var monitor = ghidraScript.getMonitor();
-      boolean restoreCancellation = monitor != null && monitor.isCancelled();
-      if (restoreCancellation) {
-        monitor.clearCancelled();
-      }
       try {
-        try {
-          ghidraScript.end(true);
-        } catch (Exception ignored) {
-          // There is no ambient transaction, or the transaction ended.
-        }
-        ghidraScript.saveProgram(currentProgram());
+        host.saveProgram(currentProgram());
       } catch (Exception error) {
         String detail = error.getMessage();
         if (detail == null || detail.isBlank()) {
           detail = error.getClass().getSimpleName();
         }
         throw new IllegalStateException("Unable to save current program: " + detail, error);
-      } finally {
-        if (restoreCancellation) {
-          monitor.cancel();
-        }
       }
     }
   }
 
   public Address parseAddress(String rawAddress) {
-    return AddressUtil.parseAddress(ghidraScript, rawAddress);
+    Program program = currentProgramOrNull();
+    if (program != null) {
+      return AddressUtil.parseAddress(program, rawAddress);
+    }
+    return AddressUtil.parseAddress(flatApi(), rawAddress);
   }
 
   public Iterable<Reference> references(Address address, boolean to) {
@@ -194,25 +242,34 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
-    return withTransaction(operation, true);
+    return withTransaction(null, operation, true);
+  }
+
+  public <T> T withProgramTransaction(Program program, TransactionalOperation<T> operation) {
+    return withTransaction(Objects.requireNonNull(program, "program"), operation, true);
   }
 
   public <T> T withTemporaryChanges(TransactionalOperation<T> operation) {
-    return withTransaction(operation, false);
+    return withTransaction(null, operation, false);
   }
 
-  private <T> T withTransaction(TransactionalOperation<T> operation, boolean commitChanges) {
+  private <T> T withTransaction(
+      Program explicitProgram, TransactionalOperation<T> operation, boolean commitChanges) {
     Objects.requireNonNull(operation, "operation");
     synchronized (executionLock) {
       if (transactionDepth > 0) {
         if (!commitChanges) {
           throw new IllegalStateException("Temporary changes require an independent transaction");
         }
+        if (explicitProgram != null && pinnedProgram != null && explicitProgram != pinnedProgram) {
+          throw new IllegalStateException("Nested transaction targets a different program");
+        }
         return runOperation(operation);
       }
 
-      ghidraScript.end(true);
-      ghidraScript.start();
+      Program targetProgram = host.resolveTransactionProgram(explicitProgram);
+      int transactionId = host.beginTransaction(targetProgram);
+      pinnedProgram = targetProgram;
       transactionDepth++;
       boolean commit = false;
       try {
@@ -221,14 +278,11 @@ public final class GhidraSession implements AutoCloseable {
         return result;
       } finally {
         transactionDepth--;
+        pinnedProgram = null;
         try {
-          ghidraScript.end(commit);
+          host.finishTransaction(targetProgram, transactionId, commit);
         } finally {
-          try {
-            ghidraScript.start();
-          } finally {
-            querySnapshots.clear();
-          }
+          querySnapshots.clear();
         }
       }
     }
@@ -238,7 +292,11 @@ public final class GhidraSession implements AutoCloseable {
     Objects.requireNonNull(command, "command");
     synchronized (executionLock) {
       try {
-        if (ghidraScript.runCommand(command)) {
+        if (transactionDepth == 0 && host.requiresCommandTransaction()) {
+          if (withTransaction(() -> host.runCommand(currentProgram(), command))) {
+            return;
+          }
+        } else if (host.runCommand(currentProgramOrNull(), command)) {
           return;
         }
       } finally {

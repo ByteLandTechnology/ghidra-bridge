@@ -6,6 +6,7 @@ import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Reference;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,6 +41,7 @@ final class ReferenceListQueries {
           anchor, canonicalAnchor, incoming, type, normalizedLimit, cursor);
     }
 
+    Program snapshotProgram = context.currentProgramOrNull();
     QuerySnapshotCache snapshots = context.querySnapshots();
     long clearEpoch = snapshots.clearEpoch();
     long modNumber = context.modificationNumber();
@@ -62,7 +64,8 @@ final class ReferenceListQueries {
         return selectReferencesBounded(
             anchor, canonicalAnchor, incoming, type, normalizedLimit, cursor);
       }
-      if (context.modificationNumber() == modNumber) {
+      if (context.currentProgramOrNull() == snapshotProgram
+          && context.modificationNumber() == modNumber) {
         snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }

@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import ghidra.app.script.GhidraScript;
+import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.address.AddressFormatException;
@@ -45,7 +46,14 @@ public final class AddressUtil {
     if (script == null) {
       throw new IllegalArgumentException("script is required");
     }
-    Program program = script.getCurrentProgram();
+    return parseAddress((FlatProgramAPI) script, rawAddress);
+  }
+
+  public static Address parseAddress(FlatProgramAPI api, String rawAddress) {
+    if (api == null) {
+      throw new IllegalArgumentException("api is required");
+    }
+    Program program = api.getCurrentProgram();
     if (program != null) {
       return parseAddress(program, rawAddress);
     }
@@ -53,15 +61,15 @@ public final class AddressUtil {
       throw new IllegalArgumentException("address is required");
     }
     String value = rawAddress.trim();
-    Address address = tryCanonicalSpaceAddress(script.getAddressFactory(), value);
+    Address address = tryCanonicalSpaceAddress(api.getAddressFactory(), value);
     if (address == null) {
-      address = toAddress(script, value);
+      address = toAddress(api, value);
     }
     if (address == null) {
-      address = toAddress(script, "0x" + value);
+      address = toAddress(api, "0x" + value);
     }
     if (address == null) {
-      address = tryAddressWithDefaultSpace(script.getAddressFactory(), value);
+      address = tryAddressWithDefaultSpace(api.getAddressFactory(), value);
     }
     if (address == null) {
       throw new IllegalArgumentException("unable to parse address: " + rawAddress);
@@ -158,7 +166,7 @@ public final class AddressUtil {
     }
   }
 
-  private static Address toAddress(GhidraScript script, String value) {
-    return script.toAddr(value);
+  private static Address toAddress(FlatProgramAPI api, String value) {
+    return api.toAddr(value);
   }
 }

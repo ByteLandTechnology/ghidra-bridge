@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ghidra.app.script.GhidraScript;
+import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.address.AddressSpace;
@@ -72,9 +73,27 @@ class AddressUtilTest {
     GhidraScript script = new TestScript(strictProgram);
     GhidraSession poisonSession = new GhidraSession(new PoisonReadScript(strictProgram));
 
+    FlatProgramAPI nullCurrentProgramApi =
+        new FlatProgramAPI() {
+          {
+            this.currentProgram = strictProgram;
+          }
+
+          @Override
+          public Program getCurrentProgram() {
+            return null;
+          }
+        };
+
     assertEquals(
         ram.getAddress(0x00401000L), AddressUtil.parseAddress(strictProgram, "ram:00401000"));
     assertEquals(ram.getAddress(0x00401000L), AddressUtil.parseAddress(script, "ram:00401000"));
+    assertEquals(
+        ram.getAddress(0x00401000L),
+        AddressUtil.parseAddress((FlatProgramAPI) script, "ram:00401000"));
+    assertEquals(
+        ram.getAddress(0x00401000L),
+        AddressUtil.parseAddress(nullCurrentProgramApi, "ram:00401000"));
     assertEquals(ram.getAddress(0x004010abL), AddressUtil.parseAddress(script, "  ram:0x4010AB "));
     assertEquals(register.getAddress(0x18L), poisonSession.parseAddress("register:0018"));
   }
@@ -96,6 +115,9 @@ class AddressUtilTest {
       assertThrows(
           IllegalArgumentException.class,
           () -> AddressUtil.parseAddress((GhidraScript) null, "ram:0"));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> AddressUtil.parseAddress((FlatProgramAPI) null, "ram:0"));
       assertThrows(IllegalArgumentException.class, () -> session.parseAddress(" "));
       assertThrows(IllegalArgumentException.class, () -> session.parseAddress("unknown:zzzz"));
     }

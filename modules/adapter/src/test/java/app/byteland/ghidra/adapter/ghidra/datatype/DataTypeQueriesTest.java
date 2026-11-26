@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.adapter.ghidra.GhidraServiceFactory;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
 import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
@@ -35,6 +36,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class DataTypeQueriesTest {
@@ -181,7 +183,9 @@ class DataTypeQueriesTest {
   @Test
   void realProgramSessionCachesSnapshotsAndInvalidatesAcrossProgramModification() {
     try (GhidraTestSupport.ProgramHolder holder =
-        GhidraTestSupport.createX64Program("dt-snapshots")) {
+            GhidraTestSupport.createX64Program("dt-snapshots");
+        GhidraTestSupport.ProgramHolder betaHolder =
+            GhidraTestSupport.createX64Program("dt-snapshots-beta")) {
       CategoryPath realCategory = new CategoryPath("/real");
       holder.inTransaction(
           program -> {
@@ -192,38 +196,71 @@ class DataTypeQueriesTest {
                   DataTypeConflictHandler.DEFAULT_HANDLER);
             }
           });
+      betaHolder.inTransaction(
+          program -> {
+            DataTypeManager dtm = program.getDataTypeManager();
+            for (int i = 0; i < 6; i++) {
+              dtm.addDataType(
+                  new StructureDataType(realCategory, String.format("Struct_beta_%02d", i), 8),
+                  DataTypeConflictHandler.DEFAULT_HANDLER);
+            }
+          });
 
-      GhidraSession session = GhidraTestSupport.sessionFor(holder.program());
-      DataTypeServiceImpl service = new DataTypeServiceImpl(session);
+      AtomicReference<Program> active = new AtomicReference<>(holder.program());
+      GhidraSession session = new GhidraSession(active::get);
+      try (var services = GhidraServiceFactory.create(session, "gui-fallback")) {
+        var service = services.dataTypeService();
 
-      Page<DataTypeResource> first = service.searchDataTypes("struct_", "/real", "struct", 2, null);
-      assertEquals(
-          List.of("/real/Struct_00", "/real/Struct_01"),
-          first.items().stream().map(DataTypeResource::path).toList());
-      assertEquals(0, session.querySnapshots().entryCount());
+        Page<DataTypeResource> first =
+            service.searchDataTypes("struct_", "/real", "struct", 2, null);
+        assertEquals(
+            List.of("/real/Struct_00", "/real/Struct_01"),
+            first.items().stream().map(DataTypeResource::path).toList());
+        assertEquals(0, session.querySnapshots().entryCount());
 
-      Page<DataTypeResource> second =
-          service.searchDataTypes("struct_", "/real", "struct", 2, first.nextCursor());
-      assertEquals(
-          List.of("/real/Struct_02", "/real/Struct_03"),
-          second.items().stream().map(DataTypeResource::path).toList());
-      assertEquals(1, session.querySnapshots().entryCount());
+        Page<DataTypeResource> second =
+            service.searchDataTypes("struct_", "/real", "struct", 2, first.nextCursor());
+        assertEquals(
+            List.of("/real/Struct_02", "/real/Struct_03"),
+            second.items().stream().map(DataTypeResource::path).toList());
+        assertEquals(1, session.querySnapshots().entryCount());
 
-      holder.inTransaction(
-          program ->
-              program
-                  .getDataTypeManager()
-                  .addDataType(
-                      new StructureDataType(realCategory, "Struct_02_inserted", 8),
-                      DataTypeConflictHandler.DEFAULT_HANDLER));
+        holder.inTransaction(
+            program ->
+                program
+                    .getDataTypeManager()
+                    .addDataType(
+                        new StructureDataType(realCategory, "Struct_02_inserted", 8),
+                        DataTypeConflictHandler.DEFAULT_HANDLER));
 
-      Page<DataTypeResource> refreshedSecond =
-          service.searchDataTypes("struct_", "/real", "struct", 2, first.nextCursor());
-      assertEquals(
-          List.of("/real/Struct_02", "/real/Struct_02_inserted"),
-          refreshedSecond.items().stream().map(DataTypeResource::path).toList());
+        Page<DataTypeResource> refreshedSecond =
+            service.searchDataTypes("struct_", "/real", "struct", 2, first.nextCursor());
+        assertEquals(
+            List.of("/real/Struct_02", "/real/Struct_02_inserted"),
+            refreshedSecond.items().stream().map(DataTypeResource::path).toList());
+        assertEquals(1, session.querySnapshots().entryCount());
 
-      session.close();
+        // Dynamic ProgramHost tab switch clears alpha snapshots and isolates beta results.
+        active.set(betaHolder.program());
+        assertEquals(0, session.querySnapshots().entryCount());
+        Page<DataTypeResource> betaFirst =
+            service.searchDataTypes("struct_", "/real", "struct", 2, null);
+        Page<DataTypeResource> betaSecond =
+            service.searchDataTypes("struct_", "/real", "struct", 2, betaFirst.nextCursor());
+        assertEquals(
+            List.of("/real/Struct_beta_02", "/real/Struct_beta_03"),
+            betaSecond.items().stream().map(DataTypeResource::path).toList());
+        assertEquals(1, session.querySnapshots().entryCount());
+
+        // Closing the active program clears its cached snapshots.
+        session.notifyProgramClosed(betaHolder.program());
+        assertEquals(0, session.querySnapshots().entryCount());
+
+        // Re-populate once more to verify BridgeServices.close() -> AnalysisServiceImpl.close()
+        // clears GhidraSession snapshots on shutdown.
+        service.searchDataTypes("struct_", "/real", "struct", 2, betaFirst.nextCursor());
+        assertEquals(1, session.querySnapshots().entryCount());
+      }
       assertEquals(0, session.querySnapshots().entryCount());
     }
   }

@@ -9,6 +9,7 @@ import ghidra.program.model.data.Category;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeManager;
+import ghidra.program.model.listing.Program;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -42,6 +43,7 @@ final class DataTypeQueries {
       return selectCategoriesBounded(category, limit, cursor);
     }
 
+    Program snapshotProgram = context.currentProgramOrNull();
     QuerySnapshotCache snapshots = context.querySnapshots();
     long clearEpoch = snapshots.clearEpoch();
     long modNumber = context.modificationNumber();
@@ -63,7 +65,8 @@ final class DataTypeQueries {
       if (!context.canCacheSnapshots()) {
         return selectCategoriesBounded(category, limit, cursor);
       }
-      if (context.modificationNumber() == modNumber) {
+      if (context.currentProgramOrNull() == snapshotProgram
+          && context.modificationNumber() == modNumber) {
         snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }
@@ -119,6 +122,7 @@ final class DataTypeQueries {
           cursor);
     }
 
+    Program snapshotProgram = context.currentProgramOrNull();
     QuerySnapshotCache snapshots = context.querySnapshots();
     long clearEpoch = snapshots.clearEpoch();
     long modNumber = context.modificationNumber();
@@ -146,7 +150,8 @@ final class DataTypeQueries {
             clamped,
             cursor);
       }
-      if (context.modificationNumber() == modNumber) {
+      if (context.currentProgramOrNull() == snapshotProgram
+          && context.modificationNumber() == modNumber) {
         snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }
