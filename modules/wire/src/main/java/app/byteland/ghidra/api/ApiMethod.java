@@ -50,27 +50,49 @@ public record ApiMethod<Request, Response>(
     FieldProjection.validate(request, fields, identityFields);
   }
 
+  Set<String> selectProjection(Request request) {
+    return FieldProjection.validate(request, fields, identityFields);
+  }
+
   public Response invokeHandler(Request request) throws Exception {
+    return invokeHandler(request, selectProjection(request));
+  }
+
+  Response invokeHandler(Request request, Set<String> selected) throws Exception {
+    if (handler instanceof ProjectedHandler<Request, Response> projectedHandler) {
+      return projectedHandler.handleProjected(request, selected);
+    }
     return handler.handle(request);
   }
 
   public Object encodeResponse(Request request, Response response) {
-    Object encoded = responseCodec.encode(response);
-    Object projected = FieldProjection.apply(encoded, request, fields, identityFields);
-    if (projected != encoded) {
-      JsonValueCodec.validateOutput(projected, responseCodec.schema());
-    }
-    return projected;
+    return encodeResponse(response, selectProjection(request));
   }
 
-  Object projectResponse(Request request, Response response) {
-    return FieldProjection.apply(response, request, fields, identityFields);
+  Object encodeResponse(Response response, Set<String> selected) {
+    return encodeProjectedResponse(projectResponse(response, selected), selected);
+  }
+
+  Object projectResponse(Response response, Set<String> selected) {
+    if (selected == null || handler instanceof ProjectedHandler<?, ?>) {
+      return response;
+    }
+    return FieldProjection.projectFallback(response, selected);
+  }
+
+  Object encodeProjectedResponse(Object projectedResponse, Set<String> selected) {
+    if (selected != null && responseCodec instanceof JsonValueCodec valueCodec) {
+      return valueCodec.encode(projectedResponse, selected);
+    }
+    @SuppressWarnings("unchecked")
+    Response typed = (Response) projectedResponse;
+    return responseCodec.encode(typed);
   }
 
   public Object invokeDecoded(Request request) throws Exception {
-    validateProjection(request);
-    Response response = invokeHandler(request);
-    return encodeResponse(request, response);
+    Set<String> selected = selectProjection(request);
+    Response response = invokeHandler(request, selected);
+    return encodeResponse(response, selected);
   }
 
   @FunctionalInterface
@@ -132,28 +154,26 @@ public record ApiMethod<Request, Response>(
   private static final class FieldProjection {
     private FieldProjection() {}
 
-    static Object apply(
-        Object response, Object request, Set<String> knownFields, List<String> identityFields) {
-      if (!(request instanceof Map<?, ?> params) || !params.containsKey("fields")) {
-        return response;
-      }
-      Set<String> selected = validate(request, knownFields, identityFields);
-      return projectResponse(response, selected);
-    }
-
     static Set<String> validate(
         Object request, Set<String> knownFields, List<String> identityFields) {
       if (!(request instanceof Map<?, ?> params) || !params.containsKey("fields")) {
-        return new java.util.LinkedHashSet<>(identityFields);
+        return null;
       }
       Object rawFields = params.get("fields");
       if (!(rawFields instanceof List<?> requested)) {
         throw ApiException.badRequest(
             "invalid_fields", "/projection/fields must be an array", "/projection/fields");
       }
-      Set<String> selected = new java.util.LinkedHashSet<>(identityFields);
-      Set<String> explicitlyRequested = new java.util.LinkedHashSet<>();
-      for (int index = 0; index < requested.size(); index++) {
+      int size = requested.size();
+      if (knownFields.isEmpty() && size == 0) {
+        throw ApiException.badRequest(
+            "invalid_fields", "/projection/fields is not supported", "/projection/fields");
+      }
+      Set<String> selected =
+          java.util.LinkedHashSet.newLinkedHashSet(identityFields.size() + size);
+      selected.addAll(identityFields);
+      Set<String> explicitlyRequested = java.util.LinkedHashSet.newLinkedHashSet(size);
+      for (int index = 0; index < size; index++) {
         Object item = requested.get(index);
         String target = "/projection/fields/" + index;
         if (!(item instanceof String path)
@@ -170,90 +190,48 @@ public record ApiMethod<Request, Response>(
         }
         selected.add(path);
       }
-      return selected;
+      return java.util.Collections.unmodifiableSet(selected);
     }
 
-    private static Object projectResponse(Object response, Set<String> selected) {
-      if (!(response instanceof Map<?, ?> map)) {
-        return response;
-      }
-      if (map.get("items") instanceof List<?> items) {
-        Map<String, Object> result = copyStringMap(map);
-        result.put(
-            "items",
-            items.stream()
-                .map(item -> item instanceof Map<?, ?> row ? projectMap(row, selected) : item)
-                .toList());
-        return result;
-      }
-      return projectMap(map, selected);
-    }
-
-    private static Map<String, Object> projectMap(Map<?, ?> source, Set<String> selected) {
-      Map<String, Object> result = new java.util.LinkedHashMap<>();
-      for (String path : selected) {
-        copyPath(source, result, path, 0);
-      }
-      return result;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static void copyPath(
-        Map<?, ?> source, Map<String, Object> target, String path, int start) {
-      int separator = path.indexOf('.', start);
-      int end = separator < 0 ? path.length() : separator;
-      String segment = path.substring(start, end);
-      Object value = source.get(segment);
-      if (value == null) {
-        return;
-      }
-      if (separator < 0) {
-        target.put(segment, value);
-        return;
-      }
-      if (value instanceof Map<?, ?> child) {
-        Map<String, Object> targetChild =
-            (Map<String, Object>)
-                target.computeIfAbsent(segment, ignored -> new java.util.LinkedHashMap<>());
-        copyPath(child, targetChild, path, separator + 1);
-      } else if (value instanceof List<?> list) {
-        @SuppressWarnings("unchecked")
-        List<Object> projected =
-            target.get(segment) instanceof List<?> existing
-                ? (List<Object>) existing
-                : new java.util.ArrayList<>();
-        int childIndex = 0;
-        for (Object item : list) {
-          if (item instanceof Map<?, ?> child) {
-            Map<String, Object> targetChild;
-            if (childIndex < projected.size()
-                && projected.get(childIndex) instanceof Map<?, ?> existingChild) {
-              targetChild = (Map<String, Object>) existingChild;
-            } else {
-              targetChild = new java.util.LinkedHashMap<>();
-              projected.add(targetChild);
-            }
-            copyPath(child, targetChild, path, separator + 1);
-            childIndex++;
-          }
+    static Object projectFallback(Object response, Set<String> selected) {
+      FieldSelection selection = FieldSelection.from(selected);
+      if (response instanceof Map<?, ?> map
+          && map.get(ApiVocabulary.ITEMS) instanceof List<?> items
+          && !selection.containsKey(ApiVocabulary.ITEMS)) {
+        Map<String, Object> copy = java.util.LinkedHashMap.newLinkedHashMap(map.size());
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+          copy.put(String.valueOf(entry.getKey()), entry.getValue());
         }
-        target.put(segment, projected);
+        copy.put(ApiVocabulary.ITEMS, WireValues.normalize(items, selection));
+        return copy;
       }
+      return WireValues.normalize(response, selection);
     }
 
     private static boolean hasNumericSegment(String path) {
-      for (String segment : path.split("\\.", -1)) {
-        if (segment.isEmpty() || segment.chars().allMatch(Character::isDigit)) return true;
+      int start = 0;
+      while (start <= path.length()) {
+        int dot = path.indexOf('.', start);
+        int end = dot < 0 ? path.length() : dot;
+        if (end == start) {
+          return true;
+        }
+        boolean allDigits = true;
+        for (int index = start; index < end; index++) {
+          if (!Character.isDigit(path.charAt(index))) {
+            allDigits = false;
+            break;
+          }
+        }
+        if (allDigits) {
+          return true;
+        }
+        if (dot < 0) {
+          break;
+        }
+        start = dot + 1;
       }
       return false;
-    }
-
-    private static Map<String, Object> copyStringMap(Map<?, ?> source) {
-      Map<String, Object> copy = new java.util.LinkedHashMap<>();
-      for (Map.Entry<?, ?> entry : source.entrySet()) {
-        copy.put(String.valueOf(entry.getKey()), entry.getValue());
-      }
-      return copy;
     }
   }
 }

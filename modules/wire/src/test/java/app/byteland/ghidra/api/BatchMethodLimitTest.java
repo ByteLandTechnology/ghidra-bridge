@@ -120,9 +120,10 @@ class BatchMethodLimitTest {
               public Object invokeHandler(
                   ApiMethod<Map<String, Object>, Object> method,
                   Map<String, Object> request,
+                  java.util.Set<String> selectedFields,
                   boolean ownTransaction)
                   throws Exception {
-                return method.invokeHandler(request);
+                return method.invokeHandler(request, selectedFields);
               }
 
               @Override

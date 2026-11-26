@@ -360,8 +360,8 @@ final class BatchMethod {
         @SuppressWarnings("unchecked")
         Map<String, Object> arguments = (Map<String, Object>) rawArguments;
         Map<String, Object> decodedArguments = target.decodeRequest(arguments);
-        target.validateProjection(decodedArguments);
-        prepared.add(new PreparedItem(id, target, decodedArguments));
+        Set<String> selectedFields = target.selectProjection(decodedArguments);
+        prepared.add(new PreparedItem(id, target, decodedArguments, selectedFields));
       } catch (ApiException error) {
         Map<String, Object> violation = new LinkedHashMap<>();
         String targetPath = error.error().target();
@@ -419,13 +419,14 @@ final class BatchMethod {
     for (PreparedItem item : items) {
       deadline.checkBeforeItem(item.id());
       try {
-        Object rawResult = runtime.invokeHandler(item.method(), item.request(), true);
+        Object rawResult =
+            runtime.invokeHandler(item.method(), item.request(), item.selectedFields(), true);
         if (Thread.currentThread().isInterrupted()) {
           throw new BatchLimitException(deadline.interrupted(item.id()));
         }
-        Object projected = item.method().projectResponse(item.request(), rawResult);
+        Object projected = item.method().projectResponse(rawResult, item.selectedFields());
         sizeTracker.acceptRow(item.id(), successRow(item.id(), projected));
-        rows.add(PendingRow.success(item, rawResult));
+        rows.add(PendingRow.success(item, projected));
       } catch (BatchLimitException limitError) {
         throw limitError;
       } catch (Exception error) {
@@ -462,12 +463,13 @@ final class BatchMethod {
     for (PreparedItem item : items) {
       try {
         deadline.checkBeforeItem(item.id());
-        Object rawResult = runtime.invokeHandler(item.method(), item.request(), false);
+        Object rawResult =
+            runtime.invokeHandler(item.method(), item.request(), item.selectedFields(), false);
         if (Thread.currentThread().isInterrupted()) {
           throw new BatchLimitException(deadline.interrupted(item.id()));
         }
         Map<String, Object> row =
-            successRow(item.id(), item.method().encodeResponse(item.request(), rawResult));
+            successRow(item.id(), item.method().encodeResponse(rawResult, item.selectedFields()));
         sizeTracker.acceptRow(item.id(), row);
         encoded.add(row);
       } catch (BatchLimitException limitError) {
@@ -488,13 +490,14 @@ final class BatchMethod {
     for (PreparedItem item : items) {
       try {
         deadline.checkBeforeItem(item.id());
-        Object rawResult = runtime.invokeHandler(item.method(), item.request(), false);
+        Object rawResult =
+            runtime.invokeHandler(item.method(), item.request(), item.selectedFields(), false);
         if (Thread.currentThread().isInterrupted()) {
           throw new BatchLimitException(deadline.interrupted(item.id()));
         }
-        Object projected = item.method().projectResponse(item.request(), rawResult);
+        Object projected = item.method().projectResponse(rawResult, item.selectedFields());
         sizeTracker.acceptRow(item.id(), successRow(item.id(), projected));
-        temporary.add(PendingRow.success(item, rawResult));
+        temporary.add(PendingRow.success(item, projected));
       } catch (BatchLimitException limitError) {
         throw new BatchRollback(item.id(), limitError.apiException());
       } catch (Exception error) {
@@ -543,7 +546,10 @@ final class BatchMethod {
   }
 
   private record PreparedItem(
-      String id, ApiMethod<Map<String, Object>, Object> method, Map<String, Object> request) {}
+      String id,
+      ApiMethod<Map<String, Object>, Object> method,
+      Map<String, Object> request,
+      Set<String> selectedFields) {}
 
   private record PreparedBatch(
       List<PreparedItem> items,
@@ -571,9 +577,9 @@ final class BatchMethod {
   }
 
   private record PendingRow(
-      String id, PreparedItem item, Object rawResult, Map<String, Object> failureRow) {
-    static PendingRow success(PreparedItem item, Object rawResult) {
-      return new PendingRow(item.id(), item, rawResult, null);
+      String id, PreparedItem item, Object projectedResult, Map<String, Object> failureRow) {
+    static PendingRow success(PreparedItem item, Object projectedResult) {
+      return new PendingRow(item.id(), item, projectedResult, null);
     }
 
     static PendingRow encodedFailure(String id, Map<String, Object> failureRow) {
@@ -598,7 +604,9 @@ final class BatchMethod {
           try {
             encodedRow =
                 successRow(
-                    item.id(), item.method().encodeResponse(item.request(), row.rawResult()));
+                    item.id(),
+                    item.method()
+                        .encodeProjectedResponse(row.projectedResult(), item.selectedFields()));
             sizeTracker.acceptRow(item.id(), encodedRow);
           } catch (BatchLimitException limitError) {
             throw translateBatchRollback(
@@ -612,7 +620,9 @@ final class BatchMethod {
           try {
             encodedRow =
                 successRow(
-                    item.id(), item.method().encodeResponse(item.request(), row.rawResult()));
+                    item.id(),
+                    item.method()
+                        .encodeProjectedResponse(row.projectedResult(), item.selectedFields()));
           } catch (Exception error) {
             encodedRow = errorRow(item.id(), error);
           }
@@ -779,6 +789,7 @@ final class BatchMethod {
     Object invokeHandler(
         ApiMethod<Map<String, Object>, Object> method,
         Map<String, Object> request,
+        Set<String> selectedFields,
         boolean ownTransaction)
         throws Exception;
 

@@ -14,7 +14,6 @@ import java.util.function.LongSupplier;
  */
 public final class AgentDispatcher implements AutoCloseable {
   private final String sessionId;
-  private final String programName;
   private final BridgeServices services;
   private final ApiRegistry apiRegistry;
   private final DispatchBarrier dispatchBarrier = new DispatchBarrier();
@@ -43,7 +42,6 @@ public final class AgentDispatcher implements AutoCloseable {
       throw new IllegalArgumentException("sessionId is required");
     }
     this.sessionId = normalizedSessionId;
-    this.programName = services.programName();
     this.apiRegistry =
         new ApiRegistry(
             services, this.sessionId, this::sessionInfo, this::markShuttingDown, nanoTime);
@@ -100,14 +98,14 @@ public final class AgentDispatcher implements AutoCloseable {
   }
 
   public String getProgramName() {
-    return programName;
+    return services.currentProgramName();
   }
 
   private Map<String, Object> sessionInfo() {
     Map<String, Object> info = new LinkedHashMap<>();
     info.put("id", sessionId);
     info.put("status", shuttingDown ? "shutting_down" : "active");
-    info.put("program_name", programName);
+    info.put("program_name", services.currentProgramName());
     return info;
   }
 
