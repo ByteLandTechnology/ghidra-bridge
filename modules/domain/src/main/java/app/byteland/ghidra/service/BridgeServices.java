@@ -13,6 +13,7 @@ import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * Holds domain services for an active Ghidra program session.
@@ -33,7 +34,8 @@ public record BridgeServices(
     SymbolService symbolService,
     DataTypeService dataTypeService,
     TransactionRunner transactionRunner,
-    String programName)
+    String programName,
+    Supplier<String> programNameSupplier)
     implements AutoCloseable {
 
   public BridgeServices {
@@ -51,6 +53,45 @@ public record BridgeServices(
     Objects.requireNonNull(dataTypeService, "dataTypeService");
     Objects.requireNonNull(transactionRunner, "transactionRunner");
     Objects.requireNonNull(programName, "programName");
+    Objects.requireNonNull(programNameSupplier, "programNameSupplier");
+  }
+
+  public BridgeServices(
+      ProgramService programService,
+      AddressService addressService,
+      CommentService commentService,
+      ReferenceService referenceService,
+      MemoryService memoryService,
+      ListingService listingService,
+      FunctionService functionService,
+      GlobalVariableService globalVariableService,
+      AnalysisService analysisService,
+      DecompilationService decompilationService,
+      SymbolService symbolService,
+      DataTypeService dataTypeService,
+      TransactionRunner transactionRunner,
+      String programName) {
+    this(
+        programService,
+        addressService,
+        commentService,
+        referenceService,
+        memoryService,
+        listingService,
+        functionService,
+        globalVariableService,
+        analysisService,
+        decompilationService,
+        symbolService,
+        dataTypeService,
+        transactionRunner,
+        programName,
+        () -> programName);
+  }
+
+  public String currentProgramName() {
+    String current = programNameSupplier.get();
+    return current == null || current.isBlank() ? programName : current;
   }
 
   @Override
