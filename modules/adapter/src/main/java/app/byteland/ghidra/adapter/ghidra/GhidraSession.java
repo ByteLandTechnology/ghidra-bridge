@@ -4,7 +4,16 @@ import app.byteland.ghidra.service.TransactionExecutionException;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceIterator;
+import ghidra.program.model.symbol.ReferenceManager;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -103,16 +112,61 @@ public final class GhidraSession {
    * @param to true for inbound references, false for outbound references
    * @return iterable of Ghidra references
    */
-  public Iterable<ghidra.program.model.symbol.Reference> references(Address address, boolean to) {
-    ghidra.program.model.symbol.ReferenceManager manager = currentProgram().getReferenceManager();
+  public Iterable<Reference> references(Address address, boolean to) {
+    Objects.requireNonNull(address, "address");
+    ReferenceManager manager = currentProgram().getReferenceManager();
     if (to) {
       return () -> {
-        ghidra.program.model.symbol.ReferenceIterator incoming = manager.getReferencesTo(address);
-        return incoming == null ? java.util.Collections.emptyIterator() : incoming;
+        ReferenceIterator incoming = manager.getReferencesTo(address);
+        return incoming == null ? Collections.emptyIterator() : incoming;
       };
     }
-    ghidra.program.model.symbol.Reference[] outgoing = manager.getReferencesFrom(address);
-    return outgoing == null ? java.util.List.of() : java.util.Arrays.asList(outgoing);
+    Reference[] outgoing = manager.getReferencesFrom(address);
+    return outgoing == null ? List.of() : Arrays.asList(outgoing);
+  }
+
+  /**
+   * Reads a byte range from the active program memory.
+   *
+   * @param start start address to read from
+   * @param length number of bytes to read
+   * @return copied program memory bytes
+   * @throws MemoryAccessException if the requested range cannot be read
+   */
+  public byte[] readBytes(Address start, int length) throws MemoryAccessException {
+    Objects.requireNonNull(start, "start");
+    byte[] bytes = new byte[length];
+    currentProgram().getMemory().getBytes(start, bytes);
+    return bytes;
+  }
+
+  /**
+   * Returns the next function after the entry point of the given function.
+   *
+   * @param function current Ghidra function, or {@code null}
+   * @return next function in address order, or {@code null} when none exists
+   */
+  public Function functionAfter(Function function) {
+    return function == null ? null : functionAfter(function.getEntryPoint());
+  }
+
+  /**
+   * Returns the first function strictly after the given address.
+   *
+   * @param address reference address
+   * @return next function in address order, or {@code null} when none exists
+   */
+  public Function functionAfter(Address address) {
+    Objects.requireNonNull(address, "address");
+    FunctionIterator iterator = currentProgram().getListing().getFunctions(address, true);
+    if (!iterator.hasNext()) {
+      return null;
+    }
+    Function candidate = iterator.next();
+    if (address.equals(candidate.getEntryPoint())) {
+      return iterator.hasNext() ? iterator.next() : null;
+    }
+    return candidate;
   }
 
   /**

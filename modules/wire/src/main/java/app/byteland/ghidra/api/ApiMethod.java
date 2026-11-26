@@ -54,17 +54,52 @@ public record ApiMethod<Request, Response>(
   }
 
   /**
-   * Executes the handler on a decoded request and encodes the projected response.
+   * Validates the requested field projection paths for a decoded request.
+   *
+   * @param request decoded request value
+   */
+  public void validateProjection(Request request) {
+    FieldProjection.validate(request, fields, identityFields);
+  }
+
+  /**
+   * Runs the method handler on a decoded request.
+   *
+   * @param request decoded request value
+   * @return typed handler response
+   * @throws Exception if handler execution fails
+   */
+  public Response invokeHandler(Request request) throws Exception {
+    return handler.handle(request);
+  }
+
+  /**
+   * Encodes a typed handler response, applies field projection, and validates projected output.
+   *
+   * @param request decoded request value
+   * @param response typed handler response
+   * @return encoded and projected wire response
+   */
+  public Object encodeResponse(Request request, Response response) {
+    Object encoded = responseCodec.encode(response);
+    Object projected = FieldProjection.apply(encoded, request, fields, identityFields);
+    if (projected != encoded) {
+      JsonValueCodec.validateOutput(projected, responseCodec.schema());
+    }
+    return projected;
+  }
+
+  /**
+   * Validates field projection, runs the handler, and encodes the projected response.
    *
    * @param request decoded request value
    * @return encoded and projected response value
    * @throws Exception if field validation or handler execution fails
    */
   public Object invokeDecoded(Request request) throws Exception {
-    FieldProjection.validate(request, fields, identityFields);
-    Response response = handler.handle(request);
-    Object encoded = responseCodec.encode(response);
-    return FieldProjection.apply(encoded, request, fields, identityFields);
+    validateProjection(request);
+    Response response = invokeHandler(request);
+    return encodeResponse(request, response);
   }
 
   /**

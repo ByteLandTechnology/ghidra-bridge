@@ -1,7 +1,6 @@
 package app.byteland.ghidra.agent;
 
 import app.byteland.ghidra.api.ApiCatalog;
-import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.api.ApiRegistry;
 import app.byteland.ghidra.service.BridgeServices;
 import java.util.LinkedHashMap;
@@ -9,7 +8,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Dispatches API requests to the registry one at a time and blocks new requests during shutdown.
+ * Dispatches API requests with concurrent shared reads, fair exclusive writes, and graceful
+ * shutdown barriers.
  */
 public final class AgentDispatcher implements AutoCloseable {
   private final String sessionId;
@@ -17,7 +17,6 @@ public final class AgentDispatcher implements AutoCloseable {
   private final BridgeServices services;
   private final ApiRegistry apiRegistry;
   private final DispatchBarrier dispatchBarrier = new DispatchBarrier();
-  private final Object sequenceLock = new Object();
   private volatile boolean shuttingDown;
 
   /**
@@ -57,7 +56,7 @@ public final class AgentDispatcher implements AutoCloseable {
   }
 
   /**
-   * Dispatches a single API method call in sequence.
+   * Dispatches one API method call under the shared-read or exclusive-write lock.
    *
    * @param method dotted API method name
    * @param params decoded request parameters
@@ -67,13 +66,39 @@ public final class AgentDispatcher implements AutoCloseable {
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {
-          if (method == null || method.isBlank()) {
-            throw ApiException.badRequest("missing_method", "method is required", "/method");
-          }
-          synchronized (sequenceLock) {
-            return apiRegistry.dispatch(method, params);
-          }
+          ApiRegistry.PreparedDispatch prepared = apiRegistry.prepareDispatch(method, params);
+          Object rawResponse =
+              prepared.readOnly()
+                  ? dispatchBarrier.runRead(prepared::execute)
+                  : dispatchBarrier.runWrite(prepared::execute);
+          return prepared.encodeResponse(rawResponse);
         });
+  }
+
+  /**
+   * Runs a lifecycle action under the fair write lock while the dispatcher is open.
+   *
+   * @param action exclusive action to run
+   */
+  public void runExclusive(Runnable action) {
+    Objects.requireNonNull(action, "action");
+    try {
+      dispatchBarrier.run(
+          () ->
+              dispatchBarrier.runWrite(
+                  () -> {
+                    action.run();
+                    return null;
+                  }));
+    } catch (RuntimeException error) {
+      throw error;
+    } catch (Exception error) {
+      throw new IllegalStateException("Exclusive dispatcher action failed", error);
+    }
+  }
+
+  DispatchBarrier barrier() {
+    return dispatchBarrier;
   }
 
   /**
