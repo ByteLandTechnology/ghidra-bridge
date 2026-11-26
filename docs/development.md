@@ -87,6 +87,7 @@ Before you submit a change, run the verification suite that matches CI:
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
+python3 tests/release_archive_reproducibility.py
 ```
 
 On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
@@ -100,14 +101,14 @@ The verification tasks check:
 
 ### Test Timeouts, Debugging, and Failure Reports
 
-Every Gradle `Test` task configures:
-- **Task deadline**: 5 minutes (`Duration.ofMinutes(5)`).
-- **Method and lifecycle deadlines**: 30-second cooperative (`SAME_THREAD`) JUnit Jupiter timeouts (`junit.jupiter.execution.timeout.default=30s`, `junit.jupiter.execution.timeout.testable.method.default=30s`, and `junit.jupiter.execution.timeout.lifecycle.method.default=30s`) with live thread dumps (`junit.jupiter.execution.timeout.threaddump.enabled=true`).
-- **Debugger mode**: `junit.jupiter.execution.timeout.mode=disabled_on_debug` disables JUnit timeouts automatically when you attach a debugger with `--debug-jvm` (for example `./gradlew --no-daemon :adapter:test --debug-jvm`), or when you pass `-Djunit.jupiter.execution.timeout.mode=disabled`.
-- **Failure-only output and archives**: Gradle prints `FULL` exception stack traces, causes, and buffered `stdout`/`stderr` streams only when a test fails. On failure, inspect:
+Every Gradle `Test` task sets:
+- **Task timeout**: 5 minutes (`Duration.ofMinutes(5)`).
+- **Method and lifecycle timeouts**: 30-second cooperative (`SAME_THREAD`) JUnit Jupiter timeouts (`junit.jupiter.execution.timeout.default=30s`, `junit.jupiter.execution.timeout.testable.method.default=30s`, and `junit.jupiter.execution.timeout.lifecycle.method.default=30s`) with thread dumps (`junit.jupiter.execution.timeout.threaddump.enabled=true`).
+- **Debugger mode**: `junit.jupiter.execution.timeout.mode=disabled_on_debug` disables JUnit timeouts when you attach a debugger with `--debug-jvm` (such as `./gradlew --no-daemon :adapter:test --debug-jvm`), or when you pass `-Djunit.jupiter.execution.timeout.mode=disabled`.
+- **Failure-only output and reports**: Gradle prints `FULL` exception stack traces, causes, and buffered `stdout` and `stderr` streams only when a test fails. On failure, check:
   - JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
   - JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
-  - Headless Ghidra regression log: `build/reports/headless-regression/headless.log` (tailed to `stderr` and saved on failure; uploaded in CI under `verify-test-diagnostics` and `publish-test-diagnostics`)
+  - Headless Ghidra regression log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
 
 ## Releases
 
@@ -129,19 +130,29 @@ The `publish` job gets the release commit without persisted credentials.
 Before Gradle runs, it checks `HEAD`, the `v<version>` tag, the remote tag SHA, the draft state,
 `.release-please-manifest.json`, and `version.txt`.
 Next, it builds the release archive with `verify` (which runs all JUnit tests) and runs `tests/function_mutation_regression.py`.
+It signs a SLSA provenance attestation for the archive.
 Then it verifies non-empty files and the SHA-256 checksum, uploads two assets, and makes the draft release public:
 
-- `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
-  `LICENSE`, and `README.md`.
+- `ghidra-bridge-<version>.zip`: Deterministic archive with `Bridge.java`, `GhidraMcp.java`,
+  `ghidra-bridge.jar`, `LICENSE`, and `README.md`.
 - `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
 
+Verify a downloaded release archive with `sha256sum` and [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify):
+
+```bash
+sha256sum -c ghidra-bridge-<version>.zip.sha256
+gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghidra-bridge
+```
+
 Gradle reads the version from `version.txt` unless you set the `releaseVersion` property.
-The package script checks that the release version matches `version.txt`, `.release-please-manifest.json`,
-and the JAR manifest.
-To build and verify the release archive locally, run:
+The package script trims whitespace from `version.txt` and checks that the release version matches
+`.release-please-manifest.json` and the JAR manifest.
+It sets fixed file modes, UTC `1980-02-01 00:00:00` timestamps, and sorted entries for reproducible zip digests.
+To build the release archive and verify archive reproducibility locally, run:
 
 ```bash
 bash .github/scripts/package-release.sh
+python3 tests/release_archive_reproducibility.py
 ```
 
 In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests".
