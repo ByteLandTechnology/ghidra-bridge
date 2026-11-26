@@ -103,12 +103,19 @@ The server rejects a bad upgrade request with an HTTP status before the socket o
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
 
-### WebSocket Close Codes
+### Message Fragments, Keepalive, and Close Codes
+
+The server reassembles multi-frame RFC 6455 UTF-8 text messages up to 16 MiB and answers interleaved `PING` and `CLOSE` frames.
+When a socket read times out, the server sends a `PING` frame.
+If no `PONG` frame arrives before the timeout, the server closes the socket and frees the client slot.
 
 The server closes the socket with these status codes:
 - `1000`: Normal closure.
-- `1001`: The server stops.
-- `1003`: The client sent a fragmented text message or an unsupported frame.
+- `1001`: The server stops, or a keepalive ping gets no `PONG` before the timeout.
+- `1002`: Protocol error, such as unmasked client frames, reserved bits, fragmented control frames, or unexpected continuation frames.
+- `1003`: Unsupported frame type, such as binary data.
+- `1007`: Invalid UTF-8 text or close reason.
+- `1009`: Message payload exceeds the 16 MiB limit.
 
 ## Model Context Protocol (MCP)
 
