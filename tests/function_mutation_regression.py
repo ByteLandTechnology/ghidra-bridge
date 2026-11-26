@@ -7,14 +7,24 @@ import json
 import os
 import pathlib
 import shutil
+import signal
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
 import urllib.request
 
+
+STARTUP_POLL_ATTEMPTS = 240
+STARTUP_POLL_TIMEOUT_SECONDS = 120.0
+STARTUP_POLL_INTERVAL_SECONDS = 0.5
+SHUTDOWN_WAIT_SECONDS = 20
+SIGTERM_WAIT_SECONDS = 10
+SIGKILL_WAIT_SECONDS = 5
+LOG_TAIL_LINES = 100
 
 TEXT_VADDR = 0x401000
 TEXT_OFFSET = 0x1000
@@ -217,15 +227,23 @@ def start_headless_process(command, log):
     )
 
 
-def stop_headless_process(process, graceful_wait):
-    if graceful_wait > 0:
-        try:
-            process.wait(timeout=graceful_wait)
-            return
-        except subprocess.TimeoutExpired:
-            pass
-    if process.poll() is not None:
-        return
+def archive_and_print_headless_log(log_path, report_log, tail_lines=LOG_TAIL_LINES):
+    report_log.parent.mkdir(parents=True, exist_ok=True)
+    if log_path.is_file():
+        shutil.copyfile(log_path, report_log)
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    else:
+        report_log.write_text("", encoding="utf-8")
+        text = ""
+    tail = "\n".join(text.splitlines()[-tail_lines:])
+    print(
+        f"=== headless.log (last {tail_lines} lines; saved full log to {report_log}) ===",
+        file=sys.stderr,
+    )
+    print(tail if tail else "<headless.log is empty>", file=sys.stderr, flush=True)
+
+
+def _force_kill_process_tree(process):
     if os.name == "nt":
         subprocess.run(
             ["taskkill", "/F", "/T", "/PID", str(process.pid)],
@@ -233,29 +251,65 @@ def stop_headless_process(process, graceful_wait):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        process.kill()
-        process.wait(timeout=10)
-        return
-    if shutil.which("pkill"):
+    elif shutil.which("pkill"):
         subprocess.run(
-            ["pkill", "-TERM", "-P", str(process.pid)],
+            ["pkill", "-KILL", "-P", str(process.pid)],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    process.terminate()
     try:
-        process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        if shutil.which("pkill"):
-            subprocess.run(
-                ["pkill", "-KILL", "-P", str(process.pid)],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
         process.kill()
-        process.wait(timeout=5)
+    except OSError:
+        pass
+
+
+def terminate_headless_process(process, ready, shutdown_fn):
+    used_force_kill = False
+    try:
+        if ready:
+            try:
+                shutdown_fn()
+            except Exception:
+                pass
+            try:
+                process.wait(timeout=SHUTDOWN_WAIT_SECONDS)
+                return False
+            except subprocess.TimeoutExpired:
+                pass
+        elif process.poll() is not None:
+            return False
+
+        if os.name == "nt":
+            ctrl_break = getattr(signal, "CTRL_BREAK_EVENT", None)
+            if ctrl_break is not None:
+                try:
+                    process.send_signal(ctrl_break)
+                except OSError:
+                    pass
+        else:
+            if shutil.which("pkill"):
+                subprocess.run(
+                    ["pkill", "-TERM", "-P", str(process.pid)],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            try:
+                process.terminate()
+            except OSError:
+                pass
+
+        try:
+            process.wait(timeout=SIGTERM_WAIT_SECONDS)
+        except subprocess.TimeoutExpired:
+            used_force_kill = True
+            _force_kill_process_tree(process)
+            process.wait(timeout=SIGKILL_WAIT_SECONDS)
+        return used_force_kill
+    finally:
+        if process.poll() is None:
+            _force_kill_process_tree(process)
 
 
 def run_test(headless, root):
@@ -300,6 +354,8 @@ def run_test(headless, root):
 
     repo_root = pathlib.Path(os.path.abspath(str(pathlib.Path(__file__).resolve().parents[1])))
     scripts = repo_root / "build" / "ghidra-script"
+    report_log = repo_root / "build" / "reports" / "headless-regression" / "headless.log"
+    report_log.unlink(missing_ok=True)
     command = [
         str(headless),
         str(project),
@@ -315,6 +371,8 @@ def run_test(headless, root):
         f"port={port}",
     ]
     log_path = root / "headless.log"
+    primary_error = None
+    used_force_kill = False
     with log_path.open("w", encoding="utf-8", errors="replace") as log:
         process = start_headless_process(command, log)
         ready = False
@@ -329,24 +387,20 @@ def run_test(headless, root):
                     "clientInfo": {"name": "function-test", "version": "1"},
                 },
             }
-            deadline = time.monotonic() + 120.0
-            while time.monotonic() < deadline:
+            deadline = time.monotonic() + STARTUP_POLL_TIMEOUT_SECONDS
+            for _ in range(STARTUP_POLL_ATTEMPTS):
+                if time.monotonic() >= deadline:
+                    break
                 if process.poll() is not None:
-                    raise RuntimeError(
-                        "Ghidra stopped: "
-                        + log_path.read_text(encoding="utf-8", errors="replace")[-2000:]
-                    )
+                    raise RuntimeError(f"Ghidra stopped with exit code {process.returncode}")
                 try:
                     if call(initialize, timeout=5).get("result"):
                         ready = True
                         break
                 except (OSError, TimeoutError, urllib.error.URLError):
-                    time.sleep(0.5)
+                    time.sleep(STARTUP_POLL_INTERVAL_SECONDS)
             if not ready:
-                raise RuntimeError(
-                    "Ghidra did not start: "
-                    + log_path.read_text(encoding="utf-8", errors="replace")[-2000:]
-                )
+                raise RuntimeError("Ghidra did not start")
             call({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
             first = function(
@@ -680,13 +734,29 @@ def run_test(headless, root):
             assert "label_renamed(" in caller_after["c"]
             assert "label_only(" not in caller_after["c"]
             print("Function mutation regression checks passed")
+        except BaseException as exc:
+            primary_error = exc
+            raise
         finally:
-            if ready:
-                try:
-                    tool(20, "ghidra_bridge", {"operation": "shutdown"})
-                except (OSError, TimeoutError, urllib.error.URLError):
-                    pass
-            stop_headless_process(process, 20 if ready else 0)
+            try:
+                used_force_kill = terminate_headless_process(
+                    process,
+                    ready,
+                    lambda: tool(20, "ghidra_bridge", {"operation": "shutdown"}),
+                )
+            except BaseException:
+                if primary_error is None:
+                    log.flush()
+                    archive_and_print_headless_log(log_path, report_log)
+                    raise
+            log.flush()
+            if primary_error is not None:
+                archive_and_print_headless_log(log_path, report_log)
+            elif used_force_kill:
+                archive_and_print_headless_log(log_path, report_log)
+                raise RuntimeError(
+                    "Ghidra ignored graceful termination during shutdown and required force kill"
+                )
 
 
 def main():

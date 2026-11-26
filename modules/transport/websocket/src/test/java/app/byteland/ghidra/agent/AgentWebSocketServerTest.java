@@ -52,12 +52,14 @@ class AgentWebSocketServerTest {
   void testBearerClientReceives101WhileUnauthenticatedSocketTrickles() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started = startDefaultServer(TOKEN, handler);
-        HttpClient httpClient = HttpClient.newHttpClient()) {
+        HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
       int port = started.port();
       String token = TOKEN;
       TestWebSocketListener listener = new TestWebSocketListener();
 
       try (Socket unauthPartial = new Socket("127.0.0.1", port)) {
+        unauthPartial.setSoTimeout(5_000);
         OutputStream unauthOut = unauthPartial.getOutputStream();
         unauthOut.write(
             ("GET /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nX-Marker: ")
@@ -191,7 +193,8 @@ class AgentWebSocketServerTest {
   void testSingleClientExclusivityAndRecoveryAfterDisconnect() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started = startDefaultServer(TOKEN, handler);
-        HttpClient httpClient = HttpClient.newHttpClient()) {
+        HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
       int port = started.port();
       URI uri = URI.create("ws://127.0.0.1:" + port + "/ws/agent");
 
@@ -323,7 +326,8 @@ class AgentWebSocketServerTest {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started =
             startCustomServer(TOKEN, handler, Duration.ofSeconds(5), 2);
-        HttpClient httpClient = HttpClient.newHttpClient()) {
+        HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
       int port = started.port();
 
       try (Socket pending2 = openPartialHandshake(port)) {
@@ -435,6 +439,7 @@ class AgentWebSocketServerTest {
         new AgentWebSocketServer.PendingSockets(running, 4);
 
     try (ServerSocket listener = new ServerSocket(0, 1, new InetSocketAddress("127.0.0.1", 0).getAddress())) {
+      listener.setSoTimeout(5_000);
       int port = listener.getLocalPort();
       AgentConfig config =
           new AgentConfig(null, "127.0.0.1", port, "/ws/agent", TOKEN, "test-session", null);
@@ -444,6 +449,8 @@ class AgentWebSocketServerTest {
 
       try (Socket client = new Socket("127.0.0.1", port);
           Socket serverSide = listener.accept()) {
+        client.setSoTimeout(5_000);
+        serverSide.setSoTimeout(5_000);
         String request =
             "GET /ws/agent HTTP/1.1\r\n"
                 + "Host: 127.0.0.1:"
@@ -492,6 +499,7 @@ class AgentWebSocketServerTest {
 
   private static Socket openPartialHandshake(int port) throws IOException {
     Socket socket = new Socket("127.0.0.1", port);
+    socket.setSoTimeout(5_000);
     OutputStream out = socket.getOutputStream();
     out.write(
         ("GET /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nX-Partial: ")
