@@ -52,6 +52,18 @@ jobs:
       - name: Test release archive reproducibility
         run: python3 tests/release_archive_reproducibility.py
 
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verify-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/**/*.xml
+            modules/**/build/reports/tests/**
+            build/reports/headless-regression/**
+
   release:
     # Update the release PR or create a release after main passes verification.
     needs: verify
@@ -149,3 +161,15 @@ jobs:
         run: |
           release_api="$(gh release view "$RELEASE_TAG" --json apiUrl --jq .apiUrl)"
           gh api --method PATCH "$release_api" -F draft=false -f make_latest=legacy --silent
+
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: publish-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/**/*.xml
+            modules/**/build/reports/tests/**
+            build/reports/headless-regression/**
