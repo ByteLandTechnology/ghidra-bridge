@@ -164,30 +164,36 @@ public final class Bootstrap {
         }
       }
 
+      script.println("[ghidra-mcp] Starting MCP HTTP service");
+      if (usedFallback) {
+        script.println(
+            "[ghidra-mcp] Default port "
+                + defaultPort
+                + " is busy; bound fallback port "
+                + boundConfig.port()
+                + ".");
+      }
+      printMcpBanner(script, program, boundConfig);
       if (headless) {
-        boundDispatcher.runExclusive(() -> saveCheckpoint(script, program, "[ghidra-mcp]"));
+        AgentDispatcher checkpointDispatcher = boundDispatcher;
+        checkpointDispatcher.runExclusive(() -> saveCheckpoint(script, program, "[ghidra-mcp]"));
       }
       boundServer.start();
+      script.println("[ghidra-mcp] MCP endpoint is listening for HTTP clients.");
     } catch (Exception | Error startupFailure) {
-      if (boundServer != null) {
-        boundServer.close();
+      try {
+        if (boundServer != null) {
+          boundServer.close();
+        }
+      } finally {
+        if (boundDispatcher != null) {
+          boundDispatcher.close();
+        } else {
+          services.close();
+        }
       }
-      services.close();
       throw startupFailure;
     }
-
-    script.println("[ghidra-mcp] Starting MCP HTTP service");
-    if (usedFallback) {
-      script.println(
-          "[ghidra-mcp] Default port "
-              + defaultPort
-              + " is busy; bound fallback port "
-              + boundConfig.port()
-              + ".");
-    }
-    printMcpBanner(script, program, boundConfig);
-    script.println("[ghidra-mcp] MCP endpoint is listening for HTTP clients.");
-
     try (GracefulExit gracefulExit =
             gracefulExit(services.programService(), program, script, "[ghidra-mcp]", headless);
         AgentDispatcher activeDispatcher = boundDispatcher;
@@ -260,7 +266,7 @@ public final class Bootstrap {
                 return opened;
               });
     } catch (Exception | Error connectFailure) {
-      services.close();
+      dispatcher.close();
       throw connectFailure;
     }
 

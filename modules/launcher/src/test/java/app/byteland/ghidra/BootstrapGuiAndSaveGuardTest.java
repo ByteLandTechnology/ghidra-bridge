@@ -380,6 +380,10 @@ class BootstrapGuiAndSaveGuardTest {
                 return null;
               });
       waitForLogLine(dirty.stdout, "MCP endpoint is listening for HTTP clients.");
+      assertEquals(
+          1,
+          dirty.checkpointSaves.get(),
+          "Headless checkpoint save must complete before accepting HTTP requests");
       dirty.monitor.cancel();
       dirtyRun.get(10, TimeUnit.SECONDS);
 

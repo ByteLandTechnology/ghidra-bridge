@@ -117,6 +117,7 @@ On Linux and macOS:
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+python3 tests/release_archive_reproducibility.py
 ```
 
 On Windows in PowerShell (run the hygiene script in Git Bash):
@@ -156,19 +157,29 @@ The `publish` job gets the release commit without persisted credentials.
 Before Gradle runs, it checks `HEAD`, the `v<version>` tag, the remote tag SHA, the draft state,
 `.release-please-manifest.json`, and `version.txt`.
 Next, it builds the release archive with `verify` (which runs all JUnit tests) and runs `tests/function_mutation_regression.py`.
+It signs a SLSA provenance attestation for the archive.
 Then it verifies non-empty files and the SHA-256 checksum, uploads two assets, and makes the draft release public:
 
-- `ghidra-bridge-<version>.zip`: Contains `Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`,
-  `LICENSE`, and `README.md`.
+- `ghidra-bridge-<version>.zip`: Deterministic archive with `Bridge.java`, `GhidraMcp.java`,
+  `ghidra-bridge.jar`, `LICENSE`, and `README.md`.
 - `ghidra-bridge-<version>.zip.sha256`: The SHA-256 checksum of the archive.
 
+Verify a downloaded release archive with `sha256sum` and [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify):
+
+```bash
+sha256sum -c ghidra-bridge-<version>.zip.sha256
+gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghidra-bridge
+```
+
 Gradle reads the version from `version.txt` unless you set the `releaseVersion` property.
-The package script checks that the release version matches `version.txt`, `.release-please-manifest.json`,
-and the JAR manifest.
-To build and verify the release archive locally, run:
+The package script trims whitespace from `version.txt` and checks that the release version matches
+`.release-please-manifest.json` and the JAR manifest.
+It sets fixed file modes, UTC `1980-02-01 00:00:00` timestamps, and sorted entries for reproducible zip digests.
+To build the release archive and verify archive reproducibility locally, run:
 
 ```bash
 bash .github/scripts/package-release.sh
+python3 tests/release_archive_reproducibility.py
 ```
 
 In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests".
