@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.ByteSequence;
 import app.byteland.ghidra.service.analysis.AnalysisResource;
@@ -22,6 +23,13 @@ import ghidra.util.task.TaskMonitor;
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
@@ -416,6 +424,169 @@ class DynamicProgramSwitchingTest {
 
         session.notifyProgramClosed(alpha);
         assertTrue(services.analysisService().getStatus().analyzed());
+      }
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void concurrentDispatcherReadsAndDecompilationsSwitchCleanlyUnderRunExclusive() throws Exception {
+    GhidraTestSupport.x64Language();
+    ClassSearcher.search(TaskMonitor.DUMMY);
+
+    try (var alphaHolder = GhidraTestSupport.createX64Program("alpha.elf");
+        var betaHolder = GhidraTestSupport.createX64Program("beta.elf")) {
+      alphaHolder.inTransaction(
+          program -> {
+            Address start =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+            byte[] code = new byte[] {(byte) 0xb8, 0x2a, 0x00, 0x00, 0x00, (byte) 0xc3};
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    start,
+                    new ByteArrayInputStream(code),
+                    code.length,
+                    TaskMonitor.DUMMY,
+                    false);
+          });
+      betaHolder.inTransaction(
+          program -> {
+            Address start =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+            byte[] code = new byte[] {(byte) 0xb8, 0x07, 0x00, 0x00, 0x00, (byte) 0xc3};
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    start,
+                    new ByteArrayInputStream(code),
+                    code.length,
+                    TaskMonitor.DUMMY,
+                    false);
+          });
+
+      Program alpha = alphaHolder.program();
+      Program beta = betaHolder.program();
+      AtomicReference<Program> active = new AtomicReference<>(alpha);
+      GhidraSession session = new GhidraSession(active::get);
+
+      try (var services = GhidraServiceFactory.create(session, "gui-fallback");
+          AgentDispatcher dispatcher = new AgentDispatcher(services, "dynamic-concurrency");
+          ExecutorService pool = Executors.newFixedThreadPool(6)) {
+        dispatcher.dispatch(
+            "function.create",
+            Map.of(
+                "resource", Map.of("entry", "0x401000", "name", "alpha_fn"),
+                "disassemble", true));
+        dispatcher.runExclusive(() -> active.set(beta));
+        dispatcher.dispatch(
+            "function.create",
+            Map.of(
+                "resource", Map.of("entry", "0x401000", "name", "beta_fn"),
+                "disassemble", true));
+        dispatcher.runExclusive(() -> active.set(alpha));
+
+        CountDownLatch startGate = new CountDownLatch(1);
+        CountDownLatch alphaObserved = new CountDownLatch(6);
+        AtomicBoolean switchedToBeta = new AtomicBoolean(false);
+        AtomicBoolean stopReaders = new AtomicBoolean(false);
+
+        List<Future<Void>> readers = new ArrayList<>();
+        for (int r = 0; r < 6; r++) {
+          final int readerId = r;
+          readers.add(
+              pool.submit(
+                  () -> {
+                    startGate.await();
+                    boolean countedAlpha = false;
+                    int step = 0;
+                    while (!stopReaders.get()) {
+                      boolean betaOnly = switchedToBeta.get();
+                      switch ((readerId + step++) % 4) {
+                        case 0 -> {
+                          Map<String, Object> info =
+                              (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
+                          String name = String.valueOf(info.get("program_name"));
+                          if (betaOnly) {
+                            assertEquals("beta.elf", name);
+                          } else {
+                            assertTrue("alpha.elf".equals(name) || "beta.elf".equals(name));
+                          }
+                        }
+                        case 1 -> {
+                          Map<String, Object> resolved =
+                              (Map<String, Object>)
+                                  dispatcher.dispatch(
+                                      "address.resolve",
+                                      Map.of("selector", Map.of("address", "0x401000")));
+                          Map<String, Object> fn =
+                              (Map<String, Object>) resolved.get("function");
+                          String fnName = String.valueOf(fn.get("name"));
+                          if (betaOnly) {
+                            assertEquals("beta_fn", fnName);
+                          } else {
+                            assertTrue("alpha_fn".equals(fnName) || "beta_fn".equals(fnName));
+                          }
+                        }
+                        case 2 -> {
+                          Map<String, Object> mem =
+                              (Map<String, Object>)
+                                  dispatcher.dispatch(
+                                      "memory.read",
+                                      Map.of(
+                                          "selector", Map.of("address", "0x401000"),
+                                          "length", 2));
+                          Map<String, Object> bytes = (Map<String, Object>) mem.get("bytes");
+                          String hex = String.valueOf(bytes.get("data"));
+                          if (betaOnly) {
+                            assertEquals("b807", hex);
+                          } else {
+                            assertTrue("b82a".equals(hex) || "b807".equals(hex));
+                          }
+                        }
+                        default -> {
+                          Map<String, Object> decomp =
+                              (Map<String, Object>)
+                                  dispatcher.dispatch(
+                                      "decompilation.get",
+                                      Map.of(
+                                          "selector", Map.of("entry", "0x401000"),
+                                          "format", "text"));
+                          String fnName = String.valueOf(decomp.get("name"));
+                          if (betaOnly) {
+                            assertEquals("beta_fn", fnName);
+                          } else {
+                            assertTrue("alpha_fn".equals(fnName) || "beta_fn".equals(fnName));
+                          }
+                        }
+                      }
+                      if (!countedAlpha) {
+                        countedAlpha = true;
+                        alphaObserved.countDown();
+                      }
+                    }
+                    return null;
+                  }));
+        }
+
+        startGate.countDown();
+        assertTrue(alphaObserved.await(15, TimeUnit.SECONDS));
+
+        dispatcher.runExclusive(
+            () -> {
+              active.set(beta);
+              switchedToBeta.set(true);
+              session.notifyProgramClosed(alpha);
+            });
+
+        Thread.sleep(100L);
+        stopReaders.set(true);
+        for (Future<Void> reader : readers) {
+          reader.get(20, TimeUnit.SECONDS);
+        }
+        assertEquals("beta.elf", dispatcher.getProgramName());
       }
     }
   }

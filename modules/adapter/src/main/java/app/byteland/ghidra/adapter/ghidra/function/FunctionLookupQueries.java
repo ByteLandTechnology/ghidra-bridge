@@ -16,7 +16,8 @@ final class FunctionLookupQueries implements FunctionResolver {
     if (rawAddress == null || rawAddress.isBlank()) {
       throw new IllegalArgumentException("address is required");
     }
-    Function function = context.flatApi().getFunctionAt(context.parseAddress(rawAddress));
+    Function function =
+        context.currentProgram().getListing().getFunctionAt(context.parseAddress(rawAddress));
     if (function == null) {
       throw new NoSuchElementException("function not found: " + rawAddress);
     }

@@ -89,7 +89,8 @@ final class ListingDescriptions {
       return null;
     }
     try {
-      byte[] values = context.flatApi().getBytes(codeUnit.getAddress(), codeUnit.getLength());
+      byte[] values = new byte[codeUnit.getLength()];
+      codeUnit.getProgram().getMemory().getBytes(codeUnit.getAddress(), values);
       return new ByteSequence(
           ByteSequence.Encoding.HEX, java.util.HexFormat.of().formatHex(values), values.length);
     } catch (MemoryAccessException exception) {

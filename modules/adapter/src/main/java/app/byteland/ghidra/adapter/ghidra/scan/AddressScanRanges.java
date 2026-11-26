@@ -16,7 +16,7 @@ public final class AddressScanRanges {
             ? context.currentProgram().getMinAddress()
             : context.parseAddress(options.start());
     if (start == null) {
-      AddressSpace space = context.flatApi().getAddressFactory().getDefaultAddressSpace();
+      AddressSpace space = context.currentProgram().getAddressFactory().getDefaultAddressSpace();
       if (space == null) throw new IllegalStateException("no default address space");
       start = space.getMinAddress();
     }
