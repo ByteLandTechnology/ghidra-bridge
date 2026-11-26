@@ -14,7 +14,6 @@ import java.util.Objects;
  */
 public final class AgentDispatcher implements AutoCloseable {
   private final String sessionId;
-  private final String programName;
   private final BridgeServices services;
   private final ApiRegistry apiRegistry;
   private final DispatchBarrier dispatchBarrier = new DispatchBarrier();
@@ -23,7 +22,6 @@ public final class AgentDispatcher implements AutoCloseable {
   public AgentDispatcher(BridgeServices services, String sessionId) {
     this.services = Objects.requireNonNull(services, "services");
     this.sessionId = NetworkBinding.requiredText(sessionId, "session_id");
-    this.programName = services.programName();
     this.apiRegistry =
         new ApiRegistry(services, this.sessionId, this::sessionInfo, this::markShuttingDown);
   }
@@ -79,14 +77,14 @@ public final class AgentDispatcher implements AutoCloseable {
   }
 
   public String getProgramName() {
-    return programName;
+    return services.currentProgramName();
   }
 
   private Map<String, Object> sessionInfo() {
     Map<String, Object> info = new LinkedHashMap<>();
     info.put("id", sessionId);
     info.put("status", shuttingDown ? "shutting_down" : "active");
-    info.put("program_name", programName);
+    info.put("program_name", services.currentProgramName());
     return info;
   }
 

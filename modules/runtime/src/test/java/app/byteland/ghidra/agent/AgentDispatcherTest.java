@@ -24,6 +24,8 @@ import app.byteland.ghidra.service.symbol.SymbolService;
 import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class AgentDispatcherTest {
@@ -79,6 +81,52 @@ class AgentDispatcherTest {
     var closedError =
         assertThrows(IllegalStateException.class, () -> dispatcher.dispatch("session.get", Map.of()));
     assertEquals("Agent dispatcher is shutting down", closedError.getMessage());
+  }
+
+  @Test
+  @DisplayName("Resolves active program name dynamically from BridgeServices")
+  void resolvesProgramNameDynamically() throws Exception {
+    AtomicReference<String> activeName = new AtomicReference<>("alpha.elf");
+    BridgeServices services =
+        new BridgeServices(
+            unused(ProgramService.class),
+            unused(AddressService.class),
+            unused(CommentService.class),
+            unused(ReferenceService.class),
+            unused(MemoryService.class),
+            unused(ListingService.class),
+            unused(FunctionService.class),
+            unused(GlobalVariableService.class),
+            closeableStub(AnalysisService.class, new AtomicInteger()),
+            closeableStub(DecompilationService.class, new AtomicInteger()),
+            unused(SymbolService.class),
+            unused(DataTypeService.class),
+            new TransactionRunner() {
+              @Override
+              public <T> T run(Operation<T> operation) {
+                throw new AssertionError("Unexpected transaction");
+              }
+            },
+            "fallback.elf",
+            activeName::get);
+
+    try (AgentDispatcher dispatcher = new AgentDispatcher(services, "gui-session")) {
+      assertEquals("alpha.elf", dispatcher.getProgramName());
+      @SuppressWarnings("unchecked")
+      Map<String, Object> first =
+          (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
+      assertEquals("alpha.elf", first.get("program_name"));
+
+      activeName.set("beta.elf");
+      assertEquals("beta.elf", dispatcher.getProgramName());
+      @SuppressWarnings("unchecked")
+      Map<String, Object> second =
+          (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
+      assertEquals("beta.elf", second.get("program_name"));
+
+      activeName.set("   ");
+      assertEquals("fallback.elf", dispatcher.getProgramName());
+    }
   }
 
   private static BridgeServices createServices(
@@ -140,6 +188,18 @@ class AgentDispatcherTest {
 
   private interface MethodHandler {
     Object invoke(String method);
+  }
+
+  private static <T> T closeableStub(Class<T> type, AtomicInteger closeCount) {
+    return proxy(
+        type,
+        method -> {
+          if ("close".equals(method)) {
+            closeCount.incrementAndGet();
+            return null;
+          }
+          throw new AssertionError(method);
+        });
   }
 
   private static <T> T unused(Class<T> type) {
