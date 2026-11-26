@@ -27,6 +27,7 @@ public final class AddressServiceImpl implements AddressService {
 
   @Override
   public AddressResource resolveAddress(String rawAddress, Set<String> fields) {
+    var program = context.currentProgram();
     Address address = context.parseAddress(rawAddress);
     boolean needInMemory = FieldProjections.allows(fields, "in_memory");
     boolean needMemoryBlock = FieldProjections.allows(fields, "memory_block");
@@ -34,11 +35,10 @@ public final class AddressServiceImpl implements AddressService {
     boolean needSymbol = FieldProjections.allows(fields, "symbol");
     boolean needCodeUnit = FieldProjections.allows(fields, "code_unit");
     MemoryBlock block =
-        needInMemory || needMemoryBlock ? context.script().getMemoryBlock(address) : null;
-    Function function = needFunction ? context.script().getFunctionContaining(address) : null;
-    Symbol symbol = needSymbol ? context.script().getSymbolAt(address) : null;
-    CodeUnit unit =
-        needCodeUnit ? context.currentProgram().getListing().getCodeUnitContaining(address) : null;
+        needInMemory || needMemoryBlock ? program.getMemory().getBlock(address) : null;
+    Function function = needFunction ? program.getListing().getFunctionContaining(address) : null;
+    Symbol symbol = needSymbol ? program.getSymbolTable().getPrimarySymbol(address) : null;
+    CodeUnit unit = needCodeUnit ? program.getListing().getCodeUnitContaining(address) : null;
     return new AddressResource(
         AddressUtil.canonicalAddress(address),
         true,

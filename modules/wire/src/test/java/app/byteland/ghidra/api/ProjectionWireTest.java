@@ -320,12 +320,28 @@ class ProjectionWireTest {
     assertEquals("invalid_response", wrongNestedType.error().code());
     assertEquals("invalid_type", ((ApiException) wrongNestedType.getCause()).error().code());
 
-    // Absent projected required child property inside present parent object is rejected.
-    ApiException missingProjectedSubfield =
+    // Empty parent object in a projectable schema fails minProperties validation.
+    ApiException emptyProjectedBody =
         assertThrows(
             ApiException.class,
             () ->
                 codec.encode(
+                    Map.of("entry", "0x00101000", "body", Map.of()),
+                    new LinkedHashSet<>(List.of("entry", "body.start"))));
+    assertEquals("invalid_response", emptyProjectedBody.error().code());
+    assertEquals(
+        "invalid_count", ((ApiException) emptyProjectedBody.getCause()).error().code());
+
+    // Absent projected required child property inside a strict nested object schema is rejected.
+    JsonValueCodec strictFunctionCodec =
+        new JsonValueCodec(
+            ApiSchemaCatalog.resourceSchema(
+                ApiSchemaCatalog.functionFields(), List.of(ApiVocabulary.ENTRY), false));
+    ApiException missingProjectedSubfield =
+        assertThrows(
+            ApiException.class,
+            () ->
+                strictFunctionCodec.encode(
                     Map.of("entry", "0x00101000", "body", Map.of()),
                     new LinkedHashSet<>(List.of("entry", "body.start"))));
     assertEquals("invalid_response", missingProjectedSubfield.error().code());
@@ -602,6 +618,51 @@ class ProjectionWireTest {
                     Map.of("fields", List.of("name"))));
     List<Map<String, Object>> page2Items = (List<Map<String, Object>>) page2.get("items");
     assertEquals(List.of(Map.of("address", "0x00101004", "id", "2", "name", "helper")), page2Items);
+
+    // Verify split-phase prepareDispatch and batch.execute preserve projection pushdown.
+    ApiRegistry.PreparedDispatch preparedFn =
+        registry.prepareDispatch(
+            "function.get",
+            Map.of(
+                "selector",
+                Map.of("entry", "0x00101000"),
+                "projection",
+                Map.of("fields", List.of("body.start"))));
+    assertEquals(
+        Map.of("entry", "0x00101000", "body", Map.of("start", "0x00101000")),
+        preparedFn.encodeResponse(preparedFn.execute()));
+
+    ApiRegistry.PreparedDispatch preparedBatch =
+        registry.prepareDispatch(
+            "batch.execute",
+            Map.of(
+                "items",
+                List.of(
+                    Map.of(
+                        "id",
+                        "fn-1",
+                        "method",
+                        "function.get",
+                        "arguments",
+                        Map.of(
+                            "selector",
+                            Map.of("entry", "0x00101000"),
+                            "projection",
+                            Map.of("fields", List.of("parameters.name")))))));
+    assertEquals(
+        Map.of(
+            "items",
+            List.of(
+                Map.of(
+                    "id",
+                    "fn-1",
+                    "result",
+                    Map.of(
+                        "entry",
+                        "0x00101000",
+                        "parameters",
+                        List.of(Map.of("name", "argc")))))),
+        preparedBatch.encodeResponse(preparedBatch.execute()));
   }
 
   private static boolean isReadOnly(ApiMethod<?, ?> method) {

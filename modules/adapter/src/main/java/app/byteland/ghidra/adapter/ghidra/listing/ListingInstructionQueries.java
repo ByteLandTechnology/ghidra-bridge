@@ -60,7 +60,7 @@ final class ListingInstructionQueries {
 
   InstructionResource getInstruction(String rawAddress, Set<String> fields) {
     Address address = parseAddress(rawAddress);
-    Instruction instruction = context.script().getInstructionAt(address);
+    Instruction instruction = context.currentProgram().getListing().getInstructionAt(address);
     if (instruction == null) {
       throw new NoSuchElementException("no instruction at address");
     }

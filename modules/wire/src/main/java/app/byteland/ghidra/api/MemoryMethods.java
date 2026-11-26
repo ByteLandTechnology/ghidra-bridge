@@ -90,7 +90,7 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.FIELDS,
                 fields),
             ApiVocabulary.SELECTOR),
-        ApiSchemaCatalog.resourceSchema(memoryFields),
+        ApiSchemaCatalog.resourceSchema(memoryFields, List.of(ApiVocabulary.ADDRESS)),
         memoryFields,
         List.of(ApiVocabulary.ADDRESS),
         request ->

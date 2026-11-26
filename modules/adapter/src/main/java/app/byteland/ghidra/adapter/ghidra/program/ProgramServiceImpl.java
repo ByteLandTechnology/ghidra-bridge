@@ -73,7 +73,7 @@ public final class ProgramServiceImpl implements ProgramService {
   @Override
   public Page<AddressSpaceResource> getAddressSpaces(
       int limit, String cursor, Set<String> fields) {
-    var addressFactory = context.script().getAddressFactory();
+    var addressFactory = program.getAddressFactory();
     boolean needDefault = FieldProjections.allows(fields, "default");
     var defaultSpace = needDefault ? addressFactory.getDefaultAddressSpace() : null;
     List<SpaceEntry> entries = new ArrayList<>();

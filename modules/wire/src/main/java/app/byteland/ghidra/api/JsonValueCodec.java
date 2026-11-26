@@ -23,14 +23,14 @@ final class JsonValueCodec implements JsonCodec<Object> {
 
   @Override
   public Object encode(Object value) {
-    return encodeWithSchema(value, valueSchema);
+    return validateOutput(value, valueSchema);
   }
 
   Object encode(Object value, Set<String> projectedFields) {
     if (projectedFields == null) {
-      return encodeWithSchema(value, valueSchema);
+      return validateOutput(value, valueSchema);
     }
-    return encodeWithSchema(value, projectedSchema(projectedFields));
+    return validateOutput(value, projectedSchema(projectedFields));
   }
 
   Map<String, Object> projectedSchema(Set<String> projectedFields) {
@@ -38,14 +38,14 @@ final class JsonValueCodec implements JsonCodec<Object> {
     if (cached != null) {
       return cached;
     }
-    Map<String, Object> derived = WireSchema.project(valueSchema, projectedFields);
+    Map<String, Object> derived = WireSchema.projectResponse(valueSchema, projectedFields);
     if (projectedSchemas.size() < MAX_CACHED_PROJECTIONS) {
       projectedSchemas.putIfAbsent(Set.copyOf(projectedFields), derived);
     }
     return derived;
   }
 
-  private static Object encodeWithSchema(Object value, Map<String, Object> schema) {
+  static Object validateOutput(Object value, Map<String, Object> schema) {
     try {
       WireSchema.validate(value, schema, "/result");
     } catch (ApiException invalidResponse) {

@@ -227,10 +227,24 @@ public final class WireSchema {
     if (selectedFields == null) {
       return schema;
     }
-    return project(schema, FieldSelection.from(selectedFields));
+    return project(schema, FieldSelection.from(selectedFields), false);
+  }
+
+  static Map<String, Object> projectResponse(
+      Map<String, Object> schema, Set<String> selectedFields) {
+    Objects.requireNonNull(schema, "schema");
+    if (selectedFields == null) {
+      return schema;
+    }
+    return project(schema, FieldSelection.from(selectedFields), true);
   }
 
   static Map<String, Object> project(Map<String, Object> schema, FieldSelection selection) {
+    return project(schema, selection, false);
+  }
+
+  private static Map<String, Object> project(
+      Map<String, Object> schema, FieldSelection selection, boolean preserveRootRequired) {
     Objects.requireNonNull(schema, "schema");
     if (selection == null || selection.selectsAll()) {
       return schema;
@@ -238,8 +252,8 @@ public final class WireSchema {
     Map<String, Map<String, Object>> definitions = schemaDefinitions(schema);
     Map<String, Object> projected =
         isListEnvelope(schema, selection)
-            ? projectListEnvelope(schema, selection, definitions)
-            : projectNode(schema, selection, definitions);
+            ? projectListEnvelope(schema, selection, definitions, preserveRootRequired)
+            : projectNode(schema, selection, definitions, preserveRootRequired);
     if (schema.containsKey(ApiVocabulary.DEFINITIONS)
         && !projected.containsKey(ApiVocabulary.DEFINITIONS)) {
       Map<String, Object> withDefs = new LinkedHashMap<>(projected);
@@ -277,14 +291,17 @@ public final class WireSchema {
   private static Map<String, Object> projectListEnvelope(
       Map<String, Object> schema,
       FieldSelection selection,
-      Map<String, Map<String, Object>> definitions) {
+      Map<String, Map<String, Object>> definitions,
+      boolean preserveItemRootRequired) {
     Map<String, Object> properties =
         new LinkedHashMap<>((Map<String, Object>) schema.get(ApiVocabulary.PROPERTIES));
     Map<String, Object> itemsArraySchema =
         new LinkedHashMap<>((Map<String, Object>) properties.get(ApiVocabulary.ITEMS));
     Map<String, Object> itemSchema =
         (Map<String, Object>) itemsArraySchema.getOrDefault(ApiVocabulary.ITEMS, Map.of());
-    itemsArraySchema.put(ApiVocabulary.ITEMS, projectNode(itemSchema, selection, definitions));
+    itemsArraySchema.put(
+        ApiVocabulary.ITEMS,
+        projectNode(itemSchema, selection, definitions, preserveItemRootRequired));
     properties.put(ApiVocabulary.ITEMS, Collections.unmodifiableMap(itemsArraySchema));
     Map<String, Object> projected = new LinkedHashMap<>(schema);
     projected.put(ApiVocabulary.PROPERTIES, Collections.unmodifiableMap(properties));
@@ -295,13 +312,15 @@ public final class WireSchema {
   private static Map<String, Object> projectNode(
       Map<String, Object> schema,
       FieldSelection selection,
-      Map<String, Map<String, Object>> definitions) {
+      Map<String, Map<String, Object>> definitions,
+      boolean preserveRequired) {
     if (selection.selectsAll()) {
       return schema;
     }
     Object ref = schema.get(ApiVocabulary.REFERENCE);
     if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
-      return projectNode(resolveReference(reference, definitions), selection, definitions);
+      return projectNode(
+          resolveReference(reference, definitions), selection, definitions, preserveRequired);
     }
     if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?>
         || schema.get(ANY_OF) instanceof List<?>) {
@@ -320,7 +339,7 @@ public final class WireSchema {
           continue;
         }
         Map<String, Object> projectedAlternative =
-            projectNode(branchSchema, selection, definitions);
+            projectNode(branchSchema, selection, definitions, preserveRequired);
         if (uniqueAlternatives.add(projectedAlternative)
             && isObjectCapableSchema(projectedAlternative)) {
           objectBranchCount++;
@@ -339,7 +358,7 @@ public final class WireSchema {
     }
     Object type = schema.get(ApiVocabulary.TYPE);
     if (type == null) {
-      return projectNode(openObject(), selection, definitions);
+      return projectNode(openObject(), selection, definitions, false);
     }
     if (ApiVocabulary.OBJECT.equals(type)) {
       Map<String, Object> properties =
@@ -350,7 +369,7 @@ public final class WireSchema {
         if (child != null) {
           projectedProperties.put(
               entry.getKey(),
-              projectNode((Map<String, Object>) entry.getValue(), child, definitions));
+              projectNode((Map<String, Object>) entry.getValue(), child, definitions, false));
         }
       }
       boolean openAdditional =
@@ -359,14 +378,14 @@ public final class WireSchema {
         for (FieldSelection.Entry entry : selection.entries()) {
           if (!projectedProperties.containsKey(entry.key())) {
             projectedProperties.put(
-                entry.key(), projectNode(any(), entry.selection(), definitions));
+                entry.key(), projectNode(any(), entry.selection(), definitions, false));
           }
         }
       }
       Map<String, Object> projected = new LinkedHashMap<>(schema);
       projected.put(ApiVocabulary.ADDITIONAL_PROPERTIES, false);
       projected.put(ApiVocabulary.PROPERTIES, Collections.unmodifiableMap(projectedProperties));
-      if (schema.get(ApiVocabulary.REQUIRED) instanceof List<?> required) {
+      if (!preserveRequired && schema.get(ApiVocabulary.REQUIRED) instanceof List<?> required) {
         List<String> projectedRequired = new ArrayList<>();
         for (Object item : required) {
           String key = String.valueOf(item);
@@ -380,7 +399,8 @@ public final class WireSchema {
           projected.put(ApiVocabulary.REQUIRED, List.copyOf(projectedRequired));
         }
       }
-      if (schema.get(ApiVocabulary.MIN_PROPERTIES) instanceof Number minProps
+      if (!preserveRequired
+          && schema.get(ApiVocabulary.MIN_PROPERTIES) instanceof Number minProps
           && minProps.intValue() > projectedProperties.size()) {
         projected.put(ApiVocabulary.MIN_PROPERTIES, projectedProperties.size());
       }
@@ -391,7 +411,7 @@ public final class WireSchema {
       Map<String, Object> projected = new LinkedHashMap<>(schema);
       projected.put(
           ApiVocabulary.ITEMS,
-          projectNode((Map<String, Object>) itemSchema, selection, definitions));
+          projectNode((Map<String, Object>) itemSchema, selection, definitions, preserveRequired));
       return Collections.unmodifiableMap(projected);
     }
     return schema;
