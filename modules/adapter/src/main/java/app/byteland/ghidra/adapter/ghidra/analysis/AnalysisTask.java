@@ -27,13 +27,17 @@ final class AnalysisTask {
   private volatile Long completedAt;
   private volatile String error;
 
-  AnalysisTask(GhidraSession context, AutoAnalysisManager manager, AnalyzerSelection selection) {
+  AnalysisTask(
+      GhidraSession context,
+      Program program,
+      AutoAnalysisManager manager,
+      AnalyzerSelection selection) {
     GhidraSession session = Objects.requireNonNull(context, "context");
+    Program targetProgram = Objects.requireNonNull(program, "program");
     AutoAnalysisManager analysisManager = Objects.requireNonNull(manager, "manager");
     AnalyzerSelection analyzerSelection = Objects.requireNonNull(selection, "selection");
-    Program program = session.currentProgram();
-    this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(program);
-    this.body = () -> performAnalysis(session, analysisManager, program, analyzerSelection);
+    this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(targetProgram);
+    this.body = () -> performAnalysis(session, analysisManager, targetProgram, analyzerSelection);
   }
 
   AnalysisTask(BooleanSupplier analyzed, Runnable operation) {
@@ -80,16 +84,16 @@ final class AnalysisTask {
             "Ghidra analysis started before the bridge task acquired the analysis manager");
       }
       AnalysisOptionChange optionChange =
-          prepareScriptAnalyzerSelection(context, manager, program, selection);
+          prepareAnalyzerSelection(manager, program, selection);
       if (optionChange != null) {
         previousAnalysisOptions = optionChange.previous();
-        applyScriptAnalyzerSelection(context, program, optionChange.updates());
+        applyAnalyzerSelection(context, program, optionChange.updates());
       }
       monitor.setIndeterminate(true);
       monitor.setMessage("Running analysis");
       manager.initializeOptions();
       manager.reAnalyzeAll(null);
-      runAndWaitForAnalysis(manager);
+      runAndWaitForAnalysis(program, manager);
       AnalysisManagerWait.awaitIdle(manager);
       if (monitor.isCancelled() || managerCancelled.get()) {
         terminalStatus = AnalysisResource.Status.CANCELLED;
@@ -110,7 +114,7 @@ final class AnalysisTask {
         }
       }
       String restoreError =
-          restoreScriptAnalyzerSelection(context, manager, program, previousAnalysisOptions);
+          restoreAnalyzerSelection(context, manager, program, previousAnalysisOptions);
       if (restoreError != null) {
         terminalStatus = AnalysisResource.Status.FAILED;
         terminalError = appendError(terminalError, restoreError);
@@ -120,7 +124,8 @@ final class AnalysisTask {
       if (monitor.isCancelled()) {
         return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
       }
-      context.withTransaction(
+      context.withProgramTransaction(
+          program,
           () -> {
             GhidraProgramUtilities.markProgramAnalyzed(program);
             return null;
@@ -161,8 +166,7 @@ final class AnalysisTask {
     status = outcome.status();
   }
 
-  private static AnalysisOptionChange prepareScriptAnalyzerSelection(
-      GhidraSession context,
+  private static AnalysisOptionChange prepareAnalyzerSelection(
       AutoAnalysisManager manager,
       Program program,
       AnalyzerSelection selection) {
@@ -170,7 +174,7 @@ final class AnalysisTask {
       return null;
     }
 
-    Map<String, String> current = context.script().getCurrentAnalysisOptionsAndValues(program);
+    Map<String, String> current = AnalysisOptionsSupport.readBooleanOptions(program);
     Set<String> selected = new LinkedHashSet<>(selection.analyzers());
     for (String analyzer : selected) {
       if (manager.getAnalyzer(analyzer) == null) {
@@ -198,18 +202,12 @@ final class AnalysisTask {
     return new AnalysisOptionChange(previous, updates);
   }
 
-  private static void applyScriptAnalyzerSelection(
+  private static void applyAnalyzerSelection(
       GhidraSession context, Program program, Map<String, String> updates) {
-    if (!updates.isEmpty()) {
-      context.withTransaction(
-          () -> {
-            context.script().setAnalysisOptions(program, updates);
-            return null;
-          });
-    }
+    AnalysisOptionsSupport.writeBooleanOptions(context, program, updates);
   }
 
-  private static String restoreScriptAnalyzerSelection(
+  private static String restoreAnalyzerSelection(
       GhidraSession context,
       AutoAnalysisManager manager,
       Program program,
@@ -218,11 +216,7 @@ final class AnalysisTask {
       return null;
     }
     try {
-      context.withTransaction(
-          () -> {
-            context.script().setAnalysisOptions(program, previousAnalysisOptions);
-            return null;
-          });
+      AnalysisOptionsSupport.writeBooleanOptions(context, program, previousAnalysisOptions);
       manager.initializeOptions();
       return null;
     } catch (RuntimeException ex) {
@@ -230,9 +224,20 @@ final class AnalysisTask {
     }
   }
 
-  private void runAndWaitForAnalysis(AutoAnalysisManager manager) {
+  private void runAndWaitForAnalysis(Program program, AutoAnalysisManager manager) {
     PluginTool tool = manager.getAnalysisTool();
-    if (tool == null || tool.threadIsBackgroundTaskThread()) {
+    if (tool == null) {
+      int transactionId = program.startTransaction("Ghidra Bridge Analysis");
+      boolean commit = false;
+      try {
+        manager.startAnalysis(monitor, true);
+        commit = !program.hasTerminatedTransaction();
+      } finally {
+        program.endTransaction(transactionId, commit);
+      }
+      return;
+    }
+    if (tool.threadIsBackgroundTaskThread()) {
       manager.startAnalysis(monitor, true);
       return;
     }

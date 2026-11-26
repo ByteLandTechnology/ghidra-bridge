@@ -114,6 +114,53 @@ class AgentDispatcherTest {
     assertThrows(IllegalStateException.class, () -> dispatcher.dispatch("session.get", Map.of()));
   }
 
+  @Test
+  @DisplayName("Resolves active program name dynamically from BridgeServices")
+  void resolvesProgramNameDynamically() throws Exception {
+    java.util.concurrent.atomic.AtomicReference<String> activeName =
+        new java.util.concurrent.atomic.AtomicReference<>("alpha.elf");
+    BridgeServices services =
+        new BridgeServices(
+            unused(ProgramService.class),
+            unused(AddressService.class),
+            unused(CommentService.class),
+            unused(ReferenceService.class),
+            unused(MemoryService.class),
+            unused(ListingService.class),
+            unused(FunctionService.class),
+            unused(GlobalVariableService.class),
+            closeableStub(AnalysisService.class, new AtomicInteger()),
+            closeableStub(DecompilationService.class, new AtomicInteger()),
+            unused(SymbolService.class),
+            unused(DataTypeService.class),
+            new TransactionRunner() {
+              @Override
+              public <T> T run(Operation<T> operation) {
+                throw new AssertionError("Unexpected transaction");
+              }
+            },
+            "fallback.elf",
+            activeName::get);
+
+    try (AgentDispatcher dispatcher = new AgentDispatcher(services, "gui-session")) {
+      assertEquals("alpha.elf", dispatcher.getProgramName());
+      @SuppressWarnings("unchecked")
+      Map<String, Object> first =
+          (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
+      assertEquals("alpha.elf", first.get("program_name"));
+
+      activeName.set("beta.elf");
+      assertEquals("beta.elf", dispatcher.getProgramName());
+      @SuppressWarnings("unchecked")
+      Map<String, Object> second =
+          (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
+      assertEquals("beta.elf", second.get("program_name"));
+
+      activeName.set("   ");
+      assertEquals("fallback.elf", dispatcher.getProgramName());
+    }
+  }
+
   private static BridgeServices stubServices(String programName, AtomicInteger closeCount) {
     AnalysisService analysis =
         closeableStub(AnalysisService.class, closeCount);

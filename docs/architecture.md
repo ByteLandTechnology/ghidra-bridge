@@ -70,10 +70,10 @@ This module implements the WebSocket transport:
 ### 6. `modules/transport/mcp`
 
 This module implements the Model Context Protocol:
-- `McpHttpServer` implements a Streamable HTTP server that complies with protocol `2026-07-28`.
-- `McpToolRegistry` maps 56 public methods to 14 domain tools and `ghidra.help`.
+- `McpHttpServer` implements a Streamable HTTP and SSE server that complies with protocol `2026-07-28`.
+- `McpToolRegistry` maps 56 public methods to 14 domain tools and `ghidra_help`.
   It does not publish `interface.get`.
-- It serves the contract resource at `ghidra-bridge://contracts/mcp-tools`.
+- It serves the contract resource at `ghidra-bridge://<tool_prefix>/contracts/mcp-tools`.
 
 ### 7. `modules/launcher`
 
@@ -99,4 +99,5 @@ The project uses these checks for architectural boundaries:
 - The `verifyArchitecture` Gradle task checks package imports across all modules.
 - Only `modules/adapter` and `modules/launcher` can import packages whose names start with `ghidra.`.
 - The `verifyApiContracts` task generates contracts in a build sandbox and fails on a difference.
+- The `verifyMcpDocumentation` task checks `docs/mcp-tools.json`, the nine guides, and MCP Javadocs.
 - Run `./gradlew clean verify` to check these rules.

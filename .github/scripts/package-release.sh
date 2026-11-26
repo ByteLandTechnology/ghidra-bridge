@@ -33,9 +33,9 @@ if [[ "$version" != "$release_manifest_version" ]]; then
 fi
 
 if [[ "${CI:-}" == "true" ]]; then
-  ./gradlew --no-daemon -PreleaseVersion="$version" verify
+  ./gradlew --no-daemon --stacktrace -PreleaseVersion="$version" verify
 else
-  ./gradlew --no-daemon -PreleaseVersion="$version" clean verify
+  ./gradlew --no-daemon --stacktrace -PreleaseVersion="$version" clean verify
 fi
 
 jar="build/ghidra-script/ghidra-bridge.jar"

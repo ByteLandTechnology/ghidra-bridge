@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.6.0](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.5.1...v1.6.0) (2026-11-26)
+
+
+### Features
+
+* publish compact MCP schemas and enriched domain help ([#45](https://github.com/ByteLandTechnology/ghidra-bridge/issues/45)) ([f22b50a](https://github.com/ByteLandTechnology/ghidra-bridge/commit/f22b50aec25be525c74e8a13aa52f6248ff4771a))
+
+
+### Performance Improvements
+
+* **wire:** project and validate response fields in one pass ([#102](https://github.com/ByteLandTechnology/ghidra-bridge/issues/102)) ([01ce7d5](https://github.com/ByteLandTechnology/ghidra-bridge/commit/01ce7d5f93e08c485f05b7d2dd09dfb0f9c1aeba))
+
+## [1.5.1](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.5.0...v1.5.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **mcp:** bound HTTP threads, concurrent requests, and SSE sessions ([#48](https://github.com/ByteLandTechnology/ghidra-bridge/issues/48)) ([96c20a1](https://github.com/ByteLandTechnology/ghidra-bridge/commit/96c20a1239d019a8bae40b0ea738776a9c2ca99e))
+* **websocket:** reassemble fragmented text frames and add keepalive timeouts ([#94](https://github.com/ByteLandTechnology/ghidra-bridge/issues/94)) ([e1732ab](https://github.com/ByteLandTechnology/ghidra-bridge/commit/e1732aba0ad2d4e0972d7d92105ab27a1e2bc28a))
+* **wire:** align wire schemas, list pagination, and flow filters ([#24](https://github.com/ByteLandTechnology/ghidra-bridge/issues/24)) ([ccc7cac](https://github.com/ByteLandTechnology/ghidra-bridge/commit/ccc7cacc3de9fcaa6dfe440646cca02585973e7c))
+
+
+### Performance Improvements
+
+* **runtime:** use fair read-write locks in AgentDispatcher ([#50](https://github.com/ByteLandTechnology/ghidra-bridge/issues/50)) ([5270daf](https://github.com/ByteLandTechnology/ghidra-bridge/commit/5270dafb05e6f81340b76402278f6d0fc2c75d4e))
+
 ## [1.5.0](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.4.1...v1.5.0) (2026-11-25)
 
 
