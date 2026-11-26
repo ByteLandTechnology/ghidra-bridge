@@ -10,10 +10,73 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
 import urllib.request
+
+
+STARTUP_POLL_ATTEMPTS = 120
+STARTUP_POLL_INTERVAL_SECONDS = 0.5
+SHUTDOWN_WAIT_SECONDS = 20
+SIGTERM_WAIT_SECONDS = 10
+SIGKILL_WAIT_SECONDS = 5
+LOG_TAIL_LINES = 100
+
+
+def archive_and_print_headless_log(log_path, report_log, tail_lines=LOG_TAIL_LINES):
+    report_log.parent.mkdir(parents=True, exist_ok=True)
+    if log_path.is_file():
+        shutil.copyfile(log_path, report_log)
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    else:
+        report_log.write_text("", encoding="utf-8")
+        text = ""
+    tail = "\n".join(text.splitlines()[-tail_lines:])
+    print(
+        f"=== headless.log (last {tail_lines} lines; saved full log to {report_log}) ===",
+        file=sys.stderr,
+    )
+    print(tail if tail else "<headless.log is empty>", file=sys.stderr, flush=True)
+
+
+def terminate_headless_process(process, ready, shutdown_fn):
+    used_sigkill = False
+    try:
+        if ready:
+            try:
+                shutdown_fn()
+            except Exception:
+                pass
+            try:
+                process.wait(timeout=SHUTDOWN_WAIT_SECONDS)
+                return False
+            except subprocess.TimeoutExpired:
+                pass
+        elif process.poll() is not None:
+            return False
+
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+        try:
+            process.wait(timeout=SIGTERM_WAIT_SECONDS)
+        except subprocess.TimeoutExpired:
+            used_sigkill = True
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=SIGKILL_WAIT_SECONDS)
+        return used_sigkill
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
 
 
 FIXTURE = """
@@ -88,14 +151,21 @@ def run_test(headless, root):
             raise AssertionError(f"Unexpected result for {name} ({arguments}): {result}")
         return result.get("structuredContent", {})
 
-    scripts = pathlib.Path(__file__).resolve().parents[1] / "build" / "ghidra-script"
+    repo_root = pathlib.Path(__file__).resolve().parents[1]
+    scripts = repo_root / "build" / "ghidra-script"
+    report_log = (
+        repo_root / "build" / "reports" / "headless-regression" / "c-declaration-headless.log"
+    )
+    report_log.unlink(missing_ok=True)
     command = [
         str(headless), str(project), "test", "-import", str(binary), "-noanalysis",
         "-scriptPath", str(scripts), "-postScript", "GhidraMcp.java",
         "host=127.0.0.1", f"port={port}",
     ]
     log_path = root / "headless.log"
-    with log_path.open("w") as log:
+    primary_error = None
+    used_sigkill = False
+    with log_path.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(
             command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
         )
@@ -111,20 +181,25 @@ def run_test(headless, root):
                     "clientInfo": {"name": "c-declaration-test", "version": "1"},
                 },
             }
-            for _ in range(120):
+            for _ in range(STARTUP_POLL_ATTEMPTS):
                 if process.poll() is not None:
-                    raise RuntimeError("Ghidra stopped: " + log_path.read_text()[-2000:])
+                    raise RuntimeError(f"Ghidra stopped with exit code {process.returncode}")
                 try:
                     if call(initialize).get("result"):
                         ready = True
                         break
                 except (OSError, TimeoutError, urllib.error.URLError):
-                    time.sleep(0.5)
+                    time.sleep(STARTUP_POLL_INTERVAL_SECONDS)
             if not ready:
                 raise RuntimeError("Ghidra did not start")
             call({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
-            # 1. Verify ghidra_help exposes data_type.parse_c and function.patch signature
+            # 1. Verify tools/list compact schemas and ghidra_help expose parse_c & signature
+            listed_tools = call(
+                {"jsonrpc": "2.0", "id": 100, "method": "tools/list", "params": {}}
+            )["result"]["tools"]
+            dt_tool = next(item for item in listed_tools if item["name"] == "ghidra_data_type")
+            assert "parse_c" in dt_tool["inputSchema"]["properties"]["operation"]["enum"]
             help_dt = tool(2, "ghidra_help", {"domain": "data_type", "operation": "parse_c"})
             assert help_dt["method"] == "data_type.parse_c"
             help_fn = tool(3, "ghidra_help", {"domain": "function", "operation": "patch"})
@@ -572,17 +647,29 @@ def run_test(headless, root):
             assert oversized_type["target"] == "/patch/data_type"
 
             print("C declaration and prototype regression checks passed")
+        except BaseException as exc:
+            primary_error = exc
+            raise
         finally:
-            if ready:
-                try:
-                    tool(99, "ghidra_bridge", {"operation": "shutdown"})
-                except (OSError, TimeoutError, urllib.error.URLError):
-                    pass
             try:
-                process.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGTERM)
-                process.wait(timeout=10)
+                used_sigkill = terminate_headless_process(
+                    process,
+                    ready,
+                    lambda: tool(99, "ghidra_bridge", {"operation": "shutdown"}),
+                )
+            except BaseException:
+                if primary_error is None:
+                    log.flush()
+                    archive_and_print_headless_log(log_path, report_log)
+                    raise
+            log.flush()
+            if primary_error is not None:
+                archive_and_print_headless_log(log_path, report_log)
+            elif used_sigkill:
+                archive_and_print_headless_log(log_path, report_log)
+                raise RuntimeError(
+                    "Ghidra ignored SIGTERM during shutdown and required SIGKILL"
+                )
 
 
 def main():

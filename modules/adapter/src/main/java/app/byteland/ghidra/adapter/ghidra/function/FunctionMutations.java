@@ -98,22 +98,22 @@ final class FunctionMutations {
     }
 
     if (hasExplicitName && !updated.getName().equals(newName)) {
-      Symbol symbol = context.script().getSymbolAt(updated.getEntryPoint());
+      Symbol symbol = context.flatApi().getSymbolAt(updated.getEntryPoint());
       if (symbol == null) {
         throw new IllegalArgumentException("function symbol not found");
       }
       ScriptSymbolRenamer.rename(context, symbol, newName);
-      updated = context.script().getFunctionAt(updated.getEntryPoint());
+      updated = context.flatApi().getFunctionAt(updated.getEntryPoint());
       if (updated == null) {
         throw new IllegalArgumentException("function not found after rename");
       }
     }
 
     if (commentPresent && !java.util.Objects.equals(updated.getComment(), newComment)) {
-      if (!context.script().setPlateComment(updated.getEntryPoint(), newComment)) {
+      if (!context.flatApi().setPlateComment(updated.getEntryPoint(), newComment)) {
         throw new IllegalArgumentException("unable to set function comment");
       }
-      updated = context.script().getFunctionAt(updated.getEntryPoint());
+      updated = context.flatApi().getFunctionAt(updated.getEntryPoint());
       if (updated == null) {
         throw new IllegalArgumentException("function not found after comment update");
       }

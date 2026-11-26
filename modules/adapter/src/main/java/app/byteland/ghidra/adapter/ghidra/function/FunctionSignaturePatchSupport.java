@@ -134,7 +134,7 @@ final class FunctionSignaturePatchSupport {
               false,
               DataTypeConflictHandler.DEFAULT_HANDLER,
               renameOption);
-      if (!command.applyTo(program, context.script().getMonitor())) {
+      if (!command.applyTo(program, context.flatApi().getMonitor())) {
         String status = command.getStatusMsg();
         throw new DataTypeMutationValidationException(
             SIGNATURE_TARGET,

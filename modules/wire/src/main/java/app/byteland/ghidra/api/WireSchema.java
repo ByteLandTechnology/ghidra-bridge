@@ -8,9 +8,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public final class WireSchema {
   private static final int EXACT_UNION_MATCHES = 1;
+  private static final String ANY_OF = "anyOf";
 
   private WireSchema() {}
 
@@ -218,6 +220,189 @@ public final class WireSchema {
   private static final Double MIN_DOUBLE = -Double.MAX_VALUE;
   private static final Double MAX_DOUBLE = Double.MAX_VALUE;
 
+  public static Map<String, Object> project(
+      Map<String, Object> schema, Set<String> selectedFields) {
+    Objects.requireNonNull(schema, "schema");
+    if (selectedFields == null) {
+      return schema;
+    }
+    return project(schema, FieldSelection.from(selectedFields), false);
+  }
+
+  static Map<String, Object> projectOutput(
+      Map<String, Object> schema, Set<String> selectedFields) {
+    Objects.requireNonNull(schema, "schema");
+    if (selectedFields == null) {
+      return schema;
+    }
+    return project(schema, FieldSelection.from(selectedFields), true);
+  }
+
+  static Map<String, Object> project(Map<String, Object> schema, FieldSelection selection) {
+    return project(schema, selection, false);
+  }
+
+  private static Map<String, Object> project(
+      Map<String, Object> schema, FieldSelection selection, boolean preserveContract) {
+    Objects.requireNonNull(schema, "schema");
+    if (selection == null || selection.selectsAll()) {
+      return schema;
+    }
+    Map<String, Map<String, Object>> definitions = schemaDefinitions(schema);
+    Map<String, Object> projected =
+        isListEnvelope(schema, selection)
+            ? projectListEnvelope(schema, selection, definitions, preserveContract)
+            : projectNode(schema, selection, definitions, preserveContract);
+    if (schema.containsKey(ApiVocabulary.DEFINITIONS)
+        && !projected.containsKey(ApiVocabulary.DEFINITIONS)) {
+      Map<String, Object> withDefs = new LinkedHashMap<>(projected);
+      withDefs.put(ApiVocabulary.DEFINITIONS, schema.get(ApiVocabulary.DEFINITIONS));
+      return Collections.unmodifiableMap(withDefs);
+    }
+    return projected;
+  }
+
+  private static boolean isListEnvelope(Map<String, Object> schema, FieldSelection selection) {
+    if (!ApiVocabulary.OBJECT.equals(schema.get(ApiVocabulary.TYPE))) {
+      return false;
+    }
+    if (!List.of(ApiVocabulary.ITEMS).equals(schema.get(ApiVocabulary.REQUIRED))) {
+      return false;
+    }
+    if (selection.containsKey(ApiVocabulary.ITEMS)) {
+      return false;
+    }
+    if (!(schema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties)) {
+      return false;
+    }
+    return properties.get(ApiVocabulary.ITEMS) instanceof Map<?, ?> itemsSchema
+        && ApiVocabulary.ARRAY.equals(itemsSchema.get(ApiVocabulary.TYPE));
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static Map<String, Object> projectListEnvelope(
+      Map<String, Object> schema,
+      FieldSelection selection,
+      Map<String, Map<String, Object>> definitions,
+      boolean preserveContract) {
+    Map<String, Object> properties =
+        new LinkedHashMap<>((Map<String, Object>) schema.get(ApiVocabulary.PROPERTIES));
+    Map<String, Object> itemsArraySchema =
+        new LinkedHashMap<>((Map<String, Object>) properties.get(ApiVocabulary.ITEMS));
+    Map<String, Object> itemSchema =
+        (Map<String, Object>) itemsArraySchema.getOrDefault(ApiVocabulary.ITEMS, Map.of());
+    itemsArraySchema.put(
+        ApiVocabulary.ITEMS, projectNode(itemSchema, selection, definitions, preserveContract));
+    properties.put(ApiVocabulary.ITEMS, Collections.unmodifiableMap(itemsArraySchema));
+    Map<String, Object> projected = new LinkedHashMap<>(schema);
+    projected.put(ApiVocabulary.PROPERTIES, Collections.unmodifiableMap(properties));
+    return Collections.unmodifiableMap(projected);
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static Map<String, Object> projectNode(
+      Map<String, Object> schema,
+      FieldSelection selection,
+      Map<String, Map<String, Object>> definitions,
+      boolean preserveContract) {
+    if (selection.selectsAll()) {
+      return schema;
+    }
+    Object ref = schema.get(ApiVocabulary.REFERENCE);
+    if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
+      return projectNode(
+          resolveReference(reference, definitions), selection, definitions, preserveContract);
+    }
+    if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?>
+        || schema.get(ANY_OF) instanceof List<?>) {
+      List<?> unionBranches =
+          schema.get(ApiVocabulary.ONE_OF) instanceof List<?> oneOfList
+              ? oneOfList
+              : (List<?>) schema.get(ANY_OF);
+      if (preserveContract && schema.containsKey(ApiVocabulary.ONE_OF)) {
+        List<Map<String, Object>> projectedAlternatives = new ArrayList<>(unionBranches.size());
+        for (Object rawAlternative : unionBranches) {
+          projectedAlternatives.add(
+              projectNode(
+                  (Map<String, Object>) rawAlternative, selection, definitions, true));
+        }
+        Map<String, Object> projected = new LinkedHashMap<>(schema);
+        projected.put(ApiVocabulary.ONE_OF, List.copyOf(projectedAlternatives));
+        return Collections.unmodifiableMap(projected);
+      }
+      java.util.LinkedHashSet<Map<String, Object>> uniqueAlternatives =
+          java.util.LinkedHashSet.newLinkedHashSet(unionBranches.size());
+      int objectBranchCount = 0;
+      for (Object rawAlternative : unionBranches) {
+        Map<String, Object> projectedAlternative =
+            projectNode(
+                (Map<String, Object>) rawAlternative, selection, definitions, preserveContract);
+        if (uniqueAlternatives.add(projectedAlternative)
+            && isObjectCapableSchema(projectedAlternative)) {
+          objectBranchCount++;
+        }
+      }
+      if (uniqueAlternatives.size() == 1) {
+        return uniqueAlternatives.iterator().next();
+      }
+      Map<String, Object> projected = new LinkedHashMap<>(schema);
+      projected.remove(ApiVocabulary.ONE_OF);
+      projected.remove(ANY_OF);
+      String unionKey =
+          schema.containsKey(ANY_OF) || objectBranchCount > 1 ? ANY_OF : ApiVocabulary.ONE_OF;
+      projected.put(unionKey, List.copyOf(uniqueAlternatives));
+      return Collections.unmodifiableMap(projected);
+    }
+    Object type = schema.get(ApiVocabulary.TYPE);
+    if (ApiVocabulary.OBJECT.equals(type)) {
+      Map<String, Object> properties =
+          (Map<String, Object>) schema.getOrDefault(ApiVocabulary.PROPERTIES, Map.of());
+      Map<String, Object> projectedProperties = new LinkedHashMap<>();
+      for (Map.Entry<String, Object> entry : properties.entrySet()) {
+        FieldSelection child = selection.child(entry.getKey());
+        if (child != null) {
+          projectedProperties.put(
+              entry.getKey(),
+              projectNode(
+                  (Map<String, Object>) entry.getValue(), child, definitions, preserveContract));
+        }
+      }
+      Map<String, Object> projected = new LinkedHashMap<>(schema);
+      projected.put(ApiVocabulary.PROPERTIES, Collections.unmodifiableMap(projectedProperties));
+      if (!preserveContract) {
+        if (schema.get(ApiVocabulary.REQUIRED) instanceof List<?> required) {
+          List<String> projectedRequired = new ArrayList<>();
+          for (Object item : required) {
+            String key = String.valueOf(item);
+            if (selection.containsKey(key)) {
+              projectedRequired.add(key);
+            }
+          }
+          if (projectedRequired.isEmpty()) {
+            projected.remove(ApiVocabulary.REQUIRED);
+          } else {
+            projected.put(ApiVocabulary.REQUIRED, List.copyOf(projectedRequired));
+          }
+        }
+        if (schema.get(ApiVocabulary.MIN_PROPERTIES) instanceof Number minProps
+            && minProps.intValue() > projectedProperties.size()) {
+          projected.put(ApiVocabulary.MIN_PROPERTIES, projectedProperties.size());
+        }
+      }
+      return Collections.unmodifiableMap(projected);
+    }
+    if (ApiVocabulary.ARRAY.equals(type)
+        && schema.get(ApiVocabulary.ITEMS) instanceof Map<?, ?> itemSchema) {
+      Map<String, Object> projected = new LinkedHashMap<>(schema);
+      projected.put(
+          ApiVocabulary.ITEMS,
+          projectNode(
+              (Map<String, Object>) itemSchema, selection, definitions, preserveContract));
+      return Collections.unmodifiableMap(projected);
+    }
+    return schema;
+  }
+
   public static void validate(Object value, Map<String, Object> schema, String target) {
     Map<String, Map<String, Object>> definitions = schemaDefinitions(schema);
     if (evaluate(value, schema, null, definitions) == null) {
@@ -236,6 +421,28 @@ public final class WireSchema {
     Object ref = schema.get(ApiVocabulary.REFERENCE);
     if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
       return evaluate(value, resolveReference(reference, definitions), cursor, definitions);
+    }
+    if (schema.get(ANY_OF) instanceof List<?> anyAlternatives) {
+      ValidationFailure firstFailure = null;
+      for (Object rawAlternative : anyAlternatives) {
+        Map<String, Object> alternative = (Map<String, Object>) rawAlternative;
+        PointerCursor branchCursor = firstFailure == null ? cursor : null;
+        ValidationFailure failure = evaluate(value, alternative, branchCursor, definitions);
+        if (failure == null) {
+          return null;
+        }
+        if (firstFailure == null) {
+          firstFailure = failure;
+        }
+      }
+      if (cursor == null) {
+        return ValidationFailure.PROBE_FAILURE;
+      }
+      if (firstFailure != null) {
+        return new ValidationFailure(
+            "invalid_union", firstFailure.message(), firstFailure.target());
+      }
+      return failure("invalid_union", cursor, " must match at least one schema");
     }
     if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
       ValidationFailure firstFailure = null;
@@ -424,6 +631,15 @@ public final class WireSchema {
       return numberRangeFailure(cursor, minimum, maximum);
     }
     return null;
+  }
+
+  private static boolean isObjectCapableSchema(Map<String, Object> schema) {
+    Object type = schema.get(ApiVocabulary.TYPE);
+    return type == null
+        || ApiVocabulary.OBJECT.equals(type)
+        || schema.containsKey(ApiVocabulary.ONE_OF)
+        || schema.containsKey(ANY_OF)
+        || schema.containsKey(ApiVocabulary.REFERENCE);
   }
 
   private static Map<String, Object> resolveReference(
