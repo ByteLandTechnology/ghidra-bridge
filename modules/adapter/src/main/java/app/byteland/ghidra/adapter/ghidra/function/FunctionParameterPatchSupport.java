@@ -5,7 +5,6 @@ import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionService.ParameterPatch;
 import app.byteland.ghidra.service.function.VariableStorageReference;
-import ghidra.app.cmd.function.UpdateFunctionCommand;
 import ghidra.program.model.data.AbstractFloatDataType;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.Pointer;
@@ -407,8 +406,8 @@ final class FunctionParameterPatchSupport {
       }
     }
 
-    // Pass 1: assign explicit storages and match unique non-default parameter names first so
-    // reordered or shifted parameters never lose their custom storage to ordinal fallback.
+    // Pass 1: assign explicit storage and match unique parameter names first.
+    // Reordered parameters keep their custom storage before ordinal fallback runs.
     for (int index = 0; index < count; index++) {
       ResolvedParameterInput input = inputs.get(index);
       int matchedNameIndex = findUniqueOldByName(oldParameters, claimedOld, input.name());
@@ -426,8 +425,7 @@ final class FunctionParameterPatchSupport {
       }
     }
 
-    // Pass 2: ordinal fallback for unnamed or renamed-in-place parameters when the old parameter
-    // at the same formal ordinal was not claimed and did not move to another ordinal by name.
+    // Pass 2: match the same formal ordinal if unclaimed and not moved by name.
     if (oldCustomStorage) {
       List<Integer> formalOldIndices = formalOldParameterIndices(oldParameters);
       for (int index = 0; index < count; index++) {
@@ -612,17 +610,16 @@ final class FunctionParameterPatchSupport {
       Variable returnParameter,
       List<? extends Variable> parameters,
       String failureMessage) {
-    context.runCommand(
-        new UpdateFunctionCommand(
-            function,
-            updateType,
-            callingConvention,
-            returnParameter,
-            parameters,
-            SourceType.USER_DEFINED,
-            false),
-        failureMessage);
-    return FunctionMutationSupport.refreshFunction(context, function, "signature update");
+    return FunctionMutationSupport.updateFunction(
+        context,
+        function,
+        updateType,
+        callingConvention,
+        returnParameter,
+        parameters,
+        SourceType.USER_DEFINED,
+        failureMessage,
+        "signature update");
   }
 
   private record ResolvedParameterInput(

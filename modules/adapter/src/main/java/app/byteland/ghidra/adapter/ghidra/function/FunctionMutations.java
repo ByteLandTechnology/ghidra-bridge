@@ -6,7 +6,6 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.function.FunctionService.ParameterPatch;
 import app.byteland.ghidra.service.function.VariableStorageReference;
-import ghidra.app.cmd.function.UpdateFunctionCommand;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.Pointer;
 import ghidra.program.model.listing.AutoParameterType;
@@ -29,6 +28,32 @@ final class FunctionMutations {
   }
 
   private FunctionMutations() {}
+
+  static void patchFunction(
+      GhidraSession context,
+      Function function,
+      String newName,
+      String newComment,
+      boolean commentPresent,
+      DataTypeReference returnType,
+      VariableStorageReference returnStorage,
+      String callingConvention,
+      FunctionAttributePatch attributes,
+      ParameterDataTypeResolver dataTypeResolver) {
+    patchFunction(
+        context,
+        function,
+        newName,
+        newComment,
+        commentPresent,
+        null,
+        returnType,
+        returnStorage,
+        callingConvention,
+        null,
+        attributes,
+        dataTypeResolver);
+  }
 
   static void patchFunction(
       GhidraSession context,
@@ -190,7 +215,8 @@ final class FunctionMutations {
     }
     boolean finalCustomStorage =
         explicitReturnStorage != null || (customStorage != null ? customStorage : oldCustomStorage);
-    SourceType signatureSource = signatureSource(function);
+    SourceType signatureSource = FunctionMutationSupport.signatureSource(function);
+    String targetCallingConvention = hasCallingConvention ? callingConvention : null;
 
     boolean returnTypeChanged = !function.getReturnType().isEquivalent(targetReturnType);
     boolean callingConventionChanged =
@@ -202,14 +228,11 @@ final class FunctionMutations {
         && explicitReturnStorage == null
         && (returnTypeChanged || callingConventionChanged)) {
       working =
-          applySignatureUpdate(
+          applyDynamicSignatureUpdate(
               context,
               working,
-              FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS,
-              hasCallingConvention ? callingConvention : null,
-              FunctionStorageSupport.createDynamicReturn(
-                  context.currentProgram(), targetReturnType),
-              currentParameters(working),
+              targetCallingConvention,
+              targetReturnType,
               signatureSource,
               "unable to derive function storage");
       targetReturnType = working.getReturnType();
@@ -238,7 +261,7 @@ final class FunctionMutations {
               context,
               working,
               FunctionUpdateType.CUSTOM_STORAGE,
-              hasCallingConvention ? callingConvention : null,
+              targetCallingConvention,
               returnParameter,
               customParameters,
               signatureSource,
@@ -253,14 +276,11 @@ final class FunctionMutations {
       }
     } else {
       working =
-          applySignatureUpdate(
+          applyDynamicSignatureUpdate(
               context,
               working,
-              FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS,
-              hasCallingConvention ? callingConvention : null,
-              FunctionStorageSupport.createDynamicReturn(
-                  context.currentProgram(), targetReturnType),
-              currentParameters(working),
+              targetCallingConvention,
+              targetReturnType,
               signatureSource,
               "unable to update function signature");
       if (working.hasCustomVariableStorage()) {
@@ -269,6 +289,24 @@ final class FunctionMutations {
     }
 
     return working;
+  }
+
+  private static Function applyDynamicSignatureUpdate(
+      GhidraSession context,
+      Function function,
+      String callingConvention,
+      DataType returnType,
+      SourceType source,
+      String failureMessage) {
+    return applySignatureUpdate(
+        context,
+        function,
+        FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS,
+        callingConvention,
+        FunctionStorageSupport.createDynamicReturn(context.currentProgram(), returnType),
+        currentParameters(function),
+        source,
+        failureMessage);
   }
 
   private static Function applySignatureUpdate(
@@ -280,11 +318,16 @@ final class FunctionMutations {
       List<? extends Variable> parameters,
       SourceType source,
       String failureMessage) {
-    context.runCommand(
-        new UpdateFunctionCommand(
-            function, updateType, callingConvention, returnParameter, parameters, source, false),
-        failureMessage);
-    return FunctionMutationSupport.refreshFunction(context, function, "signature update");
+    return FunctionMutationSupport.updateFunction(
+        context,
+        function,
+        updateType,
+        callingConvention,
+        returnParameter,
+        parameters,
+        source,
+        failureMessage,
+        "signature update");
   }
 
   private static List<Variable> customParameterCopies(
@@ -299,13 +342,7 @@ final class FunctionMutations {
       if (omitReturnStoragePointer && returnStoragePointer) {
         continue;
       }
-      parameters.add(
-          FunctionStorageSupport.copyParameter(
-              context.currentProgram(),
-              parameter,
-              parameter.getName(),
-              parameter.getFormalDataType(),
-              parameter.getVariableStorage()));
+      parameters.add(FunctionStorageSupport.copyParameter(context.currentProgram(), parameter));
     }
     return parameters;
   }
@@ -316,11 +353,6 @@ final class FunctionMutations {
       parameters.add(parameter);
     }
     return parameters;
-  }
-
-  private static SourceType signatureSource(Function function) {
-    SourceType source = function.getSignatureSource();
-    return source == null ? SourceType.USER_DEFINED : source;
   }
 
   private static <T> Function patchAttribute(

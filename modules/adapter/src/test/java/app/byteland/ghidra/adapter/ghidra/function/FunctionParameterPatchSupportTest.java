@@ -75,7 +75,7 @@ class FunctionParameterPatchSupportTest {
             assertInstanceOf(
                 DataTypeReference.Pointer.class, initial.parameters().get(0).dataType());
 
-            // Reorder and drop middle parameter while preserving comment on "sock"
+            // Reorder parameters, drop the middle parameter, and keep the comment on "sock".
             service.patchFunction(
                 "0x100000",
                 null,
@@ -155,7 +155,7 @@ class FunctionParameterPatchSupportTest {
             GhidraSession session = GhidraTestSupport.sessionFor(program);
             FunctionServiceImpl service = new FunctionServiceImpl(session);
 
-            // 1. Establish custom variable storage via patch.parameters + return_storage
+            // 1. Set custom variable storage with patch.parameters and return_storage.
             service.patchFunction(
                 "0x100100",
                 null,
@@ -187,8 +187,8 @@ class FunctionParameterPatchSupportTest {
                 VariableStorageReference.serialization(r13),
                 customInitial.parameters().get(1).storage());
 
-            // 2. Reorder [first, second] -> [second, first] WITHOUT repeating storage;
-            //    also shrink "first" from uint64_t (8B) to uint32_t (4B -> R12D) and return to int (EAX)
+            // 2. Swap [first, second] to [second, first] with no explicit storage.
+            //    Shrink "first" from uint64_t (8B) to uint32_t (4B -> R12D) and return int (EAX).
             service.patchFunction(
                 "0x100100",
                 null,
@@ -216,8 +216,8 @@ class FunctionParameterPatchSupportTest {
                 VariableStorageReference.serialization(r12d),
                 swapped.parameters().get(1).storage());
 
-            // 3. Insert a new leading parameter "prefix" at ordinal 0 without storage:
-            //    "prefix" derives ABI RDI while "second" keeps R13 and "first" keeps R12D
+            // 3. Insert new first parameter "prefix" at ordinal 0 without explicit storage.
+            //    "prefix" derives ABI RCX while "second" keeps R13 and "first" keeps R12D.
             service.patchFunction(
                 "0x100100",
                 null,
@@ -246,7 +246,7 @@ class FunctionParameterPatchSupportTest {
                 VariableStorageReference.serialization(r12d),
                 withPrefix.parameters().get(2).storage());
 
-            // 4. Apply C prototype via patch.signature and preserve custom parameter/return storage
+            // 4. Apply C prototype with patch.signature and keep custom parameter/return storage.
             service.patchFunction(
                 "0x100100",
                 null,
@@ -271,7 +271,7 @@ class FunctionParameterPatchSupportTest {
                 VariableStorageReference.serialization(r13),
                 afterSig.parameters().get(1).storage());
 
-            // 5. Disable custom storage via hasCustomVariableStorage=false
+            // 5. Disable custom storage with hasCustomVariableStorage=false.
             service.patchFunction(
                 "0x100100",
                 null,

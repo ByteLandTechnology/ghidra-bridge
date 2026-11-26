@@ -44,8 +44,8 @@ ghidra-bridge.jar
 1. 在 Ghidra CodeBrowser 中打开目标二进制程序。
 2. 打开 Script Manager（脚本管理器）窗口。
 3. 将 `build/ghidra-script/` 目录添加到脚本目录列表中。
-4. 运行 `Bridge.java`（WebSocket）或 `GhidraMcp.java`（MCP）。
-5. 在弹出的参数窗口中输入配置参数。
+4. 在 `Ghidra Bridge` 分类下运行 `Bridge.java`（WebSocket）或 `GhidraMcp.java`（MCP）。
+5. 在 Console（控制台）窗口查看绑定的端点 URL、`session_id` 和 `tool_prefix`。脚本无需弹窗即可在 `127.0.0.1`（默认端口 `8765` 或 `8766`）自动启动，并在多标签页端口冲突时顺延使用下一个空闲端口。
 
 ### 在 Ghidra Headless 无头模式中运行
 

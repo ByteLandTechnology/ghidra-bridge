@@ -14,6 +14,7 @@ import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
 import app.byteland.ghidra.service.datatype.DataTypeService;
+import app.byteland.ghidra.service.datatype.FunctionSignature;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService;
@@ -127,6 +128,30 @@ class CDeclarationsAndPrototypesWireTest {
             (method, args) -> {
               invokedWriteMethod.set(method);
               writeArguments.set(args == null ? List.of() : Arrays.asList(args));
+              if (args != null
+                  && args.length > 0
+                  && "typedef int (*callback_t)(void *);".equals(args[0])) {
+                return List.of(
+                    new DataTypeResource(
+                        "/callback_t",
+                        "callback_t",
+                        "/",
+                        DataTypeResource.Kind.FUNCTION,
+                        null,
+                        "",
+                        null,
+                        null,
+                        null,
+                        new FunctionSignature(
+                            DataTypeReference.named("/int"),
+                            List.of(
+                                new FunctionSignature.Parameter(
+                                    "ctx", DataTypeReference.untypedPointer())),
+                            "default",
+                            false,
+                            false),
+                        null));
+              }
               return List.of(
                   new DataTypeResource(
                       "/net/Socket",
@@ -211,7 +236,7 @@ class CDeclarationsAndPrototypesWireTest {
             transaction,
             "test");
     ApiRegistry registry = new ApiRegistry(services, "test", Map::of, () -> {});
-    assertEquals(57, registry.methods().size());
+    assertEquals(57, registry.methodCatalog().methods().size());
     assertTrue(registry.method("data_type.parse_c").effects().requiresTransaction());
     assertTrue(registry.method("data_type.parse_c").effects().destructive());
     assertFalse(registry.method("data_type.parse_c").effects().idempotent());
@@ -249,6 +274,21 @@ class CDeclarationsAndPrototypesWireTest {
         List.of("typedef int sock_t;", "/net", DataTypeService.ConflictMode.RENAME),
         writeArguments.get());
     assertEquals(2, transactions.get());
+
+    Map<?, ?> projectedParse =
+        (Map<?, ?>)
+            registry.dispatch(
+                "data_type.parse_c",
+                Map.of(
+                    "declarations", "typedef int (*callback_t)(void *);",
+                    "projection", Map.of("fields", List.of("signature.return_type"))));
+    assertEquals(
+        List.of(
+            Map.of(
+                "path", "/callback_t",
+                "signature", Map.of("return_type", Map.of("kind", "named", "name", "/int")))),
+        projectedParse.get("items"));
+    assertEquals(3, transactions.get());
 
     // 3. data_type.parse_c validation failures
     ApiException blankDecl =

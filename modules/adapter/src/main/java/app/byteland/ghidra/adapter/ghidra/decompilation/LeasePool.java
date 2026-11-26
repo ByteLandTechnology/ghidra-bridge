@@ -3,11 +3,15 @@ package app.byteland.ghidra.adapter.ghidra.decompilation;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 final class LeasePool<T> implements AutoCloseable {
+  private static final long WAIT_POLL_MS = 50L;
+
   interface Lease<T> extends AutoCloseable {
     T value();
 
@@ -30,35 +34,59 @@ final class LeasePool<T> implements AutoCloseable {
     this.capacity = Math.max(1, maxSize);
     this.factory = Objects.requireNonNull(factory, "factory");
     this.destroyer = Objects.requireNonNull(destroyer, "destroyer");
-    this.available = new ArrayBlockingQueue<>(capacity);
+    this.available = new ArrayBlockingQueue<>(capacity, true);
   }
 
   Lease<T> acquire() {
-    if (closed) {
-      throw new IllegalStateException("resource pool is closed");
-    }
-    T existing = available.poll();
-    if (existing != null) {
-      return new PooledLease(existing);
-    }
-
     while (true) {
+      if (closed) {
+        throw new IllegalStateException("resource pool is closed");
+      }
+      T existing = available.poll();
+      if (existing != null) {
+        if (closed) {
+          created.decrementAndGet();
+          destroyQuietly(existing);
+          throw new IllegalStateException("resource pool is closed");
+        }
+        return new PooledLease(existing);
+      }
+
       int current = created.get();
-      if (current < capacity && created.compareAndSet(current, current + 1)) {
-        boolean success = false;
+      if (current < capacity) {
+        if (!created.compareAndSet(current, current + 1)) {
+          continue;
+        }
+        boolean handedOff = false;
+        T createdValue = null;
         try {
-          T createdValue = factory.get();
-          success = true;
-          return new PooledLease(createdValue);
+          createdValue = factory.get();
+          if (closed) {
+            throw new IllegalStateException("resource pool is closed");
+          }
+          PooledLease lease = new PooledLease(createdValue);
+          handedOff = true;
+          return lease;
         } finally {
-          if (!success) {
+          if (!handedOff) {
             created.decrementAndGet();
+            if (createdValue != null) {
+              destroyQuietly(createdValue);
+            }
           }
         }
       }
 
       try {
-        return new PooledLease(available.take());
+        T waited = available.poll(WAIT_POLL_MS, TimeUnit.MILLISECONDS);
+        if (waited != null) {
+          if (closed) {
+            created.decrementAndGet();
+            destroyQuietly(waited);
+            throw new IllegalStateException("resource pool is closed");
+          }
+          return new PooledLease(waited);
+        }
       } catch (InterruptedException ex) {
         Thread.currentThread().interrupt();
         throw new IllegalStateException("Interrupted while waiting for pooled resource", ex);
@@ -66,17 +94,13 @@ final class LeasePool<T> implements AutoCloseable {
     }
   }
 
-  int maxSize() {
-    return capacity;
-  }
-
-  int createdCount() {
-    return created.get();
-  }
-
   @Override
   public void close() {
     closed = true;
+    drainAvailable();
+  }
+
+  private void drainAvailable() {
     T resource = available.poll();
     while (resource != null) {
       created.decrementAndGet();
@@ -94,7 +118,7 @@ final class LeasePool<T> implements AutoCloseable {
 
   private final class PooledLease implements Lease<T> {
     private final T leasedResource;
-    private boolean released;
+    private final AtomicBoolean released = new AtomicBoolean();
 
     private PooledLease(T value) {
       this.leasedResource = Objects.requireNonNull(value, "value");
@@ -102,7 +126,7 @@ final class LeasePool<T> implements AutoCloseable {
 
     @Override
     public T value() {
-      if (released) {
+      if (released.get()) {
         throw new IllegalStateException("lease already closed");
       }
       return leasedResource;
@@ -110,17 +134,21 @@ final class LeasePool<T> implements AutoCloseable {
 
     @Override
     public void close() {
-      if (released) {
+      if (!released.compareAndSet(false, true)) {
         return;
       }
-      released = true;
       if (closed) {
         created.decrementAndGet();
         destroyQuietly(leasedResource);
         return;
       }
       if (!available.offer(leasedResource)) {
+        created.decrementAndGet();
+        destroyQuietly(leasedResource);
         throw new IllegalStateException("resource pool overflow");
+      }
+      if (closed) {
+        drainAvailable();
       }
     }
   }

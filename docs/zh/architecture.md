@@ -47,8 +47,8 @@ modules/domain (领域服务接口与数据模型)
 ### 3. `modules/runtime`
 
 运行时模块管理请求调度与会话生命周期：
-- `AgentDispatcher` 将每个请求分发至目标方法处理器。
-- 每次只执行一个请求。`DispatchBarrier` 跟踪进行中的请求，并在停机期间拒绝新请求。
+- `AgentDispatcher` 在分发锁之外完成请求校验与响应编码，并通过 `DispatchBarrier` 路由目标处理器。
+- `DispatchBarrier` 协调并发共享读取与公平独占写入，跟踪进行中的请求，并在停机期间拒绝新请求。
 - 维护会话状态并协调安全平滑停机。
 - **架构约束**：该模块不依赖任何 Ghidra 类。
 
