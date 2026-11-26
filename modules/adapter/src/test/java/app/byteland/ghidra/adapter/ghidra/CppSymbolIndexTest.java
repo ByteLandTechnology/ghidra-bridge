@@ -4,11 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport.ProgramHolder;
 import app.byteland.ghidra.adapter.ghidra.function.FunctionServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.symbol.SymbolServiceImpl;
+import app.byteland.ghidra.agent.AgentDispatcher;
+import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.Page;
@@ -20,6 +23,7 @@ import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
 import app.byteland.ghidra.service.symbol.SymbolResource;
 import app.byteland.ghidra.service.symbol.SymbolService.DemangleResult;
 import app.byteland.ghidra.service.symbol.SymbolService.SymbolQuery;
+import ghidra.app.cmd.disassemble.DisassembleCommand;
 import ghidra.app.script.GhidraScript;
 import ghidra.app.util.demangler.DemanglerUtil;
 import ghidra.program.database.ProgramDB;
@@ -29,6 +33,7 @@ import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.DefaultAddressFactory;
 import ghidra.program.model.address.GenericAddressSpace;
+import ghidra.program.model.listing.CommentType;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
@@ -56,6 +61,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -1056,6 +1062,528 @@ class CppSymbolIndexTest {
                   }
                 });
     assertEquals("ram64:00401000", AddressUtil.canonicalAddress(customAddress));
+  }
+
+  @Test
+  void interruptedForegroundLookupDoesNotPoisonCacheForConcurrentReaders() throws Exception {
+    try (ProgramHolder holder = GhidraTestSupport.createX64Program("cpp_interrupt_safe")) {
+      String targetSymbol = "_ZN9interrupt7Service6handleEi";
+      Address[] entryHolder = new Address[1];
+      holder.inTransaction(
+          program -> {
+            program.setExecutableFormat("Executable and Linking Format (ELF)");
+            Address base = initCodeBlock(program, 0xa00000L, 0x100);
+            Function fn = createRetFunction(program.getFunctionManager(), targetSymbol, base);
+            entryHolder[0] = fn.getEntryPoint();
+          });
+
+      CountDownLatch firstEntered = new CountDownLatch(1);
+      CountDownLatch secondWaiting = new CountDownLatch(1);
+      AtomicInteger calls = new AtomicInteger();
+
+      CppDemangler interruptOnceDemangler =
+          (program, name, address) -> {
+            int attempt = calls.incrementAndGet();
+            if (attempt == 1) {
+              firstEntered.countDown();
+              try {
+                assertTrue(secondWaiting.await(5, TimeUnit.SECONDS));
+                Thread.sleep(60_000L);
+              } catch (InterruptedException interrupted) {
+                // Return an empty result with the interrupt flag set to match GnuDemangler.
+                Thread.currentThread().interrupt();
+                return List.of();
+              }
+            }
+            return DemanglerUtil.demangle(program, name, address);
+          };
+
+      GhidraScript script = GhidraTestSupport.scriptFor(holder.program());
+      try (GhidraSession session =
+              new GhidraSession(script, CppSymbolIndexConfig.defaults(), interruptOnceDemangler);
+          ExecutorService pool = Executors.newFixedThreadPool(2)) {
+        AtomicReference<Thread> firstThread = new AtomicReference<>();
+        Future<String> interruptedReader =
+            pool.submit(
+                () -> {
+                  firstThread.set(Thread.currentThread());
+                  return session
+                      .cppSymbols()
+                      .demangled(holder.program(), targetSymbol, entryHolder[0]);
+                });
+        assertTrue(firstEntered.await(5, TimeUnit.SECONDS));
+
+        Future<String> siblingReader =
+            pool.submit(
+                () -> {
+                  secondWaiting.countDown();
+                  return session
+                      .cppSymbols()
+                      .demangled(holder.program(), targetSymbol, entryHolder[0]);
+                });
+        assertTrue(secondWaiting.await(5, TimeUnit.SECONDS));
+        Thread.sleep(20L);
+        firstThread.get().interrupt();
+
+        assertNull(interruptedReader.get(5, TimeUnit.SECONDS));
+        String siblingResult = siblingReader.get(5, TimeUnit.SECONDS);
+        assertNotNull(siblingResult);
+        assertEquals(
+            siblingResult,
+            session.cppSymbols().demangled(holder.program(), targetSymbol, entryHolder[0]));
+        assertEquals(2, calls.get());
+      } finally {
+        endAmbientTransaction(script);
+      }
+    }
+  }
+
+  @Test
+  void prewarmerRunsConcurrentlyWithAgentDispatcherReadsWritesAndRollbacks() throws Exception {
+    try (ProgramHolder holder = GhidraTestSupport.createX64Program("cpp_dispatcher_concurrency")) {
+      AtomicReference<Long> extSymbolId = new AtomicReference<>();
+      holder.inTransaction(
+          program -> {
+            program.setExecutableFormat("Executable and Linking Format (ELF)");
+            AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+            Address base = space.getAddress(0x10000L);
+            byte[] bytes = new byte[0x2000];
+            // 0x10000..0x10005: mov eax, 0x2a; ret
+            bytes[0x00] = (byte) 0xb8;
+            bytes[0x01] = 0x2a;
+            bytes[0x05] = (byte) 0xc3;
+            // 0x10020..0x10025: call 0x10000 (e8 db ff ff ff); ret
+            bytes[0x20] = (byte) 0xe8;
+            bytes[0x21] = (byte) 0xdb;
+            bytes[0x22] = (byte) 0xff;
+            bytes[0x23] = (byte) 0xff;
+            bytes[0x24] = (byte) 0xff;
+            bytes[0x25] = (byte) 0xc3;
+            for (int off = 0x40; off < 0x120; off += 0x20) {
+              bytes[off] = (byte) 0xb8;
+              bytes[off + 1] = 0x01;
+              bytes[off + 5] = (byte) 0xc3;
+            }
+
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    base,
+                    new ByteArrayInputStream(bytes),
+                    bytes.length,
+                    TaskMonitor.DUMMY,
+                    false);
+
+            disassembleRange(program, base, base.add(5));
+            disassembleRange(program, base.add(0x20), base.add(0x25));
+            for (int off = 0x40; off < 0x100; off += 0x20) {
+              disassembleRange(program, base.add(off), base.add(off + 5));
+            }
+
+            FunctionManager fm = program.getFunctionManager();
+            Function callee =
+                fm.createFunction(
+                    "_ZN4demo11callee_funcEi",
+                    base,
+                    new AddressSet(base, base.add(5)),
+                    SourceType.USER_DEFINED);
+            Function caller =
+                fm.createFunction(
+                    "_ZN4demo11caller_funcEi",
+                    base.add(0x20),
+                    new AddressSet(base.add(0x20), base.add(0x25)),
+                    SourceType.USER_DEFINED);
+            for (int w = 0; w < 3; w++) {
+              Address fnAddr = base.add(0x40 + (w * 0x20L));
+              fm.createFunction(
+                  "mutable_target_" + w,
+                  fnAddr,
+                  new AddressSet(fnAddr, fnAddr.add(5)),
+                  SourceType.USER_DEFINED);
+            }
+            Address rollbackAddr = base.add(0xa0);
+            fm.createFunction(
+                "rollback_target",
+                rollbackAddr,
+                new AddressSet(rollbackAddr, rollbackAddr.add(5)),
+                SourceType.USER_DEFINED);
+
+            program
+                .getReferenceManager()
+                .addMemoryReference(
+                    caller.getEntryPoint(),
+                    callee.getEntryPoint(),
+                    RefType.UNCONDITIONAL_CALL,
+                    SourceType.USER_DEFINED,
+                    0);
+            program.getListing().setComment(base, CommentType.EOL, "COMMITTED_INIT");
+
+            SymbolTable st = program.getSymbolTable();
+            for (int i = 0; i < 36; i++) {
+              st.createLabel(
+                  base.add(0x200 + (i * 4L)),
+                  String.format("_ZN5bench10symbol_%03dEi", i),
+                  SourceType.IMPORTED);
+            }
+            for (int i = 0; i < 18; i++) {
+              st.createLabel(
+                  base.add(0x400 + (i * 4L)),
+                  String.format("__ZN5bench10darwin_%03dEv", i),
+                  SourceType.IMPORTED);
+            }
+            for (int i = 0; i < 18; i++) {
+              st.createLabel(
+                  base.add(0x600 + (i * 4L)),
+                  String.format("?msvcSym%03d@bench@@YAXXZ", i),
+                  SourceType.IMPORTED);
+            }
+
+            ExternalLocation ext =
+                program
+                    .getExternalManager()
+                    .addExtFunction("libstdc++.so.6", "_ZNSolsEi", null, SourceType.IMPORTED);
+            extSymbolId.set(ext.getSymbol().getID());
+          });
+
+      AtomicBoolean heldLockDuringPrewarmOrSharedRead = new AtomicBoolean(false);
+      ThreadLocal<Boolean> inSharedReadDispatch = ThreadLocal.withInitial(() -> Boolean.FALSE);
+      AtomicInteger pacedCalls = new AtomicInteger();
+      AtomicInteger totalDemangleCalls = new AtomicInteger();
+      AtomicReference<GhidraSession> sessionRef = new AtomicReference<>();
+
+      CppDemangler pacedDemangler =
+          (program, name, address) -> {
+            GhidraSession active = sessionRef.get();
+            boolean onPrewarmThread =
+                Thread.currentThread().getName().startsWith("ghidra-cpp-index-");
+            if (active != null
+                && active.holdsExecutionLock()
+                && (onPrewarmThread || Boolean.TRUE.equals(inSharedReadDispatch.get()))) {
+              heldLockDuringPrewarmOrSharedRead.set(true);
+            }
+            totalDemangleCalls.incrementAndGet();
+            if (pacedCalls.incrementAndGet() <= 32) {
+              LockSupport.parkNanos(250_000L);
+            }
+            return DemanglerUtil.demangle(program, name, address);
+          };
+
+      GhidraScript script = GhidraTestSupport.scriptFor(holder.program());
+      script.start();
+      try {
+        GhidraSession session =
+            new GhidraSession(
+                script,
+                new CppSymbolIndexConfig(4096, 16L * 1024 * 1024, 8),
+                pacedDemangler);
+        sessionRef.set(session);
+        BridgeServices services = GhidraServiceFactory.create(session);
+        try (AgentDispatcher dispatcher =
+                new AgentDispatcher(services, "cpp-prewarm-dispatcher-concurrency");
+            ExecutorService pool = Executors.newFixedThreadPool(14)) {
+          CountDownLatch startGate = new CountDownLatch(1);
+          AtomicBoolean stopReaders = new AtomicBoolean(false);
+          AtomicReference<Throwable> failure = new AtomicReference<>();
+          String externalIdText = String.valueOf(extSymbolId.get());
+
+          List<Future<?>> readers = new ArrayList<>();
+          for (int r = 0; r < 10; r++) {
+            final int readerId = r;
+            readers.add(
+                pool.submit(
+                    () -> {
+                      try {
+                        startGate.await();
+                        int step = 0;
+                        while (!stopReaders.get()) {
+                          int currentStep = step++;
+                          boolean sharedRead = ((readerId + currentStep) % 7 != 6) || (currentStep % 2 == 0);
+                          inSharedReadDispatch.set(sharedRead);
+                          try {
+                            runDispatcherReadStep(dispatcher, externalIdText, readerId, currentStep);
+                          } finally {
+                            inSharedReadDispatch.remove();
+                          }
+                        }
+                      } catch (Throwable error) {
+                        failure.compareAndSet(null, error);
+                      }
+                    }));
+          }
+
+          List<Future<?>> writers = new ArrayList<>();
+          for (int w = 0; w < 3; w++) {
+            final int writerId = w;
+            writers.add(
+                pool.submit(
+                    () -> {
+                      startGate.await();
+                      for (int iter = 0; iter < 10; iter++) {
+                        runDispatcherWriteStep(dispatcher, writerId, iter);
+                      }
+                      return null;
+                    }));
+          }
+
+          startGate.countDown();
+          for (Future<?> writer : writers) {
+            writer.get(30, TimeUnit.SECONDS);
+          }
+          stopReaders.set(true);
+          for (Future<?> reader : readers) {
+            reader.get(30, TimeUnit.SECONDS);
+          }
+
+          if (failure.get() != null) {
+            throw new AssertionError(
+                "Concurrent CppSymbolPrewarmer + AgentDispatcher test failed", failure.get());
+          }
+          assertFalse(heldLockDuringPrewarmOrSharedRead.get());
+
+          assertTrue(session.cppSymbols().awaitPrewarm(Duration.ofSeconds(15)));
+          assertNotNull(
+              session
+                  .cppSymbols()
+                  .symbolSnapshotIfCurrent(holder.program(), holder.program().getMinAddress()));
+
+          int callsBeforePostSweep = totalDemangleCalls.get();
+          runDispatcherReadStep(dispatcher, externalIdText, 0, 0);
+          runDispatcherReadStep(dispatcher, externalIdText, 1, 0);
+          assertEquals(callsBeforePostSweep, totalDemangleCalls.get());
+
+          @SuppressWarnings("unchecked")
+          Map<String, Object> rollbackFn =
+              (Map<String, Object>)
+                  dispatcher.dispatch(
+                      "function.get", Map.of("selector", Map.of("entry", "ram:000100a0")));
+          assertEquals("rollback_target", rollbackFn.get("name"));
+        }
+      } finally {
+        endAmbientTransaction(script);
+      }
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void runDispatcherReadStep(
+      AgentDispatcher dispatcher, String externalIdText, int readerId, int step) throws Exception {
+    switch ((readerId + step) % 7) {
+      case 0 -> {
+        int pageLimit = (step % 2 == 0) ? 25 : 250;
+        String cursor = null;
+        int seenBenchSymbols = 0;
+        int pages = 0;
+        do {
+          Map<String, Object> params =
+              cursor == null
+                  ? Map.of("page", Map.of("limit", pageLimit))
+                  : Map.of("page", Map.of("limit", pageLimit, "cursor", cursor));
+          Map<String, Object> page = (Map<String, Object>) dispatcher.dispatch("symbol.list", params);
+          List<Map<String, Object>> items = (List<Map<String, Object>>) page.get("items");
+          for (Map<String, Object> item : items) {
+            String name = String.valueOf(item.get("name"));
+            assertFalse(
+                name.startsWith("_ZN8rollback"),
+                "Rolled-back symbol leaked into symbol.list: " + name);
+            if (name.startsWith("_ZN5bench10symbol_")) {
+              assertNotNull(item.get("demangled_name"), "Missing demangled_name for " + name);
+              seenBenchSymbols++;
+            } else if (name.startsWith("__ZN5bench10darwin_")) {
+              assertNull(item.get("demangled_name"));
+            }
+          }
+          Map<String, Object> pageMeta = (Map<String, Object>) page.get("page");
+          cursor = pageMeta == null ? null : (String) pageMeta.get("next_cursor");
+          pages++;
+          assertTrue(pages < 20);
+        } while (cursor != null);
+        if (pageLimit == 250) {
+          assertEquals(36, seenBenchSymbols);
+        } else {
+          assertTrue(seenBenchSymbols > 0);
+        }
+      }
+      case 1 -> {
+        Map<String, Object> functions =
+            (Map<String, Object>)
+                dispatcher.dispatch("function.list", Map.of("page", Map.of("limit", 20)));
+        List<Map<String, Object>> items = (List<Map<String, Object>>) functions.get("items");
+        assertEquals(6, items.size());
+        for (Map<String, Object> item : items) {
+          String name = String.valueOf(item.get("name"));
+          assertFalse(
+              name.startsWith("_ZN8rollback"),
+              "Rolled-back function name leaked into function.list: " + name);
+          if (name.startsWith("_ZN4live14writer") || name.startsWith("_ZN4demo11")) {
+            assertNotNull(item.get("demangled_name"), "Missing demangled_name for " + name);
+          }
+        }
+      }
+      case 2 -> {
+        Map<String, Object> callers =
+            (Map<String, Object>)
+                dispatcher.dispatch(
+                    "function_call.list",
+                    Map.of("filter", Map.of("entry", "ram:00010000", "direction", "callers")));
+        List<Map<String, Object>> items = (List<Map<String, Object>>) callers.get("items");
+        assertFalse(items.isEmpty());
+      }
+      case 3 -> {
+        Map<String, Object> sym =
+            (Map<String, Object>)
+                dispatcher.dispatch("symbol.get", Map.of("selector", Map.of("id", externalIdText)));
+        assertNotNull(sym.get("demangled_name"));
+      }
+      case 4 -> {
+        String format = (step % 2 == 0) ? "document" : "text";
+        Map<String, Object> decomp =
+            (Map<String, Object>)
+                dispatcher.dispatch(
+                    "decompilation.get",
+                    Map.of(
+                        "selector", Map.of("entry", "ram:00010020"),
+                        "format", format));
+        assertEquals(Boolean.TRUE, decomp.get("completed"));
+        if ("document".equals(format)) {
+          List<?> lines = (List<?>) decomp.get("lines");
+          assertFalse(lines.isEmpty());
+        }
+      }
+      case 5 -> {
+        Map<String, Object> comment =
+            (Map<String, Object>)
+                dispatcher.dispatch(
+                    "comment.get",
+                    Map.of("selector", Map.of("address", "ram:00010000", "type", "eol")));
+        String text = String.valueOf(comment.get("text"));
+        assertTrue(
+            text.startsWith("COMMITTED_"),
+            "Observed uncommitted or rolled-back comment: " + text);
+      }
+      default -> {
+        Map<String, Object> batch =
+            (Map<String, Object>)
+                dispatcher.dispatch(
+                    "batch.execute",
+                    Map.of(
+                        "transaction_mode",
+                        step % 2 == 0 ? "per_item" : "all_or_none",
+                        "items",
+                        List.of(
+                            Map.of(
+                                "id",
+                                "s1",
+                                "method",
+                                "symbol.list",
+                                "arguments",
+                                Map.of("page", Map.of("limit", 10))),
+                            Map.of(
+                                "id",
+                                "f1",
+                                "method",
+                                "function.list",
+                                "arguments",
+                                Map.of("page", Map.of("limit", 10))))));
+        List<?> items = (List<?>) batch.get("items");
+        assertEquals(2, items.size());
+      }
+    }
+  }
+
+  private static void runDispatcherWriteStep(AgentDispatcher dispatcher, int writerId, int iter)
+      throws Exception {
+    switch ((writerId + iter) % 4) {
+      case 0 ->
+          dispatcher.dispatch(
+              "comment.upsert",
+              Map.of(
+                  "resource",
+                  Map.of(
+                      "address", "ram:00010000",
+                      "type", "eol",
+                      "text", "COMMITTED_COMMENT_" + writerId + "_" + iter)));
+      case 1 -> {
+        String entry = String.format("ram:000100%02x", 0x40 + (writerId * 0x20));
+        String freshMangled = String.format("_ZN4live14writer%d_iter%02dEi", writerId, iter);
+        dispatcher.dispatch(
+            "function.patch",
+            Map.of(
+                "selector", Map.of("entry", entry),
+                "patch", Map.of("name", freshMangled)));
+      }
+      case 2 -> {
+        ApiException rolledBack =
+            assertThrows(
+                ApiException.class,
+                () ->
+                    dispatcher.dispatch(
+                        "batch.execute",
+                        Map.of(
+                            "transaction_mode",
+                            "all_or_none",
+                            "items",
+                            List.of(
+                                Map.of(
+                                    "id",
+                                    "dirty-fn",
+                                    "method",
+                                    "function.patch",
+                                    "arguments",
+                                    Map.of(
+                                        "selector",
+                                        Map.of("entry", "ram:000100a0"),
+                                        "patch",
+                                        Map.of(
+                                            "name",
+                                            String.format(
+                                                "_ZN8rollback11leaked_%d_%02dEv",
+                                                writerId, iter)))),
+                                Map.of(
+                                    "id",
+                                    "dirty-comment",
+                                    "method",
+                                    "comment.upsert",
+                                    "arguments",
+                                    Map.of(
+                                        "resource",
+                                        Map.of(
+                                            "address", "ram:00010000",
+                                            "type", "eol",
+                                            "text", "ROLLBACK_" + writerId + "_" + iter))),
+                                Map.of(
+                                    "id",
+                                    "missing-fn",
+                                    "method",
+                                    "function.patch",
+                                    "arguments",
+                                    Map.of(
+                                        "selector", Map.of("entry", "ram:00011ff0"),
+                                        "patch", Map.of("name", "missing")))))));
+        assertEquals(409, rolledBack.status());
+        assertEquals("batch_rolled_back", rolledBack.error().code());
+      }
+      default -> {
+        if (iter == 9 && writerId == 0) {
+          Map<?, ?> demangled = (Map<?, ?>) dispatcher.dispatch("symbol.demangle", Map.of());
+          assertTrue(((Number) demangled.get("renamed")).intValue() >= 36);
+        } else {
+          dispatcher.dispatch(
+              "comment.upsert",
+              Map.of(
+                  "resource",
+                  Map.of(
+                      "address", "ram:00010000",
+                      "type", "eol",
+                      "text", "COMMITTED_EXTRA_" + writerId + "_" + iter)));
+        }
+      }
+    }
+  }
+
+  private static void disassembleRange(ProgramDB program, Address start, Address end) {
+    new DisassembleCommand(start, new AddressSet(start, end), false)
+        .applyTo(program, TaskMonitor.DUMMY);
   }
 
   private static void assertCanonicalMatchesLegacy(Address address) {

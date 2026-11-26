@@ -39,6 +39,7 @@ final class CppSymbolPrewarmer {
   private boolean active;
   private boolean hasSyncedModification;
   private long syncedModificationNumber;
+  private volatile boolean snapshotSkippedForSyncedMod;
   private volatile long fastSyncedMod = Long.MIN_VALUE;
   private boolean atCapacity;
   private volatile boolean closed;
@@ -100,14 +101,17 @@ final class CppSymbolPrewarmer {
       return;
     }
     long modNumber = program.getModificationNumber();
-    if (modNumber == fastSyncedMod) {
+    if (modNumber == fastSyncedMod
+        && (snapshotSkippedForSyncedMod || owner.hasSymbolSnapshotFor(program, modNumber))) {
       return;
     }
     synchronized (stateLock) {
       if (closed || !started || atCapacity) {
         return;
       }
-      if (!hasSyncedModification || syncedModificationNumber != modNumber) {
+      if (!hasSyncedModification
+          || syncedModificationNumber != modNumber
+          || needsSnapshotRebuildLocked(program, modNumber)) {
         stateLock.notifyAll();
       }
     }
@@ -134,6 +138,7 @@ final class CppSymbolPrewarmer {
     synchronized (stateLock) {
       hasSyncedModification = false;
       syncedModificationNumber = 0L;
+      snapshotSkippedForSyncedMod = false;
       fastSyncedMod = Long.MIN_VALUE;
       atCapacity = false;
       if (!closed && started) {
@@ -202,7 +207,17 @@ final class CppSymbolPrewarmer {
     if (program == null || Proxy.isProxyClass(program.getClass())) {
       return false;
     }
-    return !hasSyncedModification || syncedModificationNumber != program.getModificationNumber();
+    long modNumber = program.getModificationNumber();
+    if (!hasSyncedModification || syncedModificationNumber != modNumber) {
+      return true;
+    }
+    return needsSnapshotRebuildLocked(program, modNumber);
+  }
+
+  private boolean needsSnapshotRebuildLocked(Program program, long modNumber) {
+    return session.canCacheSnapshots()
+        && !snapshotSkippedForSyncedMod
+        && !owner.hasSymbolSnapshotFor(program, modNumber);
   }
 
   private void runLoop() {
@@ -210,6 +225,7 @@ final class CppSymbolPrewarmer {
       while (!closed && !Thread.currentThread().isInterrupted()) {
         Program program;
         long targetMod;
+        boolean symbolsAlreadySynced;
         synchronized (stateLock) {
           while (!closed && !Thread.currentThread().isInterrupted()) {
             program = session.currentProgramOrNull();
@@ -226,7 +242,8 @@ final class CppSymbolPrewarmer {
               continue;
             }
             targetMod = program.getModificationNumber();
-            if (hasSyncedModification && syncedModificationNumber == targetMod) {
+            boolean modSynced = hasSyncedModification && syncedModificationNumber == targetMod;
+            if (modSynced && !needsSnapshotRebuildLocked(program, targetMod)) {
               active = false;
               stateLock.notifyAll();
               stateLock.wait();
@@ -243,9 +260,10 @@ final class CppSymbolPrewarmer {
             continue;
           }
           targetMod = program.getModificationNumber();
+          symbolsAlreadySynced = hasSyncedModification && syncedModificationNumber == targetMod;
         }
 
-        runSinglePass(program, targetMod);
+        runSinglePass(program, targetMod, symbolsAlreadySynced);
       }
     } catch (InterruptedException ignored) {
       Thread.currentThread().interrupt();
@@ -257,11 +275,18 @@ final class CppSymbolPrewarmer {
     }
   }
 
-  private void runSinglePass(Program program, long initialMod) {
+  private void runSinglePass(Program program, long initialMod, boolean symbolsAlreadySynced) {
+    long passProgramEpoch = owner.programEpoch();
     long targetMod = initialMod;
     ScanCursor cursor = new ScanCursor();
+    if (symbolsAlreadySynced && program.getModificationNumber() == initialMod) {
+      cursor.finished = true;
+    }
 
     while (!closed && !Thread.currentThread().isInterrupted() && !cursor.finished) {
+      if (owner.programEpoch() != passProgramEpoch) {
+        return;
+      }
       if (cache.isAtCapacity()) {
         markAtCapacity();
         return;
@@ -288,7 +313,9 @@ final class CppSymbolPrewarmer {
       }
 
       for (SymbolSample sample : outcome.samples) {
-        if (closed || Thread.currentThread().isInterrupted()) {
+        if (closed
+            || Thread.currentThread().isInterrupted()
+            || owner.programEpoch() != passProgramEpoch) {
           return;
         }
         if (cache.isAtCapacity()) {
@@ -299,16 +326,22 @@ final class CppSymbolPrewarmer {
           return;
         }
         if (!owner.prewarmSample(program, sample.name(), sample.address())) {
-          markAtCapacity();
+          if (owner.programEpoch() == passProgramEpoch && !closed && !Thread.currentThread().isInterrupted()) {
+            markAtCapacity();
+          }
           return;
         }
       }
     }
 
-    if (closed || Thread.currentThread().isInterrupted() || !cursor.finished) {
+    if (closed
+        || Thread.currentThread().isInterrupted()
+        || !cursor.finished
+        || owner.programEpoch() != passProgramEpoch) {
       return;
     }
 
+    long snapshotEpoch = owner.invalidationEpoch();
     SymbolTableSnapshot.Outcome snapshotOutcome = owner.refreshSymbolSnapshot(program, targetMod);
     if (snapshotOutcome == SymbolTableSnapshot.Outcome.ABORTED
         || snapshotOutcome == SymbolTableSnapshot.Outcome.MODIFIED) {
@@ -318,15 +351,26 @@ final class CppSymbolPrewarmer {
     final long syncedTargetMod = targetMod;
     Boolean stillUnmodified =
         session.tryCollectForPrewarm(
-            program, () -> program.getModificationNumber() == syncedTargetMod, null);
+            program,
+            () ->
+                owner.programEpoch() == passProgramEpoch
+                    && owner.invalidationEpoch() == snapshotEpoch
+                    && program.getModificationNumber() == syncedTargetMod,
+            null);
     if (!Boolean.TRUE.equals(stillUnmodified)) {
       return;
     }
 
     synchronized (stateLock) {
-      if (!closed && !atCapacity && program.getModificationNumber() == targetMod) {
+      if (!closed
+          && !atCapacity
+          && owner.programEpoch() == passProgramEpoch
+          && owner.invalidationEpoch() == snapshotEpoch
+          && program.getModificationNumber() == targetMod) {
         hasSyncedModification = true;
         syncedModificationNumber = targetMod;
+        snapshotSkippedForSyncedMod =
+            snapshotOutcome == SymbolTableSnapshot.Outcome.SKIPPED;
         fastSyncedMod = targetMod;
         active = false;
         stateLock.notifyAll();

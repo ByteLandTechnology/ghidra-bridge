@@ -14,6 +14,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 
 /**
  * Immutable address-ordered memory-symbol snapshot tracked by program modification number.
@@ -88,16 +89,22 @@ public final class SymbolTableSnapshot {
         && iterationStart != null
         && iterationStart.isMemoryAddress()
         && session.canCacheSnapshots()
-        && programRef.refersTo(program)
-        && modificationNumber == program.getModificationNumber()
+        && isCurrentForModification(program, program.getModificationNumber())
         && (singleAddressSpace == null
             || singleAddressSpace.equals(iterationStart.getAddressSpace()));
+  }
+
+  boolean isCurrentForModification(Program program, long expectedMod) {
+    return program != null
+        && programRef.refersTo(program)
+        && modificationNumber == expectedMod;
   }
 
   static Outcome build(
       GhidraSession session,
       Program program,
       long expectedMod,
+      LongSupplier invalidationEpochSupplier,
       CppSymbolIndexConfig config,
       CppSymbolCache cache,
       BooleanSupplier cancelled,
@@ -108,6 +115,7 @@ public final class SymbolTableSnapshot {
       return Outcome.SKIPPED;
     }
 
+    long startEpoch = invalidationEpochSupplier.getAsLong();
     SnapshotCursor cursor = new SnapshotCursor();
     IdentityHashMap<Namespace, String> namespaceNames = new IdentityHashMap<>();
     HashMap<String, String> sharedStrings = new HashMap<>(64);
@@ -122,7 +130,8 @@ public final class SymbolTableSnapshot {
         clearSnapshot.run();
         return Outcome.SKIPPED;
       }
-      if (program.getModificationNumber() != expectedMod) {
+      if (invalidationEpochSupplier.getAsLong() != startEpoch
+          || program.getModificationNumber() != expectedMod) {
         clearSnapshot.run();
         return Outcome.MODIFIED;
       }
@@ -132,7 +141,13 @@ public final class SymbolTableSnapshot {
               program,
               () ->
                   collectBatchLocked(
-                      program, expectedMod, cursor, namespaceNames, sharedStrings),
+                      program,
+                      expectedMod,
+                      startEpoch,
+                      invalidationEpochSupplier,
+                      cursor,
+                      namespaceNames,
+                      sharedStrings),
               SnapshotBatch.PAUSED);
       if (batch.status == BatchStatus.PAUSED) {
         return Outcome.ABORTED;
@@ -195,7 +210,8 @@ public final class SymbolTableSnapshot {
             clearSnapshot.run();
             return Outcome.SKIPPED;
           }
-          if (program.getModificationNumber() != expectedMod) {
+          if (invalidationEpochSupplier.getAsLong() != startEpoch
+              || program.getModificationNumber() != expectedMod) {
             clearSnapshot.run();
             return Outcome.MODIFIED;
           }
@@ -212,19 +228,34 @@ public final class SymbolTableSnapshot {
   private static SnapshotBatch collectBatchLocked(
       Program program,
       long expectedMod,
+      long expectedEpoch,
+      LongSupplier invalidationEpochSupplier,
       SnapshotCursor cursor,
       IdentityHashMap<Namespace, String> namespaceNames,
       HashMap<String, String> sharedStrings) {
-    if (program.getModificationNumber() != expectedMod) {
+    if (invalidationEpochSupplier.getAsLong() != expectedEpoch
+        || program.getModificationNumber() != expectedMod) {
       return SnapshotBatch.MODIFIED;
+    }
+    Address startAddress = cursor.lastAddress;
+    if (startAddress == null) {
+      startAddress = program.getMinAddress();
+      if (startAddress == null) {
+        AddressSpace defaultSpace =
+            program.getAddressFactory() == null
+                ? null
+                : program.getAddressFactory().getDefaultAddressSpace();
+        startAddress = defaultSpace == null ? null : defaultSpace.getMinAddress();
+      }
+      if (startAddress == null) {
+        cursor.finished = true;
+        return SnapshotBatch.EMPTY;
+      }
     }
     SymbolTable symbolTable = program.getSymbolTable();
     SymbolIterator iterator;
     try {
-      iterator =
-          cursor.lastAddress == null
-              ? symbolTable.getSymbolIterator(true)
-              : symbolTable.getSymbolIterator(cursor.lastAddress, true);
+      iterator = symbolTable.getSymbolIterator(startAddress, true);
     } catch (RuntimeException unsupported) {
       cursor.supported = false;
       cursor.finished = true;

@@ -31,6 +31,8 @@ public final class CppSymbolIndex implements AutoCloseable {
   private final LongAdder hits = new LongAdder();
   private final LongAdder misses = new LongAdder();
   private final AtomicLong demangleCalls = new AtomicLong();
+  private final AtomicLong invalidationEpoch = new AtomicLong();
+  private final AtomicLong programEpoch = new AtomicLong();
 
   public CppSymbolIndex(GhidraSession session) {
     this(session, CppSymbolIndexConfig.defaults(), DemanglerUtil::demangle, true);
@@ -54,7 +56,7 @@ public final class CppSymbolIndex implements AutoCloseable {
     this.prewarmer = new CppSymbolPrewarmer(session, config, cache, this);
   }
 
-  /** Starts asynchronous background pre-warming for the active session program. */
+  /** Starts background pre-warming for the active session program. */
   public void startPrewarm() {
     prewarmer.start();
   }
@@ -64,7 +66,7 @@ public final class CppSymbolIndex implements AutoCloseable {
     return lookup(program, name, address).signature();
   }
 
-  /** Returns the decoded symbol entry for {@code name}, decoding on demand on a cache miss. */
+  /** Returns the decoded symbol entry for {@code name}, and decodes on demand on a cache miss. */
   public DecodedSymbol lookup(Program program, String name, Address address) {
     if (!CppSymbolNames.isMangled(name)) {
       return DecodedSymbol.EMPTY;
@@ -80,32 +82,41 @@ public final class CppSymbolIndex implements AutoCloseable {
       hits.increment();
       return hit;
     }
+    long initialEpoch = programEpoch.get();
     if (!closed && shareStaticCache) {
       DecodedSymbol staticHit = CppSymbolNames.peekCached(target, name);
       if (staticHit != null) {
-        storeOnDemand(name, staticHit);
+        if (programEpoch.get() == initialEpoch) {
+          storeOnDemand(name, staticHit);
+        }
         hits.increment();
         return staticHit;
       }
     }
     misses.increment();
 
-    if (closed) {
-      demangleCalls.incrementAndGet();
-      return CppSymbolNames.decodeWith(demangler, target, name, address);
-    }
-
     while (true) {
+      if (closed) {
+        demangleCalls.incrementAndGet();
+        return CppSymbolNames.decodeWith(demangler, target, name, address);
+      }
       DecodedSymbol recheck = cache.get(name);
       if (recheck != null) {
         return recheck;
       }
+      long decodeEpoch = programEpoch.get();
       CompletableFuture<DecodedSymbol> ownFuture = new CompletableFuture<>();
       CompletableFuture<DecodedSymbol> existing = inFlight.putIfAbsent(name, ownFuture);
       if (existing == null) {
         try {
           demangleCalls.incrementAndGet();
           DecodedSymbol decoded = CppSymbolNames.decodeWith(demangler, target, name, address);
+          if (closed
+              || programEpoch.get() != decodeEpoch
+              || (decoded == DecodedSymbol.EMPTY && Thread.currentThread().isInterrupted())) {
+            ownFuture.completeExceptionally(new PrewarmAbortedException());
+            return decoded;
+          }
           storeOnDemand(name, decoded);
           ownFuture.complete(decoded);
           return decoded;
@@ -142,10 +153,13 @@ public final class CppSymbolIndex implements AutoCloseable {
     if (target == null || cache.contains(name)) {
       return;
     }
+    long decodeEpoch = programEpoch.get();
     if (shareStaticCache) {
       DecodedSymbol staticHit = CppSymbolNames.peekCached(target, name);
       if (staticHit != null) {
-        storeOnDemand(name, staticHit);
+        if (programEpoch.get() == decodeEpoch) {
+          storeOnDemand(name, staticHit);
+        }
         return;
       }
     }
@@ -155,7 +169,7 @@ public final class CppSymbolIndex implements AutoCloseable {
       try {
         existing.join();
       } catch (CompletionException ignored) {
-        // Subsequent lookup() retries if background pre-warming aborted.
+        // A subsequent lookup() retries if background pre-warming stopped early.
       }
       return;
     }
@@ -164,6 +178,12 @@ public final class CppSymbolIndex implements AutoCloseable {
       if (existingHit == null) {
         demangleCalls.incrementAndGet();
         DecodedSymbol decoded = CppSymbolNames.decodeWith(demangler, target, name, address);
+        if (closed
+            || programEpoch.get() != decodeEpoch
+            || (decoded == DecodedSymbol.EMPTY && Thread.currentThread().isInterrupted())) {
+          ownFuture.completeExceptionally(new PrewarmAbortedException());
+          return;
+        }
         storeOnDemand(name, decoded);
         ownFuture.complete(decoded);
       } else {
@@ -232,18 +252,39 @@ public final class CppSymbolIndex implements AutoCloseable {
   @Override
   public void close() {
     closed = true;
+    invalidationEpoch.incrementAndGet();
     prewarmer.close();
     symbolSnapshot = null;
     cache.close();
     inFlight.clear();
   }
 
+  long invalidationEpoch() {
+    return invalidationEpoch.get();
+  }
+
+  long programEpoch() {
+    return programEpoch.get();
+  }
+
+  boolean hasSymbolSnapshotFor(Program program, long expectedMod) {
+    SymbolTableSnapshot current = symbolSnapshot;
+    return current != null && current.isCurrentForModification(program, expectedMod);
+  }
+
   void invalidateSnapshots() {
+    invalidationEpoch.incrementAndGet();
+    clearSnapshotOnly();
+  }
+
+  private void clearSnapshotOnly() {
     symbolSnapshot = null;
     cache.releaseSnapshotBytes();
   }
 
   void resetForProgramSwitch() {
+    programEpoch.incrementAndGet();
+    invalidationEpoch.incrementAndGet();
     symbolSnapshot = null;
     cache.reset();
     inFlight.clear();
@@ -258,10 +299,11 @@ public final class CppSymbolIndex implements AutoCloseable {
     if (cache.contains(name)) {
       return true;
     }
+    long decodeEpoch = programEpoch.get();
     if (shareStaticCache) {
       DecodedSymbol staticHit = CppSymbolNames.peekCached(program, name);
       if (staticHit != null) {
-        return cache.putFromPrewarm(name, staticHit);
+        return programEpoch.get() == decodeEpoch && cache.putFromPrewarm(name, staticHit);
       }
     }
     CompletableFuture<DecodedSymbol> ownFuture = new CompletableFuture<>();
@@ -279,7 +321,9 @@ public final class CppSymbolIndex implements AutoCloseable {
       }
       demangleCalls.incrementAndGet();
       DecodedSymbol decoded = CppSymbolNames.decodeWith(demangler, program, name, address);
-      if (closed || Thread.currentThread().isInterrupted()) {
+      if (closed
+          || Thread.currentThread().isInterrupted()
+          || programEpoch.get() != decodeEpoch) {
         ownFuture.completeExceptionally(new PrewarmAbortedException());
         completed = true;
         return false;
@@ -290,13 +334,17 @@ public final class CppSymbolIndex implements AutoCloseable {
       return fitted;
     } catch (Throwable failure) {
       if (!completed) {
-        if (closed || Thread.currentThread().isInterrupted()) {
+        if (closed
+            || Thread.currentThread().isInterrupted()
+            || programEpoch.get() != decodeEpoch) {
           ownFuture.completeExceptionally(new PrewarmAbortedException());
         } else {
           ownFuture.completeExceptionally(failure);
         }
       }
-      if (closed || Thread.currentThread().isInterrupted()) {
+      if (closed
+          || Thread.currentThread().isInterrupted()
+          || programEpoch.get() != decodeEpoch) {
         return false;
       }
       throw failure;
@@ -310,11 +358,12 @@ public final class CppSymbolIndex implements AutoCloseable {
         session,
         program,
         expectedMod,
+        invalidationEpoch::get,
         config,
         cache,
         () -> closed || Thread.currentThread().isInterrupted(),
         built -> symbolSnapshot = built,
-        this::invalidateSnapshots);
+        this::clearSnapshotOnly);
   }
 
   private void storeOnDemand(String name, DecodedSymbol symbol) {
