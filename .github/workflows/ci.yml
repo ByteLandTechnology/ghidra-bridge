@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -44,7 +44,7 @@ jobs:
         run: bash .github/scripts/verify-repository-hygiene.sh
 
       - name: Cache formatting tools
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ghidra-bridge/google-java-format
           key: google-java-format-2.0.0
@@ -67,6 +67,18 @@ jobs:
       - name: Test release archive reproducibility
         run: python3 tests/release_archive_reproducibility.py
 
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verify-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/**/*.xml
+            modules/**/build/reports/tests/**
+            build/reports/headless-regression/**
+
   release:
     # Update the release PR or create a release after main passes verification.
     needs: verify
@@ -84,7 +96,7 @@ jobs:
     steps:
       - name: Update release PR or create release
         id: release
-        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           target-branch: main
@@ -102,7 +114,7 @@ jobs:
       attestations: write
     steps:
       - name: Checkout release
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release.outputs.sha }}
           persist-credentials: false
@@ -164,3 +176,15 @@ jobs:
         run: |
           release_api="$(gh release view "$RELEASE_TAG" --json apiUrl --jq .apiUrl)"
           gh api --method PATCH "$release_api" -F draft=false -f make_latest=legacy --silent
+
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: publish-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/**/*.xml
+            modules/**/build/reports/tests/**
+            build/reports/headless-regression/**

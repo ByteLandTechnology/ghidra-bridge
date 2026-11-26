@@ -20,7 +20,9 @@ import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Proxy;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -30,7 +32,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -149,11 +153,52 @@ class McpConfigTest {
             .redirectErrorStream(true)
             .start();
 
-    String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-    boolean finished = process.waitFor(15, TimeUnit.SECONDS);
-    if (!finished) {
-      process.destroyForcibly();
-      throw new AssertionError("SinglePassProbe timed out; output: " + output);
+    ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
+    CompletableFuture<Void> outputReader =
+        CompletableFuture.runAsync(
+            () -> {
+              try (InputStream in = process.getInputStream()) {
+                byte[] chunk = new byte[1024];
+                int read;
+                while ((read = in.read(chunk)) != -1) {
+                  synchronized (outputBuffer) {
+                    outputBuffer.write(chunk, 0, read);
+                  }
+                }
+              } catch (IOException ignored) {
+                // Closed when child exits or is forcibly terminated.
+              }
+            },
+            runnable -> Thread.ofVirtual().name("single-pass-probe-reader").start(runnable));
+
+    String output;
+    try {
+      boolean finished = process.waitFor(15, TimeUnit.SECONDS);
+      if (!finished) {
+        process.destroyForcibly();
+        process.waitFor(5, TimeUnit.SECONDS);
+        try {
+          outputReader.get(2, TimeUnit.SECONDS);
+        } catch (Exception ignored) {
+        }
+        synchronized (outputBuffer) {
+          output = outputBuffer.toString(StandardCharsets.UTF_8);
+        }
+        throw new AssertionError("SinglePassProbe timed out; output: " + output);
+      }
+      outputReader.get(5, TimeUnit.SECONDS);
+      synchronized (outputBuffer) {
+        output = outputBuffer.toString(StandardCharsets.UTF_8);
+      }
+    } finally {
+      if (process.isAlive()) {
+        process.destroyForcibly();
+        try {
+          process.waitFor(5, TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+          Thread.currentThread().interrupt();
+        }
+      }
     }
     assertEquals(0, process.exitValue(), "SinglePassProbe failed: " + output);
     assertEquals("LOOKUPS=1 SESSION=probe-session", output.trim());
@@ -172,8 +217,9 @@ class McpConfigTest {
                 "session_id", "mcp-http-session",
                 "tool_prefix", "custom"));
 
-    HttpClient httpClient = HttpClient.newHttpClient();
-    try (AgentDispatcher dispatcher =
+    try (HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        AgentDispatcher dispatcher =
             new AgentDispatcher(stubServices("firmware.bin"), config.sessionId());
         McpHttpServer server = new McpHttpServer(config, dispatcher)) {
       server.start();
@@ -252,6 +298,7 @@ class McpConfigTest {
       throws IOException, InterruptedException {
     HttpRequest request =
         HttpRequest.newBuilder(URI.create(endpoint))
+            .timeout(Duration.ofSeconds(10))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
             .POST(HttpRequest.BodyPublishers.ofString(JsonUtil.toJson(payload)))
