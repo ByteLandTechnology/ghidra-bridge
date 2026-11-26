@@ -23,7 +23,14 @@ class McpSearchCatalogTest {
     assertEquals("memory.find", registry.findTool("ghidra_memory", "find").name());
 
     Map<String, Object> listingOps = registry.help(Map.of("domain", "listing"));
-    assertTrue(((List<String>) listingOps.get("operations")).contains("string.list"));
+    List<Map<String, Object>> operations =
+        (List<Map<String, Object>>) listingOps.get("operations");
+    assertTrue(
+        operations.stream()
+            .anyMatch(
+                item ->
+                    "string.list".equals(item.get("name"))
+                        && "string.list".equals(item.get("method"))));
 
     Map<String, Object> stringHelp =
         registry.help(Map.of("domain", "ghidra_listing", "operation", "string.list"));

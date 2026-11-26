@@ -10,10 +10,71 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
 import urllib.request
+
+
+SHUTDOWN_WAIT_SECONDS = 20
+SIGTERM_WAIT_SECONDS = 10
+SIGKILL_WAIT_SECONDS = 5
+LOG_TAIL_LINES = 100
+
+
+def archive_and_print_headless_log(log_path, report_log, tail_lines=LOG_TAIL_LINES):
+    report_log.parent.mkdir(parents=True, exist_ok=True)
+    if log_path.is_file():
+        shutil.copyfile(log_path, report_log)
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    else:
+        report_log.write_text("", encoding="utf-8")
+        text = ""
+    tail = "\n".join(text.splitlines()[-tail_lines:])
+    print(
+        f"=== search-headless.log (last {tail_lines} lines; saved full log to {report_log}) ===",
+        file=sys.stderr,
+    )
+    print(tail if tail else "<search-headless.log is empty>", file=sys.stderr, flush=True)
+
+
+def terminate_headless_process(process, ready, shutdown_fn):
+    used_sigkill = False
+    try:
+        if ready:
+            try:
+                shutdown_fn()
+            except Exception:
+                pass
+            try:
+                process.wait(timeout=SHUTDOWN_WAIT_SECONDS)
+                return False
+            except subprocess.TimeoutExpired:
+                pass
+        elif process.poll() is not None:
+            return False
+
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+        try:
+            process.wait(timeout=SIGTERM_WAIT_SECONDS)
+        except subprocess.TimeoutExpired:
+            used_sigkill = True
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=SIGKILL_WAIT_SECONDS)
+        return used_sigkill
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
 
 
 FIXTURE_S = """
@@ -122,7 +183,10 @@ def run_test(headless, root):
             raise AssertionError(f"Unexpected result for {name}: {result}")
         return result.get("structuredContent", {})
 
-    scripts = pathlib.Path(__file__).resolve().parents[1] / "build" / "ghidra-script"
+    repo_root = pathlib.Path(__file__).resolve().parents[1]
+    scripts = repo_root / "build" / "ghidra-script"
+    report_log = repo_root / "build" / "reports" / "headless-regression" / "search-headless.log"
+    report_log.unlink(missing_ok=True)
     command = [
         str(headless),
         str(project),
@@ -143,6 +207,7 @@ def run_test(headless, root):
             command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True
         )
         ready = False
+        primary_error = None
         try:
             initialize = {
                 "jsonrpc": "2.0",
@@ -270,17 +335,29 @@ def run_test(headless, root):
             assert page2.get("next_cursor") is None, page2
 
             print("Search regression checks passed")
+        except BaseException as exc:
+            primary_error = exc
+            raise
         finally:
-            if ready:
-                try:
-                    tool(20, "ghidra_bridge", {"operation": "shutdown"})
-                except (OSError, TimeoutError, urllib.error.URLError):
-                    pass
             try:
-                process.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGTERM)
-                process.wait(timeout=10)
+                used_sigkill = terminate_headless_process(
+                    process,
+                    ready,
+                    lambda: tool(20, "ghidra_bridge", {"operation": "shutdown"}),
+                )
+            except BaseException:
+                if primary_error is None:
+                    log.flush()
+                    archive_and_print_headless_log(log_path, report_log)
+                    raise
+            log.flush()
+            if primary_error is not None:
+                archive_and_print_headless_log(log_path, report_log)
+            elif used_sigkill:
+                archive_and_print_headless_log(log_path, report_log)
+                raise RuntimeError(
+                    "Ghidra ignored SIGTERM during shutdown and required SIGKILL"
+                )
 
 
 def main():
