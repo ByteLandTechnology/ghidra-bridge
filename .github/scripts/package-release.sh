@@ -5,8 +5,14 @@ set -euo pipefail
 repository_root="$(git rev-parse --show-toplevel)"
 cd "$repository_root"
 
-file_version="$(cat version.txt)"
-version="${1:-$file_version}"
+file_version="$(<version.txt)"
+file_version="${file_version#"${file_version%%[![:space:]]*}"}"
+file_version="${file_version%"${file_version##*[![:space:]]}"}"
+if [[ -z "$file_version" ]]; then
+  echo "package-release: version.txt is empty" >&2
+  exit 1
+fi
+version="${1-$file_version}"
 if [[ -z "$version" ]]; then
   echo "package-release: release version must not be empty" >&2
   exit 1
@@ -46,6 +52,17 @@ rm -rf "$release_dir"
 mkdir -p "$stage"
 cp build/ghidra-script/Bridge.java build/ghidra-script/GhidraMcp.java "$jar" "$stage/"
 cp LICENSE README.md "$stage/"
+find "$stage" -type d -exec chmod 0755 {} +
+find "$stage" -type f -exec chmod 0644 {} +
+TZ=UTC find "$stage" -depth -exec touch -t 198002010000.00 {} +
 
-(cd "$release_dir" && zip -q -r -X "$name.zip" "$name" && sha256sum "$name.zip" > "$name.zip.sha256")
+(
+  cd "$release_dir"
+  find "$name" -print | LC_ALL=C sort | TZ=UTC zip -q -X -@ "$name.zip"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$name.zip" > "$name.zip.sha256"
+  else
+    shasum -a 256 "$name.zip" > "$name.zip.sha256"
+  fi
+)
 echo "package-release: created $release_dir/$name.zip"

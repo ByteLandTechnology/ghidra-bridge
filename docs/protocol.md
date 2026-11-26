@@ -103,22 +103,31 @@ The server rejects a bad upgrade request with an HTTP status before the socket o
 - `405`: The upgrade request does not use GET.
 - `409`: Another client is already connected.
 
-### WebSocket Close Codes
+### Message Fragments, Keepalive, and Close Codes
+
+The server reassembles multi-frame RFC 6455 UTF-8 text messages up to 16 MiB and answers interleaved `PING` and `CLOSE` frames.
+When a socket read times out, the server sends a `PING` frame.
+If no `PONG` frame arrives before the timeout, the server closes the socket and frees the client slot.
 
 The server closes the socket with these status codes:
 - `1000`: Normal closure.
-- `1001`: The server stops.
-- `1003`: The client sent a fragmented text message or an unsupported frame.
+- `1001`: The server stops, or a keepalive ping gets no `PONG` before the timeout.
+- `1002`: Protocol error, such as unmasked client frames, reserved bits, fragmented control frames, or unexpected continuation frames.
+- `1003`: Unsupported frame type, such as binary data.
+- `1007`: Invalid UTF-8 text or close reason.
+- `1009`: Message payload exceeds the 16 MiB limit.
 
 ## Model Context Protocol (MCP)
 
-The bridge implements MCP Streamable HTTP protocol version `2026-07-28` and legacy SSE streams.
+The bridge implements MCP Streamable HTTP protocol version `2026-07-28`.
+Version `2026-07-28` requests are stateless and do not use MCP sessions.
+For legacy SSE clients, the server supports bounded SSE sessions.
 
 ### HTTP Request Rules
 
 The MCP HTTP server handles requests:
-- **POST**: Dispatches JSON-RPC 2.0 requests. When `sessionId` is set in the query string, the server sends the response on that SSE stream and returns status `202`. An unknown or expired `sessionId` returns status `404`.
-- **GET**: Opens a `text/event-stream` SSE session, sends an `endpoint` event with `<path>?sessionId=<id>`, and sends periodic `keepalive` comments.
+- **POST**: Dispatches JSON-RPC 2.0 requests. Up to 32 POST requests can run at the same time; more requests return status `503`. The server closes a POST exchange if the request body read takes more than 10 seconds. For an active SSE session (`?sessionId=<id>`), POST sends the JSON-RPC response as a `message` event and returns status `202`. An unknown or expired `sessionId` returns status `404`.
+- **GET**: Opens a `text/event-stream` SSE session, sends an `endpoint` event with `<path>?sessionId=<id>`, and sends periodic `keepalive` comments. Up to 16 SSE sessions can stay open at the same time; more requests return status `503`.
 - **HEAD**: Returns status `200` with no body.
 - **OPTIONS**: Handles CORS preflight requests and returns status `204`.
 - **Other methods**: The server returns status `405` with `Allow: POST, GET, OPTIONS`.
