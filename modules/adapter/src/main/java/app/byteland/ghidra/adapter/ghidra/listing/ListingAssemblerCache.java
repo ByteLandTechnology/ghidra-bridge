@@ -35,6 +35,12 @@ final class ListingAssemblerCache {
     return created;
   }
 
+  synchronized void releaseProgram(Program program) {
+    if (program != null) {
+      cache.remove(program);
+    }
+  }
+
   private Assembler createAssembler(Program program) {
     try {
       return Objects.requireNonNull(factory.apply(program), "assembler");

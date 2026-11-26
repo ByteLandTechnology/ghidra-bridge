@@ -35,6 +35,12 @@ class ListingAssemblerCacheTest {
     assertSame(first, cachedFirst);
     assertEquals(2, creations.get());
     assertTrue(first != second);
+
+    cache.releaseProgram(firstProgram);
+    cache.releaseProgram(null);
+    Assembler recreatedFirst = cache.get(firstProgram);
+    assertEquals(3, creations.get());
+    assertTrue(first != recreatedFirst);
   }
 
   @Test

@@ -26,8 +26,9 @@ public final class ListingServiceImpl implements ListingService {
     this.codeUnitQueries = new ListingCodeUnitQueries(context);
     this.codeUnitMutations = new ListingCodeUnitMutations(context);
     this.instructionQueries = new ListingInstructionQueries(context);
-    this.instructionMutations =
-        new ListingInstructionMutations(context, new ListingAssemblerCache());
+    ListingAssemblerCache assemblerCache = new ListingAssemblerCache();
+    context.onProgramClosed(assemblerCache::releaseProgram);
+    this.instructionMutations = new ListingInstructionMutations(context, assemblerCache);
     this.dataQueries = new ListingDataQueries(context);
     ListingFlowOverrideScopes flowOverrideScopes = new ListingFlowOverrideScopes(context);
     this.flowOverrideQueries = new ListingFlowOverrideQueries(context, flowOverrideScopes);
