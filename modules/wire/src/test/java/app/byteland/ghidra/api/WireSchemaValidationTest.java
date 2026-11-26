@@ -56,7 +56,7 @@ class WireSchemaValidationTest {
                 selectorSchema,
                 "/selector"));
 
-    // Tagged oneOf routes directly to the matching branch instead of reporting the first branch.
+    // Tagged oneOf routes directly to the selected branch instead of the first branch.
     ApiException taggedBranchFailure =
         assertThrows(
             ApiException.class,

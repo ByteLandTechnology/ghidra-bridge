@@ -337,7 +337,7 @@ class McpHttpServerToolResultTest {
               200);
       assertToolBadRequest(nonObjectArgs, "invalid_type", "/arguments", "JSON object");
 
-      // 3. Missing operation, non-string operation, unknown operation, dotted operation, unknown key, bad params.
+      // 3. Absent operation, non-text operation, unknown operation, dotted operation, unknown key, bad params.
       Map<String, Object> missingOp =
           postStatelessToolCall(client, harness.endpoint(), "missing-op", "ghidra_memory", Map.of());
       assertToolBadRequest(missingOp, "missing_field", "/operation", "Valid operations:");
