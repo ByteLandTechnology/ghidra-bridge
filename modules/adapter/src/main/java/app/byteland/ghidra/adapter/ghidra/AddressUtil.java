@@ -5,6 +5,8 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.address.AddressFormatException;
 import ghidra.program.model.address.AddressSpace;
+import ghidra.program.model.listing.Program;
+import ghidra.program.util.AddressEvaluator;
 import java.util.Locale;
 
 /**
@@ -13,9 +15,34 @@ import java.util.Locale;
 public final class AddressUtil {
   private AddressUtil() {}
 
+  public static Address parseAddress(Program program, String rawAddress) {
+    if (program == null) {
+      throw new IllegalArgumentException("program is required");
+    }
+    if (rawAddress == null || rawAddress.isBlank()) {
+      throw new IllegalArgumentException("address is required");
+    }
+    String value = rawAddress.trim();
+    Address address = AddressEvaluator.evaluate(program, value);
+    if (address == null) {
+      address = AddressEvaluator.evaluate(program, "0x" + value);
+    }
+    if (address == null) {
+      address = tryAddressWithDefaultSpace(program.getAddressFactory(), value);
+    }
+    if (address == null) {
+      throw new IllegalArgumentException("unable to parse address: " + rawAddress);
+    }
+    return address;
+  }
+
   public static Address parseAddress(GhidraScript script, String rawAddress) {
     if (script == null) {
       throw new IllegalArgumentException("script is required");
+    }
+    Program program = script.getCurrentProgram();
+    if (program != null) {
+      return parseAddress(program, rawAddress);
     }
     if (rawAddress == null || rawAddress.isBlank()) {
       throw new IllegalArgumentException("address is required");
@@ -44,20 +71,6 @@ public final class AddressUtil {
 
   public static String canonicalAddress(String addressSpace, String offsetHex) {
     return addressSpace + ":" + normalizeOffset(offsetHex);
-  }
-
-  public static String addressSpace(Address address) {
-    if (address == null) {
-      return null;
-    }
-    return address.getAddressSpace().getName();
-  }
-
-  public static String offset(Address address) {
-    if (address == null) {
-      return null;
-    }
-    return "0x" + address.toString();
   }
 
   private static String normalizeOffset(String offset) {
