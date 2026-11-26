@@ -75,20 +75,29 @@ python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analy
 
 ### Exact Local CI Sequence
 
-Run these three commands in order to match the `verify` job in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
+Run these four commands in order to match the `verify` job in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
 
 ```bash
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+python3 tests/release_archive_reproducibility.py
 ```
 
-### Release Archive Check
+### Release Archives and Provenance
 
-Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, then build the release archive and SHA-256 checksum in `build/release/`:
+Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, then build the deterministic release archive in `build/release/`. Run `tests/release_archive_reproducibility.py` to test archive reproducibility across delayed runs:
 
 ```bash
 bash .github/scripts/package-release.sh
+python3 tests/release_archive_reproducibility.py
+```
+
+Verify a downloaded release archive with `sha256sum` and GitHub CLI provenance verification:
+
+```bash
+sha256sum -c ghidra-bridge-<version>.zip.sha256
+gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghidra-bridge
 ```
 
 ## Releases
@@ -97,6 +106,7 @@ bash .github/scripts/package-release.sh
 - `release-please` creates a `v<version>` tag and a draft GitHub release (`"draft": true` and `"force-tag-creation": true` in `release-please-config.json`).
 - `publish` gets `needs.release.outputs.sha` with `persist-credentials: false` and checks `HEAD`, the `v<version>` tag, the remote tag SHA, `isDraft == true`, `.release-please-manifest.json`, and `version.txt`.
 - `publish` runs `package-release.sh` (which runs `verify` in CI and `clean verify` locally) and `tests/function_mutation_regression.py` before asset upload.
+- `publish` signs SLSA build provenance with `actions/attest-build-provenance` (`id-token: write` and `attestations: write`) before asset upload.
 - `publish` checks non-empty `.zip` and `.sha256` files, verifies `sha256sum -c`, and uploads both assets with `gh release upload --clobber`.
 - `publish` makes the draft release public last with `gh api --method PATCH` and `-F draft=false`.
 - If `publish` fails, the GitHub release stays hidden as a draft until you rerun the failed jobs.
