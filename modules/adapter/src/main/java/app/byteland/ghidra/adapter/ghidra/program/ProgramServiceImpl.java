@@ -43,7 +43,7 @@ public final class ProgramServiceImpl implements ProgramService {
 
   @Override
   public Page<AddressSpaceResource> getAddressSpaces(int limit, String cursor) {
-    var addressFactory = context.script().getAddressFactory();
+    var addressFactory = program.getAddressFactory();
     var defaultSpace = addressFactory.getDefaultAddressSpace();
     List<AddressSpaceResource> list = new ArrayList<>();
     for (AddressSpace space : addressFactory.getAddressSpaces()) {

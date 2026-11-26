@@ -179,7 +179,10 @@ final class AnalysisTask {
   private static void applyScriptAnalyzerSelection(
       GhidraSession context, Program program, Map<String, String> updates) {
     if (!updates.isEmpty()) {
-      context.script().setAnalysisOptions(program, updates);
+      context.withTransaction(() -> {
+        context.script().setAnalysisOptions(program, updates);
+        return null;
+      });
     }
   }
 
@@ -192,7 +195,10 @@ final class AnalysisTask {
       return null;
     }
     try {
-      context.script().setAnalysisOptions(program, previousAnalysisOptions);
+      context.withTransaction(() -> {
+        context.script().setAnalysisOptions(program, previousAnalysisOptions);
+        return null;
+      });
       manager.initializeOptions();
       return null;
     } catch (RuntimeException ex) {
