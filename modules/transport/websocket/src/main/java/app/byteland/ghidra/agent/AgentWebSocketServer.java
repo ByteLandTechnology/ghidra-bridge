@@ -25,17 +25,41 @@ public final class AgentWebSocketServer implements AutoCloseable {
   private final AgentConfig config;
   private final Handler handler;
   private final Duration handshakeTimeout;
+  private final Duration keepaliveInterval;
+  private final Duration pongTimeout;
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicReference<AgentServerConnection> activeConnection = new AtomicReference<>();
   private final PendingSockets pendingSockets;
   private ServerSocket serverSocket;
 
   public AgentWebSocketServer(AgentConfig config, Handler handler) {
-    this(config, handler, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_MAX_PENDING_SOCKETS);
+    this(
+        config,
+        handler,
+        DEFAULT_HANDSHAKE_TIMEOUT,
+        DEFAULT_MAX_PENDING_SOCKETS,
+        AgentWebSocketConnectionRunner.DEFAULT_KEEPALIVE_INTERVAL,
+        AgentWebSocketConnectionRunner.DEFAULT_PONG_TIMEOUT);
   }
 
   AgentWebSocketServer(
       AgentConfig config, Handler handler, Duration handshakeTimeout, int maxPendingSockets) {
+    this(
+        config,
+        handler,
+        handshakeTimeout,
+        maxPendingSockets,
+        AgentWebSocketConnectionRunner.DEFAULT_KEEPALIVE_INTERVAL,
+        AgentWebSocketConnectionRunner.DEFAULT_PONG_TIMEOUT);
+  }
+
+  AgentWebSocketServer(
+      AgentConfig config,
+      Handler handler,
+      Duration handshakeTimeout,
+      int maxPendingSockets,
+      Duration keepaliveInterval,
+      Duration pongTimeout) {
     this.config = Objects.requireNonNull(config, "config");
     this.handler = Objects.requireNonNull(handler, "handler");
     if (!config.isServerMode()) {
@@ -48,7 +72,17 @@ public final class AgentWebSocketServer implements AutoCloseable {
     if (maxPendingSockets < 1) {
       throw new IllegalArgumentException("maxPendingSockets must be positive");
     }
+    Objects.requireNonNull(keepaliveInterval, "keepaliveInterval");
+    if (keepaliveInterval.isZero() || keepaliveInterval.isNegative()) {
+      throw new IllegalArgumentException("keepaliveInterval must be positive");
+    }
+    Objects.requireNonNull(pongTimeout, "pongTimeout");
+    if (pongTimeout.isZero() || pongTimeout.isNegative()) {
+      throw new IllegalArgumentException("pongTimeout must be positive");
+    }
     this.handshakeTimeout = handshakeTimeout;
+    this.keepaliveInterval = keepaliveInterval;
+    this.pongTimeout = pongTimeout;
     this.pendingSockets = new PendingSockets(running, maxPendingSockets);
   }
 
@@ -61,7 +95,14 @@ public final class AgentWebSocketServer implements AutoCloseable {
       socket.bind(new InetSocketAddress(config.host(), config.port()));
       AgentWebSocketConnectionRunner connectionRunner =
           new AgentWebSocketConnectionRunner(
-              config, handler, running, activeConnection, pendingSockets, handshakeTimeout);
+              config,
+              handler,
+              running,
+              activeConnection,
+              pendingSockets,
+              handshakeTimeout,
+              keepaliveInterval,
+              pongTimeout);
       AgentWebSocketAcceptor acceptor =
           new AgentWebSocketAcceptor(socket, handler, running, pendingSockets, connectionRunner);
       Thread thread = new Thread(acceptor, "agent-ws-server");

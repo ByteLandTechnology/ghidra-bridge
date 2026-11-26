@@ -175,7 +175,6 @@ public final class Bootstrap {
         McpHttpServer server = null;
         try {
           server = new McpHttpServer(candidateConfig, dispatcher, script::println);
-          server.start();
           boundConfig = candidateConfig;
           boundDispatcher = dispatcher;
           boundServer = server;
@@ -196,25 +195,36 @@ public final class Bootstrap {
           throw failure;
         }
       }
+
+      script.println("[ghidra-mcp] Starting MCP HTTP service");
+      if (usedFallback) {
+        script.println(
+            "[ghidra-mcp] Default port "
+                + defaultPort
+                + " is busy; bound fallback port "
+                + boundConfig.port()
+                + ".");
+      }
+      printMcpBanner(script, program, boundConfig);
+      if (headless) {
+        AgentDispatcher checkpointDispatcher = boundDispatcher;
+        checkpointDispatcher.runExclusive(() -> saveCheckpoint(script, program, "[ghidra-mcp]"));
+      }
+      boundServer.start();
+      script.println("[ghidra-mcp] MCP endpoint is listening for HTTP clients.");
     } catch (Exception | Error startupFailure) {
-      services.close();
+      try {
+        if (boundServer != null) {
+          boundServer.close();
+        }
+      } finally {
+        if (boundDispatcher != null) {
+          boundDispatcher.close();
+        } else {
+          services.close();
+        }
+      }
       throw startupFailure;
-    }
-
-    script.println("[ghidra-mcp] Starting MCP HTTP service");
-    if (usedFallback) {
-      script.println(
-          "[ghidra-mcp] Default port "
-              + defaultPort
-              + " is busy; bound fallback port "
-              + boundConfig.port()
-              + ".");
-    }
-    printMcpBanner(script, program, boundConfig);
-    script.println("[ghidra-mcp] MCP endpoint is listening for HTTP clients.");
-
-    if (headless) {
-      saveCheckpoint(script, program, "[ghidra-mcp]");
     }
 
     try (GracefulExit gracefulExit =
@@ -293,7 +303,7 @@ public final class Bootstrap {
 
     printOutboundWsBanner(script, program, config);
     if (headless) {
-      saveCheckpoint(script, program, "[ghidra-bridge]");
+      dispatcher.runExclusive(() -> saveCheckpoint(script, program, "[ghidra-bridge]"));
     }
 
     try (GracefulExit gracefulExit =
@@ -390,11 +400,11 @@ public final class Bootstrap {
     }
     printEmbeddedWsBanner(
         script, program, config, guiConsole, systemConsole, boundEffective.generatedToken());
-    script.println("[ghidra-bridge] Embedded bridge is listening for WebSocket clients.");
-
     if (headless) {
-      saveCheckpoint(script, program, "[ghidra-bridge]");
+      AgentDispatcher checkpointDispatcher = boundDispatcher;
+      checkpointDispatcher.runExclusive(() -> saveCheckpoint(script, program, "[ghidra-bridge]"));
     }
+    script.println("[ghidra-bridge] Embedded bridge is listening for WebSocket clients.");
 
     try (GracefulExit gracefulExit =
             gracefulExit(services.programService(), program, script, "[ghidra-bridge]", headless);
