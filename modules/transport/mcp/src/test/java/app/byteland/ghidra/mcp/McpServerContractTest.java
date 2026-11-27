@@ -431,6 +431,8 @@ class McpServerContractTest {
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     null));
     TransactionRunner transactions =
         new TransactionRunner() {

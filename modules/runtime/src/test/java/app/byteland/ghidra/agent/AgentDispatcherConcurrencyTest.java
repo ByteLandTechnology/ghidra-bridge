@@ -1431,7 +1431,9 @@ class AgentDispatcherConcurrencyTest {
               "task-1",
               Instant.EPOCH,
               null,
-              0.0);
+              0.0,
+              null,
+              null);
         }
 
         @Override
@@ -1445,6 +1447,8 @@ class AgentDispatcherConcurrencyTest {
                   ? AnalysisResource.Status.RUNNING
                   : AnalysisResource.Status.IDLE,
               true,
+              null,
+              null,
               null,
               null,
               null,

@@ -298,6 +298,8 @@ class McpHttpServerConcurrencyTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 null);
           }
 

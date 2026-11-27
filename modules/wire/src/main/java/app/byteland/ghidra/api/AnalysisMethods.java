@@ -26,7 +26,11 @@ final class AnalysisMethods implements ApiMethodProvider {
             "task_id",
             "started_at",
             "finished_at",
-            "progress");
+            "progress",
+            "message",
+            ApiVocabulary.ERROR);
+    Map<String, Object> analysisOutput =
+        ApiSchemaCatalog.resourceSchema(analysisFields, List.of(ApiVocabulary.KIND));
     registry.read(
         "analysis.get",
         ApiSchemaCatalog.input(ApiSchemaCatalog.props(ApiVocabulary.FIELDS, fields)),
@@ -41,7 +45,7 @@ final class AnalysisMethods implements ApiMethodProvider {
                 "analyzers",
                 WireSchema.array(
                     WireSchema.nonBlankString(), 1, ApiSchemaCatalog.MAX_NESTED_ITEMS))),
-        ApiSchemaCatalog.resourceSchema(analysisFields, List.of(ApiVocabulary.KIND)),
+        analysisOutput,
         request ->
             registry
                 .services()

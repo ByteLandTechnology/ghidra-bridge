@@ -13,37 +13,80 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 public final class AnalysisServiceImpl implements AnalysisService {
   private final GhidraSession context;
+  private final Supplier<Object> currentTarget;
+  private final Function<Object, Backend> backendFactory;
+  private final Function<Object, ExecutorService> executorFactory;
   private final Object lock = new Object();
-  private final Map<Program, ProgramAnalysisState> states = new IdentityHashMap<>();
+  private final Map<Object, ProgramAnalysisState> states = new IdentityHashMap<>();
   private boolean closed;
 
   public AnalysisServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
+    this.currentTarget = context::currentProgram;
+    this.backendFactory =
+        target -> {
+          Program program = (Program) target;
+          return new GhidraBackend(
+              context, program, AutoAnalysisManager.getAnalysisManager(program));
+        };
+    this.executorFactory =
+        target -> {
+          Program program = (Program) target;
+          return Executors.newSingleThreadExecutor(new AnalysisThreadFactory(program.getName()));
+        };
+  }
+
+  AnalysisServiceImpl(Backend backend, ExecutorService executor) {
+    Objects.requireNonNull(backend, "backend");
+    Objects.requireNonNull(executor, "executor");
+    Object singleTarget = new Object();
+    this.context = null;
+    this.currentTarget = () -> singleTarget;
+    this.backendFactory = ignored -> backend;
+    this.executorFactory = ignored -> executor;
+    this.states.put(singleTarget, new ProgramAnalysisState(backend, executor));
+  }
+
+  AnalysisServiceImpl(
+      Supplier<Object> currentTarget,
+      Function<Object, Backend> backendFactory,
+      Function<Object, ExecutorService> executorFactory) {
+    this.context = null;
+    this.currentTarget = Objects.requireNonNull(currentTarget, "currentTarget");
+    this.backendFactory = Objects.requireNonNull(backendFactory, "backendFactory");
+    this.executorFactory = Objects.requireNonNull(executorFactory, "executorFactory");
   }
 
   @Override
   public AnalysisResource startAnalysis(List<String> analyzers) {
-    Program program = context.currentProgram();
+    Object target = Objects.requireNonNull(currentTarget.get(), "target");
     synchronized (lock) {
       if (closed) {
         throw new IllegalStateException("analysis service is closed");
       }
-      ProgramAnalysisState state = stateFor(program);
-      boolean bridgeRunning = state.currentTask != null && state.currentTask.isRunning();
-      switch (AnalysisStatusPolicy.start(false, bridgeRunning, state.manager.isAnalyzing())) {
+      ProgramAnalysisState state = states.get(target);
+      Backend backend = state != null ? state.backend : backendFactory.apply(target);
+      boolean bridgeRunning =
+          state != null && state.currentTask != null && state.currentTask.isRunning();
+      switch (AnalysisStatusPolicy.start(false, bridgeRunning, backend.isAnalyzing())) {
         case REJECT_CLOSED -> throw new IllegalStateException("analysis service is closed");
         case RETURN_BRIDGE -> {
           return state.currentTask.snapshot();
         }
         case RETURN_GHIDRA -> {
-          return globalStatus(program, AnalysisResource.Status.RUNNING);
+          return globalStatus(backend, AnalysisResource.Status.RUNNING);
         }
         case START_BRIDGE -> {
-          AnalyzerSelection selection = AnalyzerSelection.from(analyzers);
-          AnalysisTask task = new AnalysisTask(context, program, state.manager, selection);
+          AnalysisTask task = backend.createTask(analyzers);
+          if (state == null) {
+            state = new ProgramAnalysisState(backend, executorFactory.apply(target));
+            states.put(target, state);
+          }
           state.executor.execute(task::run);
           state.currentTask = task;
           return state.currentTask.snapshot();
@@ -55,20 +98,19 @@ public final class AnalysisServiceImpl implements AnalysisService {
 
   @Override
   public AnalysisResource getStatus() {
-    Program program = context.currentProgram();
+    Object target = Objects.requireNonNull(currentTarget.get(), "target");
     synchronized (lock) {
-      ProgramAnalysisState state = states.get(program);
-      AutoAnalysisManager manager =
-          state != null ? state.manager : AutoAnalysisManager.getAnalysisManager(program);
+      ProgramAnalysisState state = states.get(target);
+      Backend backend = state != null ? state.backend : backendFactory.apply(target);
       AnalysisTask currentTask = state != null ? state.currentTask : null;
       boolean bridgeRunning = currentTask != null && currentTask.isRunning();
-      boolean ghidraRunning = manager.isAnalyzing();
+      boolean ghidraRunning = backend.isAnalyzing();
       return switch (AnalysisStatusPolicy.status(
           currentTask != null, bridgeRunning, ghidraRunning)) {
         case BRIDGE -> currentTask.snapshot();
         case GHIDRA ->
             globalStatus(
-                program,
+                backend,
                 ghidraRunning ? AnalysisResource.Status.RUNNING : AnalysisResource.Status.IDLE);
       };
     }
@@ -76,12 +118,16 @@ public final class AnalysisServiceImpl implements AnalysisService {
 
   /** Cancels and releases background analysis resources for a closed program. */
   public void releaseProgram(Program program) {
-    if (program == null) {
+    releaseTarget(program);
+  }
+
+  void releaseTarget(Object target) {
+    if (target == null) {
       return;
     }
     ProgramAnalysisState state;
     synchronized (lock) {
-      state = states.remove(program);
+      state = states.remove(target);
     }
     if (state != null) {
       stopState(state);
@@ -91,9 +137,9 @@ public final class AnalysisServiceImpl implements AnalysisService {
   /**
    * Cancels the active analysis and waits until it stops.
    *
-   * <p>The session ends when its connection closes or the host process stops. An
-   * analysis can run for hours, so close must not wait for it to complete. The program keeps the
-   * analysis results that exist when the analysis stops.
+   * <p>The session ends when its connection closes or the host process stops. An analysis can run
+   * for hours, so close must not wait for it to complete. The program keeps the analysis results
+   * that exist when the analysis stops.
    */
   @Override
   public void close() {
@@ -106,42 +152,84 @@ public final class AnalysisServiceImpl implements AnalysisService {
     for (ProgramAnalysisState state : activeStates) {
       stopState(state);
     }
-    context.close();
-  }
-
-  private ProgramAnalysisState stateFor(Program program) {
-    return states.computeIfAbsent(program, ProgramAnalysisState::new);
+    if (context != null) {
+      context.close();
+    }
   }
 
   private static void stopState(ProgramAnalysisState state) {
     if (state.currentTask != null) {
       state.currentTask.cancel();
     }
-    state.manager.cancelQueuedTasks();
+    state.backend.cancelQueuedTasks();
     ExecutorShutdown.shutdownAndAwait(state.executor);
-    AnalysisManagerWait.awaitIdle(state.manager);
+    state.backend.awaitIdle();
   }
 
-  private static AnalysisResource globalStatus(Program program, AnalysisResource.Status state) {
+  private static AnalysisResource globalStatus(Backend backend, AnalysisResource.Status state) {
     return new AnalysisResource(
         AnalysisResource.Kind.GHIDRA,
         state,
-        GhidraProgramUtilities.isAnalyzed(program),
+        backend.isAnalyzed(),
+        null,
+        null,
         null,
         null,
         null,
         null);
   }
 
+  interface Backend {
+    boolean isAnalyzing();
+
+    AnalysisTask createTask(List<String> analyzers);
+
+    boolean isAnalyzed();
+
+    void cancelQueuedTasks();
+
+    void awaitIdle();
+  }
+
+  private record GhidraBackend(
+      GhidraSession context, Program program, AutoAnalysisManager manager) implements Backend {
+    @Override
+    public boolean isAnalyzing() {
+      return manager.isAnalyzing();
+    }
+
+    @Override
+    public AnalysisTask createTask(List<String> analyzers) {
+      AnalyzerSelection selection = AnalyzerSelection.from(analyzers);
+      AnalysisTask.AnalysisOptionChange optionChange =
+          AnalysisTask.prepareAnalyzerSelection(manager, program, selection);
+      return new AnalysisTask(context, program, manager, optionChange);
+    }
+
+    @Override
+    public boolean isAnalyzed() {
+      return GhidraProgramUtilities.isAnalyzed(program);
+    }
+
+    @Override
+    public void cancelQueuedTasks() {
+      manager.cancelQueuedTasks();
+    }
+
+    @Override
+    public void awaitIdle() {
+      AnalysisManagerWait.awaitIdle(manager);
+    }
+  }
+
   private static final class ProgramAnalysisState {
-    private final AutoAnalysisManager manager;
+    private final Backend backend;
     private final ExecutorService executor;
     private AnalysisTask currentTask;
 
-    private ProgramAnalysisState(Program program) {
-      this.manager = AutoAnalysisManager.getAnalysisManager(program);
-      this.executor =
-          Executors.newSingleThreadExecutor(new AnalysisThreadFactory(program.getName()));
+    private ProgramAnalysisState(Backend backend, ExecutorService executor) {
+      this.backend = backend;
+      this.executor = executor;
     }
   }
 }

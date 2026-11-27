@@ -58,6 +58,35 @@ class ApiContractGeneratorTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  void analysisMethodsExposeTelemetryFieldsInContract() {
+    ApiCatalog catalog = ApiRegistry.catalog();
+    Map<String, Object> document = ApiContractGenerator.asyncApi(catalog);
+    Map<String, Object> methods = (Map<String, Object>) document.get("x-ghidra-bridge-methods");
+
+    for (String methodName : List.of("analysis.get", "analysis.start")) {
+      Map<String, Object> method = (Map<String, Object>) methods.get(methodName);
+      Map<String, Object> outputSchema = (Map<String, Object>) method.get("output_schema");
+      assertEquals(false, outputSchema.get("additionalProperties"));
+      assertEquals(List.of("kind"), outputSchema.get("required"));
+      Map<String, Object> properties = (Map<String, Object>) outputSchema.get("properties");
+      assertEquals(Map.of("type", "string"), properties.get("message"));
+      assertEquals(Map.of("type", "string"), properties.get("error"));
+      assertTrue(properties.containsKey("status"));
+      assertTrue(properties.containsKey("progress"));
+    }
+
+    for (ApiCatalog.MethodDescriptor descriptor : catalog.methods()) {
+      if ("analysis.get".equals(descriptor.name()) || "analysis.start".equals(descriptor.name())) {
+        Map<String, Object> descriptorProps =
+            (Map<String, Object>) descriptor.outputSchema().get("properties");
+        assertEquals(Map.of("type", "string"), descriptorProps.get("message"));
+        assertEquals(Map.of("type", "string"), descriptorProps.get("error"));
+      }
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   void asyncApiPublishesDiscriminatorsAndDefaultMetadata() {
     Map<String, Object> document = ApiContractGenerator.asyncApi(ApiRegistry.catalog());
     Map<String, Object> channels = (Map<String, Object>) document.get("channels");
@@ -83,7 +112,8 @@ class ApiContractGeneratorTest {
 
     Map<String, Object> codeUnitList = (Map<String, Object>) methods.get("code_unit.list");
     Map<String, Object> cuProps =
-        (Map<String, Object>) ((Map<String, Object>) codeUnitList.get("input_schema")).get("properties");
+        (Map<String, Object>)
+            ((Map<String, Object>) codeUnitList.get("input_schema")).get("properties");
     Map<String, Object> filterProps =
         (Map<String, Object>) ((Map<String, Object>) cuProps.get("filter")).get("properties");
     assertEquals("all", ((Map<String, Object>) filterProps.get("kind")).get("default"));
@@ -93,7 +123,8 @@ class ApiContractGeneratorTest {
 
     Map<String, Object> batchExecute = (Map<String, Object>) methods.get("batch.execute");
     Map<String, Object> batchProps =
-        (Map<String, Object>) ((Map<String, Object>) batchExecute.get("input_schema")).get("properties");
+        (Map<String, Object>)
+            ((Map<String, Object>) batchExecute.get("input_schema")).get("properties");
     assertEquals(
         "per_item", ((Map<String, Object>) batchProps.get("transaction_mode")).get("default"));
     Map<String, Object> batchItems = (Map<String, Object>) batchProps.get("items");
