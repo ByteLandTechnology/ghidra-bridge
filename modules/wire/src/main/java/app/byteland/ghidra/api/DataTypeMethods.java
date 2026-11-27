@@ -37,7 +37,9 @@ final class DataTypeMethods implements ApiMethodProvider {
     registry.list(
         "data_type_category.list",
         ApiSchemaCatalog.listInput(
-            WireSchema.object(ApiSchemaCatalog.props(ApiVocabulary.PATH, WireSchema.string()))),
+            WireSchema.object(
+                ApiSchemaCatalog.props(
+                    ApiVocabulary.PATH, WireSchema.withDefault(WireSchema.string(), "/")))),
         Set.of(ApiVocabulary.PATH, ApiVocabulary.NAME, "category_count", "data_type_count"),
         List.of(ApiVocabulary.PATH),
         (request, page) ->
@@ -64,7 +66,7 @@ final class DataTypeMethods implements ApiMethodProvider {
             WireSchema.object(
                 ApiSchemaCatalog.props(
                     "query",
-                    WireSchema.string(),
+                    WireSchema.withDefault(WireSchema.string(), ""),
                     ApiVocabulary.CATEGORY_PATH,
                     WireSchema.string(),
                     ApiVocabulary.KIND,
@@ -188,10 +190,10 @@ final class DataTypeMethods implements ApiMethodProvider {
           case "struct", "union" -> compositePatch(kind, patch);
           case "enum" ->
               new DataTypePatch.EnumPatch(
-                  convertedEnumValues(patch.get("add_values")),
-                  convertedEnumValues(patch.get("remove_values")),
-                  convertedEnumValues(patch.get("rename_values")),
-                  convertedEnumValues(patch.get("update_values")));
+                  convertedEnumValues(patch.get("add_values"), "/patch/add_values"),
+                  convertedEnumValues(patch.get("remove_values"), "/patch/remove_values"),
+                  convertedEnumValues(patch.get("rename_values"), "/patch/rename_values"),
+                  convertedEnumValues(patch.get("update_values"), "/patch/update_values"));
           default -> throw new AssertionError(kind);
         };
     registry.services().dataTypeService().patchDataType(path, typedPatch);
@@ -227,11 +229,11 @@ final class DataTypeMethods implements ApiMethodProvider {
     return List.copyOf(result);
   }
 
-  private List<DataTypePatch.EnumValue> convertedEnumValues(Object raw) {
+  private List<DataTypePatch.EnumValue> convertedEnumValues(Object raw, String target) {
     if (!(raw instanceof List<?> list)) return null;
     List<DataTypePatch.EnumValue> result = new ArrayList<>();
     for (int index = 0; index < list.size(); index++) {
-      Map<String, Object> value = objectAt(list.get(index), "/patch/values/" + index);
+      Map<String, Object> value = objectAt(list.get(index), target + "/" + index);
       result.add(
           new DataTypePatch.EnumValue(
               optionalText(value, ApiVocabulary.NAME),
