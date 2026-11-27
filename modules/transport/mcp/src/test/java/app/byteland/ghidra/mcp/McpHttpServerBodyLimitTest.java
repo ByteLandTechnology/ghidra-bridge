@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
@@ -34,6 +33,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Proxy;
 import java.net.BindException;
 import java.net.InetAddress;
@@ -54,6 +54,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
@@ -444,7 +445,7 @@ class McpHttpServerBodyLimitTest {
 
       // 3. Subsequent valid POST to the same SSE session still succeeds with 202 + SSE message.
       String ping = "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"ping\",\"params\":{}}";
-      HttpClient client = HttpClient.newHttpClient();
+      HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
       HttpResponse<String> validPost =
           client.send(
               HttpRequest.newBuilder(
@@ -480,27 +481,56 @@ class McpHttpServerBodyLimitTest {
                 BoundedHeapServerMain.class.getName())
             .start();
 
-    CompletableFuture<String> stderrFuture =
-        CompletableFuture.supplyAsync(
+    ByteArrayOutputStream stderrBuffer = new ByteArrayOutputStream();
+    CompletableFuture<Void> stderrReader =
+        CompletableFuture.runAsync(
             () -> {
               try (InputStream err = process.getErrorStream()) {
-                return new String(err.readAllBytes(), StandardCharsets.UTF_8);
-              } catch (IOException e) {
-                return "STDERR_READ_ERROR: " + e;
+                byte[] chunk = new byte[1024];
+                int read;
+                while ((read = err.read(chunk)) != -1) {
+                  synchronized (stderrBuffer) {
+                    stderrBuffer.write(chunk, 0, read);
+                  }
+                }
+              } catch (IOException ignored) {
+                // Closed when child exits or is forcibly terminated.
               }
-            });
+            },
+            runnable -> Thread.ofVirtual().name("bounded-heap-stderr-reader").start(runnable));
+    CompletableFuture<String> readyLineFuture =
+        CompletableFuture.supplyAsync(
+            () -> {
+              try {
+                BufferedReader stdout =
+                    new BufferedReader(
+                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+                return stdout.readLine();
+              } catch (IOException e) {
+                throw new UncheckedIOException(e);
+              }
+            },
+            runnable -> Thread.ofVirtual().name("bounded-heap-stdout-reader").start(runnable));
 
     try {
-      int port;
-      BufferedReader stdout =
-          new BufferedReader(
-              new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
-      String readyLine = stdout.readLine();
-      assertNotNull(
-          readyLine,
-          () -> "Bounded-heap server exited early; stderr=" + stderrFuture.join());
+      String readyLine;
+      try {
+        readyLine = readyLineFuture.get(15, TimeUnit.SECONDS);
+      } catch (TimeoutException timedOut) {
+        process.destroyForcibly();
+        process.waitFor(5, TimeUnit.SECONDS);
+        String stderr = collectBufferedStderr(stderrReader, stderrBuffer);
+        throw new AssertionError(
+            "Timed out waiting for bounded-heap server READY line; stderr=" + stderr, timedOut);
+      }
+      if (readyLine == null) {
+        process.destroyForcibly();
+        process.waitFor(5, TimeUnit.SECONDS);
+        String stderr = collectBufferedStderr(stderrReader, stderrBuffer);
+        throw new AssertionError("Bounded-heap server exited early; stderr=" + stderr);
+      }
       assertTrue(readyLine.startsWith("READY "), "Unexpected stdout: " + readyLine);
-      port = Integer.parseInt(readyLine.substring("READY ".length()).trim());
+      int port = Integer.parseInt(readyLine.substring("READY ".length()).trim());
 
       int totalBytes = 64 * 1024 * 1024;
       String fixedHeaders =
@@ -554,7 +584,7 @@ class McpHttpServerBodyLimitTest {
       // Signal clean shutdown when you close child stdin.
       process.getOutputStream().close();
       assertTrue(process.waitFor(15, TimeUnit.SECONDS), "Child JVM did not exit in time");
-      String stderr = stderrFuture.get(5, TimeUnit.SECONDS);
+      String stderr = collectBufferedStderr(stderrReader, stderrBuffer);
       assertFalse(
           stderr.contains("java.lang.OutOfMemoryError") || stderr.contains("OutOfMemoryError"),
           "Unexpected OutOfMemoryError on server stderr:\n" + stderr);
@@ -562,7 +592,25 @@ class McpHttpServerBodyLimitTest {
     } finally {
       if (process.isAlive()) {
         process.destroyForcibly();
+        try {
+          process.waitFor(5, TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+          Thread.currentThread().interrupt();
+        }
       }
+    }
+  }
+
+  private static String collectBufferedStderr(
+      CompletableFuture<Void> stderrReader, ByteArrayOutputStream stderrBuffer) {
+    try {
+      stderrReader.get(5, TimeUnit.SECONDS);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+    } catch (Exception ignored) {
+    }
+    synchronized (stderrBuffer) {
+      return stderrBuffer.toString(StandardCharsets.UTF_8);
     }
   }
 
@@ -768,9 +816,7 @@ class McpHttpServerBodyLimitTest {
             unusedService(DataTypeService.class),
             transactionRunner,
             "test-program");
-    AgentConfig agentConfig =
-        new AgentConfig(null, LOOPBACK, 8765, "/ws/agent", null, "test-session", null);
-    return new AgentDispatcher(services, agentConfig);
+    return new AgentDispatcher(services, "test-session");
   }
 
   private static <T> T unusedService(Class<T> type) {

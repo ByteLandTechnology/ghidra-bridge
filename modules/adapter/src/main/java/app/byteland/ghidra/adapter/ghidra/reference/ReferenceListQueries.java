@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.reference;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.adapter.ghidra.scan.AddressScanRanges;
 import app.byteland.ghidra.adapter.ghidra.scan.AddressScopeResolver;
 import app.byteland.ghidra.adapter.ghidra.scan.BoundedAddressScan;
@@ -16,11 +17,19 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressIterator;
 import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.listing.FunctionManager;
+import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceManager;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 
 final class ReferenceListQueries {
   private static final long NANOS_PER_MILLISECOND = 1_000_000L;
+  private static final String REFERENCE_RESOURCE = "reference";
+  private static final String EXT_FROM_CANONICAL =
+      AddressUtil.canonicalAddress(Address.EXT_FROM_ADDRESS);
 
   private final GhidraSession context;
   private final AddressScopeResolver scopes;
@@ -70,7 +79,14 @@ final class ReferenceListQueries {
         && options.end() == null
         && primaryAnchor != null) {
       return listSingleAnchor(
-          primaryAnchor, incoming, fromFilter, toFilter, type, normalizedLimit, cursor);
+          primaryAnchor,
+          incoming,
+          normalizedDirection,
+          fromFilter,
+          toFilter,
+          type,
+          normalizedLimit,
+          cursor);
     }
     return listScopedOrRange(
         incoming, fromFilter, toFilter, type, scope, options, normalizedLimit, cursor);
@@ -79,6 +95,7 @@ final class ReferenceListQueries {
   private Page<ReferenceResource> listSingleAnchor(
       Address anchor,
       boolean incoming,
+      String normalizedDirection,
       Address fromFilter,
       Address toFilter,
       String type,
@@ -86,6 +103,110 @@ final class ReferenceListQueries {
       String cursor) {
     long startedNanos = System.nanoTime();
     String canonicalAnchor = AddressUtil.canonicalAddress(anchor);
+    boolean hasCursor = cursor != null && !cursor.isBlank();
+    if (!hasCursor || !context.canCacheSnapshots()) {
+      return selectReferencesBounded(
+          anchor,
+          canonicalAnchor,
+          incoming,
+          fromFilter,
+          toFilter,
+          type,
+          limit,
+          cursor,
+          startedNanos);
+    }
+
+    Program snapshotProgram = context.currentProgramOrNull();
+    QuerySnapshotCache snapshots = context.querySnapshots();
+    long clearEpoch = snapshots.clearEpoch();
+    long modNumber = context.modificationNumber();
+    String normalizedType = type == null ? null : type.toUpperCase(Locale.ROOT);
+    String canonicalFrom = fromFilter == null ? null : AddressUtil.canonicalAddress(fromFilter);
+    String canonicalTo = toFilter == null ? null : AddressUtil.canonicalAddress(toFilter);
+    QuerySnapshotCache.Key cacheKey =
+        QuerySnapshotCache.Key.of(
+            REFERENCE_RESOURCE,
+            modNumber,
+            normalizedDirection,
+            canonicalAnchor,
+            normalizedType,
+            canonicalFrom,
+            canonicalTo);
+    String[] sortedKeys = snapshots.get(cacheKey);
+    boolean visitedOnMiss = false;
+    if (sortedKeys == null) {
+      List<String> keys = new ArrayList<>();
+      for (Reference reference : context.references(anchor, incoming)) {
+        visitedOnMiss = true;
+        if (!ReferenceQuerySupport.matchesType(type, reference)
+            || !matchesEndpoint(fromFilter, reference.getFromAddress())
+            || !matchesEndpoint(toFilter, reference.getToAddress())) {
+          continue;
+        }
+        keys.add(ReferenceDescriptions.referenceKey(reference, anchor, canonicalAnchor).encoded());
+      }
+      sortedKeys = keys.toArray(String[]::new);
+      Arrays.sort(sortedKeys);
+      if (!context.canCacheSnapshots()) {
+        return selectReferencesBounded(
+            anchor,
+            canonicalAnchor,
+            incoming,
+            fromFilter,
+            toFilter,
+            type,
+            limit,
+            cursor,
+            startedNanos);
+      }
+      if (context.currentProgramOrNull() == snapshotProgram
+          && context.modificationNumber() == modNumber) {
+        snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
+      }
+    }
+
+    FunctionManager[] functionManagerHolder = new FunctionManager[1];
+    AddressResource.FunctionSummary[] anchorFunctionHolder =
+        new AddressResource.FunctionSummary[1];
+    boolean[] initialized = new boolean[1];
+    Page<ReferenceResource> selected =
+        QuerySnapshotCache.slice(
+            sortedKeys,
+            limit,
+            cursor,
+            encodedKey -> resolveReference(anchor, incoming, encodedKey),
+            reference -> {
+              if (!initialized[0]) {
+                initialized[0] = true;
+                functionManagerHolder[0] = functionManagerOrNull();
+                anchorFunctionHolder[0] =
+                    ReferenceDescriptions.functionSummary(functionManagerHolder[0], anchor);
+              }
+              return ReferenceDescriptions.describe(
+                  reference,
+                  functionManagerHolder[0],
+                  anchor,
+                  canonicalAnchor,
+                  anchorFunctionHolder[0]);
+            });
+    boolean visitedAny =
+        sortedKeys.length > 0
+            || visitedOnMiss
+            || context.references(anchor, incoming).iterator().hasNext();
+    return singleAnchorScannedPage(selected, canonicalAnchor, visitedAny, startedNanos);
+  }
+
+  private Page<ReferenceResource> selectReferencesBounded(
+      Address anchor,
+      String canonicalAnchor,
+      boolean incoming,
+      Address fromFilter,
+      Address toFilter,
+      String type,
+      int limit,
+      String cursor,
+      long startedNanos) {
     Page.Selector<Reference> selector = Page.selector(limit, cursor);
     boolean visitedAny = false;
     for (Reference reference : context.references(anchor, incoming)) {
@@ -100,7 +221,7 @@ final class ReferenceListQueries {
       selector.offer(encoded, reference);
     }
     FunctionManager functionManager =
-        selector.retainedCount() == 0 ? null : context.currentProgram().getFunctionManager();
+        selector.retainedCount() == 0 ? null : functionManagerOrNull();
     AddressResource.FunctionSummary anchorFunction =
         ReferenceDescriptions.functionSummary(functionManager, anchor);
     Page<ReferenceResource> selected =
@@ -108,6 +229,14 @@ final class ReferenceListQueries {
             reference ->
                 ReferenceDescriptions.describe(
                     reference, functionManager, anchor, canonicalAnchor, anchorFunction));
+    return singleAnchorScannedPage(selected, canonicalAnchor, visitedAny, startedNanos);
+  }
+
+  private static Page<ReferenceResource> singleAnchorScannedPage(
+      Page<ReferenceResource> selected,
+      String canonicalAnchor,
+      boolean visitedAny,
+      long startedNanos) {
     long elapsedMs = Math.max(0L, (System.nanoTime() - startedNanos) / NANOS_PER_MILLISECOND);
     boolean complete = selected.nextCursor() == null;
     String scannedBound = visitedAny ? canonicalAnchor : null;
@@ -155,7 +284,7 @@ final class ReferenceListQueries {
     BoundedAddressScan<ReferenceResource> scan =
         BoundedAddressScan.start(limit, options.timeoutMs(), requestedStart, requestedEnd);
     ReferenceManager refManager = context.currentProgram().getReferenceManager();
-    FunctionManager functionManager = context.currentProgram().getFunctionManager();
+    FunctionManager functionManager = functionManagerOrNull();
     AddressIterator addresses =
         incoming
             ? refManager.getReferenceDestinationIterator(iterationSet, true)
@@ -216,6 +345,18 @@ final class ReferenceListQueries {
     return scan.finish();
   }
 
+  private FunctionManager functionManagerOrNull() {
+    Program program = context.currentProgramOrNull();
+    if (program == null) {
+      return null;
+    }
+    try {
+      return program.getFunctionManager();
+    } catch (UnsupportedOperationException ignored) {
+      return null;
+    }
+  }
+
   private AddressSet resolveTargetAddresses(FlowOverrideScope scope, AddressScanOptions options) {
     if (scope == null) {
       AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
@@ -256,6 +397,51 @@ final class ReferenceListQueries {
   private record DescribedReference(String encodedKey, ReferenceResource resource) {}
 
   private record CursorPosition(Address address, String key) {}
+
+  private Reference resolveReference(Address anchor, boolean incoming, String encodedKey) {
+    ReferenceCursorKey key = ReferenceCursorKey.decode(encodedKey);
+    if (incoming) {
+      Address fromAddress =
+          EXT_FROM_CANONICAL.equals(key.from())
+              ? Address.EXT_FROM_ADDRESS
+              : tryParseAddress(key.from());
+      if (fromAddress == null) {
+        return null;
+      }
+      Reference exact = context.reference(fromAddress, anchor, key.operandIndex());
+      if (exact != null && matchesDecodedKey(exact, key)) {
+        return exact;
+      }
+      for (Reference candidate : context.references(fromAddress, false)) {
+        if (matchesDecodedKey(candidate, key)) {
+          return candidate;
+        }
+      }
+      return null;
+    }
+
+    for (Reference candidate : context.references(anchor, false)) {
+      if (matchesDecodedKey(candidate, key)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private static boolean matchesDecodedKey(Reference candidate, ReferenceCursorKey key) {
+    return candidate.getOperandIndex() == key.operandIndex()
+        && key.type().equals(candidate.getReferenceType().getName())
+        && key.from().equals(AddressUtil.canonicalAddress(candidate.getFromAddress()))
+        && key.to().equals(AddressUtil.canonicalAddress(candidate.getToAddress()));
+  }
+
+  private Address tryParseAddress(String rawAddress) {
+    try {
+      return parseAddress(rawAddress);
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
+  }
 
   private Address parseAddress(String rawAddress) {
     return context.parseAddress(rawAddress);

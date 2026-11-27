@@ -4,9 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
+import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
+import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressIterator;
 import ghidra.program.model.address.AddressSet;
@@ -19,17 +24,90 @@ import ghidra.program.model.symbol.Namespace;
 import ghidra.program.model.symbol.RefType;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceManager;
+import ghidra.program.model.symbol.SourceType;
+import ghidra.util.classfinder.ClassSearcher;
+import ghidra.util.task.TaskMonitor;
 import java.lang.reflect.Proxy;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class FunctionRelationQueriesTest {
   private static final GenericAddressSpace RAM =
       new GenericAddressSpace("ram", 64, AddressSpace.TYPE_RAM, 0);
+
+  @Test
+  void defersMaterializationToPageSlicesAndCachesCallerSnapshots() {
+    Fixture fixture = new Fixture(80);
+    FunctionRelationQueries queries =
+        new FunctionRelationQueries(fixture.session, fixture::resolve);
+
+    // Page 1 (cursor == null): bounded selection, zero snapshot retained, only 8 items materialized.
+    Page<FunctionCallResource> p1 = queries.getCallers("ram:00100000", 8, null);
+    assertEquals(8, p1.items().size());
+    assertEquals("ram:00200000", p1.items().getFirst().entry());
+    assertEquals("ram:00200007", p1.nextCursor());
+    assertEquals(0, fixture.cache.entryCount());
+    assertEquals(1, fixture.relationScans.get());
+    assertEquals(8, fixture.materializedCalls.get(), "only page-slice functions materialized");
+
+    // Sweep remaining 9 pages via cached snapshot.
+    List<String> warmEntries = new ArrayList<>();
+    warmEntries.addAll(p1.items().stream().map(FunctionCallResource::entry).toList());
+    String cursor = p1.nextCursor();
+    while (cursor != null) {
+      Page<FunctionCallResource> page = queries.getCallers("ram:00100000", 8, cursor);
+      warmEntries.addAll(page.items().stream().map(FunctionCallResource::entry).toList());
+      cursor = page.nextCursor();
+    }
+
+    assertEquals(80, warmEntries.size());
+    assertEquals(1, fixture.cache.entryCount());
+    assertEquals(2, fixture.relationScans.get(), "only page 1 and first cursor page scanned");
+    assertEquals(80, fixture.materializedCalls.get(), "zero discarded FunctionCallResource items");
+
+    // Verify identical sweep when analysis bypasses snapshot caching.
+    fixture.cache.clear();
+    fixture.analyzing.set(true);
+    List<String> bypassEntries = new ArrayList<>();
+    String bypassCursor = null;
+    while (true) {
+      Page<FunctionCallResource> page = queries.getCallers("ram:00100000", 8, bypassCursor);
+      assertEquals(0, fixture.cache.entryCount());
+      bypassEntries.addAll(page.items().stream().map(FunctionCallResource::entry).toList());
+      bypassCursor = page.nextCursor();
+      if (bypassCursor == null) break;
+    }
+    fixture.analyzing.set(false);
+    assertEquals(warmEntries, bypassEntries);
+
+    // Program.getModificationNumber() bump invalidates cached snapshot and reflects new caller.
+    queries.getCallers("ram:00100000", 8, p1.nextCursor());
+    assertEquals(1, fixture.cache.entryCount());
+    fixture.addCaller(0x00200008L, true);
+    fixture.modificationNumber.incrementAndGet();
+
+    Page<FunctionCallResource> refreshed = queries.getCallers("ram:00100000", 8, "ram:00200007");
+    assertEquals("func_new_200008", refreshed.items().getFirst().name());
+  }
 
   @Test
   void getCallersAndCalleesSelectEntryKeysBeforeNamespaceOrProgramLookup() {
@@ -85,7 +163,9 @@ class FunctionRelationQueriesTest {
     assertEquals(
         List.of("ram:00401000", "ram:00402000"),
         exactLimitCallees.items().stream().map(FunctionCallResource::entry).toList());
-    assertEquals(FunctionCallResource.Direction.CALLEES, exactLimitCallees.items().getFirst().direction());
+    assertEquals(
+        FunctionCallResource.Direction.CALLEES,
+        exactLimitCallees.items().getFirst().direction());
     assertNull(exactLimitCallees.nextCursor());
 
     Function emptyTarget = rootFunction(Set.of(), Set.of());
@@ -248,6 +328,115 @@ class FunctionRelationQueriesTest {
                 });
   }
 
+  @Test
+  void concurrentProgramDbReadsResolveCallersDemangleCppNamesAndInvalidateOnProgramSwitch()
+      throws Exception {
+    GhidraTestSupport.x64Language();
+    ClassSearcher.search(TaskMonitor.DUMMY);
+    try (GhidraTestSupport.ProgramHolder primary =
+            GhidraTestSupport.createX64Program("fn-callers-primary");
+        GhidraTestSupport.ProgramHolder secondary =
+            GhidraTestSupport.createX64Program("fn-callers-secondary")) {
+      primary.inTransaction(
+          program -> {
+            try {
+              program.setExecutableFormat("Executable and Linking Format (ELF)");
+              AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+              Address targetAddr = space.getAddress(0x00401000L);
+              program
+                  .getFunctionManager()
+                  .createFunction(
+                      "target_fn",
+                      targetAddr,
+                      new AddressSet(targetAddr, targetAddr.add(3)),
+                      SourceType.USER_DEFINED);
+              for (int i = 0; i < 6; i++) {
+                Address callerAddr = space.getAddress(0x00401100L + (i * 0x20L));
+                String fnName = "caller" + i;
+                String mangledName = "_ZN3pkg" + fnName.length() + fnName + "Ei";
+                program
+                    .getFunctionManager()
+                    .createFunction(
+                        mangledName,
+                        callerAddr,
+                        new AddressSet(callerAddr, callerAddr.add(7)),
+                        SourceType.USER_DEFINED);
+                program
+                    .getReferenceManager()
+                    .addMemoryReference(
+                        callerAddr,
+                        targetAddr,
+                        RefType.UNCONDITIONAL_CALL,
+                        SourceType.USER_DEFINED,
+                        0);
+              }
+            } catch (Exception error) {
+              throw new RuntimeException(error);
+            }
+          });
+
+      AtomicReference<Program> activeProgram = new AtomicReference<>(primary.program());
+      GhidraScript poisonScript =
+          new GhidraScript() {
+            {
+              this.monitor =
+                  (TaskMonitor)
+                      Proxy.newProxyInstance(
+                          TaskMonitor.class.getClassLoader(),
+                          new Class<?>[] {TaskMonitor.class},
+                          (proxy, method, args) -> {
+                            throw new AssertionError("read touched monitor: " + method.getName());
+                          });
+            }
+
+            @Override
+            protected void run() {}
+
+            @Override
+            public Program getCurrentProgram() {
+              return activeProgram.get();
+            }
+          };
+
+      GhidraSession session = new GhidraSession(poisonScript);
+      FunctionServiceImpl service = new FunctionServiceImpl(session);
+
+      CountDownLatch start = new CountDownLatch(1);
+      try (ExecutorService pool = Executors.newFixedThreadPool(8)) {
+        List<Future<List<FunctionCallResource>>> readers = new ArrayList<>();
+        for (int t = 0; t < 8; t++) {
+          readers.add(
+              pool.submit(
+                  () -> {
+                    start.await();
+                    List<FunctionCallResource> all = new ArrayList<>();
+                    String cursor = null;
+                    while (true) {
+                      Page<FunctionCallResource> page =
+                          service.getCallers("0x00401000", 2, cursor);
+                      all.addAll(page.items());
+                      cursor = page.nextCursor();
+                      if (cursor == null) break;
+                    }
+                    return all;
+                  }));
+        }
+        start.countDown();
+        for (Future<List<FunctionCallResource>> reader : readers) {
+          List<FunctionCallResource> callers = reader.get(15, TimeUnit.SECONDS);
+          assertEquals(6, callers.size());
+          assertEquals("_ZN3pkg7caller0Ei", callers.getFirst().name());
+          assertTrue(callers.getFirst().demangledName().contains("pkg::caller0(int)"));
+        }
+      }
+      assertEquals(1, session.querySnapshots().entryCount());
+
+      // Program switch clears cached snapshots even before any new modification occurs.
+      activeProgram.set(secondary.program());
+      assertEquals(0, session.querySnapshots().entryCount());
+    }
+  }
+
   private static Function rootFunction(Set<Function> callers, Set<Function> callees) {
     return (Function)
         Proxy.newProxyInstance(
@@ -298,5 +487,133 @@ class FunctionRelationQueriesTest {
                   case "equals" -> proxy == args[0];
                   default -> throw new AssertionError(method.getName());
                 });
+  }
+
+  private static final class Fixture {
+    final GenericAddressSpace ram =
+        new GenericAddressSpace("ram", 64, GenericAddressSpace.TYPE_RAM, 0);
+    final AtomicLong clockNanos = new AtomicLong(1_000L);
+    final AtomicLong modificationNumber = new AtomicLong(1L);
+    final AtomicBoolean analyzing = new AtomicBoolean(false);
+    final AtomicInteger relationScans = new AtomicInteger();
+    final AtomicInteger materializedCalls = new AtomicInteger();
+
+    final Map<String, Function> functionsByEntry = new LinkedHashMap<>();
+    final List<Function> callers = new ArrayList<>();
+    final QuerySnapshotCache cache =
+        new QuerySnapshotCache(16, 10_000, Duration.ofSeconds(30), clockNanos::get);
+    final Program program;
+    final GhidraSession session;
+
+    Fixture(int callerCount) {
+      Namespace globalNs =
+          (Namespace)
+              Proxy.newProxyInstance(
+                  Namespace.class.getClassLoader(),
+                  new Class<?>[] {Namespace.class},
+                  (proxy, method, args) -> {
+                    if ("getName".equals(method.getName())) {
+                      materializedCalls.incrementAndGet();
+                      return "Global";
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                  });
+
+      this.program =
+          (Program)
+              Proxy.newProxyInstance(
+                  Program.class.getClassLoader(),
+                  new Class<?>[] {Program.class},
+                  (proxy, method, args) -> {
+                    if ("getModificationNumber".equals(method.getName())) {
+                      return modificationNumber.get();
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                  });
+
+      Address targetAddr = ram.getAddress(0x00100000L);
+      Function target =
+          (Function)
+              Proxy.newProxyInstance(
+                  Function.class.getClassLoader(),
+                  new Class<?>[] {Function.class},
+                  (proxy, method, args) ->
+                      switch (method.getName()) {
+                        case "getEntryPoint" -> targetAddr;
+                        case "getName" -> "target";
+                        case "getProgram" -> program;
+                        case "getParentNamespace" -> globalNs;
+                        case "getCallingFunctions" -> {
+                          relationScans.incrementAndGet();
+                          Set<Function> set = new LinkedHashSet<>(callers);
+                          yield set;
+                        }
+                        case "getCalledFunctions" -> Set.of();
+                        default -> throw new UnsupportedOperationException(method.getName());
+                      });
+      functionsByEntry.put(AddressUtil.canonicalAddress(targetAddr), target);
+
+      for (int i = 0; i < callerCount; i++) {
+        Address addr = ram.getAddress(0x00200000L + i);
+        String name = String.format("caller_%04d", i);
+        Function caller = buildFunction(addr, name, globalNs);
+        functionsByEntry.put(AddressUtil.canonicalAddress(addr), caller);
+        callers.add(caller);
+      }
+      Collections.shuffle(callers, new Random(19L));
+
+      GhidraScript script =
+          new GhidraScript() {
+            @Override
+            protected void run() {}
+
+            @Override
+            public Program getCurrentProgram() {
+              return program;
+            }
+          };
+      this.session = new GhidraSession(script, cache, analyzing::get);
+    }
+
+    void addCaller(long offset, boolean replace) {
+      Namespace renamedNs =
+          (Namespace)
+              Proxy.newProxyInstance(
+                  Namespace.class.getClassLoader(),
+                  new Class<?>[] {Namespace.class},
+                  (proxy, method, args) -> "Global");
+      Address addr = ram.getAddress(offset);
+      Function fn = buildFunction(addr, "func_new_" + Long.toHexString(offset), renamedNs);
+      String key = AddressUtil.canonicalAddress(addr);
+      if (replace) {
+        callers.removeIf(
+            existing -> AddressUtil.canonicalAddress(existing.getEntryPoint()).equals(key));
+      }
+      functionsByEntry.put(key, fn);
+      callers.add(fn);
+    }
+
+    private Function buildFunction(Address entry, String name, Namespace ns) {
+      return (Function)
+          Proxy.newProxyInstance(
+              Function.class.getClassLoader(),
+              new Class<?>[] {Function.class},
+              (proxy, method, args) ->
+                  switch (method.getName()) {
+                    case "getEntryPoint" -> entry;
+                    case "getName" -> name;
+                    case "getProgram" -> program;
+                    case "getParentNamespace" -> ns;
+                    case "equals" -> proxy == args[0];
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    default -> throw new UnsupportedOperationException(method.getName());
+                  });
+    }
+
+    Function resolve(String rawAddress) {
+      Function fn = functionsByEntry.get(rawAddress);
+      if (fn == null) throw new NoSuchElementException("not found: " + rawAddress);
+      return fn;
+    }
   }
 }

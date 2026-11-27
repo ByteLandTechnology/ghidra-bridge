@@ -34,7 +34,7 @@ public final class FunctionServiceImpl implements FunctionService {
     this.context = context;
     this.lookupQueries = new FunctionLookupQueries(context);
     this.listQueries = new FunctionListQueries(context, lookupQueries);
-    this.relationQueries = new FunctionRelationQueries(lookupQueries);
+    this.relationQueries = new FunctionRelationQueries(context, lookupQueries);
     this.dataTypeResolver =
         input ->
             GhidraDataTypeReferences.resolve(context.currentProgram().getDataTypeManager(), input);
@@ -61,13 +61,13 @@ public final class FunctionServiceImpl implements FunctionService {
       throw new IllegalArgumentException("address is already in a function: " + rawAddress);
     }
     if (program.getListing().getInstructionAt(entry) == null) {
-      if (!disassemble || !context.script().disassemble(entry)) {
+      if (!disassemble || !context.flatApi().disassemble(entry)) {
         throw new IllegalArgumentException("no instruction at function entry: " + rawAddress);
       }
     }
     AddressSetView body =
-        CreateFunctionCmd.getFunctionBody(program, entry, false, context.script().getMonitor());
-    if (context.script().getMonitor().isCancelled()) {
+        CreateFunctionCmd.getFunctionBody(program, entry, false, context.flatApi().getMonitor());
+    if (context.flatApi().getMonitor().isCancelled()) {
       throw new IllegalArgumentException("function creation was cancelled");
     }
     if (manager.getFunctionsOverlapping(body).hasNext()) {
@@ -103,7 +103,7 @@ public final class FunctionServiceImpl implements FunctionService {
     Function function = lookupQueries.resolveFunction(rawAddress);
     Address entry = function.getEntryPoint();
     context.runCommand(new DeleteFunctionCmd(entry, false), "unable to delete function");
-    if (context.script().getFunctionAt(entry) != null) {
+    if (context.flatApi().getFunctionAt(entry) != null) {
       throw new IllegalArgumentException("function was not deleted at: " + rawAddress);
     }
   }

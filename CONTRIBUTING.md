@@ -20,14 +20,16 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 ## Submit a change
 
-Run the local checks that match CI verification:
+Run all local checks before you open a pull request:
 
 ```bash
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-`verify` runs JUnit tests across all Java modules (`check`), contract drift checks, script compilation, distribution checks, and architecture boundary checks. On Linux x86-64, also run `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify` when you change function or runtime behavior. State the behavior change and its effect on users in the pull request.
+`verify` runs JUnit tests across all Java modules (`check`), contract drift checks, script compilation, distribution checks, and architecture boundary checks. It also runs `verifyMcpDocumentation` to check `docs/mcp-tools.json`, the nine guides, and MCP Javadocs. On Linux x86-64, also run `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify` when you change function or runtime behavior. State the behavior change and its effect on users in the pull request.
 
 Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
 

@@ -60,6 +60,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -132,6 +134,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -226,6 +230,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -297,6 +303,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -355,6 +363,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -437,6 +447,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -560,6 +572,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -645,6 +659,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -703,6 +719,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -797,6 +815,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -887,6 +907,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -945,6 +967,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -1089,6 +1113,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -1147,6 +1173,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -1279,6 +1307,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -1356,6 +1386,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -1414,6 +1446,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -1533,6 +1567,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -1610,6 +1646,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -1687,6 +1725,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -1771,6 +1811,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -1871,6 +1913,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -1929,6 +1973,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -2071,6 +2117,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -2129,6 +2177,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -2271,6 +2321,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -2329,6 +2381,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -2435,6 +2489,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -2530,6 +2586,8 @@
                             "name":
                               "type": "string"
                             "storage":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -2583,6 +2641,8 @@
                               "minimum": !!int "0"
                               "type": "integer"
                             "storage":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -2617,6 +2677,8 @@
                       "repeatable_comment":
                         "type": "string"
                       "return_storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -2698,6 +2760,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -2756,6 +2820,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -2851,6 +2917,8 @@
                                   "name":
                                     "type": "string"
                                   "storage":
+                                    "discriminator":
+                                      "propertyName": "kind"
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
                                       "properties":
@@ -2904,6 +2972,8 @@
                                     "minimum": !!int "0"
                                     "type": "integer"
                                   "storage":
+                                    "discriminator":
+                                      "propertyName": "kind"
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
                                       "properties":
@@ -2938,6 +3008,8 @@
                             "repeatable_comment":
                               "type": "string"
                             "return_storage":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -3061,6 +3133,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3158,6 +3232,8 @@
                             "name":
                               "type": "string"
                             "storage":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -3214,6 +3290,8 @@
                               "minimum": !!int "0"
                               "type": "integer"
                             "storage":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -3253,6 +3331,8 @@
                       "repeatable_comment":
                         "type": "string"
                       "return_storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3334,6 +3414,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3431,6 +3513,8 @@
                             "name":
                               "type": "string"
                             "storage":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -3487,6 +3571,8 @@
                               "minimum": !!int "0"
                               "type": "integer"
                             "storage":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -3526,6 +3612,8 @@
                       "repeatable_comment":
                         "type": "string"
                       "return_storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3614,6 +3702,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3677,6 +3767,8 @@
                         "minimum": !!int "0"
                         "type": "integer"
                       "storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3709,6 +3801,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3772,6 +3866,8 @@
                         "minimum": !!int "0"
                         "type": "integer"
                       "storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3811,6 +3907,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3870,6 +3968,8 @@
                       "name":
                         "type": "string"
                       "storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3902,6 +4002,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -3960,6 +4062,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -4040,6 +4144,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -4115,6 +4221,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -4190,6 +4298,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -4250,6 +4360,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -4366,6 +4478,8 @@
                                   "symbol":
                                     "$defs":
                                       "data_type_reference":
+                                        "discriminator":
+                                          "propertyName": "kind"
                                         "oneOf":
                                         - "additionalProperties": !!bool "false"
                                           "properties":
@@ -4522,6 +4636,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -4597,6 +4713,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -4655,6 +4773,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -4773,6 +4893,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -4848,6 +4970,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -4906,6 +5030,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -5046,6 +5172,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -5112,6 +5240,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -5170,6 +5300,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -5278,6 +5410,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -5344,6 +5478,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -5410,6 +5546,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -5483,6 +5621,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -5541,6 +5681,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -5621,6 +5763,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -5783,6 +5927,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -5841,6 +5987,8 @@
                         "items":
                           "$defs":
                             "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
                               "oneOf":
                               - "additionalProperties": !!bool "false"
                                 "properties":
@@ -6012,6 +6160,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -6179,6 +6329,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -6346,6 +6498,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -6520,6 +6674,8 @@
                     "type": "object"
                   - "$defs":
                       "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -6680,6 +6836,8 @@
     "subscribe":
       "message":
         "payload":
+          "discriminator":
+            "propertyName": "method"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -6697,6 +6855,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -6774,6 +6934,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -6866,6 +7028,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -6943,6 +7107,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7044,6 +7210,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7121,6 +7289,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7215,6 +7385,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7280,6 +7452,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -7325,6 +7498,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7432,6 +7607,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7544,6 +7721,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7617,6 +7796,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -7668,6 +7848,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7723,11 +7905,13 @@
                 "additionalProperties": !!bool "false"
                 "properties":
                   "encoding":
+                    "default": "hex"
                     "enum":
                     - "base64"
                     - "hex"
                     "type": "string"
                   "length":
+                    "default": !!int "256"
                     "maximum": !!int "65536"
                     "minimum": !!int "1"
                     "type": "integer"
@@ -7782,6 +7966,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7896,6 +8082,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -7954,6 +8142,7 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "kind":
+                        "default": "all"
                         "enum":
                         - "all"
                         - "data"
@@ -7967,6 +8156,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -8033,6 +8223,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8098,6 +8290,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -8160,6 +8353,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8268,6 +8463,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8326,6 +8523,7 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "case_sensitive":
+                        "default": !!bool "false"
                         "type": "boolean"
                       "name":
                         "type": "string"
@@ -8339,6 +8537,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -8403,6 +8602,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8498,6 +8699,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8597,6 +8800,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8692,6 +8897,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8747,6 +8954,7 @@
                 "additionalProperties": !!bool "false"
                 "properties":
                   "delete_symbol":
+                    "default": !!bool "false"
                     "type": "boolean"
                   "selector":
                     "additionalProperties": !!bool "false"
@@ -8782,6 +8990,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8891,6 +9101,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -8949,6 +9161,8 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "selector":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -9001,6 +9215,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -9066,6 +9281,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -9124,6 +9341,11 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "flow_overrides":
+                        "default":
+                        - "branch"
+                        - "call"
+                        - "call_return"
+                        - "return"
                         "items":
                           "enum":
                           - "branch"
@@ -9136,6 +9358,8 @@
                         "minItems": !!int "1"
                         "type": "array"
                       "selector":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -9190,6 +9414,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -9249,6 +9474,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -9307,6 +9534,12 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "expected_flow_overrides":
+                        "default":
+                        - "none"
+                        - "branch"
+                        - "call"
+                        - "call_return"
+                        - "return"
                         "items":
                           "enum":
                           - "branch"
@@ -9330,6 +9563,8 @@
                     - "flow_override"
                     "type": "object"
                   "selector":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -9400,6 +9635,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -9532,6 +9769,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -9607,6 +9846,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -9695,6 +9935,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -9750,6 +9992,7 @@
                 "additionalProperties": !!bool "false"
                 "properties":
                   "disassemble":
+                    "default": !!bool "false"
                     "type": "boolean"
                   "resource":
                     "additionalProperties": !!bool "false"
@@ -9788,6 +10031,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -9864,6 +10109,8 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "return_storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -9933,6 +10180,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10021,6 +10270,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10088,6 +10339,8 @@
                         "minimum": !!int "0"
                         "type": "integer"
                       "storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -10155,6 +10408,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10219,6 +10474,8 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "storage":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -10287,6 +10544,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10380,6 +10639,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10483,6 +10744,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10541,6 +10804,7 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "direction":
+                        "default": "callees"
                         "enum":
                         - "callees"
                         - "callers"
@@ -10558,6 +10822,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -10605,6 +10870,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10701,6 +10968,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10785,6 +11054,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10840,12 +11111,14 @@
                 "additionalProperties": !!bool "false"
                 "properties":
                   "format":
+                    "default": "text"
                     "enum":
                     - "document"
                     - "text"
                     - "tokens"
                     "type": "string"
                   "include_comments":
+                    "default": !!bool "false"
                     "type": "boolean"
                   "projection":
                     "additionalProperties": !!bool "false"
@@ -10913,6 +11186,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -10990,6 +11265,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -11098,6 +11375,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -11158,6 +11437,7 @@
                       "address":
                         "type": "string"
                       "case_sensitive":
+                        "default": !!bool "false"
                         "type": "boolean"
                       "name":
                         "type": "string"
@@ -11175,6 +11455,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -11239,6 +11520,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -11337,6 +11620,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -11402,6 +11687,8 @@
                       "from":
                         "type": "string"
                       "selector":
+                        "discriminator":
+                          "propertyName": "kind"
                         "oneOf":
                         - "additionalProperties": !!bool "false"
                           "properties":
@@ -11458,6 +11745,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -11522,6 +11810,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -11634,6 +11924,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -11711,6 +12003,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -11770,6 +12063,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -11871,6 +12166,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -11978,6 +12275,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -12079,6 +12378,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -12176,6 +12477,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -12234,6 +12537,7 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "path":
+                        "default": "/"
                         "type": "string"
                     "type": "object"
                   "page":
@@ -12243,6 +12547,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -12286,6 +12591,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -12399,6 +12706,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -12461,6 +12770,7 @@
                       "kind":
                         "type": "string"
                       "query":
+                        "default": ""
                         "type": "string"
                     "type": "object"
                   "page":
@@ -12470,6 +12780,7 @@
                         "minLength": !!int "1"
                         "type": "string"
                       "limit":
+                        "default": !!int "100"
                         "maximum": !!int "1000"
                         "minimum": !!int "1"
                         "type": "integer"
@@ -12522,6 +12833,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -12577,10 +12890,13 @@
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "category_path":
+                          "default": "/"
                           "type": "string"
                         "kind":
                           "enum":
@@ -12590,6 +12906,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "size":
+                          "default": !!int "0"
                           "maximum": !!int "2147483647"
                           "minimum": !!int "0"
                           "type": "integer"
@@ -12600,6 +12917,7 @@
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "category_path":
+                          "default": "/"
                           "type": "string"
                         "kind":
                           "enum":
@@ -12615,6 +12933,7 @@
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "category_path":
+                          "default": "/"
                           "type": "string"
                         "kind":
                           "enum":
@@ -12624,6 +12943,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "size":
+                          "default": !!int "4"
                           "maximum": !!int "8"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -12636,6 +12956,7 @@
                         "base_type":
                           "$ref": "#/$defs/data_type_reference"
                         "category_path":
+                          "default": "/"
                           "type": "string"
                         "kind":
                           "enum":
@@ -12652,6 +12973,7 @@
                     - "additionalProperties": !!bool "false"
                       "properties":
                         "category_path":
+                          "default": "/"
                           "type": "string"
                         "kind":
                           "enum":
@@ -12723,6 +13045,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -12778,6 +13102,8 @@
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -13081,6 +13407,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -13139,6 +13467,7 @@
                     "additionalProperties": !!bool "false"
                     "properties":
                       "category_path":
+                        "default": "/"
                         "type": "string"
                       "kind":
                         "enum":
@@ -13210,6 +13539,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -13298,6 +13629,8 @@
               "params":
                 "$defs":
                   "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
                     "oneOf":
                     - "additionalProperties": !!bool "false"
                       "properties":
@@ -13354,6 +13687,8 @@
                 "properties":
                   "items":
                     "items":
+                      "discriminator":
+                        "propertyName": "method"
                       "oneOf":
                       - "additionalProperties": !!bool "false"
                         "properties":
@@ -13481,6 +13816,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -13641,6 +13977,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -13688,11 +14025,13 @@
                             "additionalProperties": !!bool "false"
                             "properties":
                               "encoding":
+                                "default": "hex"
                                 "enum":
                                 - "base64"
                                 - "hex"
                                 "type": "string"
                               "length":
+                                "default": !!int "256"
                                 "maximum": !!int "65536"
                                 "minimum": !!int "1"
                                 "type": "integer"
@@ -13801,6 +14140,7 @@
                                 "additionalProperties": !!bool "false"
                                 "properties":
                                   "kind":
+                                    "default": "all"
                                     "enum":
                                     - "all"
                                     - "data"
@@ -13814,6 +14154,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -13886,6 +14227,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -13996,6 +14338,7 @@
                                 "additionalProperties": !!bool "false"
                                 "properties":
                                   "case_sensitive":
+                                    "default": !!bool "false"
                                     "type": "boolean"
                                   "name":
                                     "type": "string"
@@ -14009,6 +14352,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -14181,6 +14525,7 @@
                             "additionalProperties": !!bool "false"
                             "properties":
                               "delete_symbol":
+                                "default": !!bool "false"
                                 "type": "boolean"
                               "selector":
                                 "additionalProperties": !!bool "false"
@@ -14265,6 +14610,8 @@
                                 "additionalProperties": !!bool "false"
                                 "properties":
                                   "selector":
+                                    "discriminator":
+                                      "propertyName": "kind"
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
                                       "properties":
@@ -14317,6 +14664,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -14381,6 +14729,11 @@
                                 "additionalProperties": !!bool "false"
                                 "properties":
                                   "flow_overrides":
+                                    "default":
+                                    - "branch"
+                                    - "call"
+                                    - "call_return"
+                                    - "return"
                                     "items":
                                       "enum":
                                       - "branch"
@@ -14393,6 +14746,8 @@
                                     "minItems": !!int "1"
                                     "type": "array"
                                   "selector":
+                                    "discriminator":
+                                      "propertyName": "kind"
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
                                       "properties":
@@ -14447,6 +14802,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -14505,6 +14861,12 @@
                                 "additionalProperties": !!bool "false"
                                 "properties":
                                   "expected_flow_overrides":
+                                    "default":
+                                    - "none"
+                                    - "branch"
+                                    - "call"
+                                    - "call_return"
+                                    - "return"
                                     "items":
                                       "enum":
                                       - "branch"
@@ -14528,6 +14890,8 @@
                                 - "flow_override"
                                 "type": "object"
                               "selector":
+                                "discriminator":
+                                  "propertyName": "kind"
                                 "oneOf":
                                 - "additionalProperties": !!bool "false"
                                   "properties":
@@ -14687,6 +15051,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -14771,6 +15136,7 @@
                             "additionalProperties": !!bool "false"
                             "properties":
                               "disassemble":
+                                "default": !!bool "false"
                                 "type": "boolean"
                               "resource":
                                 "additionalProperties": !!bool "false"
@@ -14826,6 +15192,8 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "return_storage":
+                                    "discriminator":
+                                      "propertyName": "kind"
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
                                       "properties":
@@ -14932,6 +15300,8 @@
                                     "minimum": !!int "0"
                                     "type": "integer"
                                   "storage":
+                                    "discriminator":
+                                      "propertyName": "kind"
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
                                       "properties":
@@ -15004,6 +15374,8 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "storage":
+                                    "discriminator":
+                                      "propertyName": "kind"
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
                                       "properties":
@@ -15149,6 +15521,7 @@
                                 "additionalProperties": !!bool "false"
                                 "properties":
                                   "direction":
+                                    "default": "callees"
                                     "enum":
                                     - "callees"
                                     - "callers"
@@ -15166,6 +15539,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -15246,12 +15620,14 @@
                             "additionalProperties": !!bool "false"
                             "properties":
                               "format":
+                                "default": "text"
                                 "enum":
                                 - "document"
                                 - "text"
                                 - "tokens"
                                 "type": "string"
                               "include_comments":
+                                "default": !!bool "false"
                                 "type": "boolean"
                               "projection":
                                 "additionalProperties": !!bool "false"
@@ -15387,6 +15763,7 @@
                                   "address":
                                     "type": "string"
                                   "case_sensitive":
+                                    "default": !!bool "false"
                                     "type": "boolean"
                                   "name":
                                     "type": "string"
@@ -15404,6 +15781,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -15513,6 +15891,8 @@
                                   "from":
                                     "type": "string"
                                   "selector":
+                                    "discriminator":
+                                      "propertyName": "kind"
                                     "oneOf":
                                     - "additionalProperties": !!bool "false"
                                       "properties":
@@ -15569,6 +15949,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -15704,6 +16085,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -15932,6 +16314,7 @@
                                 "additionalProperties": !!bool "false"
                                 "properties":
                                   "path":
+                                    "default": "/"
                                     "type": "string"
                                 "type": "object"
                               "page":
@@ -15941,6 +16324,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -16041,6 +16425,7 @@
                                   "kind":
                                     "type": "string"
                                   "query":
+                                    "default": ""
                                     "type": "string"
                                 "type": "object"
                               "page":
@@ -16050,6 +16435,7 @@
                                     "minLength": !!int "1"
                                     "type": "string"
                                   "limit":
+                                    "default": !!int "100"
                                     "maximum": !!int "1000"
                                     "minimum": !!int "1"
                                     "type": "integer"
@@ -16098,10 +16484,13 @@
                             "additionalProperties": !!bool "false"
                             "properties":
                               "resource":
+                                "discriminator":
+                                  "propertyName": "kind"
                                 "oneOf":
                                 - "additionalProperties": !!bool "false"
                                   "properties":
                                     "category_path":
+                                      "default": "/"
                                       "type": "string"
                                     "kind":
                                       "enum":
@@ -16111,6 +16500,7 @@
                                       "minLength": !!int "1"
                                       "type": "string"
                                     "size":
+                                      "default": !!int "0"
                                       "maximum": !!int "2147483647"
                                       "minimum": !!int "0"
                                       "type": "integer"
@@ -16121,6 +16511,7 @@
                                 - "additionalProperties": !!bool "false"
                                   "properties":
                                     "category_path":
+                                      "default": "/"
                                       "type": "string"
                                     "kind":
                                       "enum":
@@ -16136,6 +16527,7 @@
                                 - "additionalProperties": !!bool "false"
                                   "properties":
                                     "category_path":
+                                      "default": "/"
                                       "type": "string"
                                     "kind":
                                       "enum":
@@ -16145,6 +16537,7 @@
                                       "minLength": !!int "1"
                                       "type": "string"
                                     "size":
+                                      "default": !!int "4"
                                       "maximum": !!int "8"
                                       "minimum": !!int "1"
                                       "type": "integer"
@@ -16157,6 +16550,7 @@
                                     "base_type":
                                       "$ref": "#/$defs/data_type_reference"
                                     "category_path":
+                                      "default": "/"
                                       "type": "string"
                                     "kind":
                                       "enum":
@@ -16173,6 +16567,7 @@
                                 - "additionalProperties": !!bool "false"
                                   "properties":
                                     "category_path":
+                                      "default": "/"
                                       "type": "string"
                                     "kind":
                                       "enum":
@@ -16240,6 +16635,8 @@
                             "additionalProperties": !!bool "false"
                             "properties":
                               "patch":
+                                "discriminator":
+                                  "propertyName": "kind"
                                 "oneOf":
                                 - "additionalProperties": !!bool "false"
                                   "properties":
@@ -16542,6 +16939,7 @@
                                 "additionalProperties": !!bool "false"
                                 "properties":
                                   "category_path":
+                                    "default": "/"
                                     "type": "string"
                                   "kind":
                                     "enum":
@@ -16636,6 +17034,7 @@
                     "minItems": !!int "1"
                     "type": "array"
                   "transaction_mode":
+                    "default": "per_item"
                     "enum":
                     - "all_or_none"
                     - "per_item"
@@ -16671,6 +17070,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -16759,6 +17160,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -16892,6 +17295,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -16957,6 +17362,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -16983,6 +17389,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -17041,6 +17449,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -17133,6 +17543,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -17210,6 +17622,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -17295,6 +17709,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -17360,6 +17776,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -17447,6 +17865,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -17503,6 +17923,8 @@
       "properties":
         "items":
           "items":
+            "discriminator":
+              "propertyName": "method"
             "oneOf":
             - "additionalProperties": !!bool "false"
               "properties":
@@ -17630,6 +18052,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -17790,6 +18213,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -17837,11 +18261,13 @@
                   "additionalProperties": !!bool "false"
                   "properties":
                     "encoding":
+                      "default": "hex"
                       "enum":
                       - "base64"
                       - "hex"
                       "type": "string"
                     "length":
+                      "default": !!int "256"
                       "maximum": !!int "65536"
                       "minimum": !!int "1"
                       "type": "integer"
@@ -17950,6 +18376,7 @@
                       "additionalProperties": !!bool "false"
                       "properties":
                         "kind":
+                          "default": "all"
                           "enum":
                           - "all"
                           - "data"
@@ -17963,6 +18390,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -18035,6 +18463,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -18145,6 +18574,7 @@
                       "additionalProperties": !!bool "false"
                       "properties":
                         "case_sensitive":
+                          "default": !!bool "false"
                           "type": "boolean"
                         "name":
                           "type": "string"
@@ -18158,6 +18588,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -18330,6 +18761,7 @@
                   "additionalProperties": !!bool "false"
                   "properties":
                     "delete_symbol":
+                      "default": !!bool "false"
                       "type": "boolean"
                     "selector":
                       "additionalProperties": !!bool "false"
@@ -18414,6 +18846,8 @@
                       "additionalProperties": !!bool "false"
                       "properties":
                         "selector":
+                          "discriminator":
+                            "propertyName": "kind"
                           "oneOf":
                           - "additionalProperties": !!bool "false"
                             "properties":
@@ -18466,6 +18900,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -18530,6 +18965,11 @@
                       "additionalProperties": !!bool "false"
                       "properties":
                         "flow_overrides":
+                          "default":
+                          - "branch"
+                          - "call"
+                          - "call_return"
+                          - "return"
                           "items":
                             "enum":
                             - "branch"
@@ -18542,6 +18982,8 @@
                           "minItems": !!int "1"
                           "type": "array"
                         "selector":
+                          "discriminator":
+                            "propertyName": "kind"
                           "oneOf":
                           - "additionalProperties": !!bool "false"
                             "properties":
@@ -18596,6 +19038,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -18654,6 +19097,12 @@
                       "additionalProperties": !!bool "false"
                       "properties":
                         "expected_flow_overrides":
+                          "default":
+                          - "none"
+                          - "branch"
+                          - "call"
+                          - "call_return"
+                          - "return"
                           "items":
                             "enum":
                             - "branch"
@@ -18677,6 +19126,8 @@
                       - "flow_override"
                       "type": "object"
                     "selector":
+                      "discriminator":
+                        "propertyName": "kind"
                       "oneOf":
                       - "additionalProperties": !!bool "false"
                         "properties":
@@ -18836,6 +19287,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -18920,6 +19372,7 @@
                   "additionalProperties": !!bool "false"
                   "properties":
                     "disassemble":
+                      "default": !!bool "false"
                       "type": "boolean"
                     "resource":
                       "additionalProperties": !!bool "false"
@@ -18975,6 +19428,8 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "return_storage":
+                          "discriminator":
+                            "propertyName": "kind"
                           "oneOf":
                           - "additionalProperties": !!bool "false"
                             "properties":
@@ -19081,6 +19536,8 @@
                           "minimum": !!int "0"
                           "type": "integer"
                         "storage":
+                          "discriminator":
+                            "propertyName": "kind"
                           "oneOf":
                           - "additionalProperties": !!bool "false"
                             "properties":
@@ -19153,6 +19610,8 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "storage":
+                          "discriminator":
+                            "propertyName": "kind"
                           "oneOf":
                           - "additionalProperties": !!bool "false"
                             "properties":
@@ -19298,6 +19757,7 @@
                       "additionalProperties": !!bool "false"
                       "properties":
                         "direction":
+                          "default": "callees"
                           "enum":
                           - "callees"
                           - "callers"
@@ -19315,6 +19775,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -19395,12 +19856,14 @@
                   "additionalProperties": !!bool "false"
                   "properties":
                     "format":
+                      "default": "text"
                       "enum":
                       - "document"
                       - "text"
                       - "tokens"
                       "type": "string"
                     "include_comments":
+                      "default": !!bool "false"
                       "type": "boolean"
                     "projection":
                       "additionalProperties": !!bool "false"
@@ -19536,6 +19999,7 @@
                         "address":
                           "type": "string"
                         "case_sensitive":
+                          "default": !!bool "false"
                           "type": "boolean"
                         "name":
                           "type": "string"
@@ -19553,6 +20017,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -19662,6 +20127,8 @@
                         "from":
                           "type": "string"
                         "selector":
+                          "discriminator":
+                            "propertyName": "kind"
                           "oneOf":
                           - "additionalProperties": !!bool "false"
                             "properties":
@@ -19718,6 +20185,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -19853,6 +20321,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -20081,6 +20550,7 @@
                       "additionalProperties": !!bool "false"
                       "properties":
                         "path":
+                          "default": "/"
                           "type": "string"
                       "type": "object"
                     "page":
@@ -20090,6 +20560,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -20190,6 +20661,7 @@
                         "kind":
                           "type": "string"
                         "query":
+                          "default": ""
                           "type": "string"
                       "type": "object"
                     "page":
@@ -20199,6 +20671,7 @@
                           "minLength": !!int "1"
                           "type": "string"
                         "limit":
+                          "default": !!int "100"
                           "maximum": !!int "1000"
                           "minimum": !!int "1"
                           "type": "integer"
@@ -20247,10 +20720,13 @@
                   "additionalProperties": !!bool "false"
                   "properties":
                     "resource":
+                      "discriminator":
+                        "propertyName": "kind"
                       "oneOf":
                       - "additionalProperties": !!bool "false"
                         "properties":
                           "category_path":
+                            "default": "/"
                             "type": "string"
                           "kind":
                             "enum":
@@ -20260,6 +20736,7 @@
                             "minLength": !!int "1"
                             "type": "string"
                           "size":
+                            "default": !!int "0"
                             "maximum": !!int "2147483647"
                             "minimum": !!int "0"
                             "type": "integer"
@@ -20270,6 +20747,7 @@
                       - "additionalProperties": !!bool "false"
                         "properties":
                           "category_path":
+                            "default": "/"
                             "type": "string"
                           "kind":
                             "enum":
@@ -20285,6 +20763,7 @@
                       - "additionalProperties": !!bool "false"
                         "properties":
                           "category_path":
+                            "default": "/"
                             "type": "string"
                           "kind":
                             "enum":
@@ -20294,6 +20773,7 @@
                             "minLength": !!int "1"
                             "type": "string"
                           "size":
+                            "default": !!int "4"
                             "maximum": !!int "8"
                             "minimum": !!int "1"
                             "type": "integer"
@@ -20306,6 +20786,7 @@
                           "base_type":
                             "$ref": "#/$defs/data_type_reference"
                           "category_path":
+                            "default": "/"
                             "type": "string"
                           "kind":
                             "enum":
@@ -20322,6 +20803,7 @@
                       - "additionalProperties": !!bool "false"
                         "properties":
                           "category_path":
+                            "default": "/"
                             "type": "string"
                           "kind":
                             "enum":
@@ -20389,6 +20871,8 @@
                   "additionalProperties": !!bool "false"
                   "properties":
                     "patch":
+                      "discriminator":
+                        "propertyName": "kind"
                       "oneOf":
                       - "additionalProperties": !!bool "false"
                         "properties":
@@ -20691,6 +21175,7 @@
                       "additionalProperties": !!bool "false"
                       "properties":
                         "category_path":
+                          "default": "/"
                           "type": "string"
                         "kind":
                           "enum":
@@ -20785,6 +21270,7 @@
           "minItems": !!int "1"
           "type": "array"
         "transaction_mode":
+          "default": "per_item"
           "enum":
           - "all_or_none"
           - "per_item"
@@ -20795,6 +21281,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -20913,6 +21401,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -20971,6 +21461,7 @@
           "additionalProperties": !!bool "false"
           "properties":
             "kind":
+              "default": "all"
               "enum":
               - "all"
               - "data"
@@ -20984,6 +21475,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -21031,6 +21523,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -21089,6 +21583,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -21243,6 +21739,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -21325,6 +21823,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -21401,6 +21901,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -21496,6 +21998,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -21589,6 +22093,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -21666,6 +22172,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -21743,6 +22251,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -21783,6 +22292,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -21841,6 +22352,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -21959,6 +22472,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22047,6 +22562,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22123,6 +22640,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22205,6 +22724,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22281,6 +22802,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22336,10 +22859,13 @@
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
               "category_path":
+                "default": "/"
                 "type": "string"
               "kind":
                 "enum":
@@ -22349,6 +22875,7 @@
                 "minLength": !!int "1"
                 "type": "string"
               "size":
+                "default": !!int "0"
                 "maximum": !!int "2147483647"
                 "minimum": !!int "0"
                 "type": "integer"
@@ -22359,6 +22886,7 @@
           - "additionalProperties": !!bool "false"
             "properties":
               "category_path":
+                "default": "/"
                 "type": "string"
               "kind":
                 "enum":
@@ -22374,6 +22902,7 @@
           - "additionalProperties": !!bool "false"
             "properties":
               "category_path":
+                "default": "/"
                 "type": "string"
               "kind":
                 "enum":
@@ -22383,6 +22912,7 @@
                 "minLength": !!int "1"
                 "type": "string"
               "size":
+                "default": !!int "4"
                 "maximum": !!int "8"
                 "minimum": !!int "1"
                 "type": "integer"
@@ -22395,6 +22925,7 @@
               "base_type":
                 "$ref": "#/$defs/data_type_reference"
               "category_path":
+                "default": "/"
                 "type": "string"
               "kind":
                 "enum":
@@ -22411,6 +22942,7 @@
           - "additionalProperties": !!bool "false"
             "properties":
               "category_path":
+                "default": "/"
                 "type": "string"
               "kind":
                 "enum":
@@ -22463,6 +22995,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22640,6 +23174,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22726,6 +23262,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22820,6 +23358,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -22992,6 +23532,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -23054,6 +23596,7 @@
             "kind":
               "type": "string"
             "query":
+              "default": ""
               "type": "string"
           "type": "object"
         "page":
@@ -23063,6 +23606,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -23096,6 +23640,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -23154,6 +23700,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -23335,6 +23883,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -23390,6 +23940,8 @@
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -23674,6 +24226,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -23851,6 +24405,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -23909,6 +24465,7 @@
           "additionalProperties": !!bool "false"
           "properties":
             "category_path":
+              "default": "/"
               "type": "string"
             "kind":
               "enum":
@@ -23961,6 +24518,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -24138,6 +24697,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -24196,6 +24757,7 @@
           "additionalProperties": !!bool "false"
           "properties":
             "path":
+              "default": "/"
               "type": "string"
           "type": "object"
         "page":
@@ -24205,6 +24767,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -24229,6 +24792,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -24287,6 +24852,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -24378,6 +24945,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -24443,6 +25012,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -24486,6 +25056,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -24544,6 +25116,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -24692,6 +25266,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -24747,12 +25323,14 @@
       "additionalProperties": !!bool "false"
       "properties":
         "format":
+          "default": "text"
           "enum":
           - "document"
           - "text"
           - "tokens"
           "type": "string"
         "include_comments":
+          "default": !!bool "false"
           "type": "boolean"
         "projection":
           "additionalProperties": !!bool "false"
@@ -24801,6 +25379,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -24861,6 +25441,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -24977,6 +25559,8 @@
                     "symbol":
                       "$defs":
                         "data_type_reference":
+                          "discriminator":
+                            "propertyName": "kind"
                           "oneOf":
                           - "additionalProperties": !!bool "false"
                             "properties":
@@ -25123,6 +25707,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -25181,6 +25767,11 @@
           "additionalProperties": !!bool "false"
           "properties":
             "flow_overrides":
+              "default":
+              - "branch"
+              - "call"
+              - "call_return"
+              - "return"
               "items":
                 "enum":
                 - "branch"
@@ -25193,6 +25784,8 @@
               "minItems": !!int "1"
               "type": "array"
             "selector":
+              "discriminator":
+                "propertyName": "kind"
               "oneOf":
               - "additionalProperties": !!bool "false"
                 "properties":
@@ -25247,6 +25840,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -25287,6 +25881,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -25345,6 +25941,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -25498,6 +26096,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -25556,6 +26156,12 @@
           "additionalProperties": !!bool "false"
           "properties":
             "expected_flow_overrides":
+              "default":
+              - "none"
+              - "branch"
+              - "call"
+              - "call_return"
+              - "return"
               "items":
                 "enum":
                 - "branch"
@@ -25579,6 +26185,8 @@
           - "flow_override"
           "type": "object"
         "selector":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -25630,6 +26238,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -25688,6 +26298,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -25805,6 +26417,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -25860,6 +26474,7 @@
       "additionalProperties": !!bool "false"
       "properties":
         "disassemble":
+          "default": !!bool "false"
           "type": "boolean"
         "resource":
           "additionalProperties": !!bool "false"
@@ -25879,6 +26494,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -25976,6 +26593,8 @@
               "name":
                 "type": "string"
               "storage":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -26032,6 +26651,8 @@
                 "minimum": !!int "0"
                 "type": "integer"
               "storage":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -26071,6 +26692,8 @@
         "repeatable_comment":
           "type": "string"
         "return_storage":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -26162,6 +26785,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -26248,6 +26873,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -26361,6 +26988,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -26456,6 +27085,8 @@
               "name":
                 "type": "string"
               "storage":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -26509,6 +27140,8 @@
                 "minimum": !!int "0"
                 "type": "integer"
               "storage":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -26543,6 +27176,8 @@
         "repeatable_comment":
           "type": "string"
         "return_storage":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -26635,6 +27270,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -26710,6 +27347,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -26779,6 +27417,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -26837,6 +27477,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -26932,6 +27574,8 @@
                     "name":
                       "type": "string"
                     "storage":
+                      "discriminator":
+                        "propertyName": "kind"
                       "oneOf":
                       - "additionalProperties": !!bool "false"
                         "properties":
@@ -26985,6 +27629,8 @@
                       "minimum": !!int "0"
                       "type": "integer"
                     "storage":
+                      "discriminator":
+                        "propertyName": "kind"
                       "oneOf":
                       - "additionalProperties": !!bool "false"
                         "properties":
@@ -27019,6 +27665,8 @@
               "repeatable_comment":
                 "type": "string"
               "return_storage":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -27152,6 +27800,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -27228,6 +27878,8 @@
               "minLength": !!int "1"
               "type": "string"
             "return_storage":
+              "discriminator":
+                "propertyName": "kind"
               "oneOf":
               - "additionalProperties": !!bool "false"
                 "properties":
@@ -27278,6 +27930,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -27375,6 +28029,8 @@
               "name":
                 "type": "string"
               "storage":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -27431,6 +28087,8 @@
                 "minimum": !!int "0"
                 "type": "integer"
               "storage":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -27470,6 +28128,8 @@
         "repeatable_comment":
           "type": "string"
         "return_storage":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -27562,6 +28222,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -27620,6 +28282,7 @@
           "additionalProperties": !!bool "false"
           "properties":
             "direction":
+              "default": "callees"
               "enum":
               - "callees"
               - "callers"
@@ -27637,6 +28300,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -27665,6 +28329,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -27723,6 +28389,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -27813,6 +28481,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -27897,6 +28567,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -27956,6 +28628,8 @@
         "name":
           "type": "string"
         "storage":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -27998,6 +28672,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28065,6 +28741,8 @@
               "minimum": !!int "0"
               "type": "integer"
             "storage":
+              "discriminator":
+                "propertyName": "kind"
               "oneOf":
               - "additionalProperties": !!bool "false"
                 "properties":
@@ -28113,6 +28791,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28176,6 +28856,8 @@
           "minimum": !!int "0"
           "type": "integer"
         "storage":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28218,6 +28900,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28309,6 +28993,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28373,6 +29059,8 @@
               "minLength": !!int "1"
               "type": "string"
             "storage":
+              "discriminator":
+                "propertyName": "kind"
               "oneOf":
               - "additionalProperties": !!bool "false"
                 "properties":
@@ -28422,6 +29110,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28485,6 +29175,8 @@
           "minimum": !!int "0"
           "type": "integer"
         "storage":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28528,6 +29220,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28604,6 +29298,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28692,6 +29388,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28747,6 +29445,7 @@
       "additionalProperties": !!bool "false"
       "properties":
         "delete_symbol":
+          "default": !!bool "false"
           "type": "boolean"
         "selector":
           "additionalProperties": !!bool "false"
@@ -28780,6 +29479,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28869,6 +29570,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -28957,6 +29660,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29015,6 +29720,7 @@
           "additionalProperties": !!bool "false"
           "properties":
             "case_sensitive":
+              "default": !!bool "false"
               "type": "boolean"
             "name":
               "type": "string"
@@ -29028,6 +29734,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -29073,6 +29780,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29131,6 +29840,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -29260,6 +29971,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29340,6 +30053,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29428,6 +30143,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29504,6 +30221,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29591,6 +30310,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29681,6 +30402,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29792,6 +30515,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -29850,6 +30575,8 @@
           "additionalProperties": !!bool "false"
           "properties":
             "selector":
+              "discriminator":
+                "propertyName": "kind"
               "oneOf":
               - "additionalProperties": !!bool "false"
                 "properties":
@@ -29902,6 +30629,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -29948,6 +30676,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30006,6 +30736,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -30158,6 +30890,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30265,6 +30999,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30320,11 +31056,13 @@
       "additionalProperties": !!bool "false"
       "properties":
         "encoding":
+          "default": "hex"
           "enum":
           - "base64"
           - "hex"
           "type": "string"
         "length":
+          "default": !!int "256"
           "maximum": !!int "65536"
           "minimum": !!int "1"
           "type": "integer"
@@ -30360,6 +31098,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30447,6 +31187,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30565,6 +31307,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30658,6 +31402,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30753,6 +31499,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30826,6 +31574,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -30858,6 +31607,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -30916,6 +31667,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -31020,6 +31773,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31102,6 +31857,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31199,6 +31956,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31274,6 +32033,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31349,6 +32110,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31431,6 +32194,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31496,6 +32261,8 @@
             "from":
               "type": "string"
             "selector":
+              "discriminator":
+                "propertyName": "kind"
               "oneOf":
               - "additionalProperties": !!bool "false"
                 "properties":
@@ -31552,6 +32319,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -31597,6 +32365,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31655,6 +32425,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -31805,6 +32577,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31878,6 +32652,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -31953,6 +32729,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -32029,6 +32807,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -32118,6 +32898,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -32207,6 +32989,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -32293,6 +33077,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -32353,6 +33139,7 @@
             "address":
               "type": "string"
             "case_sensitive":
+              "default": !!bool "false"
               "type": "boolean"
             "name":
               "type": "string"
@@ -32370,6 +33157,7 @@
               "minLength": !!int "1"
               "type": "string"
             "limit":
+              "default": !!int "100"
               "maximum": !!int "1000"
               "minimum": !!int "1"
               "type": "integer"
@@ -32415,6 +33203,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -32473,6 +33263,8 @@
           "items":
             "$defs":
               "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
                 "oneOf":
                 - "additionalProperties": !!bool "false"
                   "properties":
@@ -32601,6 +33393,8 @@
     "input_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":
@@ -32680,6 +33474,8 @@
     "output_schema":
       "$defs":
         "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
           "oneOf":
           - "additionalProperties": !!bool "false"
             "properties":

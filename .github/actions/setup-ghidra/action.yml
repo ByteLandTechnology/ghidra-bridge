@@ -27,7 +27,7 @@ runs:
 
     - name: Cache Ghidra distribution
       id: cache-ghidra
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/ghidra-dist
         key: ghidra-${{ inputs.ghidra-version }}-${{ inputs.ghidra-build-date }}-${{ runner.os }}
@@ -65,4 +65,5 @@ runs:
           echo "Cannot find an extracted Ghidra directory under ${ghidra_dist}/" >&2
           exit 1
         fi
-        echo "GHIDRA_INSTALL_DIR=$(cd "$install_dir" && pwd)" >> "$GITHUB_ENV"
+        resolved_dir="$(cd "$install_dir" && pwd)"
+        echo "GHIDRA_INSTALL_DIR=${resolved_dir}" >> "$GITHUB_ENV"

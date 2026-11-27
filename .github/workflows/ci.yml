@@ -21,12 +21,41 @@ env:
   GHIDRA_ZIP_SHA256: "b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d"
 
 jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check workflows with actionlint
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          curl -sL --fail -o "$RUNNER_TEMP/actionlint/${archive}" "$url"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint/${archive}" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint/${archive}" -C "$RUNNER_TEMP/actionlint" actionlint
+          "$RUNNER_TEMP/actionlint/actionlint"
+
+      - name: Check shell scripts with ShellCheck
+        run: shellcheck .github/scripts/*.sh
+
+      - name: Verify repository hygiene
+        run: bash .github/scripts/verify-repository-hygiene.sh
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -54,9 +83,21 @@ jobs:
       - name: Test release archive reproducibility
         run: python3 tests/release_archive_reproducibility.py
 
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verify-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/**/*.xml
+            modules/**/build/reports/tests/**
+            build/reports/headless-regression/**
+
   release:
     # Update the release PR or create a release after main passes verification.
-    needs: verify
+    needs: [lint, verify]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -71,7 +112,7 @@ jobs:
     steps:
       - name: Update release PR or create release
         id: release
-        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           target-branch: main
@@ -89,7 +130,7 @@ jobs:
       attestations: write
     steps:
       - name: Checkout release
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release.outputs.sha }}
           persist-credentials: false
@@ -151,3 +192,15 @@ jobs:
         run: |
           release_api="$(gh release view "$RELEASE_TAG" --json apiUrl --jq .apiUrl)"
           gh api --method PATCH "$release_api" -F draft=false -f make_latest=legacy --silent
+
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: publish-test-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            modules/**/build/test-results/**/*.xml
+            modules/**/build/reports/tests/**
+            build/reports/headless-regression/**

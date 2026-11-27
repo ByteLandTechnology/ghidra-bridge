@@ -1,3 +1,13 @@
+import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
+import org.gradle.api.tasks.testing.TestDescriptor
+import org.gradle.api.tasks.testing.TestListener
+import org.gradle.api.tasks.testing.TestOutputEvent
+import org.gradle.api.tasks.testing.TestOutputListener
+import org.gradle.api.tasks.testing.TestResult
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
 plugins {
     id 'base'
 }
@@ -31,6 +41,65 @@ subprojects {
     }
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
+        timeout.set(Duration.ofMinutes(5))
+        [
+            'junit.jupiter.execution.timeout.default': '30s',
+            'junit.jupiter.execution.timeout.testable.method.default': '30s',
+            'junit.jupiter.execution.timeout.lifecycle.method.default': '30s',
+            'junit.jupiter.execution.timeout.thread.mode.default': 'SAME_THREAD',
+            'junit.jupiter.execution.timeout.mode': 'disabled_on_debug',
+            'junit.jupiter.execution.timeout.threaddump.enabled': 'true',
+        ].each { String key, String defaultValue ->
+            systemProperty key, providers.systemProperty(key).getOrElse(defaultValue)
+        }
+        testLogging {
+            events TestLogEvent.FAILED
+            exceptionFormat = TestExceptionFormat.FULL
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
+            showStandardStreams = false
+        }
+        def bufferedStdout = new ConcurrentHashMap<Object, StringBuffer>()
+        def bufferedStderr = new ConcurrentHashMap<Object, StringBuffer>()
+        addTestOutputListener({ TestDescriptor descriptor, TestOutputEvent event ->
+            def target = event.destination == TestOutputEvent.Destination.StdErr ? bufferedStderr : bufferedStdout
+            target.computeIfAbsent(descriptor.id) { new StringBuffer() }.append(event.message)
+        } as TestOutputListener)
+        def printBufferedStreamsOnFailure = { TestDescriptor descriptor, TestResult result ->
+            def stdoutText = bufferedStdout.remove(descriptor.id)
+            def stderrText = bufferedStderr.remove(descriptor.id)
+            if (result.resultType == TestResult.ResultType.FAILURE) {
+                def label = descriptor.className ? "${descriptor.className}.${descriptor.name}" : descriptor.name
+                if (stdoutText != null && stdoutText.length() > 0) {
+                    logger.lifecycle("\nStandard output (${label}):\n${stdoutText.toString().stripTrailing()}")
+                }
+                if (stderrText != null && stderrText.length() > 0) {
+                    logger.lifecycle("\nStandard error (${label}):\n${stderrText.toString().stripTrailing()}")
+                }
+            }
+            if (descriptor.parent == null) {
+                bufferedStdout.clear()
+                bufferedStderr.clear()
+            }
+        }
+        addTestListener(new TestListener() {
+            @Override
+            void beforeSuite(TestDescriptor suite) {}
+
+            @Override
+            void afterSuite(TestDescriptor suite, TestResult result) {
+                printBufferedStreamsOnFailure(suite, result)
+            }
+
+            @Override
+            void beforeTest(TestDescriptor testDescriptor) {}
+
+            @Override
+            void afterTest(TestDescriptor testDescriptor, TestResult result) {
+                printBufferedStreamsOnFailure(testDescriptor, result)
+            }
+        })
     }
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
@@ -237,13 +306,74 @@ project(':launcher').tasks.named('test', Test) {
     classpath += files(tasks.named('compileGeneratedScripts'))
 }
 
+def stripJavaComments = { String source ->
+    def result = new StringBuilder(source.length())
+    int index = 0
+    int length = source.length()
+    while (index < length) {
+        char current = source.charAt(index)
+        char next = index + 1 < length ? source.charAt(index + 1) : (char) 0
+        if (current == (char) '/' && next == (char) '/') {
+            index += 2
+            while (index < length && source.charAt(index) != (char) '\n') {
+                index++
+            }
+            continue
+        }
+        if (current == (char) '/' && next == (char) '*') {
+            boolean multiline = false
+            index += 2
+            while (index + 1 < length
+                && !(source.charAt(index) == (char) '*' && source.charAt(index + 1) == (char) '/')) {
+                if (source.charAt(index) == (char) '\n') {
+                    multiline = true
+                }
+                index++
+            }
+            index = Math.min(length, index + 2)
+            result.append(multiline ? '\n' : ' ')
+            continue
+        }
+        if (current == (char) '"' && index + 2 < length
+            && source.charAt(index + 1) == (char) '"' && source.charAt(index + 2) == (char) '"') {
+            index += 3
+            while (index + 2 < length
+                && !(source.charAt(index) == (char) '"'
+                    && source.charAt(index + 1) == (char) '"'
+                    && source.charAt(index + 2) == (char) '"')) {
+                index += source.charAt(index) == (char) '\\' ? 2 : 1
+            }
+            index = Math.min(length, index + 3)
+            result.append('""')
+            continue
+        }
+        if (current == (char) '"' || current == (char) '\'') {
+            char quote = current
+            index++
+            while (index < length && source.charAt(index) != quote && source.charAt(index) != (char) '\n') {
+                index += source.charAt(index) == (char) '\\' ? 2 : 1
+            }
+            if (index < length && source.charAt(index) == quote) {
+                index++
+            }
+            result.append(quote).append(quote)
+            continue
+        }
+        result.append(current)
+        index++
+    }
+    return result.toString()
+}
+
 tasks.register('verifyArchitecture') {
     group = 'verification'
     doLast {
+        def forbiddenImport = ~/(?m)^\s*import\s+(?:static\s+)?ghidra\..*/
         ['domain', 'wire', 'contracts', 'runtime', 'transport/websocket', 'transport/mcp']
             .each { module ->
-            fileTree("modules/${module}/src/main/java") { include '**/*.java' }.each { source ->
-                if (source.readLines().any { it ==~ /^import ghidra\..*/ }) {
+            fileTree("modules/${module}/src") { include '**/*.java' }.each { source ->
+                def stripped = stripJavaComments(source.getText('UTF-8'))
+                if (forbiddenImport.matcher(stripped).find()) {
                     throw new GradleException("Ghidra API import outside adapter/launcher: ${source}")
                 }
             }
@@ -251,7 +381,15 @@ tasks.register('verifyArchitecture') {
     }
 }
 
+tasks.register('verifyMcpDocumentation', JavaExec) {
+    group = 'verification'
+    dependsOn project(':transport:mcp').tasks.named('classes'), 'verifyApiContracts'
+    classpath = project(':transport:mcp').sourceSets.main.runtimeClasspath
+    mainClass = 'app.byteland.ghidra.mcp.McpContractGenerator'
+    args '--verify', rootDir.absolutePath
+}
+
 tasks.register('verify') {
     group = 'verification'
-    dependsOn 'check', 'verifyApiContracts', 'verifyDistribution', 'verifyArchitecture'
+    dependsOn 'check', 'verifyApiContracts', 'verifyMcpDocumentation', 'verifyDistribution', 'verifyArchitecture'
 }

@@ -1,10 +1,12 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import ghidra.app.script.GhidraScript;
+import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.address.AddressFormatException;
 import ghidra.program.model.address.AddressSpace;
+import ghidra.program.model.address.SegmentedAddressSpace;
 import ghidra.program.model.listing.Program;
 import ghidra.program.util.AddressEvaluator;
 import java.util.Locale;
@@ -23,12 +25,16 @@ public final class AddressUtil {
       throw new IllegalArgumentException("address is required");
     }
     String value = rawAddress.trim();
-    Address address = AddressEvaluator.evaluate(program, value);
+    AddressFactory addressFactory = program.getAddressFactory();
+    Address address = tryCanonicalSpaceAddress(addressFactory, value);
+    if (address == null) {
+      address = AddressEvaluator.evaluate(program, value);
+    }
     if (address == null) {
       address = AddressEvaluator.evaluate(program, "0x" + value);
     }
     if (address == null) {
-      address = tryAddressWithDefaultSpace(program.getAddressFactory(), value);
+      address = tryAddressWithDefaultSpace(addressFactory, value);
     }
     if (address == null) {
       throw new IllegalArgumentException("unable to parse address: " + rawAddress);
@@ -40,7 +46,14 @@ public final class AddressUtil {
     if (script == null) {
       throw new IllegalArgumentException("script is required");
     }
-    Program program = script.getCurrentProgram();
+    return parseAddress((FlatProgramAPI) script, rawAddress);
+  }
+
+  public static Address parseAddress(FlatProgramAPI api, String rawAddress) {
+    if (api == null) {
+      throw new IllegalArgumentException("api is required");
+    }
+    Program program = api.getCurrentProgram();
     if (program != null) {
       return parseAddress(program, rawAddress);
     }
@@ -48,17 +61,60 @@ public final class AddressUtil {
       throw new IllegalArgumentException("address is required");
     }
     String value = rawAddress.trim();
-    Address address = toAddress(script, value);
+    Address address = tryCanonicalSpaceAddress(api.getAddressFactory(), value);
     if (address == null) {
-      address = toAddress(script, "0x" + value);
+      address = toAddress(api, value);
     }
     if (address == null) {
-      address = tryAddressWithDefaultSpace(script.getAddressFactory(), value);
+      address = toAddress(api, "0x" + value);
+    }
+    if (address == null) {
+      address = tryAddressWithDefaultSpace(api.getAddressFactory(), value);
     }
     if (address == null) {
       throw new IllegalArgumentException("unable to parse address: " + rawAddress);
     }
     return address;
+  }
+
+  private static Address tryCanonicalSpaceAddress(AddressFactory addressFactory, String value) {
+    if (addressFactory == null) {
+      return null;
+    }
+    int idx = value.indexOf(':');
+    if (idx <= 0 || idx + 1 >= value.length()) {
+      return null;
+    }
+    String offsetPart = normalizeOffset(value.substring(idx + 1));
+    if (!isHexDigits(offsetPart)) {
+      return null;
+    }
+    AddressSpace namedSpace = addressFactory.getAddressSpace(value.substring(0, idx));
+    if (namedSpace == null || namedSpace instanceof SegmentedAddressSpace) {
+      return null;
+    }
+    try {
+      return namedSpace.getAddress(offsetPart);
+    } catch (AddressFormatException ignored) {
+      return null;
+    }
+  }
+
+  private static boolean isHexDigits(String value) {
+    if (value == null || value.isEmpty()) {
+      return false;
+    }
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      boolean hex =
+          (ch >= '0' && ch <= '9')
+              || (ch >= 'a' && ch <= 'f')
+              || (ch >= 'A' && ch <= 'F');
+      if (!hex) {
+        return false;
+      }
+    }
+    return true;
   }
 
   public static String canonicalAddress(Address address) {
@@ -110,7 +166,7 @@ public final class AddressUtil {
     }
   }
 
-  private static Address toAddress(GhidraScript script, String value) {
-    return script.toAddr(value);
+  private static Address toAddress(FlatProgramAPI api, String value) {
+    return api.toAddr(value);
   }
 }

@@ -34,6 +34,8 @@ Thumbs.db
 
 # Ignore compiler output, crash files, and logs.
 .kotlin/
+__pycache__/
+*.py[cod]
 bin/
 out/
 *.log

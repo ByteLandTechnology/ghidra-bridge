@@ -51,6 +51,24 @@ Follow these repository rules when you change code:
 
 ## Verification Commands
 
+### Workflow, Shell, and Hygiene Checks
+
+Check GitHub Actions workflows, shell scripts, tracked files, duplicates, API method counts, SHA-pinned GitHub Actions, URLs, and MCP tool names:
+
+```bash
+actionlint
+shellcheck .github/scripts/*.sh
+bash .github/scripts/verify-repository-hygiene.sh
+```
+
+### Architecture Check (`verifyArchitecture`)
+
+Check module import boundaries without a Ghidra installation:
+
+```bash
+./gradlew --no-daemon verifyArchitecture
+```
+
 ### Module Checks and Unit Tests (`check`)
 
 Run JUnit Platform test suites and module checks across all 8 Java subprojects:
@@ -77,16 +95,33 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
 `verify` runs:
 - `check`: JUnit tests and checks across all 8 Java subprojects.
 - `verifyApiContracts`: Checks that tracked contracts match generated output.
+- `verifyMcpDocumentation`: Checks MCP tool contract rules and MCP documentation consistency.
 - `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra (`compileGeneratedScripts`).
 - `verifyArchitecture`: Checks that no module outside `adapter` and `launcher` imports `ghidra.*`.
 
-### Repository Hygiene Check
+### Test Timeouts, Debugging, and Failure Reports
 
-Check tracked files, build artifacts, duplicates, API method counts, and SHA-pinned GitHub Actions:
+Every Gradle `Test` task sets:
+- A **5-minute** Gradle task timeout (`Duration.ofMinutes(5)`).
+- **30-second** cooperative (`SAME_THREAD`) JUnit Jupiter timeouts for test and lifecycle methods (`junit.jupiter.execution.timeout.default=30s`, `junit.jupiter.execution.timeout.testable.method.default=30s`, `junit.jupiter.execution.timeout.lifecycle.method.default=30s`) with thread dumps (`junit.jupiter.execution.timeout.threaddump.enabled=true`).
+- `FULL` exception output with causes and stack traces. Gradle prints buffered `stdout` and `stderr` streams only when a test fails.
+
+`junit.jupiter.execution.timeout.mode` defaults to `disabled_on_debug`. Attach a debugger to disable JUnit timeouts:
 
 ```bash
-bash .github/scripts/verify-repository-hygiene.sh
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test --debug-jvm
 ```
+
+To disable JUnit timeouts without a debugger:
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon -Djunit.jupiter.execution.timeout.mode=disabled :adapter:test
+```
+
+Test runs write failure reports to:
+- JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
+- JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
+- Headless regression failure log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
 
 ### Headless Regression Tests
 
@@ -98,9 +133,11 @@ python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analy
 
 ### Exact Local CI Sequence
 
-Run these four commands in order to match the `verify` job in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
+Run these six commands in order to match the `lint` and `verify` jobs in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
 
 ```bash
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
@@ -109,7 +146,7 @@ python3 tests/release_archive_reproducibility.py
 
 ### Release Archives and Provenance
 
-Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, then build the deterministic release archive in `build/release/`. Run `tests/release_archive_reproducibility.py` to test archive reproducibility across delayed runs:
+Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, run Gradle verification with `--stacktrace`, and build the deterministic release archive and SHA-256 checksum in `build/release/`. Run `tests/release_archive_reproducibility.py` to test archive reproducibility across delayed runs:
 
 ```bash
 bash .github/scripts/package-release.sh
@@ -125,7 +162,7 @@ gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghid
 
 ## Releases
 
-- CI keeps the `verify -> release -> publish` job sequence without cross-job workflow artifacts.
+- CI keeps the `[lint, verify] -> release -> publish` job sequence without cross-job workflow artifacts.
 - `release-please` creates a `v<version>` tag and a draft GitHub release (`"draft": true` and `"force-tag-creation": true` in `release-please-config.json`).
 - `publish` gets `needs.release.outputs.sha` with `persist-credentials: false` and checks `HEAD`, the `v<version>` tag, the remote tag SHA, `isDraft == true`, `.release-please-manifest.json`, and `version.txt`.
 - `publish` runs `package-release.sh` (which runs `verify` in CI and `clean verify` locally) and `tests/function_mutation_regression.py` before asset upload.

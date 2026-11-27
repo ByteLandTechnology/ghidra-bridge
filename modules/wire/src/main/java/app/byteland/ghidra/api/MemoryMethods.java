@@ -84,9 +84,10 @@ final class MemoryMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 addressSelector,
                 ApiVocabulary.LENGTH,
-                WireSchema.integer(1, MemoryService.MAX_RANGE_LENGTH),
+                ApiSchemaCatalog.integerWithDefault(1, MemoryService.MAX_RANGE_LENGTH, 256),
                 ApiVocabulary.ENCODING,
-                WireSchema.stringEnum(ApiVocabulary.HEX, "base64"),
+                WireSchema.withDefault(
+                    WireSchema.stringEnum(ApiVocabulary.HEX, "base64"), ApiVocabulary.HEX),
                 ApiVocabulary.FIELDS,
                 fields),
             ApiVocabulary.SELECTOR),
@@ -94,15 +95,14 @@ final class MemoryMethods implements ApiMethodProvider {
         memoryFields,
         List.of(ApiVocabulary.ADDRESS),
         request ->
-            WireValues.resource(
-                registry
-                    .services()
-                    .memoryService()
-                    .readMemoryRange(
-                        text(selector(request), ApiVocabulary.ADDRESS),
-                        integer(request, ApiVocabulary.LENGTH, 256),
-                        byteEncoding(
-                            optionalText(request, ApiVocabulary.ENCODING, ApiVocabulary.HEX)))));
+            registry
+                .services()
+                .memoryService()
+                .readMemoryRange(
+                    text(selector(request), ApiVocabulary.ADDRESS),
+                    integer(request, ApiVocabulary.LENGTH, 256),
+                    byteEncoding(
+                        optionalText(request, ApiVocabulary.ENCODING, ApiVocabulary.HEX))));
     registry.writeResult(
         "memory.write",
         MethodEffects.mutation(true, true),
