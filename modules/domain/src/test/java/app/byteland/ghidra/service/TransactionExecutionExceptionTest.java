@@ -124,7 +124,8 @@ class TransactionExecutionExceptionTest {
   }
 
   @Test
-  @DisplayName("Default serialization excludes non-serializable details while keeping in-memory map")
+  @DisplayName(
+      "Default serialization excludes non-serializable details while keeping in-memory map")
   void testSerializationExcludesNonSerializableDetails() throws Exception {
     Object nonSerializableDiagnostic = new Object();
     Map<String, Object> details = Map.of("diagnostic", nonSerializableDiagnostic);

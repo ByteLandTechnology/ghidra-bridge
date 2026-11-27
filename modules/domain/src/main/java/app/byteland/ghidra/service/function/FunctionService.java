@@ -5,13 +5,9 @@ import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import java.util.Set;
 
-/**
- * Manages functions, parameters, local variables, and call graphs.
- */
+/** Manages functions, parameters, local variables, and call graphs. */
 public interface FunctionService {
-  /**
-   * Patch for Boolean and integer function attributes.
-   */
+  /** Patch for Boolean and integer function attributes. */
   record FunctionAttributePatch(
       Boolean isInline,
       Boolean hasNoReturn,
@@ -23,9 +19,7 @@ public interface FunctionService {
     }
   }
 
-  /**
-   * Search criteria and filters for function list queries.
-   */
+  /** Search criteria and filters for function list queries. */
   record FunctionQuery(
       AddressScanOptions scan,
       int limit,
@@ -66,9 +60,7 @@ public interface FunctionService {
   /** Deletes a function at its entry address. */
   void deleteFunction(String rawAddress);
 
-  /**
-   * Updates function name, comments, signature, and attributes.
-   */
+  /** Updates function name, comments, signature, and attributes. */
   void patchFunction(
       String rawAddress,
       String newName,
@@ -79,19 +71,13 @@ public interface FunctionService {
       String callingConvention,
       FunctionAttributePatch attributes);
 
-  /**
-   * Returns one page of functions that call the target function.
-   */
+  /** Returns one page of functions that call the target function. */
   Page<FunctionCallResource> getCallers(String rawAddress, int limit, String cursor);
 
-  /**
-   * Returns one page of functions called by the target function.
-   */
+  /** Returns one page of functions called by the target function. */
   Page<FunctionCallResource> getCallees(String rawAddress, int limit, String cursor);
 
-  /**
-   * Updates a function parameter that exists.
-   */
+  /** Updates a function parameter that exists. */
   void patchParameter(
       String rawAddress,
       int ordinal,
@@ -99,9 +85,7 @@ public interface FunctionService {
       DataTypeReference newDataType,
       VariableStorageReference storage);
 
-  /**
-   * Adds a new parameter to a function signature.
-   */
+  /** Adds a new parameter to a function signature. */
   void addParameter(
       String rawAddress,
       int ordinal,
@@ -109,14 +93,10 @@ public interface FunctionService {
       DataTypeReference dataType,
       VariableStorageReference storage);
 
-  /**
-   * Removes a parameter from a function signature.
-   */
+  /** Removes a parameter from a function signature. */
   void removeParameter(String rawAddress, int ordinal);
 
-  /**
-   * Updates a local variable in a function.
-   */
+  /** Updates a local variable in a function. */
   void patchLocalVariable(
       String rawAddress, String variableName, String newName, DataTypeReference newDataType);
 }

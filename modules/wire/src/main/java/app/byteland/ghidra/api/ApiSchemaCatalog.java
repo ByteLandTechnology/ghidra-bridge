@@ -317,12 +317,7 @@ final class ApiSchemaCatalog {
     return projectable
         ? nonEmptyObject(properties)
         : WireSchema.object(
-            properties,
-            RETURN_TYPE,
-            PARAMETERS,
-            CALLING_CONVENTION,
-            HAS_VAR_ARGS,
-            HAS_NO_RETURN);
+            properties, RETURN_TYPE, PARAMETERS, CALLING_CONVENTION, HAS_VAR_ARGS, HAS_NO_RETURN);
   }
 
   static Map<String, Object> dataTypePatchSchema() {
@@ -417,8 +412,7 @@ final class ApiSchemaCatalog {
           outputFieldSchema(root, projectable && hasDottedChildren(fields, root));
       properties.put(root, WireSchema.project(fieldSchema, entry.getValue()));
     }
-    List<String> required =
-        identityFields.stream().filter(selection::containsKey).toList();
+    List<String> required = identityFields.stream().filter(selection::containsKey).toList();
     return WireSchema.withDefinitions(
         WireSchema.object(properties, required.toArray(String[]::new)));
   }
@@ -775,8 +769,7 @@ final class ApiSchemaCatalog {
   }
 
   static Set<String> symbolFields() {
-    return Set.of(
-        "id", NAME, ADDRESS, TYPE, NAMESPACE, SOURCE_TYPE, "primary", "demangled_name");
+    return Set.of("id", NAME, ADDRESS, TYPE, NAMESPACE, SOURCE_TYPE, "primary", "demangled_name");
   }
 
   static Set<String> commentFields() {

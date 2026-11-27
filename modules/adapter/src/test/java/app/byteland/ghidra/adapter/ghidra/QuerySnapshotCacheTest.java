@@ -24,8 +24,7 @@ class QuerySnapshotCacheTest {
   @Test
   void cachesSnapshotsAndEvictsLeastRecentlyUsedByEntryCountAndKeyCap() {
     AtomicLong clock = new AtomicLong(1_000L);
-    QuerySnapshotCache cache =
-        new QuerySnapshotCache(2, 6, Duration.ofSeconds(30), clock::get);
+    QuerySnapshotCache cache = new QuerySnapshotCache(2, 6, Duration.ofSeconds(30), clock::get);
 
     QuerySnapshotCache.Key k1 = QuerySnapshotCache.Key.of("data_type", 1L, "", null, null);
     QuerySnapshotCache.Key k2 = QuerySnapshotCache.Key.of("data_type", 1L, "foo", "/", "STRUCT");
@@ -48,7 +47,8 @@ class QuerySnapshotCacheTest {
     assertEquals(5, cache.totalKeyCount());
 
     // Add a 5-key snapshot to trigger eviction by maxTotalKeys=6 when maxEntries=2.
-    QuerySnapshotCache.Key k4 = QuerySnapshotCache.Key.of("function_call", 1L, "ram:0020", "callers");
+    QuerySnapshotCache.Key k4 =
+        QuerySnapshotCache.Key.of("function_call", 1L, "ram:0020", "callers");
     cache.put(k4, new String[] {"1", "2", "3", "4", "5"});
     assertNull(cache.get(k1));
     assertNull(cache.get(k3));
@@ -66,8 +66,7 @@ class QuerySnapshotCacheTest {
   @Test
   void expiresEntriesAfterTtlAndPurgesStaleModificationNumbers() {
     AtomicLong clock = new AtomicLong(0L);
-    QuerySnapshotCache cache =
-        new QuerySnapshotCache(8, 100, Duration.ofSeconds(10), clock::get);
+    QuerySnapshotCache cache = new QuerySnapshotCache(8, 100, Duration.ofSeconds(10), clock::get);
 
     QuerySnapshotCache.Key mod1 = QuerySnapshotCache.Key.of("data_type", 10L, "", null, null);
     cache.put(mod1, new String[] {"/a", "/b"});
@@ -132,8 +131,7 @@ class QuerySnapshotCacheTest {
   @Test
   void rejectsStaleConcurrentPutsAndSupportsConcurrentReaderSweeps() throws Exception {
     AtomicLong clock = new AtomicLong(1_000L);
-    QuerySnapshotCache cache =
-        new QuerySnapshotCache(8, 256, Duration.ofSeconds(30), clock::get);
+    QuerySnapshotCache cache = new QuerySnapshotCache(8, 256, Duration.ofSeconds(30), clock::get);
 
     // A stale reader with an older modification number cannot evict newer snapshots.
     long initialEpoch = cache.clearEpoch();
@@ -161,46 +159,43 @@ class QuerySnapshotCacheTest {
       for (int t = 0; t < 8; t++) {
         final int readerId = t;
         futures.add(
-            pool.submit(
-                () -> {
-                  start.await();
-                  String[] keys = {"k0", "k1", "k2", "k3", "k4", "k5"};
-                  Map<String, String> live =
-                      Map.of("k0", "v0", "k1", "v1", "k2", "v2", "k3", "v3", "k4", "v4", "k5", "v5");
-                  for (int iter = 0; iter < 100; iter++) {
-                    long epoch = cache.clearEpoch();
-                    long mod = modNumber.get();
-                    QuerySnapshotCache.Key key =
-                        QuerySnapshotCache.Key.of(
-                            "reference", mod, "to", "ram:00" + (readerId % 4), null);
-                    String[] cached = cache.get(key);
-                    if (cached == null) {
-                      cached = keys.clone();
-                      cache.putIfUnchanged(epoch, key, cached);
-                    }
-                    Page<String> sliced =
-                        QuerySnapshotCache.slice(cached, 2, "k1", live::get, v -> v);
-                    assertEquals(List.of("v2", "v3"), sliced.items());
-                    assertEquals("k3", sliced.nextCursor());
-                  }
-                  return null;
-                }));
+            pool.submit(() -> {
+              start.await();
+              String[] keys = {"k0", "k1", "k2", "k3", "k4", "k5"};
+              Map<String, String> live =
+                  Map.of("k0", "v0", "k1", "v1", "k2", "v2", "k3", "v3", "k4", "v4", "k5", "v5");
+              for (int iter = 0; iter < 100; iter++) {
+                long epoch = cache.clearEpoch();
+                long mod = modNumber.get();
+                QuerySnapshotCache.Key key =
+                    QuerySnapshotCache.Key.of(
+                        "reference", mod, "to", "ram:00" + (readerId % 4), null);
+                String[] cached = cache.get(key);
+                if (cached == null) {
+                  cached = keys.clone();
+                  cache.putIfUnchanged(epoch, key, cached);
+                }
+                Page<String> sliced = QuerySnapshotCache.slice(cached, 2, "k1", live::get, v -> v);
+                assertEquals(List.of("v2", "v3"), sliced.items());
+                assertEquals("k3", sliced.nextCursor());
+              }
+              return null;
+            }));
       }
       for (int w = 0; w < 2; w++) {
         final int writerId = w;
         futures.add(
-            pool.submit(
-                () -> {
-                  start.await();
-                  for (int iter = 0; iter < 25; iter++) {
-                    if ((iter + writerId) % 2 == 0) {
-                      modNumber.incrementAndGet();
-                    } else {
-                      cache.clear();
-                    }
-                  }
-                  return null;
-                }));
+            pool.submit(() -> {
+              start.await();
+              for (int iter = 0; iter < 25; iter++) {
+                if ((iter + writerId) % 2 == 0) {
+                  modNumber.incrementAndGet();
+                } else {
+                  cache.clear();
+                }
+              }
+              return null;
+            }));
       }
       start.countDown();
       for (Future<Void> future : futures) {

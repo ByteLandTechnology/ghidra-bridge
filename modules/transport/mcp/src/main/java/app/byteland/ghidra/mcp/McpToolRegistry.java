@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Groups the API methods into MCP tools named {@code <prefix>_<domain>}, plus
- * {@code <prefix>_help}.
+ * Groups the API methods into MCP tools named {@code <prefix>_<domain>}, plus {@code
+ * <prefix>_help}.
  */
 final class McpToolRegistry {
   private static final String OPERATION_FIELD = "operation";
@@ -45,8 +45,7 @@ final class McpToolRegistry {
     for (MethodDescriptor method : catalog.methods()) {
       if (method.name().equals("interface.get")) continue;
       String[] target = target(method.name());
-      domains.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>())
-          .put(target[1], method);
+      domains.computeIfAbsent(target[0], ignored -> new LinkedHashMap<>()).put(target[1], method);
     }
     List<Map<String, Object>> tools = new ArrayList<>();
     tools.add(
@@ -63,19 +62,18 @@ final class McpToolRegistry {
                 "destructiveHint", false,
                 "idempotentHint", true,
                 "openWorldHint", false)));
-    domains.forEach(
-        (domain, operations) -> {
-          domainEnvelopeSchemas.put(
-              domain,
-              WireSchema.object(
-                  Map.of(
-                      OPERATION_FIELD,
-                      WireSchema.stringEnum(operations.keySet().toArray(String[]::new)),
-                      PARAMS_FIELD,
-                      WireSchema.openObject()),
-                  OPERATION_FIELD));
-          tools.add(groupTool(domain, operations));
-        });
+    domains.forEach((domain, operations) -> {
+      domainEnvelopeSchemas.put(
+          domain,
+          WireSchema.object(
+              Map.of(
+                  OPERATION_FIELD,
+                  WireSchema.stringEnum(operations.keySet().toArray(String[]::new)),
+                  PARAMS_FIELD,
+                  WireSchema.openObject()),
+              OPERATION_FIELD));
+      tools.add(groupTool(domain, operations));
+    });
     listedTools = List.copyOf(tools);
   }
 
@@ -98,8 +96,7 @@ final class McpToolRegistry {
     };
   }
 
-  private Map<String, Object> groupTool(
-      String domain, Map<String, MethodDescriptor> operations) {
+  private Map<String, Object> groupTool(String domain, Map<String, MethodDescriptor> operations) {
     Map<String, Object> properties = new LinkedHashMap<>();
     properties.put(
         OPERATION_FIELD,
@@ -115,23 +112,41 @@ final class McpToolRegistry {
     inputSchema.put("required", List.of(OPERATION_FIELD));
     inputSchema.put("additionalProperties", false);
 
-    String purpose = "listing".equals(domain)
-        ? "for code units, data units, instructions, and flow overrides" : "for " + domain + " data";
-    boolean readOnlyHint =
-        operations.values().stream().allMatch(op -> effectFlag(op, "read_only"));
+    String purpose =
+        "listing".equals(domain)
+            ? "for code units, data units, instructions, and flow overrides"
+            : "for " + domain + " data";
+    boolean readOnlyHint = operations.values().stream().allMatch(op -> effectFlag(op, "read_only"));
     boolean destructiveHint =
         operations.values().stream().anyMatch(op -> effectFlag(op, "destructive"));
     boolean idempotentHint =
         operations.values().stream().allMatch(op -> effectFlag(op, "idempotent"));
-    return Map.of("name", toolName(domain),
-        "description", "Use this tool " + purpose + ". Select an operation: "
-            + String.join(", ", operations.keySet()) + ".",
-        "inputSchema", Map.copyOf(inputSchema),
-        "annotations", Map.of("readOnlyHint", readOnlyHint, "destructiveHint", destructiveHint,
-            "idempotentHint", idempotentHint, "openWorldHint", false));
+    return Map.of(
+        "name",
+        toolName(domain),
+        "description",
+        "Use this tool "
+            + purpose
+            + ". Select an operation: "
+            + String.join(", ", operations.keySet())
+            + ".",
+        "inputSchema",
+        Map.copyOf(inputSchema),
+        "annotations",
+        Map.of(
+            "readOnlyHint",
+            readOnlyHint,
+            "destructiveHint",
+            destructiveHint,
+            "idempotentHint",
+            idempotentHint,
+            "openWorldHint",
+            false));
   }
 
-  List<Map<String, Object>> listTools() { return listedTools; }
+  List<Map<String, Object>> listTools() {
+    return listedTools;
+  }
 
   MethodDescriptor findTool(String name, String operation) {
     String domain = domainOf(name);
@@ -151,7 +166,9 @@ final class McpToolRegistry {
     domains.keySet().forEach(domain -> validTools.add(toolName(domain)));
     String validToolsList = String.join(", ", validTools);
     String candidate = stripPrefixIfPresent(name);
-    if (candidate != null && candidate.indexOf('.') > 0 && candidate.indexOf('.') < candidate.length() - 1) {
+    if (candidate != null
+        && candidate.indexOf('.') > 0
+        && candidate.indexOf('.') < candidate.length() - 1) {
       String[] resolved = target(candidate);
       Map<String, MethodDescriptor> ops = domains.get(resolved[0]);
       if (ops != null && ops.containsKey(resolved[1])) {
@@ -238,8 +255,7 @@ final class McpToolRegistry {
     String domain = helpDomain(rawDomain);
     Map<String, MethodDescriptor> operations = domains.get(domain);
     if (operations == null) {
-      throw ApiException.badRequest(
-          "invalid_enum", unknownHelpDomainMessage(rawDomain), "/domain");
+      throw ApiException.badRequest("invalid_enum", unknownHelpDomainMessage(rawDomain), "/domain");
     }
     Object operationValue = arguments.get(OPERATION_FIELD);
     if (operationValue == null) {
@@ -257,10 +273,21 @@ final class McpToolRegistry {
           unknownOperationMessage(toolName(domain), domain, operations, rawOperation, true),
           "/operation");
     }
-    return Map.of("domain", toolName(domain), "operation", rawOperation,
-        "method", descriptor.name(), "description", descriptor.description(),
-        "inputSchema", descriptor.inputSchema(), "outputSchema", descriptor.outputSchema(),
-        "effects", effectsOf(descriptor));
+    return Map.of(
+        "domain",
+        toolName(domain),
+        "operation",
+        rawOperation,
+        "method",
+        descriptor.name(),
+        "description",
+        descriptor.description(),
+        "inputSchema",
+        descriptor.inputSchema(),
+        "outputSchema",
+        descriptor.outputSchema(),
+        "effects",
+        effectsOf(descriptor));
   }
 
   private static Map<String, Object> domainOperationHelp(
@@ -383,16 +410,16 @@ final class McpToolRegistry {
     }
     if ("/params".equals(target)) {
       return ApiException.badRequest(
-          code,
-          "Argument \"params\" for " + canonicalTool + " must be a JSON object.",
-          target);
+          code, "Argument \"params\" for " + canonicalTool + " must be a JSON object.", target);
     }
     return error;
   }
 
   private String unknownHelpDomainMessage(String rawDomain) {
     String stripped = stripPrefixIfPresent(rawDomain);
-    if (stripped != null && stripped.indexOf('.') > 0 && stripped.indexOf('.') < stripped.length() - 1) {
+    if (stripped != null
+        && stripped.indexOf('.') > 0
+        && stripped.indexOf('.') < stripped.length() - 1) {
       String[] resolved = target(stripped);
       Map<String, MethodDescriptor> ops = domains.get(resolved[0]);
       if (ops != null && ops.containsKey(resolved[1])) {
@@ -419,11 +446,7 @@ final class McpToolRegistry {
             + ".";
       }
     }
-    return "Unknown domain \""
-        + rawDomain
-        + "\". Valid domains: "
-        + validDomainsText()
-        + ".";
+    return "Unknown domain \"" + rawDomain + "\". Valid domains: " + validDomainsText() + ".";
   }
 
   private String unknownOperationMessage(
@@ -450,7 +473,9 @@ final class McpToolRegistry {
             + ".";
       }
     }
-    if (stripped != null && stripped.indexOf('.') > 0 && stripped.indexOf('.') < stripped.length() - 1) {
+    if (stripped != null
+        && stripped.indexOf('.') > 0
+        && stripped.indexOf('.') < stripped.length() - 1) {
       String[] resolved = target(stripped);
       if (domain.equals(resolved[0]) && operations.containsKey(resolved[1])) {
         return "Unknown operation \""

@@ -92,11 +92,10 @@ class CodeUnitMethodsTest {
             DataTypeReference.named("/undefined"));
 
     ApiRegistry registry =
-        registryWithListing(
-            (method, args) -> {
-              assertEquals("listCodeUnits", method);
-              return Page.of(List.of(instruction, data, undefined), (Integer) args[1], null);
-            });
+        registryWithListing((method, args) -> {
+          assertEquals("listCodeUnits", method);
+          return Page.of(List.of(instruction, data, undefined), (Integer) args[1], null);
+        });
 
     @SuppressWarnings("unchecked")
     Map<String, Object> response =
@@ -117,21 +116,33 @@ class CodeUnitMethodsTest {
         items.get(0));
     assertEquals(
         Map.of(
-            "address", "ram:00402000",
-            "kind", "data",
-            "length", 4,
-            "bytes", Map.of("encoding", "hex", "data", "2a000000", "length", 4),
-            "text", "dd 2Ah",
-            "data_type", Map.of("kind", "named", "name", "/dword")),
+            "address",
+            "ram:00402000",
+            "kind",
+            "data",
+            "length",
+            4,
+            "bytes",
+            Map.of("encoding", "hex", "data", "2a000000", "length", 4),
+            "text",
+            "dd 2Ah",
+            "data_type",
+            Map.of("kind", "named", "name", "/dword")),
         items.get(1));
     assertEquals(
         Map.of(
-            "address", "ram:00402004",
-            "kind", "undefined",
-            "length", 1,
-            "bytes", Map.of("encoding", "hex", "data", "00", "length", 1),
-            "text", "?? 00h",
-            "data_type", Map.of("kind", "named", "name", "/undefined")),
+            "address",
+            "ram:00402004",
+            "kind",
+            "undefined",
+            "length",
+            1,
+            "bytes",
+            Map.of("encoding", "hex", "data", "00", "length", 1),
+            "text",
+            "?? 00h",
+            "data_type",
+            Map.of("kind", "named", "name", "/undefined")),
         items.get(2));
 
     for (String disallowedField : List.of("value", "representation")) {
@@ -159,11 +170,10 @@ class CodeUnitMethodsTest {
             new ByteSequence(ByteSequence.Encoding.HEX, "2a000000", 4));
 
     ApiRegistry registry =
-        registryWithListing(
-            (method, args) -> {
-              assertEquals("listDataUnits", method);
-              return Page.of(List.of(dataUnit), (Integer) args[1], null);
-            });
+        registryWithListing((method, args) -> {
+          assertEquals("listDataUnits", method);
+          return Page.of(List.of(dataUnit), (Integer) args[1], null);
+        });
 
     @SuppressWarnings("unchecked")
     Map<String, Object> response =
@@ -174,12 +184,18 @@ class CodeUnitMethodsTest {
     assertEquals(
         List.of(
             Map.of(
-                "address", "ram:00402000",
-                "length", 4,
-                "data_type", Map.of("kind", "named", "name", "/dword"),
-                "value", "42",
-                "representation", "2Ah",
-                "bytes", Map.of("encoding", "hex", "data", "2a000000", "length", 4))),
+                "address",
+                "ram:00402000",
+                "length",
+                4,
+                "data_type",
+                Map.of("kind", "named", "name", "/dword"),
+                "value",
+                "42",
+                "representation",
+                "2Ah",
+                "bytes",
+                Map.of("encoding", "hex", "data", "2a000000", "length", 4))),
         items);
   }
 

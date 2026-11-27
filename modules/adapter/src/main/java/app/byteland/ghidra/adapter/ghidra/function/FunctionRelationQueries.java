@@ -53,8 +53,7 @@ final class FunctionRelationQueries {
     String canonicalTarget = AddressUtil.canonicalAddress(function.getEntryPoint());
     String directionKey = callers ? "callers" : "callees";
     QuerySnapshotCache.Key cacheKey =
-        QuerySnapshotCache.Key.of(
-            FUNCTION_CALL_RESOURCE, modNumber, canonicalTarget, directionKey);
+        QuerySnapshotCache.Key.of(FUNCTION_CALL_RESOURCE, modNumber, canonicalTarget, directionKey);
     String[] sortedKeys = snapshots.get(cacheKey);
     if (sortedKeys == null) {
       List<String> keys = new ArrayList<>();

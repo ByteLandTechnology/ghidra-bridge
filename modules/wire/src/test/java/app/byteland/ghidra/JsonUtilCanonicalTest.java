@@ -65,7 +65,8 @@ class JsonUtilCanonicalTest {
     List<Object> listWithNulls = Arrays.asList("head", null, orderedSet, null);
     Iterable<Object> customIterable = listWithNulls::iterator;
 
-    ArrayList<?> canonicalList = assertInstanceOf(ArrayList.class, JsonUtil.canonical(customIterable));
+    ArrayList<?> canonicalList =
+        assertInstanceOf(ArrayList.class, JsonUtil.canonical(customIterable));
     assertEquals(4, canonicalList.size());
     assertEquals("head", canonicalList.get(0));
     assertNull(canonicalList.get(1));

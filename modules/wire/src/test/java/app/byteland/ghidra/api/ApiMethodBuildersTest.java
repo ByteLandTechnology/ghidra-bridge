@@ -55,8 +55,7 @@ class ApiMethodBuildersTest {
                 "name", WireSchema.string()));
 
     Map<String, Object> listInput = ApiSchemaCatalog.listInput(filter);
-    assertEquals(
-        List.of("filter", "limit", "cursor", "fields"), propertyKeys(listInput));
+    assertEquals(List.of("filter", "limit", "cursor", "fields"), propertyKeys(listInput));
     assertFalse(listInput.containsKey("required"));
     Map<String, Object> canonicalListInput = StrictObjectCodec.canonicalSchema(listInput);
     assertEquals(List.of("filter", "page", "projection"), propertyKeys(canonicalListInput));
@@ -75,8 +74,7 @@ class ApiMethodBuildersTest {
     assertEquals(List.of("range", "timeout_ms"), nestedPropertyKeys(canonicalScanInput, "scan"));
 
     Map<String, Object> requiredListInput = ApiSchemaCatalog.requiredListInput(filter);
-    assertEquals(
-        List.of("filter", "limit", "cursor", "fields"), propertyKeys(requiredListInput));
+    assertEquals(List.of("filter", "limit", "cursor", "fields"), propertyKeys(requiredListInput));
     assertEquals(List.of("filter"), requiredListInput.get("required"));
     assertEquals(
         List.of("filter"), StrictObjectCodec.canonicalSchema(requiredListInput).get("required"));
@@ -195,9 +193,14 @@ class ApiMethodBuildersTest {
                   progress);
             });
 
-    ApiRegistry registry = registryWith(
-        transactions, memory, unused(AddressService.class), comments,
-        unused(GlobalVariableService.class), unused(DataTypeService.class));
+    ApiRegistry registry =
+        registryWith(
+            transactions,
+            memory,
+            unused(AddressService.class),
+            comments,
+            unused(GlobalVariableService.class),
+            unused(DataTypeService.class));
 
     Map<?, ?> singleBlock =
         (Map<?, ?>)
@@ -293,7 +296,8 @@ class ApiMethodBuildersTest {
 
     @SuppressWarnings("unchecked")
     Map<String, Object> writeProperties =
-        (Map<String, Object>) registry.method("memory.write").requestCodec().schema().get("properties");
+        (Map<String, Object>)
+            registry.method("memory.write").requestCodec().schema().get("properties");
     @SuppressWarnings("unchecked")
     Map<String, Object> patchSchema = (Map<String, Object>) writeProperties.get("patch");
     @SuppressWarnings("unchecked")
@@ -317,9 +321,7 @@ class ApiMethodBuildersTest {
                 Map.of(
                     "selector", Map.of("address", "0x1000"),
                     "patch",
-                        Map.of(
-                            "bytes",
-                            Map.of("encoding", "hex", "data", "cc90", "length", 2))));
+                        Map.of("bytes", Map.of("encoding", "hex", "data", "cc90", "length", 2))));
     assertEquals(Map.of("start", "ram:00001000", "length", 2), writeResult);
     assertEquals(new ByteSequence(ByteSequence.Encoding.HEX, "cc90", 2), patchedBytes.get());
     assertEquals(1, transactions.get());
@@ -378,9 +380,7 @@ class ApiMethodBuildersTest {
             unused(DataTypeService.class));
 
     List<String> names =
-        registry.methodCatalog().methods().stream()
-            .map(ApiCatalog.MethodDescriptor::name)
-            .toList();
+        registry.methodCatalog().methods().stream().map(ApiCatalog.MethodDescriptor::name).toList();
     int gvCreateIndex = names.indexOf("global_variable.create");
     int gvPatchIndex = names.indexOf("global_variable.patch");
     int gvUpsertIndex = names.indexOf("global_variable.upsert");
@@ -455,7 +455,9 @@ class ApiMethodBuildersTest {
               assertEquals("getDataType", method);
               String path = (String) args[0];
               DataTypeResource.Kind kind =
-                  path.endsWith("Union") ? DataTypeResource.Kind.UNION : DataTypeResource.Kind.STRUCT;
+                  path.endsWith("Union")
+                      ? DataTypeResource.Kind.UNION
+                      : DataTypeResource.Kind.STRUCT;
               return new DataTypeResource(
                   path, path.substring(1), "/", kind, 4, null, 4, List.of(), null, null, null);
             });

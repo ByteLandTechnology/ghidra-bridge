@@ -12,9 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/**
- * Checks network addresses and parses startup arguments for bridge transports.
- */
+/** Checks network addresses and parses startup arguments for bridge transports. */
 public final class NetworkBinding {
   public static final String DEFAULT_LOOPBACK_HOST =
       InetAddress.getLoopbackAddress().getHostAddress();
@@ -83,8 +81,7 @@ public final class NetworkBinding {
     requireTokenForNonLoopbackOrigin(host, token, InetAddress::getAllByName);
   }
 
-  static void requireTokenForNonLoopbackOrigin(
-      String host, String token, HostResolver resolver) {
+  static void requireTokenForNonLoopbackOrigin(String host, String token, HostResolver resolver) {
     Objects.requireNonNull(resolver, "resolver");
     if (optionalText(token) != null) {
       return;
@@ -226,10 +223,7 @@ public final class NetworkBinding {
    * and zero DNS lookups per request.
    */
   public static HostValidationResult validateHostHeader(
-      List<String> hostHeaders,
-      String configuredHost,
-      int listenerPort,
-      boolean loopbackListener) {
+      List<String> hostHeaders, String configuredHost, int listenerPort, boolean loopbackListener) {
     if (configuredHost == null || configuredHost.isBlank()) {
       throw new IllegalArgumentException("configuredHost is required");
     }
@@ -278,15 +272,8 @@ public final class NetworkBinding {
     }
     for (int i = 0; i < trimmed.length(); i++) {
       char c = trimmed.charAt(i);
-      if (c <= 0x20
-          || c >= 0x7F
-          || c == '/'
-          || c == '\\'
-          || c == '?'
-          || c == '#'
-          || c == '@'
-          || c == '%'
-          || c == ',') {
+      if (c <= 0x20 || c >= 0x7F || c == '/' || c == '\\' || c == '?' || c == '#' || c == '@'
+          || c == '%' || c == ',') {
         throw new IllegalArgumentException("Malformed Host header");
       }
     }
@@ -360,8 +347,8 @@ public final class NetworkBinding {
   }
 
   /**
-   * Compares two host strings case-insensitively and across canonical IPv4/IPv6 literal forms.
-   * Does not run DNS lookups.
+   * Compares two host strings case-insensitively and across canonical IPv4/IPv6 literal forms. Does
+   * not run DNS lookups.
    */
   public static boolean hostsMatch(String firstHost, String secondHost) {
     if (firstHost == null || secondHost == null) {

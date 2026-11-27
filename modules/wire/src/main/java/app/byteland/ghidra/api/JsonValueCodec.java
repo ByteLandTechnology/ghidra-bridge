@@ -8,8 +8,7 @@ final class JsonValueCodec implements JsonCodec<Object> {
   private static final int MAX_CACHED_PROJECTIONS = 256;
 
   private final Map<String, Object> valueSchema;
-  private final Map<Set<String>, Map<String, Object>> projectedSchemas =
-      new ConcurrentHashMap<>();
+  private final Map<Set<String>, Map<String, Object>> projectedSchemas = new ConcurrentHashMap<>();
 
   JsonValueCodec(Map<String, Object> schema) {
     this.valueSchema = Map.copyOf(schema);

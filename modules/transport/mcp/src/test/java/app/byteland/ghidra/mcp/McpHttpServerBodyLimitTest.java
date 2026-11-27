@@ -131,8 +131,7 @@ class McpHttpServerBodyLimitTest {
     maxLong.add("Content-Length", Long.toString(Long.MAX_VALUE));
     McpHttpServer.JsonRpcError maxLongErr =
         assertThrows(
-            McpHttpServer.JsonRpcError.class,
-            () -> McpHttpServer.validateContentLength(maxLong));
+            McpHttpServer.JsonRpcError.class, () -> McpHttpServer.validateContentLength(maxLong));
     assertEquals(413, maxLongErr.httpStatus());
 
     Headers duplicateSame = new Headers();
@@ -222,7 +221,8 @@ class McpHttpServerBodyLimitTest {
   @Test
   void serverRejectsInvalidContentLengthOverHttpWith400() throws Exception {
     try (RunningServer running = startTestServer()) {
-      // "+2" passes Long.parseLong in jdk.httpserver and reaches McpHttpServer.validateContentLength.
+      // "+2" passes Long.parseLong in jdk.httpserver and reaches
+      // McpHttpServer.validateContentLength.
       RawHttpResponse plusResponse =
           sendRawRequest(
               running.port,
@@ -295,7 +295,8 @@ class McpHttpServerBodyLimitTest {
         assertEquals(-32600, ((Number) error.get("code")).intValue());
       }
 
-      // 2. Oversized `Transfer-Encoding: chunked` (16 MiB + 1) where client pauses before 0\r\n\r\n.
+      // 2. Oversized `Transfer-Encoding: chunked` (16 MiB + 1) where client pauses before
+      // 0\r\n\r\n.
       try (Socket socket = new Socket(LOOPBACK, running.port)) {
         socket.setSoTimeout(10_000);
         String headers =
@@ -333,7 +334,8 @@ class McpHttpServerBodyLimitTest {
         assertEquals(-32600, ((Number) error.get("code")).intValue());
       }
 
-      // 3. Mismatched Content-Length over wire where client streams extra bytes past declared length.
+      // 3. Mismatched Content-Length over wire where client streams extra bytes past declared
+      // length.
       try (Socket socket = new Socket(LOOPBACK, running.port)) {
         socket.setSoTimeout(10_000);
         String headers =
@@ -474,11 +476,7 @@ class McpHttpServerBodyLimitTest {
 
     Process process =
         new ProcessBuilder(
-                javaBin,
-                "-Xmx96m",
-                "-cp",
-                classpath,
-                BoundedHeapServerMain.class.getName())
+                javaBin, "-Xmx96m", "-cp", classpath, BoundedHeapServerMain.class.getName())
             .start();
 
     ByteArrayOutputStream stderrBuffer = new ByteArrayOutputStream();
@@ -558,8 +556,7 @@ class McpHttpServerBodyLimitTest {
       assertEquals(413, fixedResponse.statusCode);
       assertEquals("close", fixedResponse.headers.get("connection"));
 
-      RawHttpResponse chunkedResponse =
-          streamOversizedBody(port, chunkedHeaders, totalBytes, true);
+      RawHttpResponse chunkedResponse = streamOversizedBody(port, chunkedHeaders, totalBytes, true);
       assertEquals(413, chunkedResponse.statusCode);
       assertEquals("close", chunkedResponse.headers.get("connection"));
 
@@ -647,14 +644,13 @@ class McpHttpServerBodyLimitTest {
       socket.setSoTimeout(20_000);
       InputStream in = socket.getInputStream();
       CompletableFuture<RawHttpResponse> responseFuture =
-          CompletableFuture.supplyAsync(
-              () -> {
-                try {
-                  return readHttpResponse(in);
-                } catch (IOException e) {
-                  throw new RuntimeException(e);
-                }
-              });
+          CompletableFuture.supplyAsync(() -> {
+            try {
+              return readHttpResponse(in);
+            } catch (IOException e) {
+              throw new RuntimeException(e);
+            }
+          });
 
       try {
         OutputStream out = socket.getOutputStream();
@@ -666,8 +662,7 @@ class McpHttpServerBodyLimitTest {
         while (remaining > 0 && !responseFuture.isDone()) {
           int step = Math.min(remaining, payload.length);
           if (chunked) {
-            out.write(
-                (Integer.toHexString(step) + "\r\n").getBytes(StandardCharsets.US_ASCII));
+            out.write((Integer.toHexString(step) + "\r\n").getBytes(StandardCharsets.US_ASCII));
             out.write(payload, 0, step);
             out.write(crlf);
           } else {
@@ -717,8 +712,7 @@ class McpHttpServerBodyLimitTest {
     } else {
       bodyBytes = input.readAllBytes();
     }
-    return new RawHttpResponse(
-        statusCode, headers, new String(bodyBytes, StandardCharsets.UTF_8));
+    return new RawHttpResponse(statusCode, headers, new String(bodyBytes, StandardCharsets.UTF_8));
   }
 
   private static String readAsciiLine(InputStream input) throws IOException {
@@ -958,7 +952,11 @@ class McpHttpServerBodyLimitTest {
       int step = (int) Math.min(len, remaining);
       if (delivered + step > maxAllowedReads) {
         throw new AssertionError(
-            "Stream read exceeded bound " + maxAllowedReads + " (attempted " + (delivered + step) + ")");
+            "Stream read exceeded bound "
+                + maxAllowedReads
+                + " (attempted "
+                + (delivered + step)
+                + ")");
       }
       Arrays.fill(buf, off, off + step, value);
       remaining -= step;

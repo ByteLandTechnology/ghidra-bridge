@@ -12,9 +12,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
-/**
- * Builds flat parameter schemas for MCP domain tools without union or reference keywords.
- */
+/** Builds flat parameter schemas for MCP domain tools without union or reference keywords. */
 final class McpParamsSchema {
   private static final int SINGLE_OPERATION_MAX_DEPTH = 4;
   private static final int SUMMARY_MAX_DEPTH = 2;
@@ -50,8 +48,7 @@ final class McpParamsSchema {
   }
 
   @SuppressWarnings("unchecked")
-  private static Map<String, Object> flatten(
-      Map<String, Object> schema, int depth, int maxDepth) {
+  private static Map<String, Object> flatten(Map<String, Object> schema, int depth, int maxDepth) {
     if (schema.get("$ref") instanceof String reference) {
       return flattenReference(reference, depth, maxDepth);
     }
@@ -79,22 +76,18 @@ final class McpParamsSchema {
     };
   }
 
-  private static Map<String, Object> flattenReference(
-      String reference, int depth, int maxDepth) {
+  private static Map<String, Object> flattenReference(String reference, int depth, int maxDepth) {
     if (!DATA_TYPE_REF.equals(reference) || depth >= maxDepth) {
       return Map.of("type", "object");
     }
     Map<String, Object> properties = new LinkedHashMap<>();
     properties.put(
         "kind",
-        Map.of(
-            "type", "string",
-            "enum", List.of("array", "named", "pointer", "untyped_pointer")));
+        Map.of("type", "string", "enum", List.of("array", "named", "pointer", "untyped_pointer")));
     properties.put("name", Map.of("type", "string", "minLength", 1));
     properties.put("target", flattenReference(reference, depth + 1, maxDepth));
     properties.put("element", flattenReference(reference, depth + 1, maxDepth));
-    properties.put(
-        "count", Map.of("type", "integer", "minimum", 1, "maximum", Integer.MAX_VALUE));
+    properties.put("count", Map.of("type", "integer", "minimum", 1, "maximum", Integer.MAX_VALUE));
 
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("type", "object");
@@ -192,27 +185,23 @@ final class McpParamsSchema {
   private static Map<String, Object> mergeObjects(List<Map<String, Object>> schemas) {
     boolean allClosed =
         schemas.stream()
-            .allMatch(
-                schema ->
-                    Boolean.FALSE.equals(schema.get("additionalProperties"))
-                        && schema.get("properties") instanceof Map<?, ?>);
+            .allMatch(schema ->
+                Boolean.FALSE.equals(schema.get("additionalProperties"))
+                    && schema.get("properties") instanceof Map<?, ?>);
     if (!allClosed) {
       return Map.of("type", "object");
     }
     Map<String, List<Map<String, Object>>> propertyBuckets = new LinkedHashMap<>();
     for (Map<String, Object> schema : schemas) {
       Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
-      properties.forEach(
-          (key, child) ->
-              propertyBuckets
-                  .computeIfAbsent(key, ignored -> new ArrayList<>())
-                  .add((Map<String, Object>) child));
+      properties.forEach((key, child) ->
+          propertyBuckets
+              .computeIfAbsent(key, ignored -> new ArrayList<>())
+              .add((Map<String, Object>) child));
     }
     Map<String, Object> mergedProperties = new LinkedHashMap<>();
-    propertyBuckets.forEach(
-        (key, bucket) ->
-            mergedProperties.put(
-                key, bucket.size() == 1 ? bucket.getFirst() : mergeSchemas(bucket)));
+    propertyBuckets.forEach((key, bucket) ->
+        mergedProperties.put(key, bucket.size() == 1 ? bucket.getFirst() : mergeSchemas(bucket)));
 
     Set<String> requiredIntersection = null;
     for (Map<String, Object> schema : schemas) {
@@ -279,8 +268,7 @@ final class McpParamsSchema {
     return Collections.unmodifiableMap(result);
   }
 
-  private static Map<String, Object> mergeNumbers(
-      List<Map<String, Object>> schemas, String type) {
+  private static Map<String, Object> mergeNumbers(List<Map<String, Object>> schemas, String type) {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("type", type);
     putSharedScalar(schemas, result, "description");
@@ -359,8 +347,7 @@ final class McpParamsSchema {
       } else {
         long value = merged.longValue();
         target.put(
-            key,
-            value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE ? (int) value : value);
+            key, value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE ? (int) value : value);
       }
     }
   }

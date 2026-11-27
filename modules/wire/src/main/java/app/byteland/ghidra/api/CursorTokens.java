@@ -128,8 +128,7 @@ public final class CursorTokens {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       return Base64.getUrlEncoder()
           .withoutPadding()
-          .encodeToString(
-              digest.digest(JsonUtil.toJson(query).getBytes(StandardCharsets.UTF_8)));
+          .encodeToString(digest.digest(JsonUtil.toJson(query).getBytes(StandardCharsets.UTF_8)));
     } catch (java.security.GeneralSecurityException impossible) {
       throw new IllegalStateException(impossible);
     }

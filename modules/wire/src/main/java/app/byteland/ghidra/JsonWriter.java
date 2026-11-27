@@ -167,12 +167,13 @@ final class JsonWriter {
       int sampleCount = Math.min(length, MAX_COLLECTION_SAMPLE);
       long sampleTotal = 0;
       for (int i = 0; i < sampleCount; i++) {
-        int index =
-            sampleCount == length ? i : (int) ((long) i * (length - 1) / (sampleCount - 1));
+        int index = sampleCount == length ? i : (int) ((long) i * (length - 1) / (sampleCount - 1));
         sampleTotal += estimateCapacity(array[index], nextDepth);
       }
       long itemsEstimate =
-          sampleCount < length ? (sampleTotal * length + sampleCount - 1) / sampleCount : sampleTotal;
+          sampleCount < length
+              ? (sampleTotal * length + sampleCount - 1) / sampleCount
+              : sampleTotal;
       return Math.min(MAX_INITIAL_CAPACITY, 2 + itemsEstimate + (length - 1));
     }
     if (value.getClass().isArray()) {

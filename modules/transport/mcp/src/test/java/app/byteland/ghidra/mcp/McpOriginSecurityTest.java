@@ -68,8 +68,7 @@ class McpOriginSecurityTest {
     McpConfig blankArg = McpConfig.fromMap(Map.of("allowed_origins", "   "), Map.of());
     assertNull(blankArg.allowedOrigins());
 
-    McpConfig blankEnv =
-        McpConfig.fromMap(Map.of(), Map.of(McpConfig.ALLOWED_ORIGINS_ENV, "   "));
+    McpConfig blankEnv = McpConfig.fromMap(Map.of(), Map.of(McpConfig.ALLOWED_ORIGINS_ENV, "   "));
     assertNull(blankEnv.allowedOrigins());
 
     McpConfig strictDenyArg = McpConfig.fromMap(Map.of("allowed_origins", " NONE "), Map.of());
@@ -118,8 +117,7 @@ class McpOriginSecurityTest {
 
     McpConfig blankArgClearsEnv =
         McpConfig.fromMap(
-            Map.of("allowed_origins", ""),
-            Map.of(McpConfig.ALLOWED_ORIGINS_ENV, INSPECTOR_ORIGIN));
+            Map.of("allowed_origins", ""), Map.of(McpConfig.ALLOWED_ORIGINS_ENV, INSPECTOR_ORIGIN));
     assertNull(blankArgClearsEnv.allowedOrigins());
   }
 
@@ -216,7 +214,8 @@ class McpOriginSecurityTest {
       HttpResponse<String> externalPreflightResp =
           client.send(externalPreflight, HttpResponse.BodyHandlers.ofString());
       assertEquals(403, externalPreflightResp.statusCode());
-      assertTrue(externalPreflightResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
+      assertTrue(
+          externalPreflightResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
       assertTrue(externalPreflightResp.headers().firstValue("Vary").isEmpty());
 
       // Local MCP Inspector origins succeed out of the box without extra configuration.
@@ -396,8 +395,7 @@ class McpOriginSecurityTest {
           sseStreamResp.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
       assertEquals("Origin", sseStreamResp.headers().firstValue("Vary").orElse(null));
       try (BufferedReader reader =
-          new BufferedReader(
-              new InputStreamReader(sseStreamResp.body(), StandardCharsets.UTF_8))) {
+          new BufferedReader(new InputStreamReader(sseStreamResp.body(), StandardCharsets.UTF_8))) {
         assertEquals("event: endpoint", reader.readLine());
       }
 
@@ -483,8 +481,7 @@ class McpOriginSecurityTest {
                   + "Origin: \r\n"
                   + "Connection: close\r\n\r\n");
       assertTrue(blankOrigin.startsWith("HTTP/1.1 403"), blankOrigin);
-      assertFalse(
-          blankOrigin.toLowerCase().contains("access-control-allow-origin"), blankOrigin);
+      assertFalse(blankOrigin.toLowerCase().contains("access-control-allow-origin"), blankOrigin);
     }
   }
 
@@ -527,13 +524,18 @@ class McpOriginSecurityTest {
   private static String programGetRequestBody() {
     Map<String, Object> meta =
         Map.of(
-            "io.modelcontextprotocol/protocolVersion", "2026-07-28",
-            "io.modelcontextprotocol/clientCapabilities", Map.of());
+            "io.modelcontextprotocol/protocolVersion",
+            "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities",
+            Map.of());
     Map<String, Object> params =
         Map.of(
-            "_meta", meta,
-            "name", "ghidra_program",
-            "arguments", Map.of("operation", "get", "params", Map.of()));
+            "_meta",
+            meta,
+            "name",
+            "ghidra_program",
+            "arguments",
+            Map.of("operation", "get", "params", Map.of()));
     return JsonUtil.toJson(
         Map.of("jsonrpc", "2.0", "id", 1, "method", "tools/call", "params", params));
   }

@@ -1,7 +1,6 @@
 package app.byteland.ghidra.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,7 +15,8 @@ import org.junit.jupiter.api.Test;
 class ApiFailuresTest {
   @Test
   void unexpectedFailuresKeepPathsAndCredentialsPrivate() {
-    var failure = ApiFailures.normalize(new java.io.IOException("/private/project Bearer TEST_SECRET"));
+    var failure =
+        ApiFailures.normalize(new java.io.IOException("/private/project Bearer TEST_SECRET"));
     assertEquals(500, failure.status());
     assertEquals("Internal error", failure.error().message());
     assertEquals(Map.of(), failure.error().details());
@@ -51,8 +51,7 @@ class ApiFailuresTest {
   @Test
   @DisplayName("TransactionExecutionException preserves target and pointer conversion")
   void testTransactionExecutionExceptionWithTarget() {
-    var ex = new TransactionExecutionException(
-        "variable storage collision", "parameters[0]");
+    var ex = new TransactionExecutionException("variable storage collision", "parameters[0]");
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
@@ -64,11 +63,9 @@ class ApiFailuresTest {
   @Test
   @DisplayName("TransactionExecutionException preserves structured details map")
   void testTransactionExecutionExceptionWithDetails() {
-    Map<String, Object> details = Map.of(
-        "command", "SetFlowOverrideCmd",
-        "retryable", false);
-    var ex = new TransactionExecutionException(
-        "flow override mutation failed", null, details, null);
+    Map<String, Object> details = Map.of("command", "SetFlowOverrideCmd", "retryable", false);
+    var ex =
+        new TransactionExecutionException("flow override mutation failed", null, details, null);
     var failure = ApiFailures.normalize(ex);
 
     assertEquals(500, failure.status());
@@ -159,7 +156,8 @@ class ApiFailuresTest {
   @Test
   @DisplayName("ApiException maps directly with its status and BridgeError")
   void testApiExceptionNormalization() {
-    var bridgeError = new BridgeError(409, "batch_rolled_back", "atomic batch failed", null, Map.of());
+    var bridgeError =
+        new BridgeError(409, "batch_rolled_back", "atomic batch failed", null, Map.of());
     var apiException = new ApiException(409, bridgeError);
     var failure = ApiFailures.normalize(apiException);
 

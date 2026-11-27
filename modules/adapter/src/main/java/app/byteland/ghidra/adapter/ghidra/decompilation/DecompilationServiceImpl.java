@@ -24,8 +24,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
   private final GhidraSession context;
   private final LeasePool<DecompInterface> injectedPool;
   private final Object poolLock = new Object();
-  private final Map<Program, LeasePool<DecompInterface>> decompilerPools =
-      new IdentityHashMap<>();
+  private final Map<Program, LeasePool<DecompInterface>> decompilerPools = new IdentityHashMap<>();
   private boolean closed;
   private final Map<DecompInterface, Boolean> commentModes =
       Collections.synchronizedMap(new WeakHashMap<>());
@@ -44,7 +43,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
 
   @Override
   public DecompilationResource decompileFunction(
-      String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
+      String rawAddress,
+      DecompilationResource.Format format,
+      Integer timeoutMs,
       boolean includeComments) {
     int timeout = timeoutMs == null ? DEFAULT_TIMEOUT_MS : timeoutMs;
     if (timeout < MIN_TIMEOUT_MS || timeout > MAX_TIMEOUT_MS) {
@@ -112,7 +113,9 @@ public final class DecompilationServiceImpl implements DecompilationService {
   }
 
   private DecompilationResource decompile(
-      Function function, int timeoutMs, DecompilationResource.Format format,
+      Function function,
+      int timeoutMs,
+      DecompilationResource.Format format,
       boolean includeComments) {
     LeasePool<DecompInterface> decompilerPool = poolFor(function.getProgram());
     try (LeasePool.Lease<DecompInterface> lease = decompilerPool.acquire()) {
@@ -131,9 +134,10 @@ public final class DecompilationServiceImpl implements DecompilationService {
       DecompilationResource.Format effectiveFormat =
           format == null ? DecompilationResource.Format.TEXT : format;
       ClangTokenGroup markup = results.getCCodeMarkup();
-      String code = effectiveFormat == DecompilationResource.Format.TEXT
-          ? GuiDocument.renderText(function, results)
-          : null;
+      String code =
+          effectiveFormat == DecompilationResource.Format.TEXT
+              ? GuiDocument.renderText(function, results)
+              : null;
       List<DecompilationResource.Token> tokens =
           effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
       List<DecompilationResource.Line> lines = null;
@@ -142,16 +146,22 @@ public final class DecompilationServiceImpl implements DecompilationService {
         code = document.code();
         lines = document.lines();
       }
-      FunctionComments comments = includeComments
-          ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
-          : null;
+      FunctionComments comments =
+          includeComments
+              ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
+              : null;
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
-          function.getName(), effectiveFormat, completed,
+          function.getName(),
+          effectiveFormat,
+          completed,
           Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L),
-          code, tokens, lines,
+          code,
+          tokens,
+          lines,
           comments == null ? null : comments.items(),
-          comments == null ? null : comments.complete(), warnings);
+          comments == null ? null : comments.complete(),
+          warnings);
     }
   }
 

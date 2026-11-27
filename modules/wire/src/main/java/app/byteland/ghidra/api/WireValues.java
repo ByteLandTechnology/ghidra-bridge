@@ -112,8 +112,7 @@ final class WireValues {
       result.put(ApiVocabulary.KIND, reference.kind());
       switch (reference) {
         case DataTypeReference.Named named -> result.put("name", named.name());
-        case DataTypeReference.Pointer pointer ->
-            result.put("target", normalize(pointer.target()));
+        case DataTypeReference.Pointer pointer -> result.put("target", normalize(pointer.target()));
         case DataTypeReference.Array array -> {
           result.put("element", normalize(array.element()));
           result.put("count", array.count());
@@ -237,7 +236,8 @@ final class WireValues {
     return plan;
   }
 
-  private static Map<String, Object> normalizeRecord(Object recordValue, ProjectedComponent[] plan) {
+  private static Map<String, Object> normalizeRecord(
+      Object recordValue, ProjectedComponent[] plan) {
     Map<String, Object> result = LinkedHashMap.newLinkedHashMap(plan.length);
     for (ProjectedComponent component : plan) {
       Object componentValue = invokeAccessor(component.meta(), recordValue);
@@ -334,10 +334,7 @@ final class WireValues {
   }
 
   private static void putProjectedValue(
-      Map<String, Object> result,
-      String key,
-      Object rawValue,
-      FieldSelection childSelection) {
+      Map<String, Object> result, String key, Object rawValue, FieldSelection childSelection) {
     if (childSelection.selectsAll()) {
       result.put(key, normalize(rawValue));
       return;

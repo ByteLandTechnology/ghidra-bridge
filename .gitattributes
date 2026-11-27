@@ -1,0 +1,16 @@
+# Keep LF line endings in text files by default.
+* text=auto eol=lf
+
+# Keep LF line endings in generated contracts and shell scripts.
+docs/api.md text eol=lf
+docs/asyncapi.yaml text eol=lf
+docs/mcp-tools.json text eol=lf
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Keep CRLF line endings in Windows batch scripts.
+*.bat text eol=crlf
+gradlew.bat text eol=crlf
+
+# Treat JAR archives as binary files.
+*.jar binary

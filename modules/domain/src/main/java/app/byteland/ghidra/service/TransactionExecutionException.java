@@ -5,12 +5,9 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Indicates an internal failure during a Ghidra database transaction or command.
- */
+/** Indicates an internal failure during a Ghidra database transaction or command. */
 public class TransactionExecutionException extends RuntimeException implements DomainException {
-  @Serial
-  private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
   private final String target;
   private final transient Map<String, Object> details;
 

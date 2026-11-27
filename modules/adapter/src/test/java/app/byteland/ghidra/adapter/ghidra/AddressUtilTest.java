@@ -110,8 +110,7 @@ class AddressUtilTest {
       assertEquals(ram.getAddress(0x00401010L), session.parseAddress("0x401000 + 0x10"));
 
       assertThrows(
-          IllegalArgumentException.class,
-          () -> AddressUtil.parseAddress((Program) null, "ram:0"));
+          IllegalArgumentException.class, () -> AddressUtil.parseAddress((Program) null, "ram:0"));
       assertThrows(
           IllegalArgumentException.class,
           () -> AddressUtil.parseAddress((GhidraScript) null, "ram:0"));

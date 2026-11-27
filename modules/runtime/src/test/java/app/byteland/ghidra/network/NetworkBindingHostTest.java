@@ -24,7 +24,8 @@ class NetworkBindingHostTest {
   @Test
   @DisplayName("Parses valid IPv4, IPv6, and localhost Host authorities with and without ports")
   void parsesValidHostAuthorities() {
-    assertEquals(new HostAuthority("127.0.0.1", null), NetworkBinding.parseHostAuthority("127.0.0.1"));
+    assertEquals(
+        new HostAuthority("127.0.0.1", null), NetworkBinding.parseHostAuthority("127.0.0.1"));
     assertEquals(
         new HostAuthority("127.0.0.1", 8766), NetworkBinding.parseHostAuthority("127.0.0.1:8766"));
     assertEquals(new HostAuthority("[::1]", null), NetworkBinding.parseHostAuthority("[::1]"));
@@ -89,7 +90,8 @@ class NetworkBindingHostTest {
   }
 
   @Test
-  @DisplayName("Allows 127.0.0.1, [::1], localhost, and literal config.host() on loopback listeners")
+  @DisplayName(
+      "Allows 127.0.0.1, [::1], localhost, and literal config.host() on loopback listeners")
   void allowsValidLoopbackAuthorities() {
     List<String> allowedOnDefaultLoopback =
         List.of(
@@ -115,8 +117,7 @@ class NetworkBindingHostTest {
 
     // Expanded IPv6 loopback matches IPv6 config.host()
     assertTrue(
-        NetworkBinding.validateHostHeader(
-                List.of("[0:0:0:0:0:0:0:1]:8766"), "::1", 8766, true)
+        NetworkBinding.validateHostHeader(List.of("[0:0:0:0:0:0:0:1]:8766"), "::1", 8766, true)
             .isValid());
   }
 
@@ -158,8 +159,7 @@ class NetworkBindingHostTest {
         400, NetworkBinding.validateHostHeader(List.of(), "127.0.0.1", 8766, true).httpStatus());
     assertEquals(
         400,
-        NetworkBinding.validateHostHeader(
-                Collections.singletonList(null), "127.0.0.1", 8766, true)
+        NetworkBinding.validateHostHeader(Collections.singletonList(null), "127.0.0.1", 8766, true)
             .httpStatus());
     assertEquals(
         400,
@@ -172,10 +172,7 @@ class NetworkBindingHostTest {
     assertEquals(
         400,
         NetworkBinding.validateHostHeader(
-                List.of("127.0.0.1:8766", "rebind.example.invalid:8766"),
-                "127.0.0.1",
-                8766,
-                true)
+                List.of("127.0.0.1:8766", "rebind.example.invalid:8766"), "127.0.0.1", 8766, true)
             .httpStatus());
     assertEquals(
         400,
@@ -191,12 +188,10 @@ class NetworkBindingHostTest {
     assertTrue(
         NetworkBinding.validateHostHeader(List.of("192.168.1.50:8766"), "192.168.1.50", 8766)
             .isValid());
-    assertEquals(
-        400, NetworkBinding.validateHostHeader(List.of(), "0.0.0.0", 8766).httpStatus());
+    assertEquals(400, NetworkBinding.validateHostHeader(List.of(), "0.0.0.0", 8766).httpStatus());
     assertEquals(
         400,
-        NetworkBinding.validateHostHeader(
-                List.of("a.example", "b.example"), "0.0.0.0", 8766)
+        NetworkBinding.validateHostHeader(List.of("a.example", "b.example"), "0.0.0.0", 8766)
             .httpStatus());
     assertEquals(
         400,

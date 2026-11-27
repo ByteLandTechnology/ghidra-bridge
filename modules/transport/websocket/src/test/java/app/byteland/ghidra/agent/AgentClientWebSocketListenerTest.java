@@ -81,7 +81,8 @@ class AgentClientWebSocketListenerTest {
   }
 
   @Test
-  @DisplayName("Accepts exact 16 MiB single-chunk and multi-chunk messages and trims buffer capacity")
+  @DisplayName(
+      "Accepts exact 16 MiB single-chunk and multi-chunk messages and trims buffer capacity")
   void acceptsExact16MiBBoundaryAndTrimsCapacity() {
     AtomicInteger demangleCalls = new AtomicInteger();
     TestHarness harness = newHarness(demangleCalls);
@@ -147,7 +148,8 @@ class AgentClientWebSocketListenerTest {
 
     assertEquals(4L, webSocket.requestedCount(), "Must not request another frame on overflow");
     assertEquals(1, webSocket.closeCalls());
-    assertEquals(AgentClientWebSocketListener.MESSAGE_TOO_BIG_CLOSE_CODE, webSocket.lastCloseCode());
+    assertEquals(
+        AgentClientWebSocketListener.MESSAGE_TOO_BIG_CLOSE_CODE, webSocket.lastCloseCode());
     assertTrue(harness.disconnectLatch().await(1, TimeUnit.SECONDS));
     assertNull(harness.channelRef().get());
     assertTrue(harness.listener().pendingBufferCapacity() <= 64 * 1024);
@@ -159,7 +161,8 @@ class AgentClientWebSocketListenerTest {
         .listener()
         .onText(
             webSocket,
-            "{\"jsonrpc\":\"2.0\",\"id\":\"after-close\",\"method\":\"symbol.demangle\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"after-close\","
+                + "\"method\":\"symbol.demangle\",\"params\":{}}",
             true);
     assertEquals(0, demangleCalls.get());
     assertEquals(4L, webSocket.requestedCount());
@@ -182,7 +185,8 @@ class AgentClientWebSocketListenerTest {
 
     assertEquals(1L, webSocket.requestedCount());
     assertEquals(1, webSocket.closeCalls());
-    assertEquals(AgentClientWebSocketListener.MESSAGE_TOO_BIG_CLOSE_CODE, webSocket.lastCloseCode());
+    assertEquals(
+        AgentClientWebSocketListener.MESSAGE_TOO_BIG_CLOSE_CODE, webSocket.lastCloseCode());
     assertTrue(harness.disconnectLatch().await(1, TimeUnit.SECONDS));
     assertNull(harness.channelRef().get());
     assertEquals(0, demangleCalls.get());
@@ -233,7 +237,8 @@ class AgentClientWebSocketListenerTest {
     overHarness.listener().onText(overSocket, threeBytePayload, true);
 
     assertEquals(1, overSocket.closeCalls());
-    assertEquals(AgentClientWebSocketListener.MESSAGE_TOO_BIG_CLOSE_CODE, overSocket.lastCloseCode());
+    assertEquals(
+        AgentClientWebSocketListener.MESSAGE_TOO_BIG_CLOSE_CODE, overSocket.lastCloseCode());
     assertTrue(overHarness.disconnectLatch().await(1, TimeUnit.SECONDS));
     assertEquals(0, rejectedCalls.get());
   }
@@ -244,10 +249,9 @@ class AgentClientWebSocketListenerTest {
     // Synchronous throw from sendClose
     TestHarness syncHarness = newHarness(new AtomicInteger());
     FakeWebSocket throwingSocket =
-        new FakeWebSocket(
-            (code, reason) -> {
-              throw new IllegalStateException("closed already");
-            });
+        new FakeWebSocket((code, reason) -> {
+          throw new IllegalStateException("closed already");
+        });
 
     syncHarness.listener().onText(throwingSocket, "a".repeat(EXACT_LIMIT_BYTES + 1), true);
     assertEquals(1, throwingSocket.closeCalls());
@@ -288,7 +292,8 @@ class AgentClientWebSocketListenerTest {
   }
 
   @Test
-  @DisplayName("Loopback peer: closes with 1009 or EOF before dispatching fragmented >16 MiB stream")
+  @DisplayName(
+      "Loopback peer: closes with 1009 or EOF before dispatching fragmented >16 MiB stream")
   void loopbackClosesBeforeDispatchingOversizedFragmentedStream() throws Exception {
     AtomicInteger demangleCalls = new AtomicInteger();
     int fragmentSize = 60 * 1024;
@@ -296,13 +301,13 @@ class AgentClientWebSocketListenerTest {
 
     byte[] firstFragmentWithMarkerId =
         paddedPrefix(
-            "{\"jsonrpc\":\"2.0\",\"id\":\"marker-over-16mib\",\"method\":\"symbol.demangle\",\"params\":{",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"marker-over-16mib\","
+                + "\"method\":\"symbol.demangle\",\"params\":{",
             fragmentSize);
     byte[] middleFragment = filledBytes(fragmentSize, (byte) ' ');
     byte[] lastFragment = paddedSuffix("}}", fragmentSize);
 
-    try (ServerSocket serverSocket =
-            new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+    try (ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
         ExecutorService executor = Executors.newCachedThreadPool()) {
       serverSocket.setSoTimeout(10_000);
       String wsUrl =
@@ -320,11 +325,10 @@ class AgentClientWebSocketListenerTest {
                 config, dispatcher, new AgentClient.LifecycleListener() {}, Duration.ofSeconds(5));
 
         Future<Void> connectFuture =
-            executor.submit(
-                () -> {
-                  client.connect();
-                  return null;
-                });
+            executor.submit(() -> {
+              client.connect();
+              return null;
+            });
 
         try (Socket peerSocket = serverSocket.accept()) {
           peerSocket.setTcpNoDelay(true);
@@ -362,8 +366,7 @@ class AgentClientWebSocketListenerTest {
                 "Unexpected JSON-RPC reply for oversized message: " + text);
           }
           assertTrue(
-              outcome.observedCloseOrEof(),
-              "Expected close frame (1009) or EOF from AgentClient");
+              outcome.observedCloseOrEof(), "Expected close frame (1009) or EOF from AgentClient");
           if (outcome.closeStatus() != null) {
             assertEquals(
                 AgentClientWebSocketListener.MESSAGE_TOO_BIG_CLOSE_CODE, outcome.closeStatus());
@@ -377,12 +380,12 @@ class AgentClientWebSocketListenerTest {
   }
 
   @Test
-  @DisplayName("Loopback peer: dispatches multi-fragment message under 16 MiB and closes 1003 on binary")
+  @DisplayName(
+      "Loopback peer: dispatches multi-fragment message under 16 MiB and closes 1003 on binary")
   void loopbackDispatchesFragmentedMessageUnderCapAndRejectsBinary() throws Exception {
     AtomicInteger demangleCalls = new AtomicInteger();
 
-    try (ServerSocket serverSocket =
-            new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+    try (ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
         ExecutorService executor = Executors.newCachedThreadPool()) {
       serverSocket.setSoTimeout(10_000);
       String wsUrl =
@@ -391,8 +394,7 @@ class AgentClientWebSocketListenerTest {
               + ":"
               + serverSocket.getLocalPort()
               + "/ws/agent";
-      AgentConfig config =
-          new AgentConfig(wsUrl, null, null, null, null, "loopback-valid", null);
+      AgentConfig config = new AgentConfig(wsUrl, null, null, null, null, "loopback-valid", null);
       try (AgentDispatcher dispatcher =
           new AgentDispatcher(stubServices(demangleCalls), config.sessionId())) {
         AgentClient client =
@@ -400,11 +402,10 @@ class AgentClientWebSocketListenerTest {
                 config, dispatcher, new AgentClient.LifecycleListener() {}, Duration.ofSeconds(5));
 
         Future<Void> connectFuture =
-            executor.submit(
-                () -> {
-                  client.connect();
-                  return null;
-                });
+            executor.submit(() -> {
+              client.connect();
+              return null;
+            });
 
         try (Socket peerSocket = serverSocket.accept()) {
           peerSocket.setTcpNoDelay(true);
@@ -424,7 +425,8 @@ class AgentClientWebSocketListenerTest {
           // Send a valid 180 KiB JSON-RPC request across 3 WebSocket fragments
           byte[] part1 =
               paddedPrefix(
-                  "{\"jsonrpc\":\"2.0\",\"id\":\"under-16mib-ok\",\"method\":\"symbol.demangle\",\"params\":{",
+                  "{\"jsonrpc\":\"2.0\",\"id\":\"under-16mib-ok\","
+                      + "\"method\":\"symbol.demangle\",\"params\":{",
                   60 * 1024);
           byte[] part2 = filledBytes(60 * 1024, (byte) ' ');
           byte[] part3 = paddedSuffix("}}", 60 * 1024);
@@ -443,7 +445,8 @@ class AgentClientWebSocketListenerTest {
 
           // Send a single 512 KiB FIN=1 frame that JDK splits across multiple onText calls
           String singlePrefix =
-              "{\"jsonrpc\":\"2.0\",\"id\":\"large-fin1-ok\",\"method\":\"symbol.demangle\",\"params\":{";
+              "{\"jsonrpc\":\"2.0\",\"id\":\"large-fin1-ok\","
+                  + "\"method\":\"symbol.demangle\",\"params\":{";
           byte[] singleLargeFrame = paddedPrefix(singlePrefix, 512 * 1024);
           singleLargeFrame[singleLargeFrame.length - 2] = '}';
           singleLargeFrame[singleLargeFrame.length - 1] = '}';
@@ -475,10 +478,7 @@ class AgentClientWebSocketListenerTest {
   }
 
   private static void listenerSendInChunks(
-      AgentClientWebSocketListener listener,
-      WebSocket webSocket,
-      String message,
-      int chunkSize) {
+      AgentClientWebSocketListener listener, WebSocket webSocket, String message, int chunkSize) {
     for (int offset = 0; offset < message.length(); offset += chunkSize) {
       int end = Math.min(offset + chunkSize, message.length());
       boolean last = end == message.length();
@@ -496,8 +496,7 @@ class AgentClientWebSocketListenerTest {
   private static byte[] paddedSuffix(String suffix, int totalBytes) {
     byte[] suffixBytes = suffix.getBytes(StandardCharsets.UTF_8);
     byte[] result = filledBytes(totalBytes, (byte) ' ');
-    System.arraycopy(
-        suffixBytes, 0, result, totalBytes - suffixBytes.length, suffixBytes.length);
+    System.arraycopy(suffixBytes, 0, result, totalBytes - suffixBytes.length, suffixBytes.length);
     return result;
   }
 
@@ -507,8 +506,8 @@ class AgentClientWebSocketListenerTest {
     return data;
   }
 
-  private static void writeServerFrame(
-      OutputStream output, boolean fin, int opcode, byte[] payload) throws IOException {
+  private static void writeServerFrame(OutputStream output, boolean fin, int opcode, byte[] payload)
+      throws IOException {
     output.write((fin ? 0x80 : 0x00) | (opcode & 0x0F));
     long length = payload.length;
     if (length <= 125) {
@@ -558,7 +557,8 @@ class AgentClientWebSocketListenerTest {
       List<String> textMessages, Integer closeStatus, boolean observedCloseOrEof) {}
 
   private static TestHarness newHarness(AtomicInteger demangleCalls) {
-    AgentConfig config = new AgentConfig("ws://127.0.0.1:9/ws/agent", null, null, null, null, "test", null);
+    AgentConfig config =
+        new AgentConfig("ws://127.0.0.1:9/ws/agent", null, null, null, null, "test", null);
     AgentDispatcher dispatcher =
         new AgentDispatcher(stubServices(demangleCalls), config.sessionId());
     List<String> sentMessages = Collections.synchronizedList(new ArrayList<>());

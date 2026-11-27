@@ -2,9 +2,7 @@ package app.byteland.ghidra.service.datatype;
 
 import app.byteland.ghidra.service.Page;
 
-/**
- * Manages data types, structures, and category hierarchies.
- */
+/** Manages data types, structures, and category hierarchies. */
 public interface DataTypeService {
   /**
    * Returns child categories under a category path.
@@ -38,8 +36,8 @@ public interface DataTypeService {
       String query, String categoryPath, String kind, int limit, String cursor);
 
   /**
-   * Creates a data type in the program data manager.
-   * The operation replaces a function definition at the same path.
+   * Creates a data type in the program data manager. The operation replaces a function definition
+   * at the same path.
    *
    * @param categoryPath destination category folder
    * @param kind data type classification kind

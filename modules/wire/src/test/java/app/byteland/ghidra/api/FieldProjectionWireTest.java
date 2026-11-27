@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.ByteSequence;
@@ -84,11 +83,7 @@ class FieldProjectionWireTest {
     ApiRegistry.PreparedDispatch prepared =
         fixture.registry.prepareDispatch(
             "symbol.get",
-            Map.of(
-                "selector",
-                Map.of("id", "7"),
-                "projection",
-                Map.of("fields", List.of("name"))));
+            Map.of("selector", Map.of("id", "7"), "projection", Map.of("fields", List.of("name"))));
     Object rawPrepared = prepared.execute();
     assertEquals(Map.of("id", "7", "name", "sym_7"), prepared.encodeResponse(rawPrepared));
 
@@ -166,8 +161,7 @@ class FieldProjectionWireTest {
     GuardedChild childTwo = new GuardedChild("arg1", selectedCalls);
     GuardedRoot root = new GuardedRoot("fn_1", nested, List.of(childOne, childTwo), selectedCalls);
 
-    Set<String> selected =
-        new LinkedHashSet<>(List.of("id", "nested.keep", "children.label"));
+    Set<String> selected = new LinkedHashSet<>(List.of("id", "nested.keep", "children.label"));
     Map<String, Object> projected = WireValues.resource(root, selected);
     assertEquals(
         Map.of(
@@ -267,7 +261,8 @@ class FieldProjectionWireTest {
         recording.enable("jdk.JavaExceptionThrow").withoutThreshold();
         recording.start();
         for (int index = 0; index < 25; index++) {
-          assertSame(validProjectedPayload, functionCodec.encode(validProjectedPayload, dotProjection));
+          assertSame(
+              validProjectedPayload, functionCodec.encode(validProjectedPayload, dotProjection));
         }
         recording.stop();
         recording.dump(recordingPath);
@@ -278,8 +273,7 @@ class FieldProjectionWireTest {
           RecordedEvent event = file.readEvent();
           if ("jdk.JavaExceptionThrow".equals(event.getEventType().getName())) {
             RecordedClass thrownClass = event.getValue("thrownClass");
-            if (thrownClass != null
-                && ApiException.class.getName().equals(thrownClass.getName())) {
+            if (thrownClass != null && ApiException.class.getName().equals(thrownClass.getName())) {
               thrownApiExceptions++;
             }
           }
@@ -301,16 +295,13 @@ class FieldProjectionWireTest {
                     "body",
                     Map.of("start", "ram:00401000", "end", "ram:00401010"))));
     ApiException leakedError =
-        assertThrows(
-            ApiException.class, () -> functionCodec.encode(leakedSibling, dotProjection));
+        assertThrows(ApiException.class, () -> functionCodec.encode(leakedSibling, dotProjection));
     assertEquals(500, leakedError.status());
     assertEquals("invalid_response", leakedError.error().code());
     assertEquals("/result/items/0/body/end", leakedError.error().target());
 
     Map<String, Object> wrongSelectedType =
-        Map.of(
-            "items",
-            List.of(Map.of("entry", "ram:00401000", "body", Map.of("start", 12345))));
+        Map.of("items", List.of(Map.of("entry", "ram:00401000", "body", Map.of("start", 12345))));
     ApiException typeError =
         assertThrows(
             ApiException.class, () -> functionCodec.encode(wrongSelectedType, dotProjection));
@@ -324,10 +315,9 @@ class FieldProjectionWireTest {
             WireSchema.object(Map.of("data_type", WireSchema.dataTypeReference()), "data_type"));
     Map<String, Object> projectedTypeSchema =
         WireSchema.project(typeEnvelopeSchema, Set.of("data_type.name"));
-    assertDoesNotThrow(
-        () ->
-            WireSchema.validate(
-                Map.of("data_type", Map.of("name", "int")), projectedTypeSchema, "/result"));
+    assertDoesNotThrow(() ->
+        WireSchema.validate(
+            Map.of("data_type", Map.of("name", "int")), projectedTypeSchema, "/result"));
     assertDoesNotThrow(
         () -> WireSchema.validate(Map.of("data_type", Map.of()), projectedTypeSchema, "/result"));
     ApiException invalidBlankName =
@@ -348,11 +338,10 @@ class FieldProjectionWireTest {
 
     List<String> projectionMethods =
         catalog.methods().stream()
-            .filter(
-                descriptor -> {
-                  Object props = descriptor.inputSchema().get("properties");
-                  return props instanceof Map<?, ?> map && map.containsKey("projection");
-                })
+            .filter(descriptor -> {
+              Object props = descriptor.inputSchema().get("properties");
+              return props instanceof Map<?, ?> map && map.containsKey("projection");
+            })
             .map(ApiCatalog.MethodDescriptor::name)
             .toList();
     assertEquals(28, projectionMethods.size());
@@ -363,11 +352,9 @@ class FieldProjectionWireTest {
         cases.stream().map(MethodCase::method).collect(java.util.stream.Collectors.toSet()));
 
     for (MethodCase testCase : cases) {
-      ApiMethod<Map<String, Object>, Object> apiMethod =
-          fixture.registry.method(testCase.method());
+      ApiMethod<Map<String, Object>, Object> apiMethod = fixture.registry.method(testCase.method());
       Map<String, Object> unprojected =
-          (Map<String, Object>)
-              fixture.registry.dispatch(testCase.method(), testCase.baseParams());
+          (Map<String, Object>) fixture.registry.dispatch(testCase.method(), testCase.baseParams());
       Map<String, Object> projectedParams = new LinkedHashMap<>(testCase.baseParams());
       projectedParams.put("projection", Map.of("fields", testCase.projectedFields()));
       Map<String, Object> projected =
@@ -391,8 +378,7 @@ class FieldProjectionWireTest {
     assertEquals(Set.of(), fixture.lastIncludes.get());
 
     fixture.registry.dispatch(
-        "function.list",
-        Map.of("projection", Map.of("fields", List.of("parameters.name"))));
+        "function.list", Map.of("projection", Map.of("fields", List.of("parameters.name"))));
     assertEquals(Set.of("parameters"), fixture.lastIncludes.get());
 
     fixture.registry.dispatch(
@@ -406,10 +392,7 @@ class FieldProjectionWireTest {
             fixture.registry.dispatch(
                 "symbol.list",
                 Map.of(
-                    "page",
-                    Map.of("limit", 2),
-                    "projection",
-                    Map.of("fields", List.of("name"))));
+                    "page", Map.of("limit", 2), "projection", Map.of("fields", List.of("name"))));
     List<Map<String, Object>> symbolItems =
         (List<Map<String, Object>>) firstProjectedPage.get("items");
     assertEquals(
@@ -1027,10 +1010,7 @@ class FieldProjectionWireTest {
               "function.get",
               Map.of("selector", Map.of("entry", "ram:00401000")),
               List.of("body.start", "parameters.name", "local_variables.storage")),
-          new MethodCase(
-              "function.list",
-              Map.of(),
-              List.of("body.start", "parameters.name")),
+          new MethodCase("function.list", Map.of(), List.of("body.start", "parameters.name")),
           new MethodCase(
               "function_call.list",
               Map.of("filter", Map.of("entry", "ram:00401000")),
@@ -1040,10 +1020,7 @@ class FieldProjectionWireTest {
               "decompilation.get",
               Map.of("selector", Map.of("entry", "ram:00401000"), "format", "document"),
               List.of("c", "lines")),
-          new MethodCase(
-              "symbol.get",
-              Map.of("selector", Map.of("id", "1")),
-              List.of("name")),
+          new MethodCase("symbol.get", Map.of("selector", Map.of("id", "1")), List.of("name")),
           new MethodCase("symbol.list", Map.of(), List.of("name")),
           new MethodCase(
               "reference.list",
@@ -1059,10 +1036,7 @@ class FieldProjectionWireTest {
               "data_type.get",
               Map.of("selector", Map.of("path", "/FuncSig")),
               List.of("signature.return_type")),
-          new MethodCase(
-              "data_type.list",
-              Map.of(),
-              List.of("signature.parameters")));
+          new MethodCase("data_type.list", Map.of(), List.of("signature.parameters")));
     }
 
     private interface ServiceCall {

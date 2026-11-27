@@ -85,12 +85,9 @@ class GuiDocumentTest {
     GuiDocument document = GuiDocument.render(function, markup);
 
     assertEquals(document.code(), textCode);
-    assertTrue(
-        textCode.contains(PrettyPrinter.INDENT_STRING + "puts(" + stringLiteral + ");\n"));
-    assertTrue(
-        textCode.contains(PrettyPrinter.INDENT_STRING + "if (';' != '{') {\n"));
-    assertTrue(
-        textCode.contains(PrettyPrinter.INDENT_STRING.repeat(2) + "return 0;\n"));
+    assertTrue(textCode.contains(PrettyPrinter.INDENT_STRING + "puts(" + stringLiteral + ");\n"));
+    assertTrue(textCode.contains(PrettyPrinter.INDENT_STRING + "if (';' != '{') {\n"));
+    assertTrue(textCode.contains(PrettyPrinter.INDENT_STRING.repeat(2) + "return 0;\n"));
     assertFalse(textCode.contains("\"a;\n"));
   }
 
@@ -189,7 +186,8 @@ class GuiDocumentTest {
     line3.addToken(callToken("unresolved_fn", missingEntry, callSiteB, callSiteB));
     line3.addToken(token("();", ClangToken.DEFAULT_COLOR, null, null));
 
-    // Line 4: non-adjacent revisit of callSiteA (with a distinct equal Address) and second call to helper_alpha.
+    // Line 4: non-adjacent revisit of callSiteA (with a distinct equal Address) and second call to
+    // helper_alpha.
     Address duplicateCallSiteA = countedAddress(0x1012L, canonicalCounts);
     ClangLine line4 = new ClangLine(4, 1);
     line4.addToken(callToken("helper_alpha", helperEntry, duplicateCallSiteA, callSiteAMax));
@@ -228,7 +226,8 @@ class GuiDocumentTest {
     SymbolResource secondHelperSymbol = rendered.lines().get(3).tokens().get(0).symbol();
     assertSame(firstHelperSymbol, secondHelperSymbol);
     assertEquals("helper_alpha", firstHelperSymbol.name());
-    assertNull(rendered.lines().get(2).tokens().get(2).symbol(), "unresolved callee has null symbol");
+    assertNull(
+        rendered.lines().get(2).tokens().get(2).symbol(), "unresolved callee has null symbol");
 
     // Verify zero state persists across separate render calls.
     GuiDocument secondRender = GuiDocument.renderLines(owner, List.of(line2));
@@ -304,7 +303,8 @@ class GuiDocumentTest {
     line2.addToken(token(" = ", ClangToken.DEFAULT_COLOR, null, null));
     line2.addToken(token("b", ClangToken.VARIABLE_COLOR, secondOnLine2, secondOnLine2));
 
-    // Line 3: first token returns null from getClosestAddress, then 0x1020 appears on the same line.
+    // Line 3: first token returns null from getClosestAddress, then 0x1020 appears on the same
+    // line.
     // Because previous updates only after the line finishes, the first token inherits 0x1010.
     ClangLine detachedEmptyParent = new ClangLine(99, 0);
     ClangLine line3 = new ClangLine(3, 1);
@@ -459,8 +459,7 @@ class GuiDocumentTest {
   private static ClangFuncNameToken callToken(
       String text, Address calleeEntry, Address min, Address max) {
     ClangStatement statement = new ClangStatement(null);
-    PcodeOp callOp =
-        new PcodeOp(min, 0, PcodeOp.CALL, new Varnode[] {new Varnode(calleeEntry, 8)});
+    PcodeOp callOp = new PcodeOp(min, 0, PcodeOp.CALL, new Varnode[] {new Varnode(calleeEntry, 8)});
     return new ClangFuncNameToken(statement, null) {
       @Override
       public String getText() {
@@ -506,36 +505,47 @@ class GuiDocumentTest {
 
   static Function stubFunction() {
     Address entry = FunctionCommentsTest.address("ram", "00101000");
-    CodeUnit unit = (CodeUnit) Proxy.newProxyInstance(
-        CodeUnit.class.getClassLoader(),
-        new Class<?>[] {CodeUnit.class},
-        (proxy, method, args) -> switch (method.getName()) {
-          case "getMinAddress" -> entry;
-          default -> throw new AssertionError(method.getName());
-        });
-    Listing listing = (Listing) Proxy.newProxyInstance(
-        Listing.class.getClassLoader(),
-        new Class<?>[] {Listing.class},
-        (proxy, method, args) -> switch (method.getName()) {
-          case "getCodeUnitContaining" -> unit;
-          default -> throw new AssertionError(method.getName());
-        });
-    Program program = (Program) Proxy.newProxyInstance(
-        Program.class.getClassLoader(),
-        new Class<?>[] {Program.class},
-        (proxy, method, args) -> switch (method.getName()) {
-          case "getListing" -> listing;
-          default -> throw new AssertionError(method.getName());
-        });
-    return (Function) Proxy.newProxyInstance(
-        Function.class.getClassLoader(),
-        new Class<?>[] {Function.class},
-        (proxy, method, args) -> switch (method.getName()) {
-          case "getProgram" -> program;
-          case "getEntryPoint" -> entry;
-          case "getName" -> "parse";
-          default -> throw new AssertionError(method.getName());
-        });
+    CodeUnit unit =
+        (CodeUnit)
+            Proxy.newProxyInstance(
+                CodeUnit.class.getClassLoader(),
+                new Class<?>[] {CodeUnit.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getMinAddress" -> entry;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    Listing listing =
+        (Listing)
+            Proxy.newProxyInstance(
+                Listing.class.getClassLoader(),
+                new Class<?>[] {Listing.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getCodeUnitContaining" -> unit;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    Program program =
+        (Program)
+            Proxy.newProxyInstance(
+                Program.class.getClassLoader(),
+                new Class<?>[] {Program.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getListing" -> listing;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    return (Function)
+        Proxy.newProxyInstance(
+            Function.class.getClassLoader(),
+            new Class<?>[] {Function.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getProgram" -> program;
+                  case "getEntryPoint" -> entry;
+                  case "getName" -> "parse";
+                  default -> throw new AssertionError(method.getName());
+                });
   }
 
   private static class TestToken extends ClangToken {
@@ -599,8 +609,7 @@ class GuiDocumentTest {
                   case "getOffset" -> offset;
                   case "toString" -> hex;
                   case "hashCode" -> Long.hashCode(offset);
-                  case "equals" ->
-                      args[0] instanceof Address other && other.getOffset() == offset;
+                  case "equals" -> args[0] instanceof Address other && other.getOffset() == offset;
                   default -> throw new AssertionError("Address." + method.getName());
                 });
   }

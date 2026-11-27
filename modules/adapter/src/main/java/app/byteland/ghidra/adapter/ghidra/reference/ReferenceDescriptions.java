@@ -8,8 +8,7 @@ import ghidra.program.model.symbol.Reference;
 final class ReferenceDescriptions {
   private ReferenceDescriptions() {}
 
-  static ReferenceResource describe(
-      Reference reference, Address anchor, String canonicalAnchor) {
+  static ReferenceResource describe(Reference reference, Address anchor, String canonicalAnchor) {
     return new ReferenceResource(
         canonicalEndpoint(reference.getFromAddress(), anchor, canonicalAnchor),
         canonicalEndpoint(reference.getToAddress(), anchor, canonicalAnchor),
@@ -28,8 +27,7 @@ final class ReferenceDescriptions {
         reference.getOperandIndex());
   }
 
-  private static String canonicalEndpoint(
-      Address address, Address anchor, String canonicalAnchor) {
+  private static String canonicalEndpoint(Address address, Address anchor, String canonicalAnchor) {
     return anchor != null && anchor.equals(address)
         ? canonicalAnchor
         : AddressUtil.canonicalAddress(address);

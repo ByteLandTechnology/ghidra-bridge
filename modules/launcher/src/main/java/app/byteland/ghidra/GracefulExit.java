@@ -81,8 +81,8 @@ final class GracefulExit implements AutoCloseable {
   }
 
   /**
-   * Halts the JVM if it does not exit within {@code delay}. The host that started this Ghidra
-   * asks for the deadline. Thus, no orphan process stays when a close step blocks.
+   * Halts the JVM if it does not exit within {@code delay}. The host that started this Ghidra asks
+   * for the deadline. Thus, no orphan process stays when a close step blocks.
    *
    * <p>The deadline never stops a save. If a save runs at the deadline, the JVM gets {@link
    * #AFTER_SAVE_GRACE} after the save to exit. A normal exit stops the daemon thread.
@@ -91,20 +91,19 @@ final class GracefulExit implements AutoCloseable {
     Thread.ofPlatform()
         .daemon()
         .name("ghidra-bridge-exit-deadline")
-        .start(
-            () -> {
-              try {
-                Thread.sleep(delay.toMillis());
-                if (closeStarted.get() && saveCompleted.getCount() > 0) {
-                  saveCompleted.await();
-                  Thread.sleep(AFTER_SAVE_GRACE.toMillis());
-                }
-              } catch (InterruptedException interrupted) {
-                return;
-              }
-              log.accept("[ghidra-bridge] Ghidra did not exit after the session ended; halting.");
-              Runtime.getRuntime().halt(1);
-            });
+        .start(() -> {
+          try {
+            Thread.sleep(delay.toMillis());
+            if (closeStarted.get() && saveCompleted.getCount() > 0) {
+              saveCompleted.await();
+              Thread.sleep(AFTER_SAVE_GRACE.toMillis());
+            }
+          } catch (InterruptedException interrupted) {
+            return;
+          }
+          log.accept("[ghidra-bridge] Ghidra did not exit after the session ended; halting.");
+          Runtime.getRuntime().halt(1);
+        });
   }
 
   @Override
@@ -152,5 +151,4 @@ final class GracefulExit implements AutoCloseable {
       shutdownHook = Optional.empty();
     }
   }
-
 }

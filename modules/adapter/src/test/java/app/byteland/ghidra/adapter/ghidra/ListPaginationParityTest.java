@@ -83,7 +83,8 @@ class ListPaginationParityTest {
   @Test
   void wireResponsesAndCursorTokensMatchBaselineAcrossAllFourListMethods() throws Exception {
     Fixture fixture = buildFixture();
-    ApiRegistry actualRegistry = new ApiRegistry(fixture.actualServices(), "sess-1", Map::of, () -> {});
+    ApiRegistry actualRegistry =
+        new ApiRegistry(fixture.actualServices(), "sess-1", Map::of, () -> {});
     ApiRegistry baselineRegistry =
         new ApiRegistry(fixture.baselineServices(), "sess-1", Map::of, () -> {});
 
@@ -126,7 +127,9 @@ class ListPaginationParityTest {
         baselineRegistry,
         actualRegistry,
         "reference.list",
-        Map.of("filter", Map.of("to", "ram:00400000", "direction", "to", "type", "UNCONDITIONAL_CALL")),
+        Map.of(
+            "filter",
+            Map.of("to", "ram:00400000", "direction", "to", "type", "UNCONDITIONAL_CALL")),
         2);
     assertMethodParity(
         baselineRegistry,
@@ -526,15 +529,14 @@ class ListPaginationParityTest {
       Page<Keyed> page = Page.paginate(matched, limit, cursor, Keyed::key);
       List<ReferenceResource> items =
           page.items().stream()
-              .map(
-                  k ->
-                      new ReferenceResource(
-                          AddressUtil.canonicalAddress(k.ref().getFromAddress()),
-                          AddressUtil.canonicalAddress(k.ref().getToAddress()),
-                          k.ref().getReferenceType().getName(),
-                          k.ref().getOperandIndex(),
-                          k.ref().isPrimary(),
-                          String.valueOf(k.ref().getSource())))
+              .map(k ->
+                  new ReferenceResource(
+                      AddressUtil.canonicalAddress(k.ref().getFromAddress()),
+                      AddressUtil.canonicalAddress(k.ref().getToAddress()),
+                      k.ref().getReferenceType().getName(),
+                      k.ref().getOperandIndex(),
+                      k.ref().isPrimary(),
+                      String.valueOf(k.ref().getSource())))
               .toList();
       return Page.of(items, page.limit(), page.nextCursor());
     };

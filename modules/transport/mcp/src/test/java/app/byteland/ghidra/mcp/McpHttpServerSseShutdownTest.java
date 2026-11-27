@@ -174,37 +174,34 @@ class McpHttpServerSseShutdownTest {
     AtomicBoolean signaled = new AtomicBoolean(false);
     Thread waiter =
         Thread.ofVirtual()
-            .start(
-                () -> {
-                  try {
-                    signaled.set(session.awaitClose(15, TimeUnit.SECONDS));
-                  } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                  } finally {
-                    waiterWoke.countDown();
-                  }
-                });
+            .start(() -> {
+              try {
+                signaled.set(session.awaitClose(15, TimeUnit.SECONDS));
+              } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+              } finally {
+                waiterWoke.countDown();
+              }
+            });
 
     Thread stalledWriter =
         Thread.ofVirtual()
-            .start(
-                () -> {
-                  try {
-                    session.sendEvent("message", "{\"ok\":true}");
-                  } catch (IOException ignored) {
-                  }
-                });
+            .start(() -> {
+              try {
+                session.sendEvent("message", "{\"ok\":true}");
+              } catch (IOException ignored) {
+              }
+            });
 
     assertTrue(writeEntered.await(2, TimeUnit.SECONDS), "Writer should enter OutputStream.write");
 
     CountDownLatch closeFinished = new CountDownLatch(1);
     Thread closer =
         Thread.ofVirtual()
-            .start(
-                () -> {
-                  session.close();
-                  closeFinished.countDown();
-                });
+            .start(() -> {
+              session.close();
+              closeFinished.countDown();
+            });
 
     try {
       assertTrue(
@@ -213,8 +210,7 @@ class McpHttpServerSseShutdownTest {
       assertTrue(signaled.get());
       assertFalse(session.isActive());
       assertTrue(
-          closeFinished.await(500, TimeUnit.MILLISECONDS),
-          "close() must not block on writeLock");
+          closeFinished.await(500, TimeUnit.MILLISECONDS), "close() must not block on writeLock");
     } finally {
       unblockWrite.countDown();
       stalledWriter.join(2_000L);
@@ -235,26 +231,26 @@ class McpHttpServerSseShutdownTest {
 
     Thread handlerThread =
         Thread.ofVirtual()
-            .start(
-                () -> {
-                  startedWaiting.countDown();
-                  try {
-                    session.awaitClose(15, TimeUnit.SECONDS);
-                  } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    interruptRestored.set(Thread.currentThread().isInterrupted());
-                  } finally {
-                    session.close();
-                    finished.countDown();
-                  }
-                });
+            .start(() -> {
+              startedWaiting.countDown();
+              try {
+                session.awaitClose(15, TimeUnit.SECONDS);
+              } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                interruptRestored.set(Thread.currentThread().isInterrupted());
+              } finally {
+                session.close();
+                finished.countDown();
+              }
+            });
 
     assertTrue(startedWaiting.await(2, TimeUnit.SECONDS));
     Thread.sleep(30L);
     handlerThread.interrupt();
 
     assertTrue(finished.await(2, TimeUnit.SECONDS));
-    assertTrue(interruptRestored.get(), "Interrupt flag should be restored on InterruptedException");
+    assertTrue(
+        interruptRestored.get(), "Interrupt flag should be restored on InterruptedException");
     assertNull(exchange.getPrincipal());
   }
 

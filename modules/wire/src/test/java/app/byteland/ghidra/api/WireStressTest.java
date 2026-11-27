@@ -4,19 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonRpc;
-import app.byteland.ghidra.service.DomainException;
 import app.byteland.ghidra.service.TransactionExecutionException;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +25,8 @@ class WireStressTest {
 
     assertEquals(500, failure.status());
     assertEquals("transaction_failed", failure.error().code());
-    assertEquals("app.byteland.ghidra.service.TransactionExecutionException", failure.error().message());
+    assertEquals(
+        "app.byteland.ghidra.service.TransactionExecutionException", failure.error().message());
     assertNull(failure.error().target());
     assertTrue(failure.error().details().isEmpty());
 
@@ -50,7 +46,8 @@ class WireStressTest {
 
     assertEquals(500, failure.status());
     assertEquals("transaction_failed", failure.error().code());
-    assertEquals("app.byteland.ghidra.service.TransactionExecutionException", failure.error().message());
+    assertEquals(
+        "app.byteland.ghidra.service.TransactionExecutionException", failure.error().message());
   }
 
   @Test
@@ -184,8 +181,9 @@ class WireStressTest {
     var ex = new TransactionExecutionException("symbol conflict at address", "symbol.name");
     var failure = ApiFailures.normalize(ex);
 
-    Map<String, Object> rpcResponse = JsonRpc.errorResponse(
-        "req-999", -32000, failure.error().message(), failure.error().toMap());
+    Map<String, Object> rpcResponse =
+        JsonRpc.errorResponse(
+            "req-999", -32000, failure.error().message(), failure.error().toMap());
 
     assertEquals("2.0", rpcResponse.get(JsonRpc.VERSION));
     assertEquals("req-999", rpcResponse.get(JsonRpc.ID));

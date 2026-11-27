@@ -338,8 +338,7 @@ final class WebSocketHandshake {
   }
 
   static final class HttpHandshakeException extends RuntimeException {
-    @Serial
-    private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
     private final int statusCode;
     private final String reasonPhrase;
 

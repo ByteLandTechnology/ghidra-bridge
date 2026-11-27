@@ -17,9 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
-/**
- * Central registry that defines and dispatches all public API methods.
- */
+/** Central registry that defines and dispatches all public API methods. */
 public final class ApiRegistry {
   public static final String INTERFACE_VERSION = "0.2.0";
   public static final int DEFAULT_LIMIT = 100;
@@ -410,12 +408,7 @@ public final class ApiRegistry {
               String resource = name.substring(0, name.indexOf('.'));
               PageRequest page = decodePage(request, resource);
               return canonicalList(
-                  resource,
-                  request,
-                  handler.handle(request, page),
-                  page,
-                  selected,
-                  allowedRoots);
+                  resource, request, handler.handle(request, page), page, selected, allowedRoots);
             });
   }
 

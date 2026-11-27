@@ -43,7 +43,8 @@ import org.junit.jupiter.api.Test;
 class McpHttpServerHostValidationTest {
 
   @Test
-  @DisplayName("Rejects GET, POST, OPTIONS, and HEAD with external Host header (403) and zero SSE sessions")
+  @DisplayName(
+      "Rejects GET, POST, OPTIONS, and HEAD with external Host header (403) and zero SSE sessions")
   void rejectsExternalHostAcrossAllHttpMethodsOnLoopback() throws Exception {
     AtomicInteger programGetCalls = new AtomicInteger();
     try (RunningMcpServer running = startServer("127.0.0.1", null, programGetCalls)) {
@@ -164,8 +165,7 @@ class McpHttpServerHostValidationTest {
 
       // Malformed Host header
       RawHttpResponse malformed =
-          sendRawHttp(
-              port, "POST /mcp HTTP/1.1\r\nHost: [::1\r\nConnection: close\r\n\r\n", false);
+          sendRawHttp(port, "POST /mcp HTTP/1.1\r\nHost: [::1\r\nConnection: close\r\n\r\n", false);
       assertEquals(400, malformed.status());
       assertNull(malformed.headers().get("access-control-allow-origin"));
 
@@ -263,7 +263,8 @@ class McpHttpServerHostValidationTest {
   }
 
   @Test
-  @DisplayName("Authenticated non-loopback listener requires a single well-formed Host and bearer token")
+  @DisplayName(
+      "Authenticated non-loopback listener requires a single well-formed Host and bearer token")
   void authenticatedNonLoopbackListenerRequiresWellFormedHostAndBearerToken() throws Exception {
     AtomicInteger programGetCalls = new AtomicInteger();
     try (RunningMcpServer running = startServer("0.0.0.0", "secret-token-123", programGetCalls)) {

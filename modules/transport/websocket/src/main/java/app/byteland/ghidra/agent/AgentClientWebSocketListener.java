@@ -34,8 +34,7 @@ final class AgentClientWebSocketListener implements WebSocket.Listener {
   }
 
   @Override
-  public void onOpen(WebSocket webSocket) {
-  }
+  public void onOpen(WebSocket webSocket) {}
 
   @Override
   public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {

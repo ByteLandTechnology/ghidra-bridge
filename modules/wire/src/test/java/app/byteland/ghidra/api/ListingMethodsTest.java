@@ -132,12 +132,13 @@ class ListingMethodsTest {
                     "page", Map.of("limit", 25),
                     "scan",
                         Map.of(
-                            "range", Map.of("start", "0x100000", "end", "0x100010"),
-                            "timeout_ms", 500)));
+                            "range",
+                            Map.of("start", "0x100000", "end", "0x100010"),
+                            "timeout_ms",
+                            500)));
     assertEquals("listCodeUnits", calledMethod.get());
     assertEquals(
-        Arrays.asList(
-            new AddressScanOptions("0x100000", "0x100010", 500), 25, "instruction", null),
+        Arrays.asList(new AddressScanOptions("0x100000", "0x100010", 500), 25, "instruction", null),
         calledArgs.get());
     registry.dispatch(
         "code_unit.list",
@@ -146,14 +147,10 @@ class ListingMethodsTest {
             "page", Map.of("limit", 25, "cursor", codeUnitPage.get("next_cursor")),
             "scan",
                 Map.of(
-                    "range", Map.of("start", "0x100000", "end", "0x100010"),
-                    "timeout_ms", 500)));
+                    "range", Map.of("start", "0x100000", "end", "0x100010"), "timeout_ms", 500)));
     assertEquals(
         List.of(
-            new AddressScanOptions("0x100000", "0x100010", 500),
-            25,
-            "instruction",
-            "ram:00100000"),
+            new AddressScanOptions("0x100000", "0x100010", 500), 25, "instruction", "ram:00100000"),
         calledArgs.get());
     assertFalse(registry.method("code_unit.list").effects().requiresTransaction());
 
@@ -165,8 +162,10 @@ class ListingMethodsTest {
                     "page", Map.of("limit", 15),
                     "scan",
                         Map.of(
-                            "range", Map.of("start", "0x100000", "end", "0x100010"),
-                            "timeout_ms", 600)));
+                            "range",
+                            Map.of("start", "0x100000", "end", "0x100010"),
+                            "timeout_ms",
+                            600)));
     assertEquals("listInstructions", calledMethod.get());
     assertEquals(
         Arrays.asList(new AddressScanOptions("0x100000", "0x100010", 600), 15, null),
@@ -177,8 +176,7 @@ class ListingMethodsTest {
             "page", Map.of("limit", 15, "cursor", instructionPage.get("next_cursor")),
             "scan",
                 Map.of(
-                    "range", Map.of("start", "0x100000", "end", "0x100010"),
-                    "timeout_ms", 600)));
+                    "range", Map.of("start", "0x100000", "end", "0x100010"), "timeout_ms", 600)));
     assertEquals(
         List.of(new AddressScanOptions("0x100000", "0x100010", 600), 15, "ram:00100000"),
         calledArgs.get());
@@ -191,8 +189,10 @@ class ListingMethodsTest {
                     "page", Map.of("limit", 10),
                     "scan",
                         Map.of(
-                            "range", Map.of("start", "0x100000", "end", "0x100010"),
-                            "timeout_ms", 700)));
+                            "range",
+                            Map.of("start", "0x100000", "end", "0x100010"),
+                            "timeout_ms",
+                            700)));
     assertEquals("listDataUnits", calledMethod.get());
     assertEquals(
         Arrays.asList(new AddressScanOptions("0x100000", "0x100010", 700), 10, null),
@@ -203,8 +203,7 @@ class ListingMethodsTest {
             "page", Map.of("limit", 10, "cursor", dataUnitPage.get("next_cursor")),
             "scan",
                 Map.of(
-                    "range", Map.of("start", "0x100000", "end", "0x100010"),
-                    "timeout_ms", 700)));
+                    "range", Map.of("start", "0x100000", "end", "0x100010"), "timeout_ms", 700)));
     assertEquals(
         List.of(new AddressScanOptions("0x100000", "0x100010", 700), 10, "ram:00100004"),
         calledArgs.get());
@@ -212,11 +211,11 @@ class ListingMethodsTest {
     assertThrows(
         ApiException.class,
         () ->
-            registry.dispatch(
-                "code_unit.list", Map.of("filter", Map.of("direction", "reverse"))));
+            registry.dispatch("code_unit.list", Map.of("filter", Map.of("direction", "reverse"))));
     assertThrows(
         ApiException.class,
-        () -> registry.dispatch("instruction.list", Map.of("scan", Map.of("direction", "reverse"))));
+        () ->
+            registry.dispatch("instruction.list", Map.of("scan", Map.of("direction", "reverse"))));
     assertThrows(
         ApiException.class,
         () -> registry.dispatch("data_unit.list", Map.of("scan", Map.of("direction", "reverse"))));

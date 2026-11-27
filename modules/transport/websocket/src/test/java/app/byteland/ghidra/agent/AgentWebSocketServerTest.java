@@ -47,7 +47,8 @@ class AgentWebSocketServerTest {
   private static final String VALID_WS_KEY = "dGhlIHNhbXBsZSBub25jZQ==";
 
   @Test
-  @DisplayName("Bearer-authenticated client receives 101 while unauthenticated socket trickles header bytes")
+  @DisplayName(
+      "Bearer-authenticated client receives 101 while unauthenticated socket trickles header bytes")
   void testBearerClientReceives101WhileUnauthenticatedSocketTrickles() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started = startDefaultServer(TOKEN, handler);
@@ -69,7 +70,8 @@ class AgentWebSocketServerTest {
           unauthOut.write('x');
           unauthOut.flush();
         }
-        // Valid Bearer-authenticated client must receive `HTTP/1.1 101 Switching Protocols`, not 409 Conflict.
+        // Valid Bearer-authenticated client must receive `HTTP/1.1 101 Switching Protocols`, not
+        // 409 Conflict.
         WebSocket ws =
             httpClient
                 .newWebSocketBuilder()
@@ -90,8 +92,7 @@ class AgentWebSocketServerTest {
   @DisplayName("Trickling handshake bytes past total deadline returns HTTP 408 Request Timeout")
   void testTricklingHandshakeExceedingTotalDeadlineReturns408() throws Exception {
     RecordingHandler handler = new RecordingHandler();
-    try (StartedServer started =
-        startCustomServer(TOKEN, handler, Duration.ofMillis(300), 8)) {
+    try (StartedServer started = startCustomServer(TOKEN, handler, Duration.ofMillis(300), 8)) {
       try (Socket trickle = new Socket("127.0.0.1", started.port())) {
         trickle.setSoTimeout(3_000);
         OutputStream out = trickle.getOutputStream();
@@ -120,8 +121,7 @@ class AgentWebSocketServerTest {
   @DisplayName("Idle handshake exceeding total deadline returns HTTP 408 Request Timeout")
   void testIdleHandshakeExceedingTotalDeadlineReturns408() throws Exception {
     RecordingHandler handler = new RecordingHandler();
-    try (StartedServer started =
-        startCustomServer(TOKEN, handler, Duration.ofMillis(200), 8)) {
+    try (StartedServer started = startCustomServer(TOKEN, handler, Duration.ofMillis(200), 8)) {
       try (Socket idle = new Socket("127.0.0.1", started.port())) {
         idle.setSoTimeout(3_000);
         OutputStream out = idle.getOutputStream();
@@ -161,22 +161,19 @@ class AgentWebSocketServerTest {
           () -> "Expected 401 response, got: " + unauthorized);
 
       String wrongMethod =
-          sendRawRequest(
-              port, "POST /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n");
+          sendRawRequest(port, "POST /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n");
       assertTrue(
           wrongMethod.startsWith("HTTP/1.1 405 Method Not Allowed\r\n"),
           () -> "Expected 405 response, got: " + wrongMethod);
 
       String wrongPath =
-          sendRawRequest(
-              port, "GET /other HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n");
+          sendRawRequest(port, "GET /other HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n");
       assertTrue(
           wrongPath.startsWith("HTTP/1.1 404 Not Found\r\n"),
           () -> "Expected 404 response, got: " + wrongPath);
 
       String missingUpgrade =
-          sendRawRequest(
-              port, "GET /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n");
+          sendRawRequest(port, "GET /ws/agent HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\n\r\n");
       assertTrue(
           missingUpgrade.startsWith("HTTP/1.1 400 Bad Request\r\n"),
           () -> "Expected 400 response, got: " + missingUpgrade);
@@ -184,7 +181,9 @@ class AgentWebSocketServerTest {
   }
 
   @Test
-  @DisplayName("Preserves single-client exclusivity with 409 for authenticated second client and 401 for unauthenticated")
+  @DisplayName(
+      "Preserves single-client exclusivity with 409 for authenticated second client and 401 for"
+          + " unauthenticated")
   void testSingleClientExclusivityAndRecoveryAfterDisconnect() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (StartedServer started = startDefaultServer(TOKEN, handler);
@@ -251,7 +250,8 @@ class AgentWebSocketServerTest {
   }
 
   @Test
-  @DisplayName("Concurrent authenticated handshakes elect one 101 winner and return 409 to all losers")
+  @DisplayName(
+      "Concurrent authenticated handshakes elect one 101 winner and return 409 to all losers")
   void testConcurrentAuthenticatedClientsRaceCleanly() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     int contenders = 6;
@@ -265,33 +265,32 @@ class AgentWebSocketServerTest {
         List<Future<Integer>> results = new ArrayList<>();
         for (int i = 0; i < contenders; i++) {
           results.add(
-              pool.submit(
-                  () -> {
-                    Socket socket = new Socket("127.0.0.1", port);
-                    sockets.add(socket);
-                    socket.setSoTimeout(5_000);
-                    OutputStream out = socket.getOutputStream();
-                    String prefix =
-                        "GET /ws/agent HTTP/1.1\r\n"
-                            + "Host: 127.0.0.1:"
-                            + port
-                            + "\r\n"
-                            + "Upgrade: websocket\r\n"
-                            + "Connection: Upgrade\r\n"
-                            + "Sec-WebSocket-Version: 13\r\n"
-                            + "Sec-WebSocket-Key: "
-                            + VALID_WS_KEY
-                            + "\r\n"
-                            + "Authorization: Bearer "
-                            + TOKEN
-                            + "\r\n";
-                    out.write(prefix.getBytes(StandardCharsets.US_ASCII));
-                    out.flush();
-                    barrier.await(5, TimeUnit.SECONDS);
-                    out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
-                    out.flush();
-                    return readStatusCode(socket.getInputStream());
-                  }));
+              pool.submit(() -> {
+                Socket socket = new Socket("127.0.0.1", port);
+                sockets.add(socket);
+                socket.setSoTimeout(5_000);
+                OutputStream out = socket.getOutputStream();
+                String prefix =
+                    "GET /ws/agent HTTP/1.1\r\n"
+                        + "Host: 127.0.0.1:"
+                        + port
+                        + "\r\n"
+                        + "Upgrade: websocket\r\n"
+                        + "Connection: Upgrade\r\n"
+                        + "Sec-WebSocket-Version: 13\r\n"
+                        + "Sec-WebSocket-Key: "
+                        + VALID_WS_KEY
+                        + "\r\n"
+                        + "Authorization: Bearer "
+                        + TOKEN
+                        + "\r\n";
+                out.write(prefix.getBytes(StandardCharsets.US_ASCII));
+                out.flush();
+                barrier.await(5, TimeUnit.SECONDS);
+                out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
+                out.flush();
+                return readStatusCode(socket.getInputStream());
+              }));
         }
 
         int winners = 0;
@@ -319,8 +318,7 @@ class AgentWebSocketServerTest {
   @DisplayName("Bounds concurrent pending sockets and recovers once a pending slot frees")
   void testBoundedPendingSocketsRejectsExcessAndRecovers() throws Exception {
     RecordingHandler handler = new RecordingHandler();
-    try (StartedServer started =
-            startCustomServer(TOKEN, handler, Duration.ofSeconds(5), 2);
+    try (StartedServer started = startCustomServer(TOKEN, handler, Duration.ofSeconds(5), 2);
         HttpClient httpClient =
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
       int port = started.port();
@@ -405,7 +403,8 @@ class AgentWebSocketServerTest {
     AgentWebSocketServer.PendingSockets pendingSockets =
         new AgentWebSocketServer.PendingSockets(running, 4);
 
-    try (ServerSocket listener = new ServerSocket(0, 1, new InetSocketAddress("127.0.0.1", 0).getAddress())) {
+    try (ServerSocket listener =
+        new ServerSocket(0, 1, new InetSocketAddress("127.0.0.1", 0).getAddress())) {
       listener.setSoTimeout(5_000);
       int port = listener.getLocalPort();
       AgentConfig config =
@@ -446,7 +445,8 @@ class AgentWebSocketServerTest {
   }
 
   @Test
-  @DisplayName("Reports ws:// endpoint and preserves underlying BindException cause when port is busy")
+  @DisplayName(
+      "Reports ws:// endpoint and preserves underlying BindException cause when port is busy")
   void testBindFailureReportsWsEndpointAndCause() throws Exception {
     RecordingHandler handler = new RecordingHandler();
     try (ServerSocket occupied = new ServerSocket()) {
@@ -629,8 +629,7 @@ class AgentWebSocketServerTest {
     }
 
     @Override
-    public void onClose(
-        AgentWebSocketServer.Connection connection, int statusCode, String reason) {
+    public void onClose(AgentWebSocketServer.Connection connection, int statusCode, String reason) {
       closeCount.incrementAndGet();
       firstCloseLatch.countDown();
     }

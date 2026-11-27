@@ -255,9 +255,7 @@ class McpHttpServerOriginTest {
     assertTrue(postResp.body().contains("sample.bin"));
 
     HttpRequest headReq =
-        requestBuilder(endpoint)
-            .method("HEAD", HttpRequest.BodyPublishers.noBody())
-            .build();
+        requestBuilder(endpoint).method("HEAD", HttpRequest.BodyPublishers.noBody()).build();
     HttpResponse<String> headResp = client.send(headReq, HttpResponse.BodyHandlers.ofString());
     assertEquals(200, headResp.statusCode());
     assertTrue(headResp.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
@@ -348,22 +346,15 @@ class McpHttpServerOriginTest {
     assertFalse(
         McpHttpServer.isAllowedOrigin(
             List.of("https://other-host.invalid:8443"), "ghidra-host.invalid"));
-    assertFalse(
-        McpHttpServer.isAllowedOrigin(
-            List.of("https://untrusted.invalid"), "127.0.0.1"));
+    assertFalse(McpHttpServer.isAllowedOrigin(List.of("https://untrusted.invalid"), "127.0.0.1"));
 
     // Configured non-loopback IPv4 and IPv6 literal match
+    assertTrue(McpHttpServer.isAllowedOrigin(List.of("http://192.168.1.50:8766"), "192.168.1.50"));
+    assertFalse(McpHttpServer.isAllowedOrigin(List.of("http://192.168.1.51:8766"), "192.168.1.50"));
+    assertTrue(McpHttpServer.isAllowedOrigin(List.of("http://[fd00::1]:8766"), "[FD00::1]"));
     assertTrue(
-        McpHttpServer.isAllowedOrigin(List.of("http://192.168.1.50:8766"), "192.168.1.50"));
-    assertFalse(
-        McpHttpServer.isAllowedOrigin(List.of("http://192.168.1.51:8766"), "192.168.1.50"));
-    assertTrue(
-        McpHttpServer.isAllowedOrigin(List.of("http://[fd00::1]:8766"), "[FD00::1]"));
-    assertTrue(
-        McpHttpServer.isAllowedOrigin(
-            List.of("http://[fd00:0:0:0:0:0:0:1]:8766"), "fd00::1"));
-    assertFalse(
-        McpHttpServer.isAllowedOrigin(List.of("http://[fd00::2]:8766"), "fd00::1"));
+        McpHttpServer.isAllowedOrigin(List.of("http://[fd00:0:0:0:0:0:0:1]:8766"), "fd00::1"));
+    assertFalse(McpHttpServer.isAllowedOrigin(List.of("http://[fd00::2]:8766"), "fd00::1"));
 
     // Malformed IP literals return null without an exception or DNS query
     assertNull(McpHttpServer.parseIpLiteral("127.0.0.1.evil.example"));
@@ -381,8 +372,7 @@ class McpHttpServerOriginTest {
         nonLoopbackHost != null, "No non-loopback IPv4 interface available");
 
     int customPort;
-    try (ServerSocket probe =
-        new ServerSocket(0, 1, InetAddress.getByName(nonLoopbackHost))) {
+    try (ServerSocket probe = new ServerSocket(0, 1, InetAddress.getByName(nonLoopbackHost))) {
       customPort = probe.getLocalPort();
     }
     McpConfig customConfig =

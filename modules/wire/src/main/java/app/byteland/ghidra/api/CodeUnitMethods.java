@@ -60,9 +60,6 @@ final class CodeUnitMethods implements ApiMethodProvider {
             registry
                 .services()
                 .listingService()
-                .listDataUnits(
-                    addressScan(request),
-                    page.limit(),
-                    page.cursor()));
+                .listDataUnits(addressScan(request), page.limit(), page.cursor()));
   }
 }

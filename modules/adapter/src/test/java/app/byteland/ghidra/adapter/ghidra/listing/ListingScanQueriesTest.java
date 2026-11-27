@@ -72,8 +72,7 @@ class ListingScanQueriesTest {
     ListingServiceImpl service = new ListingServiceImpl(new GhidraSession(new StubScript(program)));
 
     Page<CodeUnitResource> firstPage =
-        service.listCodeUnits(
-            new AddressScanOptions("0x1000", "0x100a", 1_000), 2, "all", null);
+        service.listCodeUnits(new AddressScanOptions("0x1000", "0x100a", 1_000), 2, "all", null);
     assertEquals(
         List.of("ram:00001002", "ram:00001004"),
         firstPage.items().stream().map(CodeUnitResource::address).toList());

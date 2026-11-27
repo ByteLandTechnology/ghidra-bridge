@@ -48,8 +48,7 @@ class DataTypeQueriesTest {
     // Single-page call (cursor == null) uses bounded limit+1 selection, does NOT populate cache,
     // and calls summarize (getDescription) only on the 10 returned items.
     Page<DataTypeResource> firstPage =
-        DataTypeQueries.searchDataTypes(
-            fixture.session, fixture.manager, "", null, null, 10, null);
+        DataTypeQueries.searchDataTypes(fixture.session, fixture.manager, "", null, null, 10, null);
     assertEquals(10, firstPage.items().size());
     assertEquals("/pkg/Type_0000", firstPage.items().getFirst().path());
     assertEquals("/pkg/Type_0009", firstPage.nextCursor());
@@ -187,24 +186,22 @@ class DataTypeQueriesTest {
         GhidraTestSupport.ProgramHolder betaHolder =
             GhidraTestSupport.createX64Program("dt-snapshots-beta")) {
       CategoryPath realCategory = new CategoryPath("/real");
-      holder.inTransaction(
-          program -> {
-            DataTypeManager dtm = program.getDataTypeManager();
-            for (int i = 0; i < 6; i++) {
-              dtm.addDataType(
-                  new StructureDataType(realCategory, String.format("Struct_%02d", i), 8),
-                  DataTypeConflictHandler.DEFAULT_HANDLER);
-            }
-          });
-      betaHolder.inTransaction(
-          program -> {
-            DataTypeManager dtm = program.getDataTypeManager();
-            for (int i = 0; i < 6; i++) {
-              dtm.addDataType(
-                  new StructureDataType(realCategory, String.format("Struct_beta_%02d", i), 8),
-                  DataTypeConflictHandler.DEFAULT_HANDLER);
-            }
-          });
+      holder.inTransaction(program -> {
+        DataTypeManager dtm = program.getDataTypeManager();
+        for (int i = 0; i < 6; i++) {
+          dtm.addDataType(
+              new StructureDataType(realCategory, String.format("Struct_%02d", i), 8),
+              DataTypeConflictHandler.DEFAULT_HANDLER);
+        }
+      });
+      betaHolder.inTransaction(program -> {
+        DataTypeManager dtm = program.getDataTypeManager();
+        for (int i = 0; i < 6; i++) {
+          dtm.addDataType(
+              new StructureDataType(realCategory, String.format("Struct_beta_%02d", i), 8),
+              DataTypeConflictHandler.DEFAULT_HANDLER);
+        }
+      });
 
       AtomicReference<Program> active = new AtomicReference<>(holder.program());
       GhidraSession session = new GhidraSession(active::get);
@@ -225,13 +222,12 @@ class DataTypeQueriesTest {
             second.items().stream().map(DataTypeResource::path).toList());
         assertEquals(1, session.querySnapshots().entryCount());
 
-        holder.inTransaction(
-            program ->
-                program
-                    .getDataTypeManager()
-                    .addDataType(
-                        new StructureDataType(realCategory, "Struct_02_inserted", 8),
-                        DataTypeConflictHandler.DEFAULT_HANDLER));
+        holder.inTransaction(program ->
+            program
+                .getDataTypeManager()
+                .addDataType(
+                    new StructureDataType(realCategory, "Struct_02_inserted", 8),
+                    DataTypeConflictHandler.DEFAULT_HANDLER));
 
         Page<DataTypeResource> refreshedSecond =
             service.searchDataTypes("struct_", "/real", "struct", 2, first.nextCursor());
@@ -340,8 +336,7 @@ class DataTypeQueriesTest {
     assertTrue(!scannedAll.get());
 
     Page<DataTypeResource> page2 =
-        DataTypeQueries.searchDataTypes(
-            manager, "packet", "/net", "struct", 2, page1.nextCursor());
+        DataTypeQueries.searchDataTypes(manager, "packet", "/net", "struct", 2, page1.nextCursor());
     assertEquals(
         List.of("/net/PacketC"), page2.items().stream().map(DataTypeResource::path).toList());
     assertNull(page2.nextCursor());
@@ -366,8 +361,7 @@ class DataTypeQueriesTest {
     List<DataType> allTypes = new ArrayList<>();
     for (int index = 25; index >= 1; index--) {
       String name = String.format("Type_%02d", index);
-      allTypes.add(
-          mockType(Structure.class, "/types/" + name, name, index * 4, "doc", summarized));
+      allTypes.add(mockType(Structure.class, "/types/" + name, name, index * 4, "doc", summarized));
     }
     DataTypeManager manager = managerWithCategories(Map.of(), allTypes, null);
 

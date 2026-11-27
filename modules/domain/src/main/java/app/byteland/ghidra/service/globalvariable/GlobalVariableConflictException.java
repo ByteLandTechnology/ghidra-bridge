@@ -6,8 +6,7 @@ import java.util.Objects;
 
 public final class GlobalVariableConflictException extends RuntimeException
     implements DomainException {
-  @Serial
-  private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
   private final String errorCode;
   private final String errorTarget;
 

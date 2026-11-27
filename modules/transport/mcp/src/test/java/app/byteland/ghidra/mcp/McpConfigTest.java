@@ -106,7 +106,8 @@ class McpConfigTest {
             .getMessage());
     assertEquals(
         "port must be in 1..65535",
-        assertThrows(IllegalArgumentException.class, () -> McpConfig.fromMap(Map.of("port", "65536")))
+        assertThrows(
+                IllegalArgumentException.class, () -> McpConfig.fromMap(Map.of("port", "65536")))
             .getMessage());
 
     assertEquals(
@@ -117,15 +118,13 @@ class McpConfigTest {
     assertEquals(
         "tool_prefix must start with a letter and contain 1..64 letters, digits, '_', or '-'",
         assertThrows(
-                IllegalArgumentException.class,
-                () -> McpConfig.fromArgs("tool_prefix=ghidra.bad"))
+                IllegalArgumentException.class, () -> McpConfig.fromArgs("tool_prefix=ghidra.bad"))
             .getMessage());
 
     assertEquals(
         "tool_prefix must start with a letter and contain 1..64 letters, digits, '_', or '-'",
         assertThrows(
-                IllegalArgumentException.class,
-                () -> McpConfig.fromArgs("tool_prefix=1invalid"))
+                IllegalArgumentException.class, () -> McpConfig.fromArgs("tool_prefix=1invalid"))
             .getMessage());
 
     assertEquals(
@@ -322,8 +321,7 @@ class McpConfigTest {
       Map<String, Object> toolResult = (Map<String, Object>) callResponse.get("result");
       assertEquals(Boolean.FALSE, toolResult.get("isError"));
       @SuppressWarnings("unchecked")
-      Map<String, Object> structured =
-          (Map<String, Object>) toolResult.get("structuredContent");
+      Map<String, Object> structured = (Map<String, Object>) toolResult.get("structuredContent");
       @SuppressWarnings("unchecked")
       Map<String, Object> session = (Map<String, Object>) structured.get("result");
       assertEquals("mcp-http-session", session.get("id"));

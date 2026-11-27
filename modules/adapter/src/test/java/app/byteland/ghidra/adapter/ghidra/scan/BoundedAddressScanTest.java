@@ -45,8 +45,7 @@ class BoundedAddressScanTest {
     clock.set(100_000_000L);
     timeoutScan.visit("ram:00001080", "ram:00001080", "inst_1");
     assertTrue(timeoutScan.stopped());
-    assertThrows(
-        IllegalStateException.class, () -> timeoutScan.anchorCompletedEnd("ram:00001fff"));
+    assertThrows(IllegalStateException.class, () -> timeoutScan.anchorCompletedEnd("ram:00001fff"));
 
     Page<String> page = timeoutScan.finish();
     assertEquals(List.of("inst_1"), page.items());

@@ -43,11 +43,10 @@ class PageTest {
     assertEquals(3, selector.retainedCount());
 
     Page<String> page =
-        selector.finish(
-            (item, key) -> {
-              materialized.incrementAndGet();
-              return key + ":" + item;
-            });
+        selector.finish((item, key) -> {
+          materialized.incrementAndGet();
+          return key + ":" + item;
+        });
 
     assertEquals(List.of("a:item-a", "b:item-b", "c:item-c"), page.items());
     assertEquals(3, page.count());
@@ -67,11 +66,10 @@ class PageTest {
     assertEquals(4, selector.retainedCount());
 
     Page<String> page =
-        selector.finish(
-            (value, key) -> {
-              materialized.incrementAndGet();
-              return key + "=" + value;
-            });
+        selector.finish((value, key) -> {
+          materialized.incrementAndGet();
+          return key + "=" + value;
+        });
 
     assertEquals(List.of("k001=1", "k002=2", "k003=3"), page.items());
     assertEquals("k003", page.nextCursor());

@@ -35,84 +35,77 @@ class FunctionListQueriesTest {
     AtomicReference<String> externalEntryRef = new AtomicReference<>();
     AtomicReference<String> externalCanonicalRef = new AtomicReference<>();
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("functions_test")) {
-      holder.inTransaction(
-          program -> {
-            AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-            Address base = space.getAddress(0x10000L);
-            byte[] bytes = new byte[0x100];
-            bytes[0x00] = (byte) 0x90;
-            bytes[0x01] = (byte) 0xc3;
-            bytes[0x10] = (byte) 0x90;
-            bytes[0x11] = (byte) 0x90;
-            bytes[0x12] = (byte) 0xc3;
-            bytes[0x20] = (byte) 0xe9;
-            bytes[0x30] = (byte) 0xc3;
+      holder.inTransaction(program -> {
+        AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+        Address base = space.getAddress(0x10000L);
+        byte[] bytes = new byte[0x100];
+        bytes[0x00] = (byte) 0x90;
+        bytes[0x01] = (byte) 0xc3;
+        bytes[0x10] = (byte) 0x90;
+        bytes[0x11] = (byte) 0x90;
+        bytes[0x12] = (byte) 0xc3;
+        bytes[0x20] = (byte) 0xe9;
+        bytes[0x30] = (byte) 0xc3;
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".text",
+                base,
+                new ByteArrayInputStream(bytes),
+                bytes.length,
+                TaskMonitor.DUMMY,
+                false);
+
+        FunctionManager fm = program.getFunctionManager();
+        Function alpha =
+            fm.createFunction(
+                "AlphaInit", base, new AddressSet(base, base.add(1)), SourceType.USER_DEFINED);
+        fm.createFunction(
+            "BetaCompute",
+            base.add(0x10),
+            new AddressSet(base.add(0x10), base.add(0x12)),
+            SourceType.USER_DEFINED);
+        fm.createThunkFunction(
+            "AlphaThunk",
+            program.getGlobalNamespace(),
+            base.add(0x20),
+            new AddressSet(base.add(0x20), base.add(0x24)),
+            alpha,
+            SourceType.USER_DEFINED);
+        fm.createFunction(
+            "GammaExit",
+            base.add(0x30),
+            new AddressSet(base.add(0x30), base.add(0x30)),
+            SourceType.USER_DEFINED);
+
+        ExternalLocation extLoc =
             program
-                .getMemory()
-                .createInitializedBlock(
-                    ".text",
-                    base,
-                    new ByteArrayInputStream(bytes),
-                    bytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
+                .getExternalManager()
+                .addExtFunction("libc.so.6", "puts", null, SourceType.IMPORTED);
+        Address extEntry = extLoc.getFunction().getEntryPoint();
+        externalEntryRef.set(extEntry.toString());
+        externalCanonicalRef.set(AddressUtil.canonicalAddress(extEntry));
 
-            FunctionManager fm = program.getFunctionManager();
-            Function alpha =
-                fm.createFunction(
-                    "AlphaInit",
-                    base,
-                    new AddressSet(base, base.add(1)),
-                    SourceType.USER_DEFINED);
-            fm.createFunction(
-                "BetaCompute",
-                base.add(0x10),
-                new AddressSet(base.add(0x10), base.add(0x12)),
-                SourceType.USER_DEFINED);
-            fm.createThunkFunction(
-                "AlphaThunk",
-                program.getGlobalNamespace(),
-                base.add(0x20),
-                new AddressSet(base.add(0x20), base.add(0x24)),
-                alpha,
-                SourceType.USER_DEFINED);
-            fm.createFunction(
-                "GammaExit",
-                base.add(0x30),
-                new AddressSet(base.add(0x30), base.add(0x30)),
-                SourceType.USER_DEFINED);
-
-            ExternalLocation extLoc =
-                program
-                    .getExternalManager()
-                    .addExtFunction(
-                        "libc.so.6", "puts", null, SourceType.IMPORTED);
-            Address extEntry = extLoc.getFunction().getEntryPoint();
-            externalEntryRef.set(extEntry.toString());
-            externalCanonicalRef.set(AddressUtil.canonicalAddress(extEntry));
-
-            Address maxAddr = space.getMaxAddress();
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".high",
-                    maxAddr,
-                    new ByteArrayInputStream(new byte[] {(byte) 0xc3}),
-                    1,
-                    TaskMonitor.DUMMY,
-                    false);
-            fm.createFunction(
-                "MaxEdgeFn",
+        Address maxAddr = space.getMaxAddress();
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".high",
                 maxAddr,
-                new AddressSet(maxAddr, maxAddr),
-                SourceType.USER_DEFINED);
-          });
+                new ByteArrayInputStream(new byte[] {(byte) 0xc3}),
+                1,
+                TaskMonitor.DUMMY,
+                false);
+        fm.createFunction(
+            "MaxEdgeFn", maxAddr, new AddressSet(maxAddr, maxAddr), SourceType.USER_DEFINED);
+      });
 
       SeekSpy spy = new SeekSpy();
       FunctionServiceImpl service =
           new FunctionServiceImpl(GhidraTestSupport.sessionFor(spy.wrap(holder.program())));
 
-      // 1. Stateful pagination: 1 FunctionManager.getFunctions iterator per page, 0 getFunctionAfter
+      // 1. Stateful pagination: 1 FunctionManager.getFunctions iterator per page, 0
+      // getFunctionAfter
       Page<FunctionResource> page1 =
           service.listFunctions(
               new FunctionQuery(
@@ -207,8 +200,7 @@ class FunctionListQueriesTest {
                   true,
                   Set.of()));
       assertEquals(
-          List.of("AlphaThunk"),
-          thunksOnly.items().stream().map(FunctionResource::name).toList());
+          List.of("AlphaThunk"), thunksOnly.items().stream().map(FunctionResource::name).toList());
 
       Page<FunctionResource> nonThunks =
           service.listFunctions(
@@ -240,8 +232,7 @@ class FunctionListQueriesTest {
                   null,
                   Set.of()));
       assertEquals(
-          List.of("BetaCompute"),
-          containing.items().stream().map(FunctionResource::name).toList());
+          List.of("BetaCompute"), containing.items().stream().map(FunctionResource::name).toList());
 
       // 5. Entry filter on memory function and external function (direct getFunctionAt check)
       Page<FunctionResource> byEntry =
@@ -257,8 +248,7 @@ class FunctionListQueriesTest {
                   null,
                   Set.of()));
       assertEquals(
-          List.of("BetaCompute"),
-          byEntry.items().stream().map(FunctionResource::name).toList());
+          List.of("BetaCompute"), byEntry.items().stream().map(FunctionResource::name).toList());
 
       String externalEntry = externalEntryRef.get();
       spy.reset();
@@ -275,7 +265,8 @@ class FunctionListQueriesTest {
                   null,
                   Set.of()));
       assertEquals(1, spy.boundaryLookups.get());
-      assertEquals(List.of("puts"), externalPage.items().stream().map(FunctionResource::name).toList());
+      assertEquals(
+          List.of("puts"), externalPage.items().stream().map(FunctionResource::name).toList());
       assertTrue(externalPage.items().getFirst().external());
       assertTrue(externalPage.scanProgress().complete());
 

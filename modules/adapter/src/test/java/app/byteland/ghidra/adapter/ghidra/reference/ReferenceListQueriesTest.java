@@ -116,7 +116,8 @@ class ReferenceListQueriesTest {
     fixture.modificationNumber.incrementAndGet();
     assertEquals(
         10,
-        queries.listReferences(null, "ram:00400000", null, "to", 10, initial.nextCursor())
+        queries
+            .listReferences(null, "ram:00400000", null, "to", 10, initial.nextCursor())
             .items()
             .size());
   }
@@ -130,7 +131,8 @@ class ReferenceListQueriesTest {
             new ReferenceCursorKey("space\"quote\\slash\t", "Stack:-0x10", "DATA\n", 10));
     for (ReferenceCursorKey sample : samples) {
       String expected =
-          JsonUtil.toJson(List.of(sample.from(), sample.to(), sample.type(), sample.operandIndex()));
+          JsonUtil.toJson(
+              List.of(sample.from(), sample.to(), sample.type(), sample.operandIndex()));
       assertEquals(expected, sample.encoded());
       assertEquals(sample, ReferenceCursorKey.decode(sample.encoded()));
     }
@@ -221,7 +223,8 @@ class ReferenceListQueriesTest {
               described));
     }
     ReferenceListQueries queries =
-        new ReferenceListQueries(sessionWithReferences(incoming, new Reference[0], new AtomicInteger()));
+        new ReferenceListQueries(
+            sessionWithReferences(incoming, new Reference[0], new AtomicInteger()));
 
     Page<ReferenceResource> page =
         queries.listReferences(null, "ram:00500000", null, "to", 25, null);

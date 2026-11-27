@@ -22,15 +22,7 @@ class CodeUnitResourceTest {
             .toList();
 
     assertEquals(
-        List.of(
-            "address",
-            "kind",
-            "length",
-            "bytes",
-            "text",
-            "mnemonic",
-            "operands",
-            "dataType"),
+        List.of("address", "kind", "length", "bytes", "text", "mnemonic", "operands", "dataType"),
         names);
   }
 
@@ -69,14 +61,7 @@ class CodeUnitResourceTest {
 
     CodeUnitResource resource =
         new CodeUnitResource(
-            "ram:00402000",
-            CodeUnitResource.Kind.DATA,
-            4,
-            bytes,
-            "dd 2Ah",
-            null,
-            null,
-            dataType);
+            "ram:00402000", CodeUnitResource.Kind.DATA, 4, bytes, "dd 2Ah", null, null, dataType);
 
     assertEquals("ram:00402000", resource.address());
     assertEquals(CodeUnitResource.Kind.DATA, resource.kind());

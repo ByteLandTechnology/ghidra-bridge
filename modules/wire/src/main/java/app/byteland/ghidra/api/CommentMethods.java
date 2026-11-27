@@ -97,8 +97,7 @@ final class CommentMethods implements ApiMethodProvider {
           patchComment(request);
           return requireComment(selector(request));
         });
-    registerCommentWrite(
-        "comment.upsert", MethodEffects.mutation(true, true), commentInput, true);
+    registerCommentWrite("comment.upsert", MethodEffects.mutation(true, true), commentInput, true);
     registry.writeResult(
         "comment.delete",
         MethodEffects.mutation(true, true),

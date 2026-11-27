@@ -34,14 +34,7 @@ public record McpConfig(
   private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,63}");
   private static final Set<String> ALLOWED =
       Set.of(
-          "host",
-          "port",
-          "path",
-          "session_id",
-          "token",
-          "tool_prefix",
-          "allowed_origins",
-          "jar");
+          "host", "port", "path", "session_id", "token", "tool_prefix", "allowed_origins", "jar");
 
   public McpConfig(
       String host, int port, String path, String token, String sessionId, String toolPrefix) {
@@ -93,7 +86,8 @@ public record McpConfig(
     }
   }
 
-  private static String resolveRawAllowedOrigins(Map<String, String> args, Map<String, String> env) {
+  private static String resolveRawAllowedOrigins(
+      Map<String, String> args, Map<String, String> env) {
     String fromArgs = NetworkBinding.optionalText(args.get("allowed_origins"));
     if (fromArgs != null) {
       return fromArgs;
@@ -219,8 +213,8 @@ public record McpConfig(
   }
 
   /**
-   * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores,
-   * or hyphens. An underscore separates the prefix from the domain, and dots are not permitted.
+   * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores, or
+   * hyphens. An underscore separates the prefix from the domain, and dots are not permitted.
    */
   public static String requireToolPrefix(String prefix) {
     if (prefix == null || !TOOL_PREFIX.matcher(prefix).matches()) {
@@ -230,9 +224,7 @@ public record McpConfig(
     return prefix;
   }
 
-  /**
-   * Derives a valid MCP tool prefix from a program name for a fallback port session.
-   */
+  /** Derives a valid MCP tool prefix from a program name for a fallback port session. */
   public static String deriveFallbackToolPrefix(String programName, int port) {
     NetworkBinding.requireValidPort(port);
     String fallback = DEFAULT_TOOL_PREFIX + "_" + port;
@@ -254,9 +246,7 @@ public record McpConfig(
     return requireToolPrefix(sanitized);
   }
 
-  /**
-   * Derives a sanitized session identifier from a program name and bound fallback port.
-   */
+  /** Derives a sanitized session identifier from a program name and bound fallback port. */
   public static String deriveFallbackSessionId(String programName, int port) {
     NetworkBinding.requireValidPort(port);
     String suffix = "-" + port;

@@ -32,7 +32,8 @@ public final class CountingInetAddressResolverProvider extends InetAddressResolv
           throws UnknownHostException {
         String normalized = normalize(host);
         if (normalized.endsWith(TEST_DOMAIN_SUFFIX)) {
-          LOOKUP_COUNTS.computeIfAbsent(normalized, ignored -> new AtomicInteger())
+          LOOKUP_COUNTS
+              .computeIfAbsent(normalized, ignored -> new AtomicInteger())
               .incrementAndGet();
           if (normalized.startsWith("unresolvable.")) {
             throw new UnknownHostException("unresolvable test host: " + host);

@@ -1,4 +1,5 @@
 .gradle/
+.ruff_cache/
 ghidra-dist/
 **/build/
 !**/src/**/build/

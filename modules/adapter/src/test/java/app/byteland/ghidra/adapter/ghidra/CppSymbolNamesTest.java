@@ -91,7 +91,8 @@ class CppSymbolNamesTest {
           program -> program.setExecutableFormat("Executable and Linking Format (ELF)"));
 
       // Touch cache while symbol table is nearly empty so initial capacity is MIN_CAPACITY.
-      Address base = holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x1000);
+      Address base =
+          holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x1000);
       assertEquals("undefined seed(void)", CppSymbolNames.demangled(spy, "_Z4seedv", base));
 
       // Populate 6,000 mangled functions (> MIN_CAPACITY = 4,096).
@@ -153,7 +154,8 @@ class CppSymbolNamesTest {
           program -> program.setExecutableFormat("Executable and Linking Format (ELF)"));
       AtomicInteger demangleProbes = new AtomicInteger();
       Program spy = spyWithReportedSymbolCount(holder.program(), 100_000, demangleProbes);
-      Address addr = holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x1000);
+      Address addr =
+          holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x1000);
 
       List<String> hotSymbols = new ArrayList<>();
       for (int i = 0; i < 128; i++) {
@@ -191,8 +193,10 @@ class CppSymbolNamesTest {
       setupSymbolsForSharing(holder, validMangled, invalidMangled, conflictMangled);
       AtomicInteger demangleProbes = new AtomicInteger();
       Program spy =
-          spyWithConflictOnName(holder.program(), "blocked", "duplicate blocked symbol", demangleProbes);
-      Address base = holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x100000);
+          spyWithConflictOnName(
+              holder.program(), "blocked", "duplicate blocked symbol", demangleProbes);
+      Address base =
+          holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x100000);
 
       assertEquals(
           "undefined outer::inner::widget(int,int)",
@@ -273,7 +277,8 @@ class CppSymbolNamesTest {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("concurrent_reads")) {
       holder.inTransaction(
           program -> program.setExecutableFormat("Executable and Linking Format (ELF)"));
-      Address addr = holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x1000);
+      Address addr =
+          holder.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x1000);
       CountDownLatch enteredMissDemangle = new CountDownLatch(1);
       CountDownLatch releaseMissDemangle = new CountDownLatch(1);
       AtomicBoolean blockNextFormatRead = new AtomicBoolean(false);
@@ -310,14 +315,12 @@ class CppSymbolNamesTest {
         List<Future<?>> readers = new ArrayList<>();
         for (int t = 0; t < 4; t++) {
           readers.add(
-              pool.submit(
-                  () -> {
-                    for (int i = 0; i < 500; i++) {
-                      assertEquals(
-                          "undefined fast::hit(int)",
-                          CppSymbolNames.demangled(spy, cachedKey, addr));
-                    }
-                  }));
+              pool.submit(() -> {
+                for (int i = 0; i < 500; i++) {
+                  assertEquals(
+                      "undefined fast::hit(int)", CppSymbolNames.demangled(spy, cachedKey, addr));
+                }
+              }));
         }
         for (Future<?> reader : readers) {
           reader.get(2, TimeUnit.SECONDS);
@@ -352,42 +355,39 @@ class CppSymbolNamesTest {
     }
     assertNull(probe.programRef().get(), "Closed Program remained strongly reachable");
 
-      // Trigger stale key cleanup on a live program.
-      try (ProgramHolder next = GhidraTestSupport.createX64Program("gc_cleanup_followup")) {
-        next.inTransaction(
-            program -> program.setExecutableFormat("Executable and Linking Format (ELF)"));
-        Address addr =
-            next.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x1000);
-        assertEquals(
-            "undefined ping(void)", CppSymbolNames.demangled(next.program(), "_Z4pingv", addr));
-      }
+    // Trigger stale key cleanup on a live program.
+    try (ProgramHolder next = GhidraTestSupport.createX64Program("gc_cleanup_followup")) {
+      next.inTransaction(
+          program -> program.setExecutableFormat("Executable and Linking Format (ELF)"));
+      Address addr = next.program().getAddressFactory().getDefaultAddressSpace().getAddress(0x1000);
+      assertEquals(
+          "undefined ping(void)", CppSymbolNames.demangled(next.program(), "_Z4pingv", addr));
     }
+  }
 
   private static GcProbe createDecodeAndCloseProgram() {
     String localStaticInFunction = "_ZZN5alpha3runEiE7counter";
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("gc_collectible_program")) {
       Program program = holder.program();
       Address base = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x00100000L);
-      holder.inTransaction(
-          db -> {
-            db.setExecutableFormat("Executable and Linking Format (ELF)");
-            db.getMemory()
-                .createInitializedBlock(
-                    ".text",
-                    base,
-                    new ByteArrayInputStream(new byte[] {(byte) 0x90, (byte) 0xc3, 0, 0, 0, 0, 0, 0}),
-                    8,
-                    TaskMonitor.DUMMY,
-                    false);
-            db.getFunctionManager()
-                .createFunction(
-                    "_ZN5alpha4beta5gammaEv",
-                    base,
-                    new AddressSet(base, base.add(1)),
-                    SourceType.IMPORTED);
-            db.getSymbolTable()
-                .createLabel(base.add(4), localStaticInFunction, SourceType.IMPORTED);
-          });
+      holder.inTransaction(db -> {
+        db.setExecutableFormat("Executable and Linking Format (ELF)");
+        db.getMemory()
+            .createInitializedBlock(
+                ".text",
+                base,
+                new ByteArrayInputStream(new byte[] {(byte) 0x90, (byte) 0xc3, 0, 0, 0, 0, 0, 0}),
+                8,
+                TaskMonitor.DUMMY,
+                false);
+        db.getFunctionManager()
+            .createFunction(
+                "_ZN5alpha4beta5gammaEv",
+                base,
+                new AddressSet(base, base.add(1)),
+                SourceType.IMPORTED);
+        db.getSymbolTable().createLabel(base.add(4), localStaticInFunction, SourceType.IMPORTED);
+      });
 
       DecodedSymbol retained = CppSymbolNames.decode(program, localStaticInFunction, base.add(4));
       SymbolServiceImpl symService = new SymbolServiceImpl(GhidraTestSupport.sessionFor(program));
@@ -402,8 +402,7 @@ class CppSymbolNamesTest {
       NameCandidate explicitCandidate =
           new NameCandidate("alpha::run(int)::counter", "counter", rawFnNamespace);
 
-      return new GcProbe(
-          new WeakReference<>(program), retained, explicitCandidate.namespace());
+      return new GcProbe(new WeakReference<>(program), retained, explicitCandidate.namespace());
     }
   }
 
@@ -413,75 +412,59 @@ class CppSymbolNamesTest {
       Demangled detachedSyntheticFunctionNamespace) {}
 
   private static void populateFunctions(ProgramHolder holder, int count) {
-    holder.inTransaction(
-        program -> {
-          AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-          Address base = space.getAddress(0x00200000L);
-          byte[] code = new byte[count * 2];
-          for (int i = 0; i < count; i++) {
-            code[i * 2] = (byte) 0x90;
-            code[i * 2 + 1] = (byte) 0xc3;
-          }
-          program
-              .getMemory()
-              .createInitializedBlock(
-                  ".text",
-                  base,
-                  new ByteArrayInputStream(code),
-                  code.length,
-                  TaskMonitor.DUMMY,
-                  false);
-          FunctionManager fm = program.getFunctionManager();
-          for (int i = 0; i < count; i++) {
-            Address entry = base.add(i * 2L);
-            String ns = "ns" + (i % 50);
-            String fn = "fn_" + i;
-            String mangled = "_ZN" + ns.length() + ns + fn.length() + fn + "Ei";
-            fm.createFunction(
-                mangled, entry, new AddressSet(entry, entry.add(1)), SourceType.IMPORTED);
-          }
-        });
+    holder.inTransaction(program -> {
+      AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+      Address base = space.getAddress(0x00200000L);
+      byte[] code = new byte[count * 2];
+      for (int i = 0; i < count; i++) {
+        code[i * 2] = (byte) 0x90;
+        code[i * 2 + 1] = (byte) 0xc3;
+      }
+      program
+          .getMemory()
+          .createInitializedBlock(
+              ".text", base, new ByteArrayInputStream(code), code.length, TaskMonitor.DUMMY, false);
+      FunctionManager fm = program.getFunctionManager();
+      for (int i = 0; i < count; i++) {
+        Address entry = base.add(i * 2L);
+        String ns = "ns" + (i % 50);
+        String fn = "fn_" + i;
+        String mangled = "_ZN" + ns.length() + ns + fn.length() + fn + "Ei";
+        fm.createFunction(mangled, entry, new AddressSet(entry, entry.add(1)), SourceType.IMPORTED);
+      }
+    });
   }
 
   private static void setupSymbolsForSharing(
       ProgramHolder holder, String validMangled, String invalidMangled, String conflictMangled) {
-    holder.inTransaction(
-        program -> {
-          program.setExecutableFormat("Executable and Linking Format (ELF)");
-          AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-          Address base = space.getAddress(0x00100000L);
-          byte[] code = new byte[64];
-          code[0] = (byte) 0x90;
-          code[1] = (byte) 0xc3;
-          code[0x10] = (byte) 0x90;
-          code[0x11] = (byte) 0xc3;
-          code[0x20] = (byte) 0x90;
-          code[0x21] = (byte) 0xc3;
-          program
-              .getMemory()
-              .createInitializedBlock(
-                  ".text",
-                  base,
-                  new ByteArrayInputStream(code),
-                  code.length,
-                  TaskMonitor.DUMMY,
-                  false);
-          FunctionManager fm = program.getFunctionManager();
-          fm.createFunction(
-              validMangled, base, new AddressSet(base, base.add(1)), SourceType.IMPORTED);
-          Symbol invalid =
-              program
-                  .getSymbolTable()
-                  .createLabel(base.add(0x10), invalidMangled, SourceType.IMPORTED);
-          invalid.setPrimary();
-          if (conflictMangled != null) {
-            Symbol conflict =
-                program
-                    .getSymbolTable()
-                    .createLabel(base.add(0x20), conflictMangled, SourceType.IMPORTED);
-            conflict.setPrimary();
-          }
-        });
+    holder.inTransaction(program -> {
+      program.setExecutableFormat("Executable and Linking Format (ELF)");
+      AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+      Address base = space.getAddress(0x00100000L);
+      byte[] code = new byte[64];
+      code[0] = (byte) 0x90;
+      code[1] = (byte) 0xc3;
+      code[0x10] = (byte) 0x90;
+      code[0x11] = (byte) 0xc3;
+      code[0x20] = (byte) 0x90;
+      code[0x21] = (byte) 0xc3;
+      program
+          .getMemory()
+          .createInitializedBlock(
+              ".text", base, new ByteArrayInputStream(code), code.length, TaskMonitor.DUMMY, false);
+      FunctionManager fm = program.getFunctionManager();
+      fm.createFunction(validMangled, base, new AddressSet(base, base.add(1)), SourceType.IMPORTED);
+      Symbol invalid =
+          program.getSymbolTable().createLabel(base.add(0x10), invalidMangled, SourceType.IMPORTED);
+      invalid.setPrimary();
+      if (conflictMangled != null) {
+        Symbol conflict =
+            program
+                .getSymbolTable()
+                .createLabel(base.add(0x20), conflictMangled, SourceType.IMPORTED);
+        conflict.setPrimary();
+      }
+    });
   }
 
   private static Program programWithSymbols(int count) {

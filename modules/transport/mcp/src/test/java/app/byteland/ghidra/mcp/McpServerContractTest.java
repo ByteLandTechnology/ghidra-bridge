@@ -135,8 +135,7 @@ class McpServerContractTest {
     Map<String, Object> domainHelp = registry.help(Map.of("domain", "memory"));
     assertEquals("sample_memory", domainHelp.get("domain"));
 
-    List<Map<String, Object>> operations =
-        (List<Map<String, Object>>) domainHelp.get("operations");
+    List<Map<String, Object>> operations = (List<Map<String, Object>>) domainHelp.get("operations");
     assertEquals(4, operations.size());
     for (Map<String, Object> operation : operations) {
       assertNotNull(operation.get("name"));
@@ -213,8 +212,10 @@ class McpServerContractTest {
               defaultServer.endpoint(),
               "tools/call",
               Map.of(
-                  "name", "ghidra_bridge",
-                  "arguments", Map.of("operation", "get", "params", Map.of())));
+                  "name",
+                  "ghidra_bridge",
+                  "arguments",
+                  Map.of("operation", "get", "params", Map.of())));
       Map<String, Object> underscoreResult = (Map<String, Object>) underscoreCall.get("result");
       assertEquals(Boolean.FALSE, underscoreResult.get("isError"));
 
@@ -224,8 +225,10 @@ class McpServerContractTest {
               defaultServer.endpoint(),
               "tools/call",
               Map.of(
-                  "name", "ghidra.bridge",
-                  "arguments", Map.of("operation", "get", "params", Map.of())));
+                  "name",
+                  "ghidra.bridge",
+                  "arguments",
+                  Map.of("operation", "get", "params", Map.of())));
       Map<String, Object> dottedResult = (Map<String, Object>) dottedFallbackCall.get("result");
       assertEquals(Boolean.FALSE, dottedResult.get("isError"));
 
@@ -253,8 +256,7 @@ class McpServerContractTest {
 
         String relativeEndpoint = dataLine.substring("data: ".length());
         String sessionUrl = "http://127.0.0.1:" + defaultRunning.port() + relativeEndpoint;
-        HttpResponse<String> posted =
-            sendInitializedRaw(client, sessionUrl, "ping", Map.of());
+        HttpResponse<String> posted = sendInitializedRaw(client, sessionUrl, "ping", Map.of());
         assertEquals(202, posted.statusCode());
 
         String blankLine = reader.readLine();
@@ -371,8 +373,7 @@ class McpServerContractTest {
       HttpClient client, String endpoint, String method, Map<String, Object> params)
       throws Exception {
     String body =
-        JsonUtil.toJson(
-            Map.of("jsonrpc", "2.0", "id", 1, "method", method, "params", params));
+        JsonUtil.toJson(Map.of("jsonrpc", "2.0", "id", 1, "method", method, "params", params));
     HttpRequest request =
         HttpRequest.newBuilder(URI.create(endpoint))
             .header("Content-Type", "application/json")

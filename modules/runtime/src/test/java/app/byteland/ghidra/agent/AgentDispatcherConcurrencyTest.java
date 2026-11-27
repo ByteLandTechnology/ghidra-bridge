@@ -87,7 +87,9 @@ class AgentDispatcherConcurrencyTest {
     try (AgentDispatcher dispatcher = harness.dispatcher) {
       List<String> catalogReadOnly =
           dispatcher.methodCatalog().methods().stream()
-              .filter(m -> Boolean.TRUE.equals(((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
+              .filter(m ->
+                  Boolean.TRUE.equals(
+                      ((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
               .map(MethodDescriptor::name)
               .toList();
       assertEquals(29, catalogReadOnly.size(), "Catalog must expose all 29 read-only methods");
@@ -119,59 +121,47 @@ class AgentDispatcherConcurrencyTest {
 
       try (ExecutorService pool = Executors.newFixedThreadPool(22)) {
         Future<Object> decompFuture =
-            pool.submit(
-                () ->
-                    dispatcher.dispatch(
-                        "decompilation.get",
-                        Map.of("selector", Map.of("entry", "ram:00100000"))));
+            pool.submit(() ->
+                dispatcher.dispatch(
+                    "decompilation.get", Map.of("selector", Map.of("entry", "ram:00100000"))));
         assertTrue(slowDecompEntered.await(5, TimeUnit.SECONDS));
 
         List<Future<Long>> fastReadNanos = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
           final int idx = i;
           fastReadNanos.add(
-              pool.submit(
-                  () -> {
-                    long start = System.nanoTime();
-                    switch (idx % 5) {
-                      case 0 -> dispatcher.dispatch("program.get", Map.of());
-                      case 1 ->
-                          dispatcher.dispatch(
-                              "memory.read",
-                              Map.of("selector", Map.of("address", "ram:00100000"), "length", 16));
-                      case 2 -> dispatcher.dispatch("session.get", Map.of());
-                      case 3 -> dispatcher.dispatch("analysis.get", Map.of());
-                      default ->
-                          dispatcher.dispatch(
-                              "batch.execute",
-                              Map.of(
-                                  "transaction_mode",
-                                  idx % 2 == 0 ? "per_item" : "all_or_none",
-                                  "items",
-                                  List.of(
-                                      Map.of(
-                                          "id",
-                                          "p",
-                                          "method",
-                                          "program.get",
-                                          "arguments",
-                                          Map.of()),
-                                      Map.of(
-                                          "id",
-                                          "s",
-                                          "method",
-                                          "session.get",
-                                          "arguments",
-                                          Map.of()))));
-                    }
-                    return System.nanoTime() - start;
-                  }));
+              pool.submit(() -> {
+                long start = System.nanoTime();
+                switch (idx % 5) {
+                  case 0 -> dispatcher.dispatch("program.get", Map.of());
+                  case 1 ->
+                      dispatcher.dispatch(
+                          "memory.read",
+                          Map.of("selector", Map.of("address", "ram:00100000"), "length", 16));
+                  case 2 -> dispatcher.dispatch("session.get", Map.of());
+                  case 3 -> dispatcher.dispatch("analysis.get", Map.of());
+                  default ->
+                      dispatcher.dispatch(
+                          "batch.execute",
+                          Map.of(
+                              "transaction_mode",
+                              idx % 2 == 0 ? "per_item" : "all_or_none",
+                              "items",
+                              List.of(
+                                  Map.of("id", "p", "method", "program.get", "arguments", Map.of()),
+                                  Map.of(
+                                      "id", "s", "method", "session.get", "arguments", Map.of()))));
+                }
+                return System.nanoTime() - start;
+              }));
         }
 
-        // All 20 fast reads and read-only batches must finish while decompilation.get is still blocked!
+        // All 20 fast reads and read-only batches must finish while decompilation.get is still
+        // blocked!
         for (Future<Long> future : fastReadNanos) {
           long elapsedMs = TimeUnit.NANOSECONDS.toMillis(future.get(2, TimeUnit.SECONDS));
-          assertTrue(elapsedMs < 500, "Fast read blocked behind decompilation: " + elapsedMs + "ms");
+          assertTrue(
+              elapsedMs < 500, "Fast read blocked behind decompilation: " + elapsedMs + "ms");
         }
         assertFalse(decompFuture.isDone(), "Slow decompilation should still be holding read lock");
         assertTrue(
@@ -216,7 +206,8 @@ class AgentDispatcherConcurrencyTest {
         assertEquals(0, obs.readHoldCount(), "Mutation must not hold read lock: " + method);
       }
 
-      // Mutating batch (per_item), mutating batch (all_or_none), and mixed read+write batch (26th method: batch.execute)
+      // Mutating batch (per_item), mutating batch (all_or_none), and mixed read+write batch (26th
+      // method: batch.execute)
       for (String mode : List.of("per_item", "all_or_none")) {
         harness.lastWriteMethodObservation.set(null);
         dispatcher.dispatch(
@@ -240,18 +231,19 @@ class AgentDispatcherConcurrencyTest {
                                 "type", "eol",
                                 "text", "updated-" + mode))))));
         LockObservation batchObs = harness.lastWriteMethodObservation.get();
-        assertTrue(batchObs != null && batchObs.writeLocked(), "Mixed/mutating batch must hold write lock");
+        assertTrue(
+            batchObs != null && batchObs.writeLocked(),
+            "Mixed/mutating batch must hold write lock");
       }
 
       // Lifecycle actions via runExclusive and session.shutdown must acquire the fair write lock.
       AtomicReference<LockObservation> exclusiveObs = new AtomicReference<>();
-      dispatcher.runExclusive(
-          () ->
-              exclusiveObs.set(
-                  new LockObservation(
-                      dispatcher.barrier().readHoldCount(),
-                      dispatcher.barrier().readLockCount(),
-                      dispatcher.barrier().isWriteLockedByCurrentThread())));
+      dispatcher.runExclusive(() ->
+          exclusiveObs.set(
+              new LockObservation(
+                  dispatcher.barrier().readHoldCount(),
+                  dispatcher.barrier().readLockCount(),
+                  dispatcher.barrier().isWriteLockedByCurrentThread())));
       assertTrue(exclusiveObs.get().writeLocked(), "runExclusive must hold write lock");
       assertEquals(0, exclusiveObs.get().readHoldCount());
 
@@ -273,77 +265,75 @@ class AgentDispatcherConcurrencyTest {
       harness.writeRelease = releaseWriter;
 
       Future<Object> blockedWrite =
-          pool.submit(
-              () ->
-                  dispatcher.dispatch(
-                      "comment.upsert",
-                      Map.of(
-                          "resource",
-                          Map.of("address", "ram:00100000", "type", "eol", "text", "hold-lock"))));
+          pool.submit(() ->
+              dispatcher.dispatch(
+                  "comment.upsert",
+                  Map.of(
+                      "resource",
+                      Map.of("address", "ram:00100000", "type", "eol", "text", "hold-lock"))));
       assertTrue(writerEntered.await(5, TimeUnit.SECONDS));
 
-      // While the write lock is completely held, pre-lock codecs and projection checks must fail fast without waiting!
+      // While the write lock is completely held, pre-lock codecs and projection checks must fail
+      // fast without waiting!
       Future<Void> preLockChecks =
-          pool.submit(
-              () -> {
-                ApiException missing =
-                    assertThrows(ApiException.class, () -> dispatcher.dispatch("", Map.of()));
-                assertEquals("missing_method", missing.error().code());
+          pool.submit(() -> {
+            ApiException missing =
+                assertThrows(ApiException.class, () -> dispatcher.dispatch("", Map.of()));
+            assertEquals("missing_method", missing.error().code());
 
-                ApiException unknown =
-                    assertThrows(
-                        ApiException.class, () -> dispatcher.dispatch("unknown.op", Map.of()));
-                assertEquals(404, unknown.status());
+            ApiException unknown =
+                assertThrows(ApiException.class, () -> dispatcher.dispatch("unknown.op", Map.of()));
+            assertEquals(404, unknown.status());
 
-                // StrictObjectCodec check
-                ApiException badSchema =
-                    assertThrows(
-                        ApiException.class,
-                        () -> dispatcher.dispatch("program.get", Map.of("unexpected_key", 123)));
-                assertEquals(400, badSchema.status());
+            // StrictObjectCodec check
+            ApiException badSchema =
+                assertThrows(
+                    ApiException.class,
+                    () -> dispatcher.dispatch("program.get", Map.of("unexpected_key", 123)));
+            assertEquals(400, badSchema.status());
 
-                // FieldProjection checks (via canonical projection.fields)
-                ApiException badField =
-                    assertThrows(
-                        ApiException.class,
-                        () ->
-                            dispatcher.dispatch(
-                                "program.get",
-                                Map.of("projection", Map.of("fields", List.of("not_a_field")))));
-                assertEquals(400, badField.status());
+            // FieldProjection checks (via canonical projection.fields)
+            ApiException badField =
+                assertThrows(
+                    ApiException.class,
+                    () ->
+                        dispatcher.dispatch(
+                            "program.get",
+                            Map.of("projection", Map.of("fields", List.of("not_a_field")))));
+            assertEquals(400, badField.status());
 
-                ApiException duplicateField =
-                    assertThrows(
-                        ApiException.class,
-                        () ->
-                            dispatcher.dispatch(
-                                "program.get",
-                                Map.of("projection", Map.of("fields", List.of("name", "name")))));
-                assertEquals("duplicate_field", duplicateField.error().code());
+            ApiException duplicateField =
+                assertThrows(
+                    ApiException.class,
+                    () ->
+                        dispatcher.dispatch(
+                            "program.get",
+                            Map.of("projection", Map.of("fields", List.of("name", "name")))));
+            assertEquals("duplicate_field", duplicateField.error().code());
 
-                // BatchMethod pre-lock item validation + projection validation
-                ApiException badBatch =
-                    assertThrows(
-                        ApiException.class,
-                        () ->
-                            dispatcher.dispatch(
-                                "batch.execute",
-                                Map.of(
-                                    "items",
-                                    List.of(
+            // BatchMethod pre-lock item validation + projection validation
+            ApiException badBatch =
+                assertThrows(
+                    ApiException.class,
+                    () ->
+                        dispatcher.dispatch(
+                            "batch.execute",
+                            Map.of(
+                                "items",
+                                List.of(
+                                    Map.of(
+                                        "id",
+                                        "item1",
+                                        "method",
+                                        "program.get",
+                                        "arguments",
                                         Map.of(
-                                            "id",
-                                            "item1",
-                                            "method",
-                                            "program.get",
-                                            "arguments",
-                                            Map.of(
-                                                "projection",
-                                                Map.of("fields", List.of("name", "name"))))))));
-                assertEquals(400, badBatch.status());
-                assertEquals("validation_failed", badBatch.error().code());
-                return null;
-              });
+                                            "projection",
+                                            Map.of("fields", List.of("name", "name"))))))));
+            assertEquals(400, badBatch.status());
+            assertEquals("validation_failed", badBatch.error().code());
+            return null;
+          });
 
       preLockChecks.get(500, TimeUnit.MILLISECONDS);
       assertFalse(blockedWrite.isDone(), "Writer must still be holding the write lock");
@@ -361,7 +351,8 @@ class AgentDispatcherConcurrencyTest {
       assertEquals(0, dispatcher.barrier().readLockCount());
       assertFalse(dispatcher.barrier().isWriteLockedByCurrentThread());
 
-      // Read-only all_or_none batch translates post-lock item encoding failures to 409 batch_rolled_back
+      // Read-only all_or_none batch translates post-lock item encoding failures to 409
+      // batch_rolled_back
       ApiException readOnlyAllOrNoneFailure =
           assertThrows(
               ApiException.class,
@@ -373,7 +364,8 @@ class AgentDispatcherConcurrencyTest {
                           "all_or_none",
                           "items",
                           List.of(
-                              Map.of("id", "ok-prog", "method", "program.get", "arguments", Map.of()),
+                              Map.of(
+                                  "id", "ok-prog", "method", "program.get", "arguments", Map.of()),
                               Map.of(
                                   "id",
                                   "bad-lang",
@@ -386,7 +378,8 @@ class AgentDispatcherConcurrencyTest {
       assertEquals("bad-lang", readOnlyAllOrNoneFailure.error().details().get("failed_item"));
       assertEquals(0, dispatcher.barrier().readLockCount());
 
-      // Transactional all_or_none batch rolls back prior mutations if a later item fails encodeResponse
+      // Transactional all_or_none batch rolls back prior mutations if a later item fails
+      // encodeResponse
       String beforeRollback = harness.committedComment.get();
       ApiException transactionalEncodeRollback =
           assertThrows(
@@ -441,13 +434,12 @@ class AgentDispatcherConcurrencyTest {
       harness.writeStarted = secondWriteEntered;
       harness.writeRelease = secondWriteRelease;
       Future<Object> secondBlockedWrite =
-          pool.submit(
-              () ->
-                  dispatcher.dispatch(
-                      "comment.upsert",
-                      Map.of(
-                          "resource",
-                          Map.of("address", "ram:00100000", "type", "eol", "text", "hold-2"))));
+          pool.submit(() ->
+              dispatcher.dispatch(
+                  "comment.upsert",
+                  Map.of(
+                      "resource",
+                      Map.of("address", "ram:00100000", "type", "eol", "text", "hold-2"))));
       assertTrue(secondWriteEntered.await(5, TimeUnit.SECONDS));
 
       Map<?, ?> projected =
@@ -474,140 +466,142 @@ class AgentDispatcherConcurrencyTest {
       for (int r = 0; r < 14; r++) {
         final int readerId = r;
         readers.add(
-            pool.submit(
-                () -> {
-                  try {
-                    startGate.await();
-                    while (!stopReaders.get()) {
-                      Map<?, ?> comment =
-                          (Map<?, ?>)
-                              dispatcher.dispatch(
-                                  "comment.get",
-                                  Map.of(
-                                      "selector",
-                                      Map.of("address", "ram:00100000", "type", "eol")));
-                      String text = String.valueOf(comment.get("text"));
-                      assertFalse(
-                          text.startsWith("UNCOMMITTED") || text.startsWith("ROLLBACK"),
-                          "Reader saw uncommitted or rolled-back data: " + text);
-                      if (readerId % 3 == 0) {
-                        dispatcher.dispatch(
-                            "batch.execute",
-                            Map.of(
-                                "items",
-                                List.of(
+            pool.submit(() -> {
+              try {
+                startGate.await();
+                while (!stopReaders.get()) {
+                  Map<?, ?> comment =
+                      (Map<?, ?>)
+                          dispatcher.dispatch(
+                              "comment.get",
+                              Map.of("selector", Map.of("address", "ram:00100000", "type", "eol")));
+                  String text = String.valueOf(comment.get("text"));
+                  assertFalse(
+                      text.startsWith("UNCOMMITTED") || text.startsWith("ROLLBACK"),
+                      "Reader saw uncommitted or rolled-back data: " + text);
+                  if (readerId % 3 == 0) {
+                    dispatcher.dispatch(
+                        "batch.execute",
+                        Map.of(
+                            "items",
+                            List.of(
+                                Map.of(
+                                    "id",
+                                    "c",
+                                    "method",
+                                    "comment.get",
+                                    "arguments",
                                     Map.of(
-                                        "id",
-                                        "c",
-                                        "method",
-                                        "comment.get",
-                                        "arguments",
-                                        Map.of(
-                                            "selector",
-                                            Map.of("address", "ram:00100000", "type", "eol"))),
-                                    Map.of(
-                                        "id", "p", "method", "program.get", "arguments", Map.of()))));
-                      }
-                    }
-                  } catch (Throwable t) {
-                    failure.compareAndSet(null, t);
+                                        "selector",
+                                        Map.of("address", "ram:00100000", "type", "eol"))),
+                                Map.of(
+                                    "id", "p", "method", "program.get", "arguments", Map.of()))));
                   }
-                }));
+                }
+              } catch (Throwable t) {
+                failure.compareAndSet(null, t);
+              }
+            }));
       }
 
       List<Future<Long>> writers = new ArrayList<>();
       for (int w = 0; w < 4; w++) {
         final int writerId = w;
         writers.add(
-            pool.submit(
-                () -> {
-                  startGate.await();
-                  long maxWaitNanos = 0L;
-                  for (int iter = 0; iter < 25; iter++) {
-                    long t0 = System.nanoTime();
-                    int mode = (writerId + iter) % 3;
-                    if (mode == 0) {
-                      String committedVal = "COMMITTED_SINGLE_" + writerId + "_" + iter;
-                      dispatcher.dispatch(
-                          "comment.upsert",
+            pool.submit(() -> {
+              startGate.await();
+              long maxWaitNanos = 0L;
+              for (int iter = 0; iter < 25; iter++) {
+                long t0 = System.nanoTime();
+                int mode = (writerId + iter) % 3;
+                if (mode == 0) {
+                  String committedVal = "COMMITTED_SINGLE_" + writerId + "_" + iter;
+                  dispatcher.dispatch(
+                      "comment.upsert",
+                      Map.of(
+                          "resource",
                           Map.of(
-                              "resource",
+                              "address", "ram:00100000",
+                              "type", "eol",
+                              "text", committedVal)));
+                } else if (mode == 1) {
+                  String committedVal = "COMMITTED_BATCH_" + writerId + "_" + iter;
+                  dispatcher.dispatch(
+                      "batch.execute",
+                      Map.of(
+                          "transaction_mode",
+                          "all_or_none",
+                          "items",
+                          List.of(
                               Map.of(
-                                  "address", "ram:00100000",
-                                  "type", "eol",
-                                  "text", committedVal)));
-                    } else if (mode == 1) {
-                      String committedVal = "COMMITTED_BATCH_" + writerId + "_" + iter;
-                      dispatcher.dispatch(
-                          "batch.execute",
-                          Map.of(
-                              "transaction_mode",
-                              "all_or_none",
-                              "items",
-                              List.of(
+                                  "id",
+                                  "u1",
+                                  "method",
+                                  "comment.upsert",
+                                  "arguments",
                                   Map.of(
-                                      "id",
-                                      "u1",
-                                      "method",
-                                      "comment.upsert",
-                                      "arguments",
+                                      "resource",
                                       Map.of(
-                                          "resource",
+                                          "address", "ram:00100000",
+                                          "type", "eol",
+                                          "text", committedVal))))));
+                } else {
+                  // Failing all_or_none batch: first item mutates to ROLLBACK_*, second item fails
+                  // -> must roll back!
+                  final int iteration = iter;
+                  ApiException rolledBack =
+                      assertThrows(
+                          ApiException.class,
+                          () ->
+                              dispatcher.dispatch(
+                                  "batch.execute",
+                                  Map.of(
+                                      "transaction_mode",
+                                      "all_or_none",
+                                      "items",
+                                      List.of(
                                           Map.of(
-                                              "address", "ram:00100000",
-                                              "type", "eol",
-                                              "text", committedVal))))));
-                    } else {
-                      // Failing all_or_none batch: first item mutates to ROLLBACK_*, second item fails -> must roll back!
-                      final int iteration = iter;
-                      ApiException rolledBack =
-                          assertThrows(
-                              ApiException.class,
-                              () ->
-                                  dispatcher.dispatch(
-                                      "batch.execute",
-                                      Map.of(
-                                          "transaction_mode",
-                                          "all_or_none",
-                                          "items",
-                                          List.of(
+                                              "id",
+                                              "dirty",
+                                              "method",
+                                              "comment.upsert",
+                                              "arguments",
                                               Map.of(
-                                                  "id",
-                                                  "dirty",
-                                                  "method",
-                                                  "comment.upsert",
-                                                  "arguments",
+                                                  "resource",
                                                   Map.of(
-                                                      "resource",
-                                                      Map.of(
-                                                          "address", "ram:00100000",
-                                                          "type", "eol",
-                                                          "text", "ROLLBACK_" + writerId + "_" + iteration))),
+                                                      "address", "ram:00100000",
+                                                      "type", "eol",
+                                                      "text",
+                                                          "ROLLBACK_"
+                                                              + writerId
+                                                              + "_"
+                                                              + iteration))),
+                                          Map.of(
+                                              "id",
+                                              "boom",
+                                              "method",
+                                              "comment.upsert",
+                                              "arguments",
                                               Map.of(
-                                                  "id",
-                                                  "boom",
-                                                  "method",
-                                                  "comment.upsert",
-                                                  "arguments",
+                                                  "resource",
                                                   Map.of(
-                                                      "resource",
-                                                      Map.of(
-                                                          "address", "ram:00100000",
-                                                          "type", "eol",
-                                                          "text", "TRIGGER_FAILURE")))))));
-                      assertEquals(409, rolledBack.status());
-                      assertEquals("batch_rolled_back", rolledBack.error().code());
-                    }
-                    maxWaitNanos = Math.max(maxWaitNanos, System.nanoTime() - t0);
-                  }
-                  return maxWaitNanos;
-                }));
+                                                      "address", "ram:00100000",
+                                                      "type", "eol",
+                                                      "text", "TRIGGER_FAILURE")))))));
+                  assertEquals(409, rolledBack.status());
+                  assertEquals("batch_rolled_back", rolledBack.error().code());
+                }
+                maxWaitNanos = Math.max(maxWaitNanos, System.nanoTime() - t0);
+              }
+              return maxWaitNanos;
+            }));
       }
 
       startGate.countDown();
       for (Future<Long> writer : writers) {
         long maxWaitMs = TimeUnit.NANOSECONDS.toMillis(writer.get(15, TimeUnit.SECONDS));
-        assertTrue(maxWaitMs < 5_000, "Fair write lock must prevent writer starvation: " + maxWaitMs);
+        assertTrue(
+            maxWaitMs < 5_000, "Fair write lock must prevent writer starvation: " + maxWaitMs);
       }
       stopReaders.set(true);
       for (Future<?> reader : readers) {
@@ -630,10 +624,12 @@ class AgentDispatcherConcurrencyTest {
     harness.analysisRunning.set(true);
 
     // Reads and read-only batches succeed during analysis
-    assertEquals("test-program", ((Map<?, ?>) dispatcher.dispatch("program.get", Map.of())).get("name"));
+    assertEquals(
+        "test-program", ((Map<?, ?>) dispatcher.dispatch("program.get", Map.of())).get("name"));
     dispatcher.dispatch(
         "batch.execute",
-        Map.of("items", List.of(Map.of("id", "1", "method", "analysis.get", "arguments", Map.of()))));
+        Map.of(
+            "items", List.of(Map.of("id", "1", "method", "analysis.get", "arguments", Map.of()))));
 
     // analysis.start returns 409 analysis_already_running
     ApiException alreadyRunning =
@@ -681,22 +677,21 @@ class AgentDispatcherConcurrencyTest {
 
     try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
       Future<Object> activeRead =
-          pool.submit(
-              () ->
-                  dispatcher.dispatch(
-                      "decompilation.get", Map.of("selector", Map.of("entry", "ram:00100000"))));
+          pool.submit(() ->
+              dispatcher.dispatch(
+                  "decompilation.get", Map.of("selector", Map.of("entry", "ram:00100000"))));
       assertTrue(inFlightStarted.await(5, TimeUnit.SECONDS));
 
       Future<?> closeFuture = pool.submit(dispatcher::close);
       Thread.sleep(40L);
       assertFalse(harness.servicesClosed.get(), "Services must not close while dispatch is active");
-      assertThrows(
-          IllegalStateException.class, () -> dispatcher.dispatch("program.get", Map.of()));
+      assertThrows(IllegalStateException.class, () -> dispatcher.dispatch("program.get", Map.of()));
 
       releaseInFlight.countDown();
       activeRead.get(5, TimeUnit.SECONDS);
       closeFuture.get(5, TimeUnit.SECONDS);
-      assertTrue(harness.servicesClosed.get(), "Services must close once in-flight dispatch drains");
+      assertTrue(
+          harness.servicesClosed.get(), "Services must close once in-flight dispatch drains");
     }
   }
 
@@ -727,12 +722,8 @@ class AgentDispatcherConcurrencyTest {
     calls.put("decompilation.get", Map.of("selector", Map.of("entry", "ram:00100000")));
     calls.put("symbol.get", Map.of("selector", Map.of("id", "1")));
     calls.put("symbol.list", Map.of());
-    calls.put(
-        "reference.list",
-        Map.of("filter", Map.of("direction", "to", "to", "ram:00100000")));
-    calls.put(
-        "comment.get",
-        Map.of("selector", Map.of("address", "ram:00100000", "type", "eol")));
+    calls.put("reference.list", Map.of("filter", Map.of("direction", "to", "to", "ram:00100000")));
+    calls.put("comment.get", Map.of("selector", Map.of("address", "ram:00100000", "type", "eol")));
     calls.put("comment.list", Map.of());
     calls.put("data_type_category.list", Map.of());
     calls.put("data_type.get", Map.of("selector", Map.of("path", "/DemoStruct")));
@@ -749,9 +740,7 @@ class AgentDispatcherConcurrencyTest {
             "memory.write",
             Map.of(
                 "selector", Map.of("address", "ram:00100000"),
-                "patch",
-                    Map.of(
-                        "bytes", Map.of("encoding", "hex", "data", "9090", "length", 2)))));
+                "patch", Map.of("bytes", Map.of("encoding", "hex", "data", "9090", "length", 2)))));
     calls.add(
         Map.entry(
             "flow_override.patch",
@@ -777,9 +766,7 @@ class AgentDispatcherConcurrencyTest {
                 "resource",
                 Map.of("address", "ram:00100100", "name", "g_var", "data_type", intRef))));
     calls.add(
-        Map.entry(
-            "global_variable.delete",
-            Map.of("selector", Map.of("address", "ram:00100100"))));
+        Map.entry("global_variable.delete", Map.of("selector", Map.of("address", "ram:00100100"))));
     calls.add(
         Map.entry(
             "function.create",
@@ -790,15 +777,13 @@ class AgentDispatcherConcurrencyTest {
             Map.of(
                 "selector", Map.of("entry", "ram:00100000"),
                 "patch", Map.of("name", "fn_patched"))));
-    calls.add(
-        Map.entry("function.delete", Map.of("selector", Map.of("entry", "ram:00100000"))));
+    calls.add(Map.entry("function.delete", Map.of("selector", Map.of("entry", "ram:00100000"))));
     calls.add(
         Map.entry(
             "function_parameter.create",
             Map.of(
                 "selector", Map.of("entry", "ram:00100000"),
-                "resource",
-                    Map.of("ordinal", 0, "name", "arg0", "data_type", intRef))));
+                "resource", Map.of("ordinal", 0, "name", "arg0", "data_type", intRef))));
     calls.add(
         Map.entry(
             "function_parameter.patch",
@@ -827,8 +812,7 @@ class AgentDispatcherConcurrencyTest {
         Map.entry(
             "comment.create",
             Map.of(
-                "resource",
-                Map.of("address", "ram:00100000", "type", "eol", "text", "created"))));
+                "resource", Map.of("address", "ram:00100000", "type", "eol", "text", "created"))));
     calls.add(
         Map.entry(
             "comment.patch",
@@ -839,8 +823,7 @@ class AgentDispatcherConcurrencyTest {
         Map.entry(
             "comment.upsert",
             Map.of(
-                "resource",
-                Map.of("address", "ram:00100000", "type", "eol", "text", "upserted"))));
+                "resource", Map.of("address", "ram:00100000", "type", "eol", "text", "upserted"))));
     calls.add(
         Map.entry(
             "comment.delete",
@@ -867,13 +850,17 @@ class AgentDispatcherConcurrencyTest {
                     "DemoFnType",
                     "signature",
                     Map.of(
-                        "return_type", intRef,
-                        "parameters", List.of(),
-                        "calling_convention", "__stdcall",
-                        "has_var_args", false,
-                        "has_no_return", false)))));
-    calls.add(
-        Map.entry("data_type.delete", Map.of("selector", Map.of("path", "/DemoStruct"))));
+                        "return_type",
+                        intRef,
+                        "parameters",
+                        List.of(),
+                        "calling_convention",
+                        "__stdcall",
+                        "has_var_args",
+                        false,
+                        "has_no_return",
+                        false)))));
+    calls.add(Map.entry("data_type.delete", Map.of("selector", Map.of("path", "/DemoStruct"))));
     return calls;
   }
 
@@ -1055,8 +1042,7 @@ class AgentDispatcherConcurrencyTest {
     private AddressService addressService() {
       return rawAddress -> {
         observe("address.resolve", dispatcher.barrier().isWriteLockedByCurrentThread());
-        return new AddressResource(
-            "ram:00100000", true, true, null, null, null, null);
+        return new AddressResource("ram:00100000", true, true, null, null, null, null);
       };
     }
 
@@ -1374,10 +1360,7 @@ class AgentDispatcherConcurrencyTest {
 
         @Override
         public void patchLocalVariable(
-            String rawAddress,
-            String variableName,
-            String newName,
-            DataTypeReference newDataType) {
+            String rawAddress, String variableName, String newName, DataTypeReference newDataType) {
           observe("function_local_variable.patch", true);
         }
       };
@@ -1549,8 +1532,7 @@ class AgentDispatcherConcurrencyTest {
         public Page<DataTypeCategoryResource> listCategories(
             String categoryPath, int limit, String cursor) {
           observe("data_type_category.list", false);
-          return Page.of(
-              List.of(new DataTypeCategoryResource("/", "", 0, 1)), limit, null);
+          return Page.of(List.of(new DataTypeCategoryResource("/", "", 0, 1)), limit, null);
         }
 
         @Override

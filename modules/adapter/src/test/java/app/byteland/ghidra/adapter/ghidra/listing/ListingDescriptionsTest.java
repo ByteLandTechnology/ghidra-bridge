@@ -255,7 +255,6 @@ class ListingDescriptionsTest {
 
   private static <T> T proxy(Class<T> type, Invocation invocation) {
     return type.cast(
-        Proxy.newProxyInstance(
-            type.getClassLoader(), new Class<?>[] {type}, invocation::apply));
+        Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, invocation::apply));
   }
 }

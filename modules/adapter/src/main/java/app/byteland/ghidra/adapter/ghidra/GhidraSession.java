@@ -24,9 +24,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/**
- * Coordinates Ghidra program access, commands, and transaction lifecycles.
- */
+/** Coordinates Ghidra program access, commands, and transaction lifecycles. */
 public final class GhidraSession implements AutoCloseable {
   private final ProgramHost host;
   private final QuerySnapshotCache querySnapshots;
@@ -43,7 +41,8 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public GhidraSession(Supplier<Program> programSupplier) {
-    this(ProgramHost.forProgramSupplier(Objects.requireNonNull(programSupplier, "programSupplier")));
+    this(
+        ProgramHost.forProgramSupplier(Objects.requireNonNull(programSupplier, "programSupplier")));
   }
 
   public GhidraSession(ProgramHost host) {
@@ -51,9 +50,7 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public GhidraSession(
-      GhidraScript script,
-      QuerySnapshotCache querySnapshots,
-      BooleanSupplier analyzingSupplier) {
+      GhidraScript script, QuerySnapshotCache querySnapshots, BooleanSupplier analyzingSupplier) {
     this(
         ProgramHost.forScript(Objects.requireNonNull(script, "script")),
         querySnapshots,
@@ -62,14 +59,9 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public GhidraSession(
-      ProgramHost host,
-      QuerySnapshotCache querySnapshots,
-      BooleanSupplier analyzingSupplier) {
+      ProgramHost host, QuerySnapshotCache querySnapshots, BooleanSupplier analyzingSupplier) {
     this(
-        host,
-        querySnapshots,
-        Objects.requireNonNull(analyzingSupplier, "analyzingSupplier"),
-        true);
+        host, querySnapshots, Objects.requireNonNull(analyzingSupplier, "analyzingSupplier"), true);
   }
 
   private GhidraSession(
@@ -214,7 +206,9 @@ public final class GhidraSession implements AutoCloseable {
   public Reference reference(Address fromAddress, Address toAddress, int operandIndex) {
     Objects.requireNonNull(fromAddress, "fromAddress");
     Objects.requireNonNull(toAddress, "toAddress");
-    return currentProgram().getReferenceManager().getReference(fromAddress, toAddress, operandIndex);
+    return currentProgram()
+        .getReferenceManager()
+        .getReference(fromAddress, toAddress, operandIndex);
   }
 
   public byte[] readBytes(Address start, int length) throws MemoryAccessException {

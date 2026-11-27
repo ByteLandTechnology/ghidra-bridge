@@ -22,7 +22,6 @@ public final class SymbolServiceImpl implements SymbolService {
     return SymbolDescriptions.describe(SymbolQueries.getSymbolById(context, symbolId));
   }
 
-
   @Override
   public void renameSymbol(long symbolId, String newName) {
     SymbolMutations.renameSymbol(context, SymbolQueries.getSymbolById(context, symbolId), newName);

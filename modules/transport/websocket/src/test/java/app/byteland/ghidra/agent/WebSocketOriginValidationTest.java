@@ -131,8 +131,7 @@ class WebSocketOriginValidationTest {
             List.of("Origin: https://untrusted-origin.example", "Origin: http://127.0.0.1:8765"));
     WebSocketHandshake.HttpHandshakeException firstError =
         assertThrows(
-            WebSocketHandshake.HttpHandshakeException.class,
-            () -> readHandshake(evilThenAllowed));
+            WebSocketHandshake.HttpHandshakeException.class, () -> readHandshake(evilThenAllowed));
     assertEquals(403, firstError.status());
     assertEquals("Forbidden", firstError.reason());
 
@@ -175,8 +174,7 @@ class WebSocketOriginValidationTest {
         readHandshake(
             rawUpgradeRequest(
                 "192.0.2.10:8765",
-                List.of(
-                    "Origin: https://192.0.2.10:8443", "Authorization: Bearer secret-token")));
+                List.of("Origin: https://192.0.2.10:8443", "Authorization: Bearer secret-token")));
     assertDoesNotThrow(() -> WebSocketHandshakeValidator.validate(ipv4Config, matchingOrigin));
 
     for (String disallowed :
@@ -199,8 +197,7 @@ class WebSocketOriginValidationTest {
       assertEquals("Forbidden", errorWithToken.reason());
 
       WebSocketHandshake.HandshakeRequest withoutToken =
-          readHandshake(
-              rawUpgradeRequest("192.0.2.10:8765", List.of("Origin: " + disallowed)));
+          readHandshake(rawUpgradeRequest("192.0.2.10:8765", List.of("Origin: " + disallowed)));
       WebSocketHandshake.HttpHandshakeException errorWithoutToken =
           assertThrows(
               WebSocketHandshake.HttpHandshakeException.class,
@@ -243,7 +240,9 @@ class WebSocketOriginValidationTest {
   }
 
   @Test
-  @DisplayName("Server returns 403 for untrusted Origin, releases client slot, and upgrades valid clients with 101")
+  @DisplayName(
+      "Server returns 403 for untrusted Origin, releases client slot, and upgrades valid clients"
+          + " with 101")
   void serverRejectsUntrustedOriginAndReleasesClientSlot() throws Exception {
     AtomicInteger openCount = new AtomicInteger();
     RecordingHandler handler = new RecordingHandler(openCount);
@@ -270,7 +269,8 @@ class WebSocketOriginValidationTest {
           () -> "Expected 403 Forbidden but got: " + untrustedResponse);
       assertEquals(0, openCount.get(), "Rejected upgrade must not open a session");
 
-      // 2. Origin: null and duplicate Origin headers return HTTP/1.1 403 Forbidden and keep the slot free.
+      // 2. Origin: null and duplicate Origin headers return HTTP/1.1 403 Forbidden and keep the
+      // slot free.
       String nullOriginResponse =
           sendRawAndReadHttpResponse(
               port, rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: null")));
@@ -291,7 +291,8 @@ class WebSocketOriginValidationTest {
           () -> "Expected 403 Forbidden for duplicate Origin but got: " + duplicateOriginResponse);
       assertEquals(0, openCount.get());
 
-      // 3. Right after 403 rejections, permitted loopback Origin upgrades succeed with 101 (not 409).
+      // 3. Right after 403 rejections, permitted loopback Origin upgrades succeed with 101 (not
+      // 409).
       assertSuccessfulUpgradeAndClose(
           port,
           rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://127.0.0.1:" + port)),
@@ -303,7 +304,8 @@ class WebSocketOriginValidationTest {
           port, rawUpgradeRequest("127.0.0.1:" + port, List.of()), handler);
       assertEquals(2, openCount.get());
 
-      // 5. 127.0.0.2, localhost, and [::1] Origin headers also succeed with `101 Switching Protocols`.
+      // 5. 127.0.0.2, localhost, and [::1] Origin headers also succeed with `101 Switching
+      // Protocols`.
       assertSuccessfulUpgradeAndClose(
           port,
           rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://127.0.0.2:" + port)),
@@ -472,8 +474,7 @@ class WebSocketOriginValidationTest {
     public void onText(AgentWebSocketServer.Connection connection, String message) {}
 
     @Override
-    public void onClose(
-        AgentWebSocketServer.Connection connection, int statusCode, String reason) {
+    public void onClose(AgentWebSocketServer.Connection connection, int statusCode, String reason) {
       closeLatch.countDown();
     }
 

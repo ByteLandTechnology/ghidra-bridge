@@ -20,8 +20,7 @@ final class ListingFlowOverrideErrors {
   }
 
   static final class Conflict extends RuntimeException implements DomainException {
-    @Serial
-    private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
 
     private Conflict(String message) {
       super(message);
@@ -44,8 +43,7 @@ final class ListingFlowOverrideErrors {
   }
 
   static final class UpdateFailed extends TransactionExecutionException {
-    @Serial
-    private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
 
     private UpdateFailed(String message) {
       super(message);

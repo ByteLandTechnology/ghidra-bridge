@@ -36,21 +36,20 @@ import org.junit.jupiter.api.Test;
 class DynamicProgramSwitchingTest {
 
   private static void addInitializedRamBlock(GhidraTestSupport.ProgramHolder holder, byte fill) {
-    holder.inTransaction(
-        program -> {
-          Address start = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
-          byte[] initial = new byte[64];
-          java.util.Arrays.fill(initial, fill);
-          program
-              .getMemory()
-              .createInitializedBlock(
-                  ".text",
-                  start,
-                  new ByteArrayInputStream(initial),
-                  initial.length,
-                  ghidra.util.task.TaskMonitor.DUMMY,
-                  false);
-        });
+    holder.inTransaction(program -> {
+      Address start = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+      byte[] initial = new byte[64];
+      java.util.Arrays.fill(initial, fill);
+      program
+          .getMemory()
+          .createInitializedBlock(
+              ".text",
+              start,
+              new ByteArrayInputStream(initial),
+              initial.length,
+              ghidra.util.task.TaskMonitor.DUMMY,
+              false);
+    });
   }
 
   @Test
@@ -81,14 +80,13 @@ class DynamicProgramSwitchingTest {
         // Write bytes to alpha.elf through TransactionRunner and MemoryService on the dynamic host.
         services
             .transactionRunner()
-            .run(
-                () -> {
-                  services
-                      .memoryService()
-                      .patchMemory(
-                          "0x401000", new ByteSequence(ByteSequence.Encoding.HEX, "deadbeef", 4));
-                  return null;
-                });
+            .run(() -> {
+              services
+                  .memoryService()
+                  .patchMemory(
+                      "0x401000", new ByteSequence(ByteSequence.Encoding.HEX, "deadbeef", 4));
+              return null;
+            });
         assertEquals(
             "deadbeef",
             services
@@ -97,12 +95,10 @@ class DynamicProgramSwitchingTest {
                 .bytes()
                 .data());
         assertEquals(
-            "c3c3c3c3",
-            java.util.HexFormat.of()
-                .formatHex(
-                    betaChecksBytes(beta, 0x401000, 4)));
+            "c3c3c3c3", java.util.HexFormat.of().formatHex(betaChecksBytes(beta, 0x401000, 4)));
 
-        // Switch active tab to beta.elf and verify reads, mutations, commands, and analysis status route to beta.elf.
+        // Switch active tab to beta.elf and verify reads, mutations, commands, and analysis status
+        // route to beta.elf.
         active.set(beta);
         assertEquals("beta.elf", services.currentProgramName());
         assertEquals("beta.elf", services.programService().getProgram().name());
@@ -115,14 +111,13 @@ class DynamicProgramSwitchingTest {
                 .data());
         services
             .transactionRunner()
-            .run(
-                () -> {
-                  services
-                      .memoryService()
-                      .patchMemory(
-                          "0x401000", new ByteSequence(ByteSequence.Encoding.HEX, "cafebabe", 4));
-                  return null;
-                });
+            .run(() -> {
+              services
+                  .memoryService()
+                  .patchMemory(
+                      "0x401000", new ByteSequence(ByteSequence.Encoding.HEX, "cafebabe", 4));
+              return null;
+            });
         assertEquals(
             "cafebabe",
             services
@@ -131,8 +126,7 @@ class DynamicProgramSwitchingTest {
                 .bytes()
                 .data());
         assertEquals(
-            "deadbeef",
-            java.util.HexFormat.of().formatHex(betaChecksBytes(alpha, 0x401000, 4)));
+            "deadbeef", java.util.HexFormat.of().formatHex(betaChecksBytes(alpha, 0x401000, 4)));
         assertEquals("IDLE", services.analysisService().getStatus().status().name());
 
         List<Program> commandTargets = new ArrayList<>();
@@ -168,8 +162,7 @@ class DynamicProgramSwitchingTest {
         // Clear active program and verify fallback name and clean error.
         active.set(null);
         assertEquals("gui-fallback", services.currentProgramName());
-        assertThrows(
-            IllegalStateException.class, () -> services.programService().getProgram());
+        assertThrows(IllegalStateException.class, () -> services.programService().getProgram());
         assertThrows(IllegalStateException.class, session::flatApi);
       }
     }
@@ -187,35 +180,34 @@ class DynamicProgramSwitchingTest {
       AtomicReference<Program> active = new AtomicReference<>(alpha);
       GhidraSession session = new GhidraSession(active::get);
 
-      session.withTransaction(
-          () -> {
-            FlatProgramAPI pinnedApi = session.flatApi();
-            assertSame(alpha, session.currentProgram());
-            assertSame(alpha, pinnedApi.getCurrentProgram());
+      session.withTransaction(() -> {
+        FlatProgramAPI pinnedApi = session.flatApi();
+        assertSame(alpha, session.currentProgram());
+        assertSame(alpha, pinnedApi.getCurrentProgram());
 
-            // External tab switch occurs before the outer transaction completes.
-            active.set(beta);
-            assertSame(alpha, session.currentProgram());
-            assertSame(pinnedApi, session.flatApi());
-            assertSame(alpha, session.withTransaction(session::currentProgram));
-            pinnedApi.setBytes(session.parseAddress("0x401000"), new byte[] {0x55});
-            assertThrows(
-                IllegalStateException.class,
-                () -> session.withProgramTransaction(beta, () -> "wrong-program"));
-            return null;
-          });
+        // External tab switch occurs before the outer transaction completes.
+        active.set(beta);
+        assertSame(alpha, session.currentProgram());
+        assertSame(pinnedApi, session.flatApi());
+        assertSame(alpha, session.withTransaction(session::currentProgram));
+        pinnedApi.setBytes(session.parseAddress("0x401000"), new byte[] {0x55});
+        assertThrows(
+            IllegalStateException.class,
+            () -> session.withProgramTransaction(beta, () -> "wrong-program"));
+        return null;
+      });
 
       assertEquals((byte) 0x55, betaChecksBytes(alpha, 0x401000, 1)[0]);
       assertEquals((byte) 0x22, betaChecksBytes(beta, 0x401000, 1)[0]);
       assertSame(beta, session.currentProgram());
 
       // Temporary changes on beta.elf roll back cleanly when the block completes.
-      session.withTemporaryChanges(
-          () -> {
-            session.flatApi().setBytes(session.parseAddress("0x401000"), new byte[] {0x77});
-            assertEquals((byte) 0x77, session.flatApi().getBytes(session.parseAddress("0x401000"), 1)[0]);
-            return null;
-          });
+      session.withTemporaryChanges(() -> {
+        session.flatApi().setBytes(session.parseAddress("0x401000"), new byte[] {0x77});
+        assertEquals(
+            (byte) 0x77, session.flatApi().getBytes(session.parseAddress("0x401000"), 1)[0]);
+        return null;
+      });
       assertEquals((byte) 0x22, betaChecksBytes(beta, 0x401000, 1)[0]);
       assertTrue(!beta.isChanged() || betaChecksBytes(beta, 0x401000, 1)[0] == 0x22);
     }
@@ -228,40 +220,36 @@ class DynamicProgramSwitchingTest {
 
     try (var alphaHolder = GhidraTestSupport.createX64Program("alpha.elf");
         var betaHolder = GhidraTestSupport.createX64Program("beta.elf")) {
-      alphaHolder.inTransaction(
-          program -> {
-            program.setExecutableFormat("Executable and Linking Format (ELF)");
-            Address start =
-                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
-            // mov eax, 0x2a; ret
-            byte[] code = new byte[] {(byte) 0xb8, 0x2a, 0x00, 0x00, 0x00, (byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".text",
-                    start,
-                    new ByteArrayInputStream(code),
-                    code.length,
-                    TaskMonitor.DUMMY,
-                    false);
-          });
-      betaHolder.inTransaction(
-          program -> {
-            program.setExecutableFormat("Executable and Linking Format (ELF)");
-            Address start =
-                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
-            // nop; mov eax, 0x07; ret
-            byte[] code = new byte[] {(byte) 0x90, (byte) 0xb8, 0x07, 0x00, 0x00, 0x00, (byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".text",
-                    start,
-                    new ByteArrayInputStream(code),
-                    code.length,
-                    TaskMonitor.DUMMY,
-                    false);
-          });
+      alphaHolder.inTransaction(program -> {
+        program.setExecutableFormat("Executable and Linking Format (ELF)");
+        Address start = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+        // mov eax, 0x2a; ret
+        byte[] code = new byte[] {(byte) 0xb8, 0x2a, 0x00, 0x00, 0x00, (byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".text",
+                start,
+                new ByteArrayInputStream(code),
+                code.length,
+                TaskMonitor.DUMMY,
+                false);
+      });
+      betaHolder.inTransaction(program -> {
+        program.setExecutableFormat("Executable and Linking Format (ELF)");
+        Address start = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+        // nop; mov eax, 0x07; ret
+        byte[] code = new byte[] {(byte) 0x90, (byte) 0xb8, 0x07, 0x00, 0x00, 0x00, (byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".text",
+                start,
+                new ByteArrayInputStream(code),
+                code.length,
+                TaskMonitor.DUMMY,
+                false);
+      });
 
       Program alpha = alphaHolder.program();
       Program beta = betaHolder.program();
@@ -272,13 +260,15 @@ class DynamicProgramSwitchingTest {
         // Create mangled function on alpha.elf, list instructions, demangle, and decompile.
         services
             .transactionRunner()
-            .run(() -> services.functionService().createFunction("0x401000", "_ZN5alpha3runEv", true));
+            .run(() ->
+                services.functionService().createFunction("0x401000", "_ZN5alpha3runEv", true));
         List<InstructionResource> alphaInsns =
             services
                 .listingService()
                 .listInstructions(AddressScanOptions.of(null, null, 2_000), 10, null)
                 .items();
-        assertEquals(List.of("MOV", "RET"), alphaInsns.stream().map(InstructionResource::mnemonic).toList());
+        assertEquals(
+            List.of("MOV", "RET"), alphaInsns.stream().map(InstructionResource::mnemonic).toList());
 
         DemangleResult alphaDemangle = services.symbolService().demangleSymbols();
         assertEquals(1, alphaDemangle.renamed());
@@ -292,21 +282,20 @@ class DynamicProgramSwitchingTest {
         // Rename the function on alpha.elf and confirm cache flush updates decompiler output.
         services
             .transactionRunner()
-            .run(
-                () -> {
-                  services
-                      .functionService()
-                      .patchFunction(
-                          "0x401000",
-                          "alpha_updated",
-                          null,
-                          false,
-                          null,
-                          null,
-                          null,
-                          FunctionAttributePatch.empty());
-                  return null;
-                });
+            .run(() -> {
+              services
+                  .functionService()
+                  .patchFunction(
+                      "0x401000",
+                      "alpha_updated",
+                      null,
+                      false,
+                      null,
+                      null,
+                      null,
+                      FunctionAttributePatch.empty());
+              return null;
+            });
         DecompilationResource alphaUpdated =
             services
                 .decompilationService()
@@ -314,11 +303,13 @@ class DynamicProgramSwitchingTest {
         assertEquals("alpha_updated", alphaUpdated.name());
         assertTrue(alphaUpdated.c().contains("alpha_updated("));
 
-        // Switch active program to beta.elf and verify instruction scan, demangler, and decompiler isolate state.
+        // Switch active program to beta.elf and verify instruction scan, demangler, and decompiler
+        // isolate state.
         active.set(beta);
         services
             .transactionRunner()
-            .run(() -> services.functionService().createFunction("0x401000", "_ZN4beta4stepEv", true));
+            .run(() ->
+                services.functionService().createFunction("0x401000", "_ZN4beta4stepEv", true));
         List<InstructionResource> betaInsns =
             services
                 .listingService()
@@ -355,40 +346,36 @@ class DynamicProgramSwitchingTest {
 
     try (var alphaHolder = GhidraTestSupport.createX64Program("alpha.elf");
         var betaHolder = GhidraTestSupport.createX64Program("beta.elf")) {
-      alphaHolder.inTransaction(
-          program -> {
-            Address start =
-                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
-            byte[] data =
-                "alpha_analysis_string\0\0\0\0\0\0\0\0\0\0\0"
-                    .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".rodata",
-                    start,
-                    new ByteArrayInputStream(data),
-                    data.length,
-                    TaskMonitor.DUMMY,
-                    false);
-          });
-      betaHolder.inTransaction(
-          program -> {
-            Address start =
-                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
-            byte[] data =
-                "beta_analysis_string\0\0\0\0\0\0\0\0\0\0\0\0"
-                    .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".rodata",
-                    start,
-                    new ByteArrayInputStream(data),
-                    data.length,
-                    TaskMonitor.DUMMY,
-                    false);
-          });
+      alphaHolder.inTransaction(program -> {
+        Address start = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+        byte[] data =
+            "alpha_analysis_string\0\0\0\0\0\0\0\0\0\0\0"
+                .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".rodata",
+                start,
+                new ByteArrayInputStream(data),
+                data.length,
+                TaskMonitor.DUMMY,
+                false);
+      });
+      betaHolder.inTransaction(program -> {
+        Address start = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+        byte[] data =
+            "beta_analysis_string\0\0\0\0\0\0\0\0\0\0\0\0"
+                .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".rodata",
+                start,
+                new ByteArrayInputStream(data),
+                data.length,
+                TaskMonitor.DUMMY,
+                false);
+      });
 
       Program alpha = alphaHolder.program();
       Program beta = betaHolder.program();
@@ -410,8 +397,7 @@ class DynamicProgramSwitchingTest {
         assertEquals(AnalysisResource.Status.COMPLETED, completedAlpha.status());
         assertTrue(completedAlpha.analyzed());
         assertTrue(alpha.getListing().getNumDefinedData() > 0);
-        assertTrue(
-            alpha.getOptions(Program.ANALYSIS_PROPERTIES).getBoolean("Stack", false));
+        assertTrue(alpha.getOptions(Program.ANALYSIS_PROPERTIES).getBoolean("Stack", false));
 
         // beta.elf stays unanalyzed until its own task starts.
         active.set(beta);
@@ -436,36 +422,32 @@ class DynamicProgramSwitchingTest {
 
     try (var alphaHolder = GhidraTestSupport.createX64Program("alpha.elf");
         var betaHolder = GhidraTestSupport.createX64Program("beta.elf")) {
-      alphaHolder.inTransaction(
-          program -> {
-            Address start =
-                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
-            byte[] code = new byte[] {(byte) 0xb8, 0x2a, 0x00, 0x00, 0x00, (byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".text",
-                    start,
-                    new ByteArrayInputStream(code),
-                    code.length,
-                    TaskMonitor.DUMMY,
-                    false);
-          });
-      betaHolder.inTransaction(
-          program -> {
-            Address start =
-                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
-            byte[] code = new byte[] {(byte) 0xb8, 0x07, 0x00, 0x00, 0x00, (byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".text",
-                    start,
-                    new ByteArrayInputStream(code),
-                    code.length,
-                    TaskMonitor.DUMMY,
-                    false);
-          });
+      alphaHolder.inTransaction(program -> {
+        Address start = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+        byte[] code = new byte[] {(byte) 0xb8, 0x2a, 0x00, 0x00, 0x00, (byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".text",
+                start,
+                new ByteArrayInputStream(code),
+                code.length,
+                TaskMonitor.DUMMY,
+                false);
+      });
+      betaHolder.inTransaction(program -> {
+        Address start = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+        byte[] code = new byte[] {(byte) 0xb8, 0x07, 0x00, 0x00, 0x00, (byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".text",
+                start,
+                new ByteArrayInputStream(code),
+                code.length,
+                TaskMonitor.DUMMY,
+                false);
+      });
 
       Program alpha = alphaHolder.program();
       Program beta = betaHolder.program();
@@ -478,14 +460,12 @@ class DynamicProgramSwitchingTest {
         dispatcher.dispatch(
             "function.create",
             Map.of(
-                "resource", Map.of("entry", "0x401000", "name", "alpha_fn"),
-                "disassemble", true));
+                "resource", Map.of("entry", "0x401000", "name", "alpha_fn"), "disassemble", true));
         dispatcher.runExclusive(() -> active.set(beta));
         dispatcher.dispatch(
             "function.create",
             Map.of(
-                "resource", Map.of("entry", "0x401000", "name", "beta_fn"),
-                "disassemble", true));
+                "resource", Map.of("entry", "0x401000", "name", "beta_fn"), "disassemble", true));
         dispatcher.runExclusive(() -> active.set(alpha));
 
         CountDownLatch startGate = new CountDownLatch(1);
@@ -497,89 +477,83 @@ class DynamicProgramSwitchingTest {
         for (int r = 0; r < 6; r++) {
           final int readerId = r;
           readers.add(
-              pool.submit(
-                  () -> {
-                    startGate.await();
-                    boolean countedAlpha = false;
-                    int step = 0;
-                    while (!stopReaders.get()) {
-                      boolean betaOnly = switchedToBeta.get();
-                      switch ((readerId + step++) % 4) {
-                        case 0 -> {
-                          Map<String, Object> info =
-                              (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
-                          String name = String.valueOf(info.get("program_name"));
-                          if (betaOnly) {
-                            assertEquals("beta.elf", name);
-                          } else {
-                            assertTrue("alpha.elf".equals(name) || "beta.elf".equals(name));
-                          }
-                        }
-                        case 1 -> {
-                          Map<String, Object> resolved =
-                              (Map<String, Object>)
-                                  dispatcher.dispatch(
-                                      "address.resolve",
-                                      Map.of("selector", Map.of("address", "0x401000")));
-                          Map<String, Object> fn =
-                              (Map<String, Object>) resolved.get("function");
-                          String fnName = String.valueOf(fn.get("name"));
-                          if (betaOnly) {
-                            assertEquals("beta_fn", fnName);
-                          } else {
-                            assertTrue("alpha_fn".equals(fnName) || "beta_fn".equals(fnName));
-                          }
-                        }
-                        case 2 -> {
-                          Map<String, Object> mem =
-                              (Map<String, Object>)
-                                  dispatcher.dispatch(
-                                      "memory.read",
-                                      Map.of(
-                                          "selector", Map.of("address", "0x401000"),
-                                          "length", 2));
-                          Map<String, Object> bytes = (Map<String, Object>) mem.get("bytes");
-                          String hex = String.valueOf(bytes.get("data"));
-                          if (betaOnly) {
-                            assertEquals("b807", hex);
-                          } else {
-                            assertTrue("b82a".equals(hex) || "b807".equals(hex));
-                          }
-                        }
-                        default -> {
-                          Map<String, Object> decomp =
-                              (Map<String, Object>)
-                                  dispatcher.dispatch(
-                                      "decompilation.get",
-                                      Map.of(
-                                          "selector", Map.of("entry", "0x401000"),
-                                          "format", "text"));
-                          String fnName = String.valueOf(decomp.get("name"));
-                          if (betaOnly) {
-                            assertEquals("beta_fn", fnName);
-                          } else {
-                            assertTrue("alpha_fn".equals(fnName) || "beta_fn".equals(fnName));
-                          }
-                        }
-                      }
-                      if (!countedAlpha) {
-                        countedAlpha = true;
-                        alphaObserved.countDown();
+              pool.submit(() -> {
+                startGate.await();
+                boolean countedAlpha = false;
+                int step = 0;
+                while (!stopReaders.get()) {
+                  boolean betaOnly = switchedToBeta.get();
+                  switch ((readerId + step++) % 4) {
+                    case 0 -> {
+                      Map<String, Object> info =
+                          (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
+                      String name = String.valueOf(info.get("program_name"));
+                      if (betaOnly) {
+                        assertEquals("beta.elf", name);
+                      } else {
+                        assertTrue("alpha.elf".equals(name) || "beta.elf".equals(name));
                       }
                     }
-                    return null;
-                  }));
+                    case 1 -> {
+                      Map<String, Object> resolved =
+                          (Map<String, Object>)
+                              dispatcher.dispatch(
+                                  "address.resolve",
+                                  Map.of("selector", Map.of("address", "0x401000")));
+                      Map<String, Object> fn = (Map<String, Object>) resolved.get("function");
+                      String fnName = String.valueOf(fn.get("name"));
+                      if (betaOnly) {
+                        assertEquals("beta_fn", fnName);
+                      } else {
+                        assertTrue("alpha_fn".equals(fnName) || "beta_fn".equals(fnName));
+                      }
+                    }
+                    case 2 -> {
+                      Map<String, Object> mem =
+                          (Map<String, Object>)
+                              dispatcher.dispatch(
+                                  "memory.read",
+                                  Map.of("selector", Map.of("address", "0x401000"), "length", 2));
+                      Map<String, Object> bytes = (Map<String, Object>) mem.get("bytes");
+                      String hex = String.valueOf(bytes.get("data"));
+                      if (betaOnly) {
+                        assertEquals("b807", hex);
+                      } else {
+                        assertTrue("b82a".equals(hex) || "b807".equals(hex));
+                      }
+                    }
+                    default -> {
+                      Map<String, Object> decomp =
+                          (Map<String, Object>)
+                              dispatcher.dispatch(
+                                  "decompilation.get",
+                                  Map.of(
+                                      "selector", Map.of("entry", "0x401000"), "format", "text"));
+                      String fnName = String.valueOf(decomp.get("name"));
+                      if (betaOnly) {
+                        assertEquals("beta_fn", fnName);
+                      } else {
+                        assertTrue("alpha_fn".equals(fnName) || "beta_fn".equals(fnName));
+                      }
+                    }
+                  }
+                  if (!countedAlpha) {
+                    countedAlpha = true;
+                    alphaObserved.countDown();
+                  }
+                }
+                return null;
+              }));
         }
 
         startGate.countDown();
         assertTrue(alphaObserved.await(15, TimeUnit.SECONDS));
 
-        dispatcher.runExclusive(
-            () -> {
-              active.set(beta);
-              switchedToBeta.set(true);
-              session.notifyProgramClosed(alpha);
-            });
+        dispatcher.runExclusive(() -> {
+          active.set(beta);
+          switchedToBeta.set(true);
+          session.notifyProgramClosed(alpha);
+        });
 
         Thread.sleep(100L);
         stopReaders.set(true);

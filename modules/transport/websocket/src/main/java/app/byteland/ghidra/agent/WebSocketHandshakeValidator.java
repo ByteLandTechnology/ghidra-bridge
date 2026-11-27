@@ -38,8 +38,7 @@ final class WebSocketHandshakeValidator {
     if (!hostValidation.isValid()) {
       int status = hostValidation.httpStatus();
       String reason = status == 403 ? FORBIDDEN_REASON : BAD_REQUEST_REASON;
-      throw new WebSocketHandshake.HttpHandshakeException(
-          status, reason, hostValidation.message());
+      throw new WebSocketHandshake.HttpHandshakeException(status, reason, hostValidation.message());
     }
     if (!"GET".equals(request.method())) {
       throw new WebSocketHandshake.HttpHandshakeException(

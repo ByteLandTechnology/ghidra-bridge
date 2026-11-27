@@ -30,16 +30,12 @@ public record ScanProgress(
     }
   }
 
-  /**
-   * Scan classification category.
-   */
+  /** Scan classification category. */
   public enum Kind {
     ADDRESS
   }
 
-  /**
-   * Cause of scan loop termination.
-   */
+  /** Cause of scan loop termination. */
   public enum StopReason {
     COMPLETED,
     LIMIT,

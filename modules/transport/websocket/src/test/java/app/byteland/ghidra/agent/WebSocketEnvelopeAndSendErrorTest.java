@@ -65,15 +65,18 @@ import org.junit.jupiter.api.Timeout;
 class WebSocketEnvelopeAndSendErrorTest {
 
   private static final String REQ_NULL_PARAM =
-      "{\"jsonrpc\":\"2.0\",\"id\":\"req-null-param\",\"method\":\"program.get\",\"params\":{\"projection\":null}}";
+      "{\"jsonrpc\":\"2.0\",\"id\":\"req-null-param\",\"method\":\"program.get\","
+          + "\"params\":{\"projection\":null}}";
   private static final String NOTIF_NULL_PARAM =
       "{\"jsonrpc\":\"2.0\",\"method\":\"program.get\",\"params\":{\"projection\":null}}";
   private static final String ERR_BLANK =
       "{\"jsonrpc\":\"2.0\",\"id\":\"err-blank\",\"error\":{\"code\":-32000,\"message\":\"   \"}}";
   private static final String ERR_NULL_DATA =
-      "{\"jsonrpc\":\"2.0\",\"id\":\"err-null-data\",\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":null}}";
+      "{\"jsonrpc\":\"2.0\",\"id\":\"err-null-data\","
+          + "\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":null}}";
   private static final String ERR_DATA_ENTRY =
-      "{\"jsonrpc\":\"2.0\",\"id\":\"err-data-entry\",\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":{\"target\":null}}}";
+      "{\"jsonrpc\":\"2.0\",\"id\":\"err-data-entry\","
+          + "\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":{\"target\":null}}}";
   private static final String FOLLOWUP_SESSION_GET =
       "{\"jsonrpc\":\"2.0\",\"id\":\"followup-1\",\"method\":\"session.get\",\"params\":{}}";
 
@@ -112,14 +115,22 @@ class WebSocketEnvelopeAndSendErrorTest {
         List.of(
             ERR_BLANK,
             ERR_NULL_DATA,
-            "{\"jsonrpc\":\"2.0\",\"id\":\"err-str-data\",\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":\"text\"}}",
-            "{\"jsonrpc\":\"2.0\",\"id\":\"err-arr-data\",\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":[]}}",
-            "{\"jsonrpc\":\"2.0\",\"id\":\"err-float-code\",\"error\":{\"code\":-32000.5,\"message\":\"bad\"}}",
-            "{\"jsonrpc\":\"2.0\",\"id\":\"err-exp-code\",\"error\":{\"code\":1e3,\"message\":\"bad\"}}",
-            "{\"jsonrpc\":\"2.0\",\"id\":\"err-overflow-code\",\"error\":{\"code\":9223372036854775807,\"message\":\"bad\"}}",
-            "{\"jsonrpc\":\"2.0\",\"id\":\"err-str-code\",\"error\":{\"code\":\"-32000\",\"message\":\"bad\"}}",
-            "{\"jsonrpc\":\"2.0\",\"id\":\"err-null-code\",\"error\":{\"code\":null,\"message\":\"bad\"}}",
-            "{\"jsonrpc\":\"2.0\",\"id\":\"err-null-msg\",\"error\":{\"code\":-32000,\"message\":null}}")) {
+            "{\"jsonrpc\":\"2.0\",\"id\":\"err-str-data\","
+                + "\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":\"text\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"err-arr-data\","
+                + "\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":[]}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"err-float-code\","
+                + "\"error\":{\"code\":-32000.5,\"message\":\"bad\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"err-exp-code\","
+                + "\"error\":{\"code\":1e3,\"message\":\"bad\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"err-overflow-code\","
+                + "\"error\":{\"code\":9223372036854775807,\"message\":\"bad\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"err-str-code\","
+                + "\"error\":{\"code\":\"-32000\",\"message\":\"bad\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"err-null-code\","
+                + "\"error\":{\"code\":null,\"message\":\"bad\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":\"err-null-msg\","
+                + "\"error\":{\"code\":-32000,\"message\":null}}")) {
       Map<String, Object> raw = JsonUtil.parseObject(invalidJson);
       assertThrows(ApiException.class, () -> MessageEnvelope.fromMap(raw), invalidJson);
     }
@@ -178,9 +189,10 @@ class WebSocketEnvelopeAndSendErrorTest {
           // Check nullable schema fields on the same socket.
           sendClientText(
               clientSocket,
-              "{\"jsonrpc\":\"2.0\",\"id\":\"req-nullable-comment\",\"method\":\"function.patch\",\"params\":{\"selector\":{\"entry\":\"ram:00100000\"},\"patch\":{\"comment\":null}}}");
-          Map<String, Object> patchReply =
-              JsonUtil.parseObject(incoming.poll(5, TimeUnit.SECONDS));
+              "{\"jsonrpc\":\"2.0\",\"id\":\"req-nullable-comment\",\"method\":\"function.patch\","
+                  + "\"params\":{\"selector\":{\"entry\":\"ram:00100000\"},"
+                  + "\"patch\":{\"comment\":null}}}");
+          Map<String, Object> patchReply = JsonUtil.parseObject(incoming.poll(5, TimeUnit.SECONDS));
           assertEquals("req-nullable-comment", patchReply.get("id"));
           @SuppressWarnings("unchecked")
           Map<String, Object> patchResult = (Map<String, Object>) patchReply.get("result");
@@ -215,7 +227,8 @@ class WebSocketEnvelopeAndSendErrorTest {
   }
 
   @Test
-  @DisplayName("Outbound ws_url mode keeps WebSocket open across malformed and null-value envelopes")
+  @DisplayName(
+      "Outbound ws_url mode keeps WebSocket open across malformed and null-value envelopes")
   void testOutboundWsUrlModeKeepsConnectionOpen() throws Exception {
     BlockingQueue<String> hostIncoming = new LinkedBlockingQueue<>();
     AtomicReference<AgentWebSocketServer.Connection> hostConnectionRef = new AtomicReference<>();
@@ -273,11 +286,10 @@ class WebSocketEnvelopeAndSendErrorTest {
                 new AgentClient.LifecycleListener() {},
                 Duration.ofSeconds(5));
         Future<?> clientFuture =
-            executor.submit(
-                () -> {
-                  agentClient.connect(cancel::get);
-                  return null;
-                });
+            executor.submit(() -> {
+              agentClient.connect(cancel::get);
+              return null;
+            });
         boolean clientStopped = false;
 
         try {
@@ -304,7 +316,9 @@ class WebSocketEnvelopeAndSendErrorTest {
 
           // Check nullable schema fields in outbound mode as well.
           hostConnection.sendText(
-              "{\"jsonrpc\":\"2.0\",\"id\":\"req-nullable-comment\",\"method\":\"function.patch\",\"params\":{\"selector\":{\"entry\":\"ram:00100000\"},\"patch\":{\"comment\":null}}}");
+              "{\"jsonrpc\":\"2.0\",\"id\":\"req-nullable-comment\",\"method\":\"function.patch\","
+                  + "\"params\":{\"selector\":{\"entry\":\"ram:00100000\"},"
+                  + "\"patch\":{\"comment\":null}}}");
           Map<String, Object> patchReply =
               JsonUtil.parseObject(hostIncoming.poll(5, TimeUnit.SECONDS));
           assertEquals("req-nullable-comment", patchReply.get("id"));
@@ -484,37 +498,35 @@ class WebSocketEnvelopeAndSendErrorTest {
                 }
               })) {
         Future<?> peerFuture =
-            peerExecutor.submit(
-                () -> {
-                  try (Socket peer = rawServer.accept()) {
-                    peer.setTcpNoDelay(true);
-                    WebSocketHandshake.HandshakeRequest handshake =
-                        WebSocketHandshake.readHandshake(
-                            peer, System.nanoTime() + TimeUnit.SECONDS.toNanos(5));
-                    WebSocketHandshake.writeHandshakeResponse(
-                        peer.getOutputStream(), handshake.acceptKey());
-                    peer.setSoTimeout(5_000);
-                    // Read the masked ready frame from the outbound AgentClient.
-                    WebSocketFrames.Frame readyFrame =
-                        WebSocketFrames.readFrame(peer.getInputStream());
-                    assertEquals(WebSocketFrames.TEXT_OPCODE, readyFrame.opcode());
-                    // Use an ID larger than the 16 KiB JDK WebSocket buffer.
-                    // The reply then flushes across buffers to the reset socket and fails fast.
-                    String largeId = "req-rst-" + "x".repeat(20_000);
-                    byte[] requestBytes =
-                        ("{\"jsonrpc\":\"2.0\",\"id\":\""
-                                + largeId
-                                + "\",\"method\":\"program.save\",\"params\":{}}")
-                            .getBytes(StandardCharsets.UTF_8);
-                    WebSocketFrames.writeFrame(
-                        peer.getOutputStream(), WebSocketFrames.TEXT_OPCODE, requestBytes);
-                    assertTrue(dispatchEntered.await(5, TimeUnit.SECONDS));
-                    peer.setSoLinger(true, 0);
-                  } finally {
-                    releaseDispatch.countDown();
-                  }
-                  return null;
-                });
+            peerExecutor.submit(() -> {
+              try (Socket peer = rawServer.accept()) {
+                peer.setTcpNoDelay(true);
+                WebSocketHandshake.HandshakeRequest handshake =
+                    WebSocketHandshake.readHandshake(
+                        peer, System.nanoTime() + TimeUnit.SECONDS.toNanos(5));
+                WebSocketHandshake.writeHandshakeResponse(
+                    peer.getOutputStream(), handshake.acceptKey());
+                peer.setSoTimeout(5_000);
+                // Read the masked ready frame from the outbound AgentClient.
+                WebSocketFrames.Frame readyFrame = WebSocketFrames.readFrame(peer.getInputStream());
+                assertEquals(WebSocketFrames.TEXT_OPCODE, readyFrame.opcode());
+                // Use an ID larger than the 16 KiB JDK WebSocket buffer.
+                // The reply then flushes across buffers to the reset socket and fails fast.
+                String largeId = "req-rst-" + "x".repeat(20_000);
+                byte[] requestBytes =
+                    ("{\"jsonrpc\":\"2.0\",\"id\":\""
+                            + largeId
+                            + "\",\"method\":\"program.save\",\"params\":{}}")
+                        .getBytes(StandardCharsets.UTF_8);
+                WebSocketFrames.writeFrame(
+                    peer.getOutputStream(), WebSocketFrames.TEXT_OPCODE, requestBytes);
+                assertTrue(dispatchEntered.await(5, TimeUnit.SECONDS));
+                peer.setSoLinger(true, 0);
+              } finally {
+                releaseDispatch.countDown();
+              }
+              return null;
+            });
 
         AgentClient agentClient =
             new AgentClient(
@@ -523,11 +535,10 @@ class WebSocketEnvelopeAndSendErrorTest {
                 new AgentClient.LifecycleListener() {},
                 Duration.ofSeconds(5));
         Future<?> connectFuture =
-            clientExecutor.submit(
-                () -> {
-                  agentClient.connect();
-                  return null;
-                });
+            clientExecutor.submit(() -> {
+              agentClient.connect();
+              return null;
+            });
 
         peerFuture.get(5, TimeUnit.SECONDS);
         // Complete without a block in HttpClient.close().
@@ -559,8 +570,28 @@ class WebSocketEnvelopeAndSendErrorTest {
               }
               if ("getFunction".equals(method)) {
                 return new FunctionResource(
-                    "ram:00100000", "test_function", null, null, null, null, null, 0, null, null,
-                    null, null, false, false, false, false, null, false, false, null, null, null);
+                    "ram:00100000",
+                    "test_function",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    false,
+                    false,
+                    false,
+                    null,
+                    false,
+                    false,
+                    null,
+                    null,
+                    null);
               }
               throw new UnsupportedOperationException(method);
             });
@@ -570,8 +601,13 @@ class WebSocketEnvelopeAndSendErrorTest {
             (method, args) -> {
               if ("close".equals(method)) return null;
               return new AnalysisResource(
-                  AnalysisResource.Kind.GHIDRA, AnalysisResource.Status.IDLE, false, null, null,
-                  null, null);
+                  AnalysisResource.Kind.GHIDRA,
+                  AnalysisResource.Status.IDLE,
+                  false,
+                  null,
+                  null,
+                  null,
+                  null);
             });
     DecompilationService decompilationService =
         proxy(
@@ -595,11 +631,20 @@ class WebSocketEnvelopeAndSendErrorTest {
         };
     BridgeServices services =
         new BridgeServices(
-            programService, unused(AddressService.class), unused(CommentService.class),
-            unused(ReferenceService.class), unused(MemoryService.class),
-            unused(ListingService.class), functionService, unused(GlobalVariableService.class),
-            analysisService, decompilationService, unused(SymbolService.class),
-            unused(DataTypeService.class), transactionRunner, "test.bin");
+            programService,
+            unused(AddressService.class),
+            unused(CommentService.class),
+            unused(ReferenceService.class),
+            unused(MemoryService.class),
+            unused(ListingService.class),
+            functionService,
+            unused(GlobalVariableService.class),
+            analysisService,
+            decompilationService,
+            unused(SymbolService.class),
+            unused(DataTypeService.class),
+            transactionRunner,
+            "test.bin");
     return new AgentDispatcher(services, config.sessionId());
   }
 
@@ -672,11 +717,10 @@ class WebSocketEnvelopeAndSendErrorTest {
               },
               Duration.ofSeconds(5));
       Future<?> serverFuture =
-          executor.submit(
-              () -> {
-                agentClient.connect(cancel::get);
-                return null;
-              });
+          executor.submit(() -> {
+            agentClient.connect(cancel::get);
+            return null;
+          });
       long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
       while (System.nanoTime() < deadline) {
         if (listening.await(20, TimeUnit.MILLISECONDS)) {

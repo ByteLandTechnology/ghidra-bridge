@@ -63,222 +63,218 @@ class FunctionMutationsTest {
   @Test
   void updatesDynamicSignatureAndPreservesSignatureSource() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("dynamic_sig_test")) {
-      holder.inTransaction(
-          program -> {
-            Function function = createTestFunction(program, "dyn_fn", SourceType.IMPORTED);
-            GhidraSession session = GhidraTestSupport.sessionFor(program);
-            FunctionMutations.ParameterDataTypeResolver resolver = resolverFor(program);
+      holder.inTransaction(program -> {
+        Function function = createTestFunction(program, "dyn_fn", SourceType.IMPORTED);
+        GhidraSession session = GhidraTestSupport.sessionFor(program);
+        FunctionMutations.ParameterDataTypeResolver resolver = resolverFor(program);
 
-            FunctionMutations.patchFunction(
-                session,
-                function,
-                null,
-                null,
-                false,
-                null,
-                null,
-                "   ",
-                FunctionAttributePatch.empty(),
-                resolver);
-            assertFalse(function.hasCustomVariableStorage());
+        FunctionMutations.patchFunction(
+            session,
+            function,
+            null,
+            null,
+            false,
+            null,
+            null,
+            "   ",
+            FunctionAttributePatch.empty(),
+            resolver);
+        assertFalse(function.hasCustomVariableStorage());
 
-            FunctionMutations.patchFunction(
-                session,
-                function,
-                null,
-                null,
-                false,
-                LONGLONG_REF,
-                null,
-                "__fastcall",
-                FunctionAttributePatch.empty(),
-                resolver);
+        FunctionMutations.patchFunction(
+            session,
+            function,
+            null,
+            null,
+            false,
+            LONGLONG_REF,
+            null,
+            "__fastcall",
+            FunctionAttributePatch.empty(),
+            resolver);
 
-            Function updated = program.getFunctionManager().getFunctionAt(function.getEntryPoint());
-            assertFalse(updated.hasCustomVariableStorage());
-            assertTrue(LongLongDataType.dataType.isEquivalent(updated.getReturnType()));
-            assertEquals("__fastcall", updated.getCallingConventionName());
-            assertEquals(SourceType.IMPORTED, updated.getSignatureSource());
-            assertEquals(
-                new VariableStorage(program, program.getLanguage().getRegister("RAX"))
-                    .getSerializationString(),
-                updated.getReturn().getVariableStorage().getSerializationString());
-          });
+        Function updated = program.getFunctionManager().getFunctionAt(function.getEntryPoint());
+        assertFalse(updated.hasCustomVariableStorage());
+        assertTrue(LongLongDataType.dataType.isEquivalent(updated.getReturnType()));
+        assertEquals("__fastcall", updated.getCallingConventionName());
+        assertEquals(SourceType.IMPORTED, updated.getSignatureSource());
+        assertEquals(
+            new VariableStorage(program, program.getLanguage().getRegister("RAX"))
+                .getSerializationString(),
+            updated.getReturn().getVariableStorage().getSerializationString());
+      });
     }
   }
 
   @Test
   void derivesStorageWhenEnablingCustomStorageOnReturnTypeOrCallingConventionChange() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("derived_sig_test")) {
-      holder.inTransaction(
-          program -> {
-            Function function = createTestFunction(program, "derived_fn", SourceType.ANALYSIS);
-            GhidraSession session = GhidraTestSupport.sessionFor(program);
-            FunctionMutations.ParameterDataTypeResolver resolver = resolverFor(program);
+      holder.inTransaction(program -> {
+        Function function = createTestFunction(program, "derived_fn", SourceType.ANALYSIS);
+        GhidraSession session = GhidraTestSupport.sessionFor(program);
+        FunctionMutations.ParameterDataTypeResolver resolver = resolverFor(program);
 
-            ParameterImpl existingParam =
-                new ParameterImpl(
-                    "first_arg",
-                    IntegerDataType.dataType,
-                    VariableStorage.UNASSIGNED_STORAGE,
-                    program,
-                    SourceType.USER_DEFINED);
-            existingParam.setComment("preserved comment");
-            function.updateFunction(
-                null,
-                null,
-                List.of(existingParam),
-                FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS,
-                false,
-                SourceType.ANALYSIS);
+        ParameterImpl existingParam =
+            new ParameterImpl(
+                "first_arg",
+                IntegerDataType.dataType,
+                VariableStorage.UNASSIGNED_STORAGE,
+                program,
+                SourceType.USER_DEFINED);
+        existingParam.setComment("preserved comment");
+        function.updateFunction(
+            null,
+            null,
+            List.of(existingParam),
+            FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS,
+            false,
+            SourceType.ANALYSIS);
 
-            FunctionMutations.patchFunction(
-                session,
-                function,
-                null,
-                null,
-                false,
-                INT_REF,
-                null,
-                "__fastcall",
-                customStoragePatch(true),
-                resolver);
+        FunctionMutations.patchFunction(
+            session,
+            function,
+            null,
+            null,
+            false,
+            INT_REF,
+            null,
+            "__fastcall",
+            customStoragePatch(true),
+            resolver);
 
-            Function updated = program.getFunctionManager().getFunctionAt(function.getEntryPoint());
-            assertTrue(updated.hasCustomVariableStorage());
-            assertEquals(SourceType.ANALYSIS, updated.getSignatureSource());
-            assertTrue(IntegerDataType.dataType.isEquivalent(updated.getReturnType()));
-            assertEquals(
-                new VariableStorage(program, program.getLanguage().getRegister("EAX"))
-                    .getSerializationString(),
-                updated.getReturn().getVariableStorage().getSerializationString());
-            assertEquals(1, updated.getParameterCount());
-            assertEquals("first_arg", updated.getParameters()[0].getName());
-            assertEquals("preserved comment", updated.getParameters()[0].getComment());
-          });
+        Function updated = program.getFunctionManager().getFunctionAt(function.getEntryPoint());
+        assertTrue(updated.hasCustomVariableStorage());
+        assertEquals(SourceType.ANALYSIS, updated.getSignatureSource());
+        assertTrue(IntegerDataType.dataType.isEquivalent(updated.getReturnType()));
+        assertEquals(
+            new VariableStorage(program, program.getLanguage().getRegister("EAX"))
+                .getSerializationString(),
+            updated.getReturn().getVariableStorage().getSerializationString());
+        assertEquals(1, updated.getParameterCount());
+        assertEquals("first_arg", updated.getParameters()[0].getName());
+        assertEquals("preserved comment", updated.getParameters()[0].getComment());
+      });
     }
   }
 
   @Test
   void appliesExplicitReturnStorageOmitsReturnStoragePointerAndResizesAndResetsCustomStorage() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("explicit_sig_test")) {
-      holder.inTransaction(
-          program -> {
-            StructureDataType bigStruct = new StructureDataType(CategoryPath.ROOT, "big_ret", 24);
-            program
-                .getDataTypeManager()
-                .addDataType(bigStruct, DataTypeConflictHandler.REPLACE_HANDLER);
+      holder.inTransaction(program -> {
+        StructureDataType bigStruct = new StructureDataType(CategoryPath.ROOT, "big_ret", 24);
+        program
+            .getDataTypeManager()
+            .addDataType(bigStruct, DataTypeConflictHandler.REPLACE_HANDLER);
 
-            Function function = createTestFunction(program, "custom_fn", SourceType.USER_DEFINED);
-            GhidraSession session = GhidraTestSupport.sessionFor(program);
-            FunctionMutations.ParameterDataTypeResolver resolver = resolverFor(program);
+        Function function = createTestFunction(program, "custom_fn", SourceType.USER_DEFINED);
+        GhidraSession session = GhidraTestSupport.sessionFor(program);
+        FunctionMutations.ParameterDataTypeResolver resolver = resolverFor(program);
 
-            FunctionParameterMutations.addParameter(
-                session, function, 0, "formal_arg", INT_REF, null, resolver);
-            function.getParameters()[0].setComment("arg comment");
+        FunctionParameterMutations.addParameter(
+            session, function, 0, "formal_arg", INT_REF, null, resolver);
+        function.getParameters()[0].setComment("arg comment");
 
-            FunctionMutations.patchFunction(
-                session,
-                function,
-                null,
-                null,
-                false,
-                BIG_STRUCT_REF,
-                null,
-                null,
-                FunctionAttributePatch.empty(),
-                resolver);
+        FunctionMutations.patchFunction(
+            session,
+            function,
+            null,
+            null,
+            false,
+            BIG_STRUCT_REF,
+            null,
+            null,
+            FunctionAttributePatch.empty(),
+            resolver);
 
-            Function withAutoPtr =
-                program.getFunctionManager().getFunctionAt(function.getEntryPoint());
-            assertFalse(withAutoPtr.hasCustomVariableStorage());
-            assertEquals(2, withAutoPtr.getParameterCount());
-            assertEquals(
-                AutoParameterType.RETURN_STORAGE_PTR,
-                withAutoPtr.getParameters()[0].getAutoParameterType());
+        Function withAutoPtr = program.getFunctionManager().getFunctionAt(function.getEntryPoint());
+        assertFalse(withAutoPtr.hasCustomVariableStorage());
+        assertEquals(2, withAutoPtr.getParameterCount());
+        assertEquals(
+            AutoParameterType.RETURN_STORAGE_PTR,
+            withAutoPtr.getParameters()[0].getAutoParameterType());
 
-            IllegalArgumentException conflict =
-                assertThrows(
-                    IllegalArgumentException.class,
-                    () ->
-                        FunctionMutations.patchFunction(
-                            session,
-                            withAutoPtr,
-                            null,
-                            null,
-                            false,
-                            LONGLONG_REF,
-                            VariableStorageReference.register("R12"),
-                            null,
-                            customStoragePatch(false),
-                            resolver));
-            assertEquals(
-                "explicit storage cannot be combined with hasCustomVariableStorage=false",
-                conflict.getMessage());
+        IllegalArgumentException conflict =
+            assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                    FunctionMutations.patchFunction(
+                        session,
+                        withAutoPtr,
+                        null,
+                        null,
+                        false,
+                        LONGLONG_REF,
+                        VariableStorageReference.register("R12"),
+                        null,
+                        customStoragePatch(false),
+                        resolver));
+        assertEquals(
+            "explicit storage cannot be combined with hasCustomVariableStorage=false",
+            conflict.getMessage());
 
-            FunctionMutations.patchFunction(
-                session,
-                withAutoPtr,
-                null,
-                null,
-                false,
-                LONGLONG_REF,
-                VariableStorageReference.register("R12"),
-                null,
-                FunctionAttributePatch.empty(),
-                resolver);
+        FunctionMutations.patchFunction(
+            session,
+            withAutoPtr,
+            null,
+            null,
+            false,
+            LONGLONG_REF,
+            VariableStorageReference.register("R12"),
+            null,
+            FunctionAttributePatch.empty(),
+            resolver);
 
-            Function explicitCustom =
-                program.getFunctionManager().getFunctionAt(function.getEntryPoint());
-            assertTrue(explicitCustom.hasCustomVariableStorage());
-            assertEquals(
-                new VariableStorage(program, program.getLanguage().getRegister("R12"))
-                    .getSerializationString(),
-                explicitCustom.getReturn().getVariableStorage().getSerializationString());
-            assertEquals(1, explicitCustom.getParameterCount());
-            assertEquals("formal_arg", explicitCustom.getParameters()[0].getName());
-            assertEquals("arg comment", explicitCustom.getParameters()[0].getComment());
+        Function explicitCustom =
+            program.getFunctionManager().getFunctionAt(function.getEntryPoint());
+        assertTrue(explicitCustom.hasCustomVariableStorage());
+        assertEquals(
+            new VariableStorage(program, program.getLanguage().getRegister("R12"))
+                .getSerializationString(),
+            explicitCustom.getReturn().getVariableStorage().getSerializationString());
+        assertEquals(1, explicitCustom.getParameterCount());
+        assertEquals("formal_arg", explicitCustom.getParameters()[0].getName());
+        assertEquals("arg comment", explicitCustom.getParameters()[0].getComment());
 
-            FunctionMutations.patchFunction(
-                session,
-                explicitCustom,
-                null,
-                null,
-                false,
-                INT_REF,
-                null,
-                null,
-                FunctionAttributePatch.empty(),
-                resolver);
+        FunctionMutations.patchFunction(
+            session,
+            explicitCustom,
+            null,
+            null,
+            false,
+            INT_REF,
+            null,
+            null,
+            FunctionAttributePatch.empty(),
+            resolver);
 
-            Function resizedCustom =
-                program.getFunctionManager().getFunctionAt(function.getEntryPoint());
-            assertTrue(resizedCustom.hasCustomVariableStorage());
-            assertEquals(
-                new VariableStorage(program, program.getLanguage().getRegister("R12D"))
-                    .getSerializationString(),
-                resizedCustom.getReturn().getVariableStorage().getSerializationString());
+        Function resizedCustom =
+            program.getFunctionManager().getFunctionAt(function.getEntryPoint());
+        assertTrue(resizedCustom.hasCustomVariableStorage());
+        assertEquals(
+            new VariableStorage(program, program.getLanguage().getRegister("R12D"))
+                .getSerializationString(),
+            resizedCustom.getReturn().getVariableStorage().getSerializationString());
 
-            FunctionMutations.patchFunction(
-                session,
-                resizedCustom,
-                null,
-                null,
-                false,
-                INT_REF,
-                null,
-                null,
-                customStoragePatch(false),
-                resolver);
+        FunctionMutations.patchFunction(
+            session,
+            resizedCustom,
+            null,
+            null,
+            false,
+            INT_REF,
+            null,
+            null,
+            customStoragePatch(false),
+            resolver);
 
-            Function resetDynamic =
-                program.getFunctionManager().getFunctionAt(function.getEntryPoint());
-            assertFalse(resetDynamic.hasCustomVariableStorage());
-            assertEquals(
-                new VariableStorage(program, program.getLanguage().getRegister("EAX"))
-                    .getSerializationString(),
-                resetDynamic.getReturn().getVariableStorage().getSerializationString());
-          });
+        Function resetDynamic =
+            program.getFunctionManager().getFunctionAt(function.getEntryPoint());
+        assertFalse(resetDynamic.hasCustomVariableStorage());
+        assertEquals(
+            new VariableStorage(program, program.getLanguage().getRegister("EAX"))
+                .getSerializationString(),
+            resetDynamic.getReturn().getVariableStorage().getSerializationString());
+      });
     }
   }
 

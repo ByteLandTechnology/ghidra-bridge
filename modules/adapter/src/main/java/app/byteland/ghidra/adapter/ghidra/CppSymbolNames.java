@@ -136,8 +136,7 @@ public final class CppSymbolNames {
     static final DecodedSymbol EMPTY = new DecodedSymbol(null, List.of());
 
     public DecodedSymbol {
-      candidates =
-          candidates == null || candidates.isEmpty() ? List.of() : List.copyOf(candidates);
+      candidates = candidates == null || candidates.isEmpty() ? List.of() : List.copyOf(candidates);
     }
   }
 

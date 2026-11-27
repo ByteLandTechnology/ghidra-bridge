@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Check release archive reproducibility across delayed and perturbed runs."""
 
 import hashlib
@@ -11,7 +9,6 @@ import subprocess
 import tempfile
 import time
 import zipfile
-
 
 EXPECTED_DOS_TIMESTAMP = (1980, 2, 1, 0, 0, 0)
 
@@ -48,7 +45,9 @@ def run_package_script(
         env["CI"] = "true"
     else:
         env.pop("CI", None)
-    command = f"umask {umask_octal} && exec bash .github/scripts/package-release.sh \"$@\""
+    command = (
+        f'umask {umask_octal} && exec bash .github/scripts/package-release.sh "$@"'
+    )
     return subprocess.run(
         ["bash", "-c", command, "package-release", *args],
         cwd=repo_root,
@@ -102,13 +101,16 @@ def verify_archive(
             mode = (info.external_attr >> 16) & 0o777
             expected_mode = 0o755 if info.is_dir() else 0o644
             assert mode == expected_mode, (
-                f"Entry {info.filename} has mode {oct(mode)}, expected {oct(expected_mode)}"
+                f"Entry {info.filename} has mode {oct(mode)}, "
+                f"expected {oct(expected_mode)}"
             )
 
         jar_bytes = archive.read(f"{prefix}/ghidra-bridge.jar")
 
     with zipfile.ZipFile(io.BytesIO(jar_bytes)) as jar:
-        manifest = jar.read("META-INF/MANIFEST.MF").decode("utf-8").replace("\r\n", "\n")
+        manifest = (
+            jar.read("META-INF/MANIFEST.MF").decode("utf-8").replace("\r\n", "\n")
+        )
     assert f"Implementation-Version: {version}\n" in manifest, (
         f"JAR manifest does not contain Implementation-Version {version}: {manifest!r}"
     )
@@ -168,8 +170,8 @@ def main() -> None:
             "Expected .release-please-manifest.json mismatch to fail"
         )
         assert (
-            f".release-please-manifest.json has '0.0.0-manifest', expected '{base_version}'"
-            in manifest_mismatch.stderr
+            ".release-please-manifest.json has '0.0.0-manifest', "
+            f"expected '{base_version}'" in manifest_mismatch.stderr
         ), f"Unexpected manifest mismatch output: {manifest_mismatch.stderr!r}"
         manifest_file.write_bytes(original_manifest)
 
@@ -199,10 +201,13 @@ def main() -> None:
         )
 
         assert first_digest == second_digest, (
-            f"Zip SHA-256 changed across delayed runs: {first_digest} != {second_digest}"
+            "Zip SHA-256 changed across delayed runs: "
+            f"{first_digest} != {second_digest}"
         )
         assert first_bytes == second_bytes, "Zip bytes changed across delayed runs"
-        assert first_checksum == second_checksum, "Checksum file changed across delayed runs"
+        assert first_checksum == second_checksum, (
+            "Checksum file changed across delayed runs"
+        )
 
     print(f"Release archive reproducibility checks passed ({first_digest})")
 

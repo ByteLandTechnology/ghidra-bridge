@@ -14,9 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
-/**
- * Runs the WebSocket transport as an embedded server or an outbound client to ws_url.
- */
+/** Runs the WebSocket transport as an embedded server or an outbound client to ws_url. */
 public final class AgentClient {
   private static final System.Logger LOGGER = System.getLogger(AgentClient.class.getName());
 
@@ -78,8 +76,8 @@ public final class AgentClient {
   }
 
   /**
-   * Binds the embedded listener or completes the outbound handshake, then returns an active
-   * session handle. Returns {@code null} if cancellation occurs during the outbound handshake.
+   * Binds the embedded listener or completes the outbound handshake, then returns an active session
+   * handle. Returns {@code null} if cancellation occurs during the outbound handshake.
    */
   public ActiveSession openSession(BooleanSupplier cancellationRequested) throws Exception {
     if (config.isServerMode()) {

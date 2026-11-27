@@ -6,8 +6,7 @@ import java.util.Objects;
 
 public final class DataTypeMutationValidationException extends IllegalArgumentException
     implements DomainException {
-  @Serial
-  private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
   private final String validationTarget;
 
   public DataTypeMutationValidationException(String target, String message) {

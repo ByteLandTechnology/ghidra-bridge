@@ -86,8 +86,7 @@ public record Page<T>(
       this.resuming = cursor != null && !cursor.isBlank();
       this.cursor = this.resuming ? cursor : null;
       this.heap =
-          new PriorityQueue<>(
-              Math.min(this.maxRetained, INITIAL_CAPACITY), Keyed.maxOrder());
+          new PriorityQueue<>(Math.min(this.maxRetained, INITIAL_CAPACITY), Keyed.maxOrder());
     }
 
     public void offer(String key, T item) {

@@ -36,8 +36,7 @@ class LeasePoolTest {
     AtomicInteger createdIds = new AtomicInteger();
     Set<Integer> destroyedIds = ConcurrentHashMap.newKeySet();
 
-    LeasePool<Integer> pool =
-        new LeasePool<>(4, createdIds::incrementAndGet, destroyedIds::add);
+    LeasePool<Integer> pool = new LeasePool<>(4, createdIds::incrementAndGet, destroyedIds::add);
 
     // Lazy initialization: zero instances created until first acquire().
     assertEquals(0, createdIds.get());
@@ -59,17 +58,16 @@ class LeasePoolTest {
       List<Future<Integer>> futures = new ArrayList<>();
       for (int i = 0; i < 10; i++) {
         futures.add(
-            executor.submit(
-                () -> {
-                  startLatch.await();
-                  try (LeasePool.Lease<Integer> lease = pool.acquire()) {
-                    int current = activeLeases.incrementAndGet();
-                    maxActiveLeases.accumulateAndGet(current, Math::max);
-                    Thread.sleep(30L);
-                    activeLeases.decrementAndGet();
-                    return lease.value();
-                  }
-                }));
+            executor.submit(() -> {
+              startLatch.await();
+              try (LeasePool.Lease<Integer> lease = pool.acquire()) {
+                int current = activeLeases.incrementAndGet();
+                maxActiveLeases.accumulateAndGet(current, Math::max);
+                Thread.sleep(30L);
+                activeLeases.decrementAndGet();
+                return lease.value();
+              }
+            }));
       }
       startLatch.countDown();
       for (Future<Integer> future : futures) {
@@ -114,7 +112,8 @@ class LeasePoolTest {
     assertEquals(2, nextId.get());
     secondSlot.close();
 
-    // Close pool while first lease is still held; idle slot drains now and active lease destroys on close.
+    // Close pool while first lease is still held; idle slot drains now and active lease destroys on
+    // close.
     pool.close();
     assertEquals(
         Set.of(2), destroyed, "Only idle resources should destroy before the active lease closes");

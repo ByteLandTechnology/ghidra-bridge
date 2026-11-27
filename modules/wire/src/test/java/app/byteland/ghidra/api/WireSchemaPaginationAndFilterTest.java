@@ -53,8 +53,13 @@ class WireSchemaPaginationAndFilterTest {
               return new MemoryResource(
                   "ram:00100000", new ByteSequence(ByteSequence.Encoding.HEX, "9090", 2));
             });
-    ApiRegistry registry = registryWith(memory, unused(FunctionService.class),
-        unused(DataTypeService.class), unused(SymbolService.class), unused(ReferenceService.class));
+    ApiRegistry registry =
+        registryWith(
+            memory,
+            unused(FunctionService.class),
+            unused(DataTypeService.class),
+            unused(SymbolService.class),
+            unused(ReferenceService.class));
 
     Map<String, Object> outputSchema = registry.method("memory.read").responseCodec().schema();
     assertEquals(List.of("address"), outputSchema.get("required"));
@@ -77,8 +82,7 @@ class WireSchemaPaginationAndFilterTest {
         (Map<String, Object>)
             registry.dispatch("memory.read", Map.of("selector", Map.of("address", "ram:00100000")));
     assertEquals("ram:00100000", unprojected.get("address"));
-    assertEquals(
-        Map.of("encoding", "hex", "data", "9090", "length", 2), unprojected.get("bytes"));
+    assertEquals(Map.of("encoding", "hex", "data", "9090", "length", 2), unprojected.get("bytes"));
   }
 
   @Test
@@ -163,8 +167,13 @@ class WireSchemaPaginationAndFilterTest {
                       ScanProgress.StopReason.COMPLETED,
                       1L));
             });
-    ApiRegistry registry = registryWith(unused(MemoryService.class), functions,
-        unused(DataTypeService.class), unused(SymbolService.class), unused(ReferenceService.class));
+    ApiRegistry registry =
+        registryWith(
+            unused(MemoryService.class),
+            functions,
+            unused(DataTypeService.class),
+            unused(SymbolService.class),
+            unused(ReferenceService.class));
 
     @SuppressWarnings("unchecked")
     Map<String, Object> projectedBody =
@@ -176,16 +185,17 @@ class WireSchemaPaginationAndFilterTest {
                     "projection",
                         Map.of(
                             "fields",
-                            List.of(
-                                "body.start", "parameters.name", "local_variables.storage"))));
+                            List.of("body.start", "parameters.name", "local_variables.storage"))));
     assertEquals(
         Map.of(
             "entry", "ram:00100000",
             "body", Map.of("start", "ram:00100000"),
             "parameters", List.of(Map.of("name", "argc")),
             "local_variables",
-                List.of(Map.of("storage", Map.of("kind", "serialization",
-                    "serialization", "Stack[-0x8]:4")))),
+                List.of(
+                    Map.of(
+                        "storage",
+                        Map.of("kind", "serialization", "serialization", "Stack[-0x8]:4")))),
         projectedBody);
 
     @SuppressWarnings("unchecked")
@@ -211,8 +221,9 @@ class WireSchemaPaginationAndFilterTest {
         (Map<String, Object>)
             registry.dispatch(
                 "function.list",
-                Map.of("projection", Map.of("fields", List.of("body.num_addresses",
-                    "parameters.ordinal"))));
+                Map.of(
+                    "projection",
+                    Map.of("fields", List.of("body.num_addresses", "parameters.ordinal"))));
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> items = (List<Map<String, Object>>) projectedList.get("items");
     assertEquals(2, items.size());
@@ -222,9 +233,7 @@ class WireSchemaPaginationAndFilterTest {
             "body", Map.of("num_addresses", 17L),
             "parameters", List.of(Map.of("ordinal", 0))),
         items.get(0));
-    assertEquals(
-        Map.of("entry", "EXTERNAL:00000001", "parameters", List.of()),
-        items.get(1));
+    assertEquals(Map.of("entry", "EXTERNAL:00000001", "parameters", List.of()), items.get(1));
   }
 
   @Test
@@ -271,8 +280,13 @@ class WireSchemaPaginationAndFilterTest {
               assertEquals("searchDataTypes", method);
               return Page.of(List.of(fnType, structType), 100, null);
             });
-    ApiRegistry registry = registryWith(unused(MemoryService.class), unused(FunctionService.class),
-        dataTypes, unused(SymbolService.class), unused(ReferenceService.class));
+    ApiRegistry registry =
+        registryWith(
+            unused(MemoryService.class),
+            unused(FunctionService.class),
+            dataTypes,
+            unused(SymbolService.class),
+            unused(ReferenceService.class));
 
     @SuppressWarnings("unchecked")
     Map<String, Object> projectedFn =
@@ -284,8 +298,10 @@ class WireSchemaPaginationAndFilterTest {
                     "projection", Map.of("fields", List.of("signature.return_type"))));
     assertEquals(
         Map.of(
-            "path", "/callback_t",
-            "signature", Map.of("return_type", Map.of("kind", "named", "name", "/int"))),
+            "path",
+            "/callback_t",
+            "signature",
+            Map.of("return_type", Map.of("kind", "named", "name", "/int"))),
         projectedFn);
 
     @SuppressWarnings("unchecked")
@@ -307,25 +323,35 @@ class WireSchemaPaginationAndFilterTest {
     assertEquals(
         List.of(
             Map.of(
-                "path", "/callback_t",
+                "path",
+                "/callback_t",
                 "signature",
-                    Map.of(
-                        "parameters",
-                        List.of(
-                            Map.of(
-                                "name", "ctx",
-                                "data_type", Map.of("kind", "untyped_pointer"))))),
+                Map.of(
+                    "parameters",
+                    List.of(
+                        Map.of("name", "ctx", "data_type", Map.of("kind", "untyped_pointer"))))),
             Map.of("path", "/header_t")),
         projectedList.get("items"));
   }
 
   @Test
   void nonProjectedWriteSchemasNonDottedBytesAndInputSignaturesStayStrict() {
-    ApiRegistry registry = registryWith(unused(MemoryService.class), unused(FunctionService.class),
-        unused(DataTypeService.class), unused(SymbolService.class), unused(ReferenceService.class));
+    ApiRegistry registry =
+        registryWith(
+            unused(MemoryService.class),
+            unused(FunctionService.class),
+            unused(DataTypeService.class),
+            unused(SymbolService.class),
+            unused(ReferenceService.class));
 
-    for (String method : List.of("instruction.get", "instruction.list", "flow_override.list",
-        "flow_override.patch", "code_unit.list", "data_unit.list")) {
+    for (String method :
+        List.of(
+            "instruction.get",
+            "instruction.list",
+            "flow_override.list",
+            "flow_override.patch",
+            "code_unit.list",
+            "data_unit.list")) {
       Map<?, ?> itemSchema = itemOrResourceSchema(registry.method(method).responseCodec().schema());
       Map<?, ?> bytesSchema = (Map<?, ?>) ((Map<?, ?>) itemSchema.get("properties")).get("bytes");
       assertEquals(List.of("encoding", "data", "length"), bytesSchema.get("required"), method);
@@ -402,10 +428,22 @@ class WireSchemaPaginationAndFilterTest {
               return Page.scanned(
                   List.of(
                       new SymbolResource(
-                          "2", "sym_two", "ram:00100000", "Global", "Label", "USER_DEFINED", true,
+                          "2",
+                          "sym_two",
+                          "ram:00100000",
+                          "Global",
+                          "Label",
+                          "USER_DEFINED",
+                          true,
                           null),
                       new SymbolResource(
-                          "10", "sym_ten", "ram:00100000", "Global", "Label", "USER_DEFINED", false,
+                          "10",
+                          "sym_ten",
+                          "ram:00100000",
+                          "Global",
+                          "Label",
+                          "USER_DEFINED",
+                          false,
                           null)),
                   100,
                   null,
@@ -433,8 +471,13 @@ class WireSchemaPaginationAndFilterTest {
                   100,
                   null);
             });
-    ApiRegistry registry = registryWith(unused(MemoryService.class), unused(FunctionService.class),
-        unused(DataTypeService.class), symbols, references);
+    ApiRegistry registry =
+        registryWith(
+            unused(MemoryService.class),
+            unused(FunctionService.class),
+            unused(DataTypeService.class),
+            symbols,
+            references);
 
     @SuppressWarnings("unchecked")
     Map<String, Object> symbolPage =
@@ -503,8 +546,7 @@ class WireSchemaPaginationAndFilterTest {
             listing);
 
     for (Map<String, Object> invalidFilter :
-        List.<Map<String, Object>>of(
-            Map.of(), Map.of("flow_overrides", List.of("call_return")))) {
+        List.<Map<String, Object>>of(Map.of(), Map.of("flow_overrides", List.of("call_return")))) {
       ApiException direct =
           assertThrows(
               ApiException.class,
@@ -557,8 +599,7 @@ class WireSchemaPaginationAndFilterTest {
     assertEquals("missing_field", missingKind.error().code());
     assertEquals("/selector/kind", missingKind.error().target());
 
-    ApiException nullSelector =
-        assertThrows(ApiException.class, () -> ApiRegistry.flowScope(null));
+    ApiException nullSelector = assertThrows(ApiException.class, () -> ApiRegistry.flowScope(null));
     assertEquals(400, nullSelector.status());
     assertEquals("missing_field", nullSelector.error().code());
     assertEquals("/selector/kind", nullSelector.error().target());

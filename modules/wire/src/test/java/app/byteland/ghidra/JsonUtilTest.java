@@ -174,7 +174,8 @@ class JsonUtilTest {
 
     String json = JsonUtil.toJson(composite);
     assertEquals(
-        "{\"ints\":[1,2,3],\"strings\":[\"a\\\"b\",\"c\\\\d\"],\"tags\":[\"alpha\",\"beta\"],\"nonFinite\":null}",
+        "{\"ints\":[1,2,3],\"strings\":[\"a\\\"b\",\"c\\\\d\"],"
+            + "\"tags\":[\"alpha\",\"beta\"],\"nonFinite\":null}",
         json);
 
     Map<Object, Object> badMap = new LinkedHashMap<>();
@@ -203,7 +204,8 @@ class JsonUtilTest {
     query.put("selector", Map.of("address", "ram:00101000"));
     query.put("filter", Map.of("name", "FUN_00101000", "namespace", "std::vector"));
     String expectedCanonicalJson =
-        "{\"filter\":{\"name\":\"FUN_00101000\",\"namespace\":\"std::vector\"},\"selector\":{\"address\":\"ram:00101000\"}}";
+        "{\"filter\":{\"name\":\"FUN_00101000\",\"namespace\":\"std::vector\"},"
+            + "\"selector\":{\"address\":\"ram:00101000\"}}";
     String expectedFingerprint =
         Base64.getUrlEncoder()
             .withoutPadding()

@@ -69,7 +69,12 @@ class FunctionParameterMutationsTest {
   @Test
   void addsDynamicStorageParametersAndPreservesUserDefinedSource() {
     Parameter existing =
-        stubParameter("first", 0, IntegerDataType.dataType, SourceType.ANALYSIS, false,
+        stubParameter(
+            "first",
+            0,
+            IntegerDataType.dataType,
+            SourceType.ANALYSIS,
+            false,
             registerStorage(0, 4));
     Harness harness = new Harness(false, List.of(existing));
 
@@ -109,7 +114,12 @@ class FunctionParameterMutationsTest {
     Parameter autoThis =
         stubParameter("this", 0, voidPtr, SourceType.ANALYSIS, true, registerStorage(16, 8));
     Parameter formalArg =
-        stubParameter("arg", 1, IntegerDataType.dataType, SourceType.USER_DEFINED, false,
+        stubParameter(
+            "arg",
+            1,
+            IntegerDataType.dataType,
+            SourceType.USER_DEFINED,
+            false,
             registerStorage(24, 4));
     Harness harness = new Harness(false, List.of(autoThis, formalArg));
 
@@ -140,8 +150,7 @@ class FunctionParameterMutationsTest {
     assertEquals(FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS, update.updateType());
     assertEquals(SourceType.USER_DEFINED, update.source());
     assertEquals(
-        List.of("after_this", "arg"),
-        update.parameters().stream().map(Variable::getName).toList());
+        List.of("after_this", "arg"), update.parameters().stream().map(Variable::getName).toList());
     assertEquals(3, harness.function.getParameterCount());
     assertEquals("this", harness.function.getParameters()[0].getName());
     assertEquals("after_this", harness.function.getParameters()[1].getName());
@@ -153,7 +162,11 @@ class FunctionParameterMutationsTest {
     VariableStorage customRegister = registerStorage(32, 8);
     Parameter existing =
         stubParameter(
-            "custom_arg", 0, LongLongDataType.dataType, SourceType.USER_DEFINED, false,
+            "custom_arg",
+            0,
+            LongLongDataType.dataType,
+            SourceType.USER_DEFINED,
+            false,
             customRegister);
     Harness harness = new Harness(true, List.of(existing));
 
@@ -243,7 +256,12 @@ class FunctionParameterMutationsTest {
   @Test
   void propagatesUpdateFunctionCommandFailureAsTransactionExecutionException() {
     Parameter existing =
-        stubParameter("dup", 0, IntegerDataType.dataType, SourceType.USER_DEFINED, false,
+        stubParameter(
+            "dup",
+            0,
+            IntegerDataType.dataType,
+            SourceType.USER_DEFINED,
+            false,
             registerStorage(0, 4));
     Harness harness = new Harness(false, List.of(existing));
 
@@ -268,10 +286,8 @@ class FunctionParameterMutationsTest {
     Parameter existing =
         stubParameter(
             "existing", 0, LongLongDataType.dataType, null, false, rcxStorage, "existing note");
-    Parameter returnParam =
-        stubReturn(IntegerDataType.dataType, SourceType.IMPORTED, eaxStorage);
-    Harness harness =
-        new Harness(false, List.of(existing), returnParam, SourceType.IMPORTED, x64);
+    Parameter returnParam = stubReturn(IntegerDataType.dataType, SourceType.IMPORTED, eaxStorage);
+    Harness harness = new Harness(false, List.of(existing), returnParam, SourceType.IMPORTED, x64);
 
     FunctionParameterMutations.addParameter(
         harness.session,
@@ -347,14 +363,23 @@ class FunctionParameterMutationsTest {
 
     Parameter first =
         stubParameter(
-            "target", 0, IntegerDataType.dataType, SourceType.ANALYSIS, false, ecxStorage,
+            "target",
+            0,
+            IntegerDataType.dataType,
+            SourceType.ANALYSIS,
+            false,
+            ecxStorage,
             "target comment");
     Parameter second =
         stubParameter(
-            "neighbor", 1, LongLongDataType.dataType, SourceType.IMPORTED, false, r8Storage,
+            "neighbor",
+            1,
+            LongLongDataType.dataType,
+            SourceType.IMPORTED,
+            false,
+            r8Storage,
             "neighbor comment");
-    Parameter returnParam =
-        stubReturn(LongLongDataType.dataType, SourceType.ANALYSIS, raxStorage);
+    Parameter returnParam = stubReturn(LongLongDataType.dataType, SourceType.ANALYSIS, raxStorage);
     Harness harness =
         new Harness(false, List.of(first, second), returnParam, SourceType.ANALYSIS, x64);
 
@@ -441,7 +466,12 @@ class FunctionParameterMutationsTest {
             IllegalArgumentException.class,
             () ->
                 FunctionParameterMutations.addParameter(
-                    harness.session, harness.function, 9, "next", INT_REF, edxRef,
+                    harness.session,
+                    harness.function,
+                    9,
+                    "next",
+                    INT_REF,
+                    edxRef,
                     DATA_TYPES::get));
     assertEquals("parameter ordinal out of range: 9", outOfRange.getMessage());
 
@@ -468,7 +498,12 @@ class FunctionParameterMutationsTest {
             IllegalArgumentException.class,
             () ->
                 FunctionParameterMutations.patchParameter(
-                    harness.session, harness.function, 0, "arg0", INT_REF, edxRef,
+                    harness.session,
+                    harness.function,
+                    0,
+                    "arg0",
+                    INT_REF,
+                    edxRef,
                     DATA_TYPES::get));
     assertEquals(
         "explicit storage requires custom variable storage", missingCustomFlag.getMessage());
@@ -572,7 +607,8 @@ class FunctionParameterMutationsTest {
                           assertNotNull(language);
                           yield language.getDefaultCompilerSpec();
                         }
-                        default -> throw new AssertionError("Unexpected Program." + method.getName());
+                        default ->
+                            throw new AssertionError("Unexpected Program." + method.getName());
                       });
       GhidraScript script =
           new GhidraScript() {
@@ -613,8 +649,7 @@ class FunctionParameterMutationsTest {
       Set<String> seenNames = new HashSet<>();
       for (Variable variable : newParams) {
         if (!seenNames.add(variable.getName())) {
-          throw new DuplicateNameException(
-              "Duplicate parameter name '" + variable.getName() + "'");
+          throw new DuplicateNameException("Duplicate parameter name '" + variable.getName() + "'");
         }
       }
 
@@ -652,7 +687,9 @@ class FunctionParameterMutationsTest {
                 ? param.getFormalDataType()
                 : variable.getDataType();
         VariableStorage storage =
-            useCustom ? variable.getVariableStorage() : registerStorage(ordinal * 8L, dt.getLength());
+            useCustom
+                ? variable.getVariableStorage()
+                : registerStorage(ordinal * 8L, dt.getLength());
         rebuilt.add(
             stubParameter(
                 variable.getName(),

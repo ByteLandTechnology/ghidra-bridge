@@ -30,54 +30,53 @@ class ListingInstructionAndDataQueriesTest {
   @Test
   void instructionQueriesStreamForwardAndResumeAtMaxAddress() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("instructions_test")) {
-      holder.inTransaction(
-          program -> {
-            AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-            Address minAddr = space.getMinAddress();
-            byte[] lowBytes = {(byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".low",
-                    minAddr,
-                    new ByteArrayInputStream(lowBytes),
-                    lowBytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            new DisassembleCommand(minAddr, new AddressSet(minAddr, minAddr), false)
-                .applyTo(program, TaskMonitor.DUMMY);
+      holder.inTransaction(program -> {
+        AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+        Address minAddr = space.getMinAddress();
+        byte[] lowBytes = {(byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".low",
+                minAddr,
+                new ByteArrayInputStream(lowBytes),
+                lowBytes.length,
+                TaskMonitor.DUMMY,
+                false);
+        new DisassembleCommand(minAddr, new AddressSet(minAddr, minAddr), false)
+            .applyTo(program, TaskMonitor.DUMMY);
 
-            // 0x3000..0x3004: mov eax, imm32 (5 bytes)
-            // 0x3005: nop (1 byte)
-            // 0x3006: ret (1 byte)
-            Address base = space.getAddress(0x3000L);
-            byte[] body = {(byte) 0xb8, 0x01, 0x00, 0x00, 0x00, (byte) 0x90, (byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".text",
-                    base,
-                    new ByteArrayInputStream(body),
-                    body.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            AddressSet bodySet = new AddressSet(base, base.add(6));
-            new DisassembleCommand(bodySet, bodySet, false).applyTo(program, TaskMonitor.DUMMY);
+        // 0x3000..0x3004: mov eax, imm32 (5 bytes)
+        // 0x3005: nop (1 byte)
+        // 0x3006: ret (1 byte)
+        Address base = space.getAddress(0x3000L);
+        byte[] body = {(byte) 0xb8, 0x01, 0x00, 0x00, 0x00, (byte) 0x90, (byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".text",
+                base,
+                new ByteArrayInputStream(body),
+                body.length,
+                TaskMonitor.DUMMY,
+                false);
+        AddressSet bodySet = new AddressSet(base, base.add(6));
+        new DisassembleCommand(bodySet, bodySet, false).applyTo(program, TaskMonitor.DUMMY);
 
-            Address maxAddr = space.getMaxAddress();
-            byte[] highBytes = {(byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".high",
-                    maxAddr,
-                    new ByteArrayInputStream(highBytes),
-                    highBytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            new DisassembleCommand(maxAddr, new AddressSet(maxAddr, maxAddr), false)
-                .applyTo(program, TaskMonitor.DUMMY);
-          });
+        Address maxAddr = space.getMaxAddress();
+        byte[] highBytes = {(byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".high",
+                maxAddr,
+                new ByteArrayInputStream(highBytes),
+                highBytes.length,
+                TaskMonitor.DUMMY,
+                false);
+        new DisassembleCommand(maxAddr, new AddressSet(maxAddr, maxAddr), false)
+            .applyTo(program, TaskMonitor.DUMMY);
+      });
 
       SeekSpy spy = new SeekSpy();
       ListingInstructionQueries queries =
@@ -98,9 +97,7 @@ class ListingInstructionAndDataQueriesTest {
       spy.reset();
       Page<InstructionResource> page2 =
           queries.listInstructions(
-              AddressScanOptions.of("ram:00003000", "ram:00003006", 1000),
-              2,
-              page1.nextCursor());
+              AddressScanOptions.of("ram:00003000", "ram:00003006", 1000), 2, page1.nextCursor());
       assertEquals(1, spy.instructionIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
       assertEquals(
@@ -142,54 +139,53 @@ class ListingInstructionAndDataQueriesTest {
   @Test
   void dataQueriesStreamForwardAndResumeAtMaxAddress() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("data_units_test")) {
-      holder.inTransaction(
-          program -> {
-            AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-            Address minAddr = space.getMinAddress();
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".low",
-                    minAddr,
-                    new ByteArrayInputStream(new byte[] {0x11}),
-                    1,
-                    TaskMonitor.DUMMY,
-                    false);
-            program.getListing().createData(minAddr, ByteDataType.dataType);
+      holder.inTransaction(program -> {
+        AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+        Address minAddr = space.getMinAddress();
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".low",
+                minAddr,
+                new ByteArrayInputStream(new byte[] {0x11}),
+                1,
+                TaskMonitor.DUMMY,
+                false);
+        program.getListing().createData(minAddr, ByteDataType.dataType);
 
-            // 0x4000..0x4003: dword (4 bytes)
-            // 0x4008..0x4009: word (2 bytes)
-            // 0x4010: byte (1 byte)
-            Address base = space.getAddress(0x4000L);
-            byte[] bytes = new byte[0x20];
-            bytes[0] = 1;
-            bytes[8] = 2;
-            bytes[0x10] = 3;
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".data",
-                    base,
-                    new ByteArrayInputStream(bytes),
-                    bytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            program.getListing().createData(base, DWordDataType.dataType);
-            program.getListing().createData(base.add(8), WordDataType.dataType);
-            program.getListing().createData(base.add(0x10), ByteDataType.dataType);
+        // 0x4000..0x4003: dword (4 bytes)
+        // 0x4008..0x4009: word (2 bytes)
+        // 0x4010: byte (1 byte)
+        Address base = space.getAddress(0x4000L);
+        byte[] bytes = new byte[0x20];
+        bytes[0] = 1;
+        bytes[8] = 2;
+        bytes[0x10] = 3;
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".data",
+                base,
+                new ByteArrayInputStream(bytes),
+                bytes.length,
+                TaskMonitor.DUMMY,
+                false);
+        program.getListing().createData(base, DWordDataType.dataType);
+        program.getListing().createData(base.add(8), WordDataType.dataType);
+        program.getListing().createData(base.add(0x10), ByteDataType.dataType);
 
-            Address maxAddr = space.getMaxAddress();
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".high",
-                    maxAddr,
-                    new ByteArrayInputStream(new byte[] {0x7f}),
-                    1,
-                    TaskMonitor.DUMMY,
-                    false);
-            program.getListing().createData(maxAddr, ByteDataType.dataType);
-          });
+        Address maxAddr = space.getMaxAddress();
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".high",
+                maxAddr,
+                new ByteArrayInputStream(new byte[] {0x7f}),
+                1,
+                TaskMonitor.DUMMY,
+                false);
+        program.getListing().createData(maxAddr, ByteDataType.dataType);
+      });
 
       SeekSpy spy = new SeekSpy();
       ListingDataQueries queries =
@@ -210,14 +206,11 @@ class ListingInstructionAndDataQueriesTest {
       spy.reset();
       Page<DataUnitResource> page2 =
           queries.listDataUnits(
-              AddressScanOptions.of("ram:00004000", "ram:00004010", 1000),
-              2,
-              page1.nextCursor());
+              AddressScanOptions.of("ram:00004000", "ram:00004010", 1000), 2, page1.nextCursor());
       assertEquals(1, spy.definedDataIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
       assertEquals(
-          List.of("ram:00004010"),
-          page2.items().stream().map(DataUnitResource::address).toList());
+          List.of("ram:00004010"), page2.items().stream().map(DataUnitResource::address).toList());
       assertTrue(page2.scanProgress().complete());
 
       // Multi-byte start bound inside 4-byte dword (0x4002) skips 0x4000

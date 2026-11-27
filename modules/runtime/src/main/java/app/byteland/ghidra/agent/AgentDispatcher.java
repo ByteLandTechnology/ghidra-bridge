@@ -33,30 +33,25 @@ public final class AgentDispatcher implements AutoCloseable {
   }
 
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
-    return dispatchBarrier.run(
-        () -> {
-          ApiRegistry.PreparedDispatch prepared = apiRegistry.prepareDispatch(method, params);
-          Object rawResponse =
-              prepared.readOnly()
-                  ? dispatchBarrier.runRead(prepared::execute)
-                  : dispatchBarrier.runWrite(prepared::execute);
-          return prepared.encodeResponse(rawResponse);
-        });
+    return dispatchBarrier.run(() -> {
+      ApiRegistry.PreparedDispatch prepared = apiRegistry.prepareDispatch(method, params);
+      Object rawResponse =
+          prepared.readOnly()
+              ? dispatchBarrier.runRead(prepared::execute)
+              : dispatchBarrier.runWrite(prepared::execute);
+      return prepared.encodeResponse(rawResponse);
+    });
   }
 
-  /**
-   * Runs a lifecycle action under the fair write lock while the dispatcher is open.
-   */
+  /** Runs a lifecycle action under the fair write lock while the dispatcher is open. */
   public void runExclusive(Runnable action) {
     Objects.requireNonNull(action, "action");
     try {
-      dispatchBarrier.run(
-          () ->
-              dispatchBarrier.runWrite(
-                  () -> {
-                    action.run();
-                    return null;
-                  }));
+      dispatchBarrier.run(() ->
+          dispatchBarrier.runWrite(() -> {
+            action.run();
+            return null;
+          }));
     } catch (RuntimeException error) {
       throw error;
     } catch (Exception error) {

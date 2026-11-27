@@ -54,8 +54,8 @@ class DecompilationServiceImplTest {
     fixture.addFunction(0x102000L, "helper_demo", fixture.program);
     FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
 
-    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
-        fixture.session, new LeasePool<>(1, () -> decompiler))) {
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> decompiler))) {
       // Cold decompile on a new decompiler skips flushCache.
       DecompilationResource first =
           service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
@@ -91,8 +91,8 @@ class DecompilationServiceImplTest {
     Fixture fixture = createFixture(modificationNumber);
     FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
 
-    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
-        fixture.session, new LeasePool<>(1, () -> decompiler))) {
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> decompiler))) {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertEquals(0, decompiler.flushCalls.get());
 
@@ -116,16 +116,21 @@ class DecompilationServiceImplTest {
     AtomicLong modificationNumber = new AtomicLong(1L);
     Fixture fixture = createFixture(modificationNumber);
     AtomicInteger mode = new AtomicInteger(0);
-    FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> {
-      return switch (mode.get()) {
-        case 1 -> throw new IllegalStateException("ipc broken");
-        case 2 -> -1;
-        default -> 0;
-      };
-    });
+    FakeDecompiler decompiler =
+        new FakeDecompiler(
+            fixture.markup,
+            true,
+            null,
+            () -> {
+              return switch (mode.get()) {
+                case 1 -> throw new IllegalStateException("ipc broken");
+                case 2 -> -1;
+                default -> 0;
+              };
+            });
 
-    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
-        fixture.session, new LeasePool<>(1, () -> decompiler))) {
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> decompiler))) {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
       assertEquals(0, decompiler.flushCalls.get());
       assertEquals(1, decompiler.decompileCalls.get());
@@ -135,8 +140,9 @@ class DecompilationServiceImplTest {
       mode.set(1);
       assertThrows(
           IllegalStateException.class,
-          () -> service.decompileFunction(
-              "0x101000", DecompilationResource.Format.TEXT, 1_000, false));
+          () ->
+              service.decompileFunction(
+                  "0x101000", DecompilationResource.Format.TEXT, 1_000, false));
       assertEquals(1, decompiler.flushCalls.get());
       assertEquals(1, decompiler.decompileCalls.get());
 
@@ -145,7 +151,8 @@ class DecompilationServiceImplTest {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
       assertEquals(2, decompiler.flushCalls.get());
 
-      // Even if modificationNumber resets to 1 (equal to the prior clean value), dirty forces retry.
+      // Even if modificationNumber resets to 1 (equal to the prior clean value), dirty forces
+      // retry.
       modificationNumber.set(1L);
       mode.set(0);
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_000, false);
@@ -167,8 +174,8 @@ class DecompilationServiceImplTest {
     FakeDecompiler decompiler = new FakeDecompiler(fixtureA.markup, true, null, () -> 0);
     decompiler.openedProgram = fixtureA.program;
 
-    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
-        fixtureA.session, new LeasePool<>(1, () -> decompiler))) {
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixtureA.session, new LeasePool<>(1, () -> decompiler))) {
       DecompilationResource first =
           service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertEquals("literal_demo", first.name());
@@ -203,8 +210,8 @@ class DecompilationServiceImplTest {
     // Cold lease whose DecompInterface opened a different Program must also flush.
     FakeDecompiler mismatchedCold = new FakeDecompiler(fixtureB.markup, true, null, () -> 0);
     mismatchedCold.openedProgram = fixtureA.program;
-    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
-        fixtureB.session, new LeasePool<>(1, () -> mismatchedCold))) {
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixtureB.session, new LeasePool<>(1, () -> mismatchedCold))) {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertEquals(1, mismatchedCold.flushCalls.get());
     }
@@ -217,8 +224,9 @@ class DecompilationServiceImplTest {
     FakeDecompiler firstDecompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
     FakeDecompiler secondDecompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
     AtomicInteger created = new AtomicInteger();
-    LeasePool<DecompInterface> pool = new LeasePool<>(
-        2, () -> created.getAndIncrement() == 0 ? firstDecompiler : secondDecompiler);
+    LeasePool<DecompInterface> pool =
+        new LeasePool<>(
+            2, () -> created.getAndIncrement() == 0 ? firstDecompiler : secondDecompiler);
 
     try (DecompilationServiceImpl service = new DecompilationServiceImpl(fixture.session, pool)) {
       service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
@@ -251,7 +259,8 @@ class DecompilationServiceImplTest {
 
     assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(null));
     assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(null, pool));
-    assertThrows(NullPointerException.class, () -> new DecompilationServiceImpl(fixture.session, null));
+    assertThrows(
+        NullPointerException.class, () -> new DecompilationServiceImpl(fixture.session, null));
   }
 
   @Test
@@ -260,8 +269,8 @@ class DecompilationServiceImplTest {
     Fixture fixture = createFixture(modificationNumber);
     FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
 
-    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
-        fixture.session, new LeasePool<>(1, () -> decompiler))) {
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> decompiler))) {
       DecompilationResource textRes =
           service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, true);
       DecompilationResource docRes =
@@ -269,17 +278,20 @@ class DecompilationServiceImplTest {
 
       assertTrue(textRes.completed());
       assertEquals(docRes.c(), textRes.c());
-      assertTrue(textRes.c().contains(
-          PrettyPrinter.INDENT_STRING + "return \"semi; {brace} /*comment*/\";\n"));
+      assertTrue(
+          textRes
+              .c()
+              .contains(PrettyPrinter.INDENT_STRING + "return \"semi; {brace} /*comment*/\";\n"));
       assertNull(textRes.lines());
       assertEquals(Boolean.TRUE, textRes.commentsComplete());
       assertEquals(List.of(), textRes.warnings());
     }
 
     FakeDecompiler timedOut = new FakeDecompiler(null, false, "Decompile timed out", () -> 0);
-    timedOut.fallbackFunction = new DecompiledFunction("const char *f(void);", "/* raw fallback */");
-    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
-        fixture.session, new LeasePool<>(1, () -> timedOut))) {
+    timedOut.fallbackFunction =
+        new DecompiledFunction("const char *f(void);", "/* raw fallback */");
+    try (DecompilationServiceImpl service =
+        new DecompilationServiceImpl(fixture.session, new LeasePool<>(1, () -> timedOut))) {
       DecompilationResource res =
           service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1_200, false);
       assertFalse(res.completed());
@@ -290,45 +302,57 @@ class DecompilationServiceImplTest {
 
   private static Fixture createFixture(AtomicLong modificationNumber) {
     Address entry = RAM_SPACE.getAddress(0x101000L);
-    CodeUnit unit = (CodeUnit) Proxy.newProxyInstance(
-        CodeUnit.class.getClassLoader(),
-        new Class<?>[] {CodeUnit.class},
-        (proxy, method, args) -> switch (method.getName()) {
-          case "getMinAddress" -> entry;
-          default -> throw new AssertionError(method.getName());
-        });
-    AddressIterator emptyComments = (AddressIterator) Proxy.newProxyInstance(
-        AddressIterator.class.getClassLoader(),
-        new Class<?>[] {AddressIterator.class},
-        (proxy, method, args) -> switch (method.getName()) {
-          case "iterator" -> Collections.emptyIterator();
-          case "hasNext" -> false;
-          default -> throw new AssertionError(method.getName());
-        });
+    CodeUnit unit =
+        (CodeUnit)
+            Proxy.newProxyInstance(
+                CodeUnit.class.getClassLoader(),
+                new Class<?>[] {CodeUnit.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getMinAddress" -> entry;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    AddressIterator emptyComments =
+        (AddressIterator)
+            Proxy.newProxyInstance(
+                AddressIterator.class.getClassLoader(),
+                new Class<?>[] {AddressIterator.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "iterator" -> Collections.emptyIterator();
+                      case "hasNext" -> false;
+                      default -> throw new AssertionError(method.getName());
+                    });
     Map<Address, Function> functions = new HashMap<>();
-    Listing listing = (Listing) Proxy.newProxyInstance(
-        Listing.class.getClassLoader(),
-        new Class<?>[] {Listing.class},
-        (proxy, method, args) -> switch (method.getName()) {
-          case "getFunctionAt" -> functions.get((Address) args[0]);
-          case "getCodeUnitContaining" -> unit;
-          case "getCommentAddressIterator" -> {
-            assertEquals(CommentType.REPEATABLE, args[0]);
-            yield emptyComments;
-          }
-          default -> throw new AssertionError(method.getName());
-        });
-    Program program = (Program) Proxy.newProxyInstance(
-        Program.class.getClassLoader(),
-        new Class<?>[] {Program.class},
-        (proxy, method, args) -> switch (method.getName()) {
-          case "getModificationNumber" -> modificationNumber.get();
-          case "getAddressFactory" -> ADDRESS_FACTORY;
-          case "getListing" -> listing;
-          case "equals" -> proxy == args[0];
-          case "hashCode" -> System.identityHashCode(proxy);
-          default -> throw new AssertionError(method.getName());
-        });
+    Listing listing =
+        (Listing)
+            Proxy.newProxyInstance(
+                Listing.class.getClassLoader(),
+                new Class<?>[] {Listing.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getFunctionAt" -> functions.get((Address) args[0]);
+                      case "getCodeUnitContaining" -> unit;
+                      case "getCommentAddressIterator" -> {
+                        assertEquals(CommentType.REPEATABLE, args[0]);
+                        yield emptyComments;
+                      }
+                      default -> throw new AssertionError(method.getName());
+                    });
+    Program program =
+        (Program)
+            Proxy.newProxyInstance(
+                Program.class.getClassLoader(),
+                new Class<?>[] {Program.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getModificationNumber" -> modificationNumber.get();
+                      case "getAddressFactory" -> ADDRESS_FACTORY;
+                      case "getListing" -> listing;
+                      case "equals" -> proxy == args[0];
+                      case "hashCode" -> System.identityHashCode(proxy);
+                      default -> throw new AssertionError(method.getName());
+                    });
     TestScript script = new TestScript(program);
 
     ClangTokenGroup markup = new ClangTokenGroup(null);
@@ -359,16 +383,19 @@ class DecompilationServiceImplTest {
       ClangTokenGroup markup) {
     void addFunction(long offset, String name, Program owningProgram) {
       Address entry = RAM_SPACE.getAddress(offset);
-      Function function = (Function) Proxy.newProxyInstance(
-          Function.class.getClassLoader(),
-          new Class<?>[] {Function.class},
-          (proxy, method, args) -> switch (method.getName()) {
-            case "getProgram" -> owningProgram;
-            case "getEntryPoint" -> entry;
-            case "getName" -> name;
-            case "getBody" -> null;
-            default -> throw new AssertionError(method.getName());
-          });
+      Function function =
+          (Function)
+              Proxy.newProxyInstance(
+                  Function.class.getClassLoader(),
+                  new Class<?>[] {Function.class},
+                  (proxy, method, args) ->
+                      switch (method.getName()) {
+                        case "getProgram" -> owningProgram;
+                        case "getEntryPoint" -> entry;
+                        case "getName" -> name;
+                        case "getBody" -> null;
+                        default -> throw new AssertionError(method.getName());
+                      });
       functions.put(entry, function);
     }
   }

@@ -46,7 +46,8 @@ class AddressUtilAndSessionReadTest {
           proxy(
               ghidra.util.task.TaskMonitor.class,
               (method, args) -> {
-                throw new AssertionError("Read path must not touch GhidraScript monitor: " + method);
+                throw new AssertionError(
+                    "Read path must not touch GhidraScript monitor: " + method);
               });
     }
 
@@ -163,38 +164,35 @@ class AddressUtilAndSessionReadTest {
       for (int t = 0; t < 20; t++) {
         final int tid = t;
         tasks.add(
-            pool.submit(
-                () -> {
-                  start.await();
-                  for (int i = 0; i < 50; i++) {
-                    long offset = 0x00100000L + ((tid * 16L + i) & 0xffL);
-                    String hex = "0x" + Long.toHexString(offset);
-                    Address parsed = session.parseAddress(hex);
-                    assertEquals(offset, parsed.getOffset());
-                    assertEquals(
-                        parsed,
-                        AddressUtil.parseAddress(
-                            program, "ram:" + Long.toHexString(offset)));
+            pool.submit(() -> {
+              start.await();
+              for (int i = 0; i < 50; i++) {
+                long offset = 0x00100000L + ((tid * 16L + i) & 0xffL);
+                String hex = "0x" + Long.toHexString(offset);
+                Address parsed = session.parseAddress(hex);
+                assertEquals(offset, parsed.getOffset());
+                assertEquals(
+                    parsed, AddressUtil.parseAddress(program, "ram:" + Long.toHexString(offset)));
 
-                    byte[] bytes = session.readBytes(parsed, 4);
-                    assertArrayEquals(
-                        new byte[] {
-                          (byte) (offset & 0xff),
-                          (byte) ((offset + 1) & 0xff),
-                          (byte) ((offset + 2) & 0xff),
-                          (byte) ((offset + 3) & 0xff)
-                        },
-                        bytes);
+                byte[] bytes = session.readBytes(parsed, 4);
+                assertArrayEquals(
+                    new byte[] {
+                      (byte) (offset & 0xff),
+                      (byte) ((offset + 1) & 0xff),
+                      (byte) ((offset + 2) & 0xff),
+                      (byte) ((offset + 3) & 0xff)
+                    },
+                    bytes);
 
-                    assertIterableEquals(List.of(sampleRef), session.references(parsed, true));
-                    assertIterableEquals(List.of(sampleRef), session.references(parsed, false));
+                assertIterableEquals(List.of(sampleRef), session.references(parsed, true));
+                assertIterableEquals(List.of(sampleRef), session.references(parsed, false));
 
-                    assertSame(fn2, session.functionAfter(fn1));
-                    assertSame(fn2, session.functionAfter(fn1Entry));
-                    assertNull(session.functionAfter(fn2));
-                  }
-                  return null;
-                }));
+                assertSame(fn2, session.functionAfter(fn1));
+                assertSame(fn2, session.functionAfter(fn1Entry));
+                assertNull(session.functionAfter(fn2));
+              }
+              return null;
+            }));
       }
       start.countDown();
       for (Future<Void> task : tasks) {

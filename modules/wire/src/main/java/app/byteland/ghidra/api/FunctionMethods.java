@@ -94,17 +94,22 @@ final class FunctionMethods implements ApiMethodProvider {
         "Create a function at its entry. Set disassemble to decode code.",
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
-                ApiVocabulary.RESOURCE, functionResource,
-                "disassemble", WireSchema.withDefault(WireSchema.bool(), false)),
+                ApiVocabulary.RESOURCE,
+                functionResource,
+                "disassemble",
+                WireSchema.withDefault(WireSchema.bool(), false)),
             ApiVocabulary.RESOURCE),
         ApiSchemaCatalog.functionFields(),
         List.of(ApiVocabulary.ENTRY),
         request -> {
           Map<String, Object> resource = resource(request);
-          return registry.services().functionService().createFunction(
-              text(resource, ApiVocabulary.ENTRY),
-              optionalText(resource, ApiVocabulary.NAME),
-              bool(request, "disassemble").orElse(false));
+          return registry
+              .services()
+              .functionService()
+              .createFunction(
+                  text(resource, ApiVocabulary.ENTRY),
+                  optionalText(resource, ApiVocabulary.NAME),
+                  bool(request, "disassemble").orElse(false));
         });
     registry.writeResource(
         "function.patch",
@@ -134,8 +139,10 @@ final class FunctionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorOnlyInput(entrySelector),
         ApiSchemaCatalog.DELETED_RECEIPT_SCHEMA,
         request -> {
-          registry.services().functionService().deleteFunction(
-              text(selector(request), ApiVocabulary.ENTRY));
+          registry
+              .services()
+              .functionService()
+              .deleteFunction(text(selector(request), ApiVocabulary.ENTRY));
           return Map.of(ApiVocabulary.DELETED, true);
         });
     registerFunctionVariableMethods(entrySelector);
@@ -147,11 +154,15 @@ final class FunctionMethods implements ApiMethodProvider {
                     ApiVocabulary.ENTRY,
                     WireSchema.nonBlankString(),
                     ApiVocabulary.DIRECTION,
-                    WireSchema.withDefault(
-                        WireSchema.stringEnum("callers", "callees"), "callees")),
+                    WireSchema.withDefault(WireSchema.stringEnum("callers", "callees"), "callees")),
                 ApiVocabulary.ENTRY)),
-        Set.of(ApiVocabulary.ENTRY, ApiVocabulary.NAME, "call_site", ApiVocabulary.DIRECTION,
-            ApiVocabulary.NAMESPACE, "demangled_name"),
+        Set.of(
+            ApiVocabulary.ENTRY,
+            ApiVocabulary.NAME,
+            "call_site",
+            ApiVocabulary.DIRECTION,
+            ApiVocabulary.NAMESPACE,
+            "demangled_name"),
         List.of(ApiVocabulary.ENTRY),
         (request, page) -> {
           Map<String, Object> filter = filter(request);

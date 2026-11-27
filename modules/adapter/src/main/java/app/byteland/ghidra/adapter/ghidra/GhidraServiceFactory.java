@@ -15,10 +15,8 @@ import app.byteland.ghidra.adapter.ghidra.symbol.SymbolServiceImpl;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
-import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeService;
-import app.byteland.ghidra.service.decompilation.DecompilationService;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
 import app.byteland.ghidra.service.listing.ListingService;
@@ -29,9 +27,7 @@ import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.app.script.GhidraScript;
 import java.util.Objects;
 
-/**
- * Creates bridge service implementations for a Ghidra script session.
- */
+/** Creates bridge service implementations for a Ghidra script session. */
 public final class GhidraServiceFactory {
   private GhidraServiceFactory() {}
 

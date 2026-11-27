@@ -69,12 +69,9 @@ class ApiContractGeneratorTest {
 
     Map<String, Object> methods = (Map<String, Object>) document.get("x-ghidra-bridge-methods");
     Map<String, Object> dataTypeCreate = (Map<String, Object>) methods.get("data_type.create");
-    Map<String, Object> dtCreateSchema =
-        (Map<String, Object>) dataTypeCreate.get("input_schema");
-    Map<String, Object> dtCreateProps =
-        (Map<String, Object>) dtCreateSchema.get("properties");
-    Map<String, Object> resourceSchema =
-        (Map<String, Object>) dtCreateProps.get("resource");
+    Map<String, Object> dtCreateSchema = (Map<String, Object>) dataTypeCreate.get("input_schema");
+    Map<String, Object> dtCreateProps = (Map<String, Object>) dtCreateSchema.get("properties");
+    Map<String, Object> resourceSchema = (Map<String, Object>) dtCreateProps.get("resource");
     assertEquals(Map.of("propertyName", "kind"), resourceSchema.get("discriminator"));
 
     Map<String, Object> defs = (Map<String, Object>) dtCreateSchema.get("$defs");
@@ -83,7 +80,8 @@ class ApiContractGeneratorTest {
 
     Map<String, Object> codeUnitList = (Map<String, Object>) methods.get("code_unit.list");
     Map<String, Object> cuProps =
-        (Map<String, Object>) ((Map<String, Object>) codeUnitList.get("input_schema")).get("properties");
+        (Map<String, Object>)
+            ((Map<String, Object>) codeUnitList.get("input_schema")).get("properties");
     Map<String, Object> filterProps =
         (Map<String, Object>) ((Map<String, Object>) cuProps.get("filter")).get("properties");
     assertEquals("all", ((Map<String, Object>) filterProps.get("kind")).get("default"));
@@ -93,7 +91,8 @@ class ApiContractGeneratorTest {
 
     Map<String, Object> batchExecute = (Map<String, Object>) methods.get("batch.execute");
     Map<String, Object> batchProps =
-        (Map<String, Object>) ((Map<String, Object>) batchExecute.get("input_schema")).get("properties");
+        (Map<String, Object>)
+            ((Map<String, Object>) batchExecute.get("input_schema")).get("properties");
     assertEquals(
         "per_item", ((Map<String, Object>) batchProps.get("transaction_mode")).get("default"));
     Map<String, Object> batchItems = (Map<String, Object>) batchProps.get("items");

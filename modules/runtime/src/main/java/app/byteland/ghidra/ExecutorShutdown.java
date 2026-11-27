@@ -4,9 +4,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Provides graceful shutdown procedures for executor services.
- */
+/** Provides graceful shutdown procedures for executor services. */
 public final class ExecutorShutdown {
   private ExecutorShutdown() {}
 
@@ -27,7 +25,7 @@ public final class ExecutorShutdown {
         if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
           executor.shutdownNow();
           if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-    // Stop tasks that do not finish.
+            // Stop tasks that do not finish.
           }
         }
       } catch (InterruptedException ex) {

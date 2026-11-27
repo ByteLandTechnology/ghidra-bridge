@@ -268,8 +268,7 @@ public final class WireSchema {
     return project(schema, FieldSelection.from(selectedFields), false);
   }
 
-  static Map<String, Object> projectOutput(
-      Map<String, Object> schema, Set<String> selectedFields) {
+  static Map<String, Object> projectOutput(Map<String, Object> schema, Set<String> selectedFields) {
     Objects.requireNonNull(schema, "schema");
     if (selectedFields == null) {
       return schema;
@@ -362,8 +361,7 @@ public final class WireSchema {
         List<Map<String, Object>> projectedAlternatives = new ArrayList<>(unionBranches.size());
         for (Object rawAlternative : unionBranches) {
           projectedAlternatives.add(
-              projectNode(
-                  (Map<String, Object>) rawAlternative, selection, definitions, true));
+              projectNode((Map<String, Object>) rawAlternative, selection, definitions, true));
         }
         Map<String, Object> projected = new LinkedHashMap<>(schema);
         projected.put(ApiVocabulary.ONE_OF, List.copyOf(projectedAlternatives));
@@ -444,8 +442,7 @@ public final class WireSchema {
       Map<String, Object> projected = new LinkedHashMap<>(schema);
       projected.put(
           ApiVocabulary.ITEMS,
-          projectNode(
-              (Map<String, Object>) itemSchema, selection, definitions, preserveContract));
+          projectNode((Map<String, Object>) itemSchema, selection, definitions, preserveContract));
       return Collections.unmodifiableMap(projected);
     }
     return schema;
@@ -870,7 +867,8 @@ public final class WireSchema {
     long minimum = ((Number) schema.getOrDefault(ApiVocabulary.MINIMUM, MIN_LONG)).longValue();
     long maximum = ((Number) schema.getOrDefault(ApiVocabulary.MAXIMUM, MAX_LONG)).longValue();
     if (number < minimum || number > maximum) {
-      return rangeFailure(ApiVocabulary.INVALID_VALUE, cursor, " must be in ", minimum, maximum, "");
+      return rangeFailure(
+          ApiVocabulary.INVALID_VALUE, cursor, " must be in ", minimum, maximum, "");
     }
     return null;
   }
@@ -942,18 +940,12 @@ public final class WireSchema {
   }
 
   private static ValidationFailure rangeFailure(
-      String code,
-      PointerCursor cursor,
-      String prefix,
-      long minimum,
-      long maximum,
-      String suffix) {
+      String code, PointerCursor cursor, String prefix, long minimum, long maximum, String suffix) {
     if (cursor == null) {
       return ValidationFailure.PROBE_FAILURE;
     }
     String target = cursor.format();
-    return new ValidationFailure(
-        code, target + prefix + minimum + ".." + maximum + suffix, target);
+    return new ValidationFailure(code, target + prefix + minimum + ".." + maximum + suffix, target);
   }
 
   private static ValidationFailure numberRangeFailure(

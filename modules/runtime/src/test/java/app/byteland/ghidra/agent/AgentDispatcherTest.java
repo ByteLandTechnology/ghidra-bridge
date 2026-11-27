@@ -31,7 +31,8 @@ import org.junit.jupiter.api.Test;
 class AgentDispatcherTest {
   @Test
   void requiresServicesAndNonBlankSessionId() {
-    BridgeServices services = createServices("sample.elf", new AtomicInteger(), new AtomicInteger());
+    BridgeServices services =
+        createServices("sample.elf", new AtomicInteger(), new AtomicInteger());
     assertThrows(NullPointerException.class, () -> new AgentDispatcher(null, "demo-session"));
     assertEquals(
         "session_id is required",
@@ -43,7 +44,8 @@ class AgentDispatcherTest {
             .getMessage());
     assertEquals(
         "session_id is required",
-        assertThrows(IllegalArgumentException.class, () -> new AgentDispatcher(services, "   \t\n "))
+        assertThrows(
+                IllegalArgumentException.class, () -> new AgentDispatcher(services, "   \t\n "))
             .getMessage());
   }
 
@@ -79,7 +81,8 @@ class AgentDispatcherTest {
     assertEquals(1, decompilerClosed.get());
 
     var closedError =
-        assertThrows(IllegalStateException.class, () -> dispatcher.dispatch("session.get", Map.of()));
+        assertThrows(
+            IllegalStateException.class, () -> dispatcher.dispatch("session.get", Map.of()));
     assertEquals("Agent dispatcher is shutting down", closedError.getMessage());
   }
 

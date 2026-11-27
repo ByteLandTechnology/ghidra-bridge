@@ -64,8 +64,7 @@ final class AnalysisTask {
         throw new IllegalStateException(
             "Ghidra analysis started before the bridge task acquired the analysis manager");
       }
-      AnalysisOptionChange optionChange =
-          prepareAnalyzerSelection(manager, program, selection);
+      AnalysisOptionChange optionChange = prepareAnalyzerSelection(manager, program, selection);
       if (optionChange != null) {
         previousAnalysisOptions = optionChange.previous();
         applyAnalyzerSelection(context, program, optionChange.updates());
@@ -146,9 +145,7 @@ final class AnalysisTask {
   }
 
   private static AnalysisOptionChange prepareAnalyzerSelection(
-      AutoAnalysisManager manager,
-      Program program,
-      AnalyzerSelection selection) {
+      AutoAnalysisManager manager, Program program, AnalyzerSelection selection) {
     if (!selection.hasSelection()) {
       return null;
     }

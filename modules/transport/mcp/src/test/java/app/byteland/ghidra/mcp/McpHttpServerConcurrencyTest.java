@@ -82,11 +82,10 @@ class McpHttpServerConcurrencyTest {
       for (int i = 0; i < 21; i++) {
         final int idx = i;
         warmupCalls.add(
-            clientPool.submit(
-                () -> {
-                  warmupGate.await();
-                  return sendReadVariant(client, uri, "w-" + idx, idx);
-                }));
+            clientPool.submit(() -> {
+              warmupGate.await();
+              return sendReadVariant(client, uri, "w-" + idx, idx);
+            }));
       }
       warmupGate.countDown();
       for (Future<Map<String, Object>> warmupCall : warmupCalls) {
@@ -96,15 +95,14 @@ class McpHttpServerConcurrencyTest {
 
       // Start one blocked decompilation.get call over HTTP
       Future<Map<String, Object>> slowDecomp =
-          clientPool.submit(
-              () ->
-                  sendToolCall(
-                      client,
-                      uri,
-                      "decomp-1",
-                      "ghidra_decompilation",
-                      "get",
-                      Map.of("selector", Map.of("entry", "ram:00100000"))));
+          clientPool.submit(() ->
+              sendToolCall(
+                  client,
+                  uri,
+                  "decomp-1",
+                  "ghidra_decompilation",
+                  "get",
+                  Map.of("selector", Map.of("entry", "ram:00100000"))));
       assertTrue(slowDecompStarted.await(5, TimeUnit.SECONDS));
 
       // Fire C=20 concurrent fast read HTTP calls while decompilation.get is still in flight
@@ -113,17 +111,16 @@ class McpHttpServerConcurrencyTest {
       for (int i = 0; i < 20; i++) {
         final int idx = i;
         latenciesMs.add(
-            clientPool.submit(
-                () -> {
-                  launch.await();
-                  long start = System.nanoTime();
-                  Map<String, Object> body = sendReadVariant(client, uri, "r-" + idx, idx);
-                  double elapsedMs = (System.nanoTime() - start) / 1_000_000.0;
-                  @SuppressWarnings("unchecked")
-                  Map<String, Object> result = (Map<String, Object>) body.get("result");
-                  assertEquals(Boolean.FALSE, result.get("isError"));
-                  return elapsedMs;
-                }));
+            clientPool.submit(() -> {
+              launch.await();
+              long start = System.nanoTime();
+              Map<String, Object> body = sendReadVariant(client, uri, "r-" + idx, idx);
+              double elapsedMs = (System.nanoTime() - start) / 1_000_000.0;
+              @SuppressWarnings("unchecked")
+              Map<String, Object> result = (Map<String, Object>) body.get("result");
+              assertEquals(Boolean.FALSE, result.get("isError"));
+              return elapsedMs;
+            }));
       }
 
       launch.countDown();
@@ -277,7 +274,8 @@ class McpHttpServerConcurrencyTest {
               peakReaders.accumulateAndGet(r, Math::max);
               try {
                 return new MemoryResource(
-                    "ram:00100000", new ByteSequence(ByteSequence.Encoding.HEX, "90".repeat(16), 16));
+                    "ram:00100000",
+                    new ByteSequence(ByteSequence.Encoding.HEX, "90".repeat(16), 16));
               } finally {
                 concurrentReaders.decrementAndGet();
               }
@@ -407,9 +405,11 @@ class McpHttpServerConcurrencyTest {
   }
 
   private static <T> T unused(Class<T> type) {
-    return proxy(type, (method, args) -> {
-      throw new AssertionError("Unexpected call: " + method);
-    });
+    return proxy(
+        type,
+        (method, args) -> {
+          throw new AssertionError("Unexpected call: " + method);
+        });
   }
 
   private static <T> T proxy(Class<T> type, Invocation handler) {

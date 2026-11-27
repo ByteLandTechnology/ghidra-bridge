@@ -23,8 +23,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * The generated Bridge and GhidraMcp scripts call this entry point.
- * It starts the WebSocket or MCP transport.
+ * The generated Bridge and GhidraMcp scripts call this entry point. It starts the WebSocket or MCP
+ * transport.
  */
 @SuppressWarnings("try")
 public final class Bootstrap {
@@ -126,9 +126,7 @@ public final class Bootstrap {
       for (int offset = 0; offset < maxAttempts; offset++) {
         int candidatePort = defaultPort + offset;
         McpConfig candidateConfig =
-            offset == 0
-                ? initialConfig
-                : resolveMcpConfig(rawArgs, program, candidatePort, true);
+            offset == 0 ? initialConfig : resolveMcpConfig(rawArgs, program, candidatePort, true);
         AgentDispatcher dispatcher = new AgentDispatcher(services, candidateConfig.sessionId());
         McpHttpServer server = null;
         try {
@@ -330,9 +328,7 @@ public final class Bootstrap {
       for (int offset = 0; offset < maxAttempts; offset++) {
         int candidatePort = defaultPort + offset;
         EffectiveConfig candidate =
-            offset == 0
-                ? initialConfig
-                : resolveWsConfig(rawArgs, program, candidatePort, true);
+            offset == 0 ? initialConfig : resolveWsConfig(rawArgs, program, candidatePort, true);
         AgentDispatcher dispatcher = new AgentDispatcher(services, candidate.config().sessionId());
         AgentClient client = new AgentClient(candidate.config(), dispatcher);
         try {
@@ -544,8 +540,7 @@ public final class Bootstrap {
   }
 
   static McpConfig resolveMcpConfig(String[] args, Program program) {
-    return resolveMcpConfig(
-        NetworkBinding.parseArgs(args), program, McpConfig.DEFAULT_PORT, false);
+    return resolveMcpConfig(NetworkBinding.parseArgs(args), program, McpConfig.DEFAULT_PORT, false);
   }
 
   private static String applyDefaultSessionId(

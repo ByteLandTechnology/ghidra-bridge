@@ -6,9 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * Immutable catalog of API methods and their metadata.
- */
+/** Immutable catalog of API methods and their metadata. */
 public final class ApiCatalog {
   private final String apiInterfaceVersion;
   private final List<MethodDescriptor> methodDescriptors;
@@ -50,9 +48,7 @@ public final class ApiCatalog {
         methodDescriptors.stream().map(MethodDescriptor::interfaceValue).toList());
   }
 
-  /**
-   * Describes a registered method and its input and output schemas.
-   */
+  /** Describes a registered method and its input and output schemas. */
   public static final class MethodDescriptor {
     private final String methodName;
     private final String methodDescription;

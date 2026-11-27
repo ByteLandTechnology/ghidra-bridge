@@ -34,7 +34,9 @@ final class SymbolMethods implements ApiMethodProvider {
                 "renamed", WireSchema.integer(0, Integer.MAX_VALUE),
                 "failed", WireSchema.integer(0, Integer.MAX_VALUE),
                 "failures", WireSchema.array(WireSchema.string(), 0, 20)),
-            "renamed", "failed", "failures"),
+            "renamed",
+            "failed",
+            "failures"),
         request -> registry.services().symbolService().demangleSymbols());
     registry.read(
         "symbol.get",

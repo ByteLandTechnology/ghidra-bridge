@@ -135,7 +135,8 @@ class WireValuesTest {
             8),
         WireValues.normalize(arrayOfPointers));
     assertEquals(
-        Map.of("kind", "untyped_pointer"), WireValues.normalize(DataTypeReference.untypedPointer()));
+        Map.of("kind", "untyped_pointer"),
+        WireValues.normalize(DataTypeReference.untypedPointer()));
 
     assertEquals(
         Map.of("kind", "register", "register", "RAX"),
@@ -271,8 +272,7 @@ class WireValuesTest {
                 Map.of("address", "0x00401000"),
                 "projection",
                 Map.of("fields", List.of("bytes.data"))));
-    assertEquals(
-        Map.of("address", "0x00401000", "bytes", Map.of("data", "deadbeef")), projected);
+    assertEquals(Map.of("address", "0x00401000", "bytes", Map.of("data", "deadbeef")), projected);
   }
 
   @Test
@@ -405,10 +405,7 @@ class WireValuesTest {
 
     assertEquals(
         Map.of(
-            "address",
-            "0x00401000",
-            "bytes",
-            Map.of("encoding", "hex", "data", "90", "length", 1)),
+            "address", "0x00401000", "bytes", Map.of("encoding", "hex", "data", "90", "length", 1)),
         WireValues.restrict(value, Set.of("address", "bytes.data")));
   }
 

@@ -82,12 +82,19 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
-Before you submit a change, run the local lint, hygiene, and verification checks:
+To format Java and Python files in place before verification, run:
+
+```bash
+bash .github/scripts/verify-formatting.sh --fix
+```
+
+Before you submit a change, run the local lint, hygiene, formatting, and verification checks:
 
 ```bash
 actionlint
 shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
+bash .github/scripts/verify-formatting.sh
 ./gradlew --no-daemon clean verify
 python3 tests/release_archive_reproducibility.py
 ```
@@ -103,6 +110,7 @@ To check module import boundaries without a Ghidra installation, run:
 The verification checks enforce these rules:
 - **Workflows and Shell Scripts**: `actionlint` and `shellcheck` validate GitHub Actions workflows, composite actions, and shell scripts.
 - **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, SHA-pinned GitHub Actions, URLs, and MCP tool names.
+- **Formatting**: `verify-formatting.sh` verifies `google-java-format` style, the 100-character Java line limit, and `ruff` checks on `tests/`.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.

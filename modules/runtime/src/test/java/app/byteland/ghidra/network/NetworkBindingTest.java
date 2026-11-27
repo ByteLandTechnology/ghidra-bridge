@@ -31,13 +31,8 @@ class NetworkBindingTest {
 
     Map<String, String> parsed =
         NetworkBinding.parseArgs(
-            " host=127.0.0.1 ",
-            "",
-            "ws_url=ws://127.0.0.1:8765/ws/agent?mode=test&v=1",
-            "token=");
-    assertEquals(
-        List.of("host", "ws_url", "token"),
-        List.copyOf(parsed.keySet()));
+            " host=127.0.0.1 ", "", "ws_url=ws://127.0.0.1:8765/ws/agent?mode=test&v=1", "token=");
+    assertEquals(List.of("host", "ws_url", "token"), List.copyOf(parsed.keySet()));
     assertEquals("127.0.0.1", parsed.get("host"));
     assertEquals("ws://127.0.0.1:8765/ws/agent?mode=test&v=1", parsed.get("ws_url"));
     assertEquals("", parsed.get("token"));
@@ -92,8 +87,7 @@ class NetworkBindingTest {
 
     var invalid =
         assertThrows(
-            IllegalArgumentException.class,
-            () -> NetworkBinding.optionalInteger("eight", "port"));
+            IllegalArgumentException.class, () -> NetworkBinding.optionalInteger("eight", "port"));
     assertEquals("port must be an integer", invalid.getMessage());
     assertInstanceOf(NumberFormatException.class, invalid.getCause());
   }
@@ -200,14 +194,13 @@ class NetworkBindingTest {
     assertEquals(
         "token is required when allowed_origins includes a non-loopback origin",
         nonLoopbackOrigin.getMessage());
-    assertDoesNotThrow(
-        () ->
-            NetworkBinding.requireTokenForNonLoopbackOrigin(
-                "missing.invalid",
-                "secret",
-                host -> {
-                  throw new AssertionError("Resolver should not run when token is configured");
-                }));
+    assertDoesNotThrow(() ->
+        NetworkBinding.requireTokenForNonLoopbackOrigin(
+            "missing.invalid",
+            "secret",
+            host -> {
+              throw new AssertionError("Resolver should not run when token is configured");
+            }));
   }
 
   @Test

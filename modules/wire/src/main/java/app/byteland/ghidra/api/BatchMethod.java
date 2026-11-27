@@ -27,29 +27,27 @@ final class BatchMethod {
     this.runtime = Objects.requireNonNull(runtime, "runtime");
 
     Set<String> allowedMethods = new LinkedHashSet<>();
-    methods.forEach(
-        (methodName, method) -> {
-          if (method.effects().batchable()) allowedMethods.add(methodName);
-        });
+    methods.forEach((methodName, method) -> {
+      if (method.effects().batchable()) allowedMethods.add(methodName);
+    });
     batchableMethods = Collections.unmodifiableSet(allowedMethods);
 
     List<Map<String, Object>> itemAlternatives = new ArrayList<>();
-    batchableMethods.forEach(
-        methodName -> {
-          ApiMethod<Map<String, Object>, Object> target = methods.get(methodName);
-          itemAlternatives.add(
-              WireSchema.object(
-                  ApiSchemaCatalog.props(
-                      "id",
-                      WireSchema.nonBlankString(),
-                      ApiVocabulary.METHOD,
-                      WireSchema.stringEnum(methodName),
-                      ApiVocabulary.ARGUMENTS,
-                      withoutDefinitions(target.requestCodec().schema())),
+    batchableMethods.forEach(methodName -> {
+      ApiMethod<Map<String, Object>, Object> target = methods.get(methodName);
+      itemAlternatives.add(
+          WireSchema.object(
+              ApiSchemaCatalog.props(
                   "id",
+                  WireSchema.nonBlankString(),
                   ApiVocabulary.METHOD,
-                  ApiVocabulary.ARGUMENTS));
-        });
+                  WireSchema.stringEnum(methodName),
+                  ApiVocabulary.ARGUMENTS,
+                  withoutDefinitions(target.requestCodec().schema())),
+              "id",
+              ApiVocabulary.METHOD,
+              ApiVocabulary.ARGUMENTS));
+    });
     requestSchema =
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
@@ -57,7 +55,8 @@ final class BatchMethod {
                 WireSchema.array(
                     WireSchema.taggedOneOf(ApiVocabulary.METHOD, itemAlternatives), 1, MAX_ITEMS),
                 ApiVocabulary.TRANSACTION_MODE,
-                WireSchema.withDefault(WireSchema.stringEnum("per_item", "all_or_none"), "per_item")),
+                WireSchema.withDefault(
+                    WireSchema.stringEnum("per_item", "all_or_none"), "per_item")),
             ApiVocabulary.ITEMS);
   }
 
@@ -193,9 +192,7 @@ final class BatchMethod {
 
   private Object executeBatch(Map<String, Object> request) {
     PreparedBatch batch =
-        request instanceof DecodedBatchRequest decoded
-            ? decoded.prepared()
-            : prepareBatch(request);
+        request instanceof DecodedBatchRequest decoded ? decoded.prepared() : prepareBatch(request);
     return "all_or_none".equals(batch.transactionMode())
         ? executeAllOrNone(batch.items())
         : executePerItem(batch.items());
@@ -485,8 +482,7 @@ final class BatchMethod {
     }
   }
 
-  private record PendingRow(
-      String id, PreparedItem item, Object rawResult, Throwable failure) {
+  private record PendingRow(String id, PreparedItem item, Object rawResult, Throwable failure) {
     static PendingRow success(PreparedItem item, Object rawResult) {
       return new PendingRow(item.id(), item, rawResult, null);
     }
@@ -530,8 +526,7 @@ final class BatchMethod {
   }
 
   private static final class BatchRollback extends RuntimeException {
-    @Serial
-    private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
     private final String failedItemId;
 
     BatchRollback(String itemId, Throwable cause) {

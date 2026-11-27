@@ -17,8 +17,8 @@ import java.util.function.LongSupplier;
 /**
  * Bounded LRU and TTL cache of sorted compact key snapshots for cursor-paginated queries.
  *
- * <p>Entries are indexed by resource name, normalized filter components, and
- * {@code Program.getModificationNumber()}, and capped by both snapshot count and total key count.
+ * <p>Entries are indexed by resource name, normalized filter components, and {@code
+ * Program.getModificationNumber()}, and capped by both snapshot count and total key count.
  */
 public final class QuerySnapshotCache {
   public static final int DEFAULT_MAX_ENTRIES = 32;
@@ -38,8 +38,7 @@ public final class QuerySnapshotCache {
     this(DEFAULT_MAX_ENTRIES, DEFAULT_MAX_TOTAL_KEYS, DEFAULT_TTL, System::nanoTime);
   }
 
-  public QuerySnapshotCache(
-      int maxEntries, int maxTotalKeys, Duration ttl, LongSupplier nanoTime) {
+  public QuerySnapshotCache(int maxEntries, int maxTotalKeys, Duration ttl, LongSupplier nanoTime) {
     if (maxEntries < 0) {
       throw new IllegalArgumentException("maxEntries must not be negative");
     }
@@ -58,16 +57,14 @@ public final class QuerySnapshotCache {
   }
 
   /**
-   * Returns the current clear epoch so concurrent readers can detect an intervening {@link #clear()}
-   * before storing a newly scanned snapshot.
+   * Returns the current clear epoch so concurrent readers can detect an intervening {@link
+   * #clear()} before storing a newly scanned snapshot.
    */
   public synchronized long clearEpoch() {
     return clearEpoch;
   }
 
-  /**
-   * Returns a cached sorted key snapshot on hit, or {@code null} on miss or expiration.
-   */
+  /** Returns a cached sorted key snapshot on hit, or {@code null} on miss or expiration. */
   public synchronized String[] get(Key key) {
     Objects.requireNonNull(key, "key");
     long now = nanoTime.getAsLong();
@@ -79,9 +76,7 @@ public final class QuerySnapshotCache {
     return entry == null ? null : entry.keys;
   }
 
-  /**
-   * Stores an already-sorted key array if it fits within the cache entry and key caps.
-   */
+  /** Stores an already-sorted key array if it fits within the cache entry and key caps. */
   public synchronized void put(Key key, String[] sortedKeys) {
     putInternal(this.clearEpoch, key, sortedKeys);
   }
@@ -91,8 +86,7 @@ public final class QuerySnapshotCache {
    * expectedClearEpoch} and {@code key.modificationNumber()} is not older than the latest observed
    * modification number.
    */
-  public synchronized void putIfUnchanged(
-      long expectedClearEpoch, Key key, String[] sortedKeys) {
+  public synchronized void putIfUnchanged(long expectedClearEpoch, Key key, String[] sortedKeys) {
     putInternal(expectedClearEpoch, key, sortedKeys);
   }
 
@@ -175,8 +169,7 @@ public final class QuerySnapshotCache {
     Objects.requireNonNull(resolver, "resolver");
     Objects.requireNonNull(mapper, "mapper");
     int clamped = Page.clampLimit(limit);
-    int startIndex =
-        cursor == null || cursor.isBlank() ? 0 : firstIndexAfter(sortedKeys, cursor);
+    int startIndex = cursor == null || cursor.isBlank() ? 0 : firstIndexAfter(sortedKeys, cursor);
     if (startIndex >= sortedKeys.length) {
       return Page.of(List.of(), clamped, null);
     }

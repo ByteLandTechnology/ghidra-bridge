@@ -120,9 +120,7 @@ class ScanListFilterTest {
     Map<String, Object> scanParams =
         Map.of(
             "scan",
-            Map.of(
-                "range", Map.of("start", "0x1000", "end", "0x2000"),
-                "timeout_ms", 2500));
+            Map.of("range", Map.of("start", "0x1000", "end", "0x2000"), "timeout_ms", 2500));
     AddressScanOptions expected = new AddressScanOptions("0x1000", "0x2000", 2500);
 
     harness.registry.dispatch("code_unit.list", scanParams);
@@ -145,9 +143,7 @@ class ScanListFilterTest {
         Map.of(
             "filter", Map.of("address", "0x1500"),
             "scan",
-                Map.of(
-                    "range", Map.of("start", "0x1000", "end", "0x2000"),
-                    "timeout_ms", 2500)));
+                Map.of("range", Map.of("start", "0x1000", "end", "0x2000"), "timeout_ms", 2500)));
     assertEquals(expected, harness.lastSymbolQuery.get().scan());
     assertEquals("0x1500", harness.lastSymbolQuery.get().address());
 
@@ -243,10 +239,7 @@ class ScanListFilterTest {
 
   @SuppressWarnings("unchecked")
   private static void assertBatchUnknownField(
-      ApiRegistry registry,
-      String method,
-      Map<String, Object> arguments,
-      String expectedSuffix) {
+      ApiRegistry registry, String method, Map<String, Object> arguments, String expectedSuffix) {
     ApiException batchError =
         assertThrows(
             ApiException.class,
@@ -316,7 +309,8 @@ class ScanListFilterTest {
                 lastScan.set(scan);
                 int limit =
                     switch (method) {
-                      case "listCodeUnits", "listInstructions", "listDataUnits" -> (Integer) args[1];
+                      case "listCodeUnits", "listInstructions", "listDataUnits" ->
+                          (Integer) args[1];
                       case "getFlowOverrides" -> (Integer) args[3];
                       default -> 100;
                     };

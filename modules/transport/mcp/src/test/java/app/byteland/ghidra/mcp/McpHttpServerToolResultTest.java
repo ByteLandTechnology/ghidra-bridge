@@ -79,7 +79,8 @@ class McpHttpServerToolResultTest {
       for (boolean isError : new boolean[] {false, true}) {
         for (boolean stateless : new boolean[] {false, true}) {
           String expected =
-              JsonUtil.toJson(JsonRpc.success("req-1", legacyToolResult(payload, isError, stateless)));
+              JsonUtil.toJson(
+                  JsonRpc.success("req-1", legacyToolResult(payload, isError, stateless)));
           String actual =
               JsonUtil.toJson(
                   JsonRpc.success("req-1", McpHttpServer.toolResult(payload, isError, stateless)));
@@ -164,7 +165,8 @@ class McpHttpServerToolResultTest {
               harness.endpoint(),
               "http-decomp",
               "ghidra_decompilation",
-              Map.of("operation", "get", "params", Map.of("selector", Map.of("entry", "0x100000"))));
+              Map.of(
+                  "operation", "get", "params", Map.of("selector", Map.of("entry", "0x100000"))));
       assertDualContentParity(decompHttp, false, true);
       assertEquals(
           "get", ((Map<?, ?>) resultMap(decompHttp).get("structuredContent")).get("operation"));
@@ -211,7 +213,8 @@ class McpHttpServerToolResultTest {
       assertEquals(500, errorStructured.get("status"));
       assertEquals("transaction_failed", errorStructured.get("code"));
 
-      // Verify SSE transport (GET /mcp -> endpoint event -> POST /mcp?sessionId=... -> message event)
+      // Verify SSE transport (GET /mcp -> endpoint event -> POST /mcp?sessionId=... -> message
+      // event)
       // produces identical content[0].text and structuredContent for success and error calls.
       HttpRequest sseRequest =
           HttpRequest.newBuilder(URI.create(harness.endpoint()))
@@ -296,8 +299,10 @@ class McpHttpServerToolResultTest {
                       Map.of(
                           "_meta",
                           Map.of(
-                              "io.modelcontextprotocol/protocolVersion", "2026-07-28",
-                              "io.modelcontextprotocol/clientCapabilities", Map.of()))),
+                              "io.modelcontextprotocol/protocolVersion",
+                              "2026-07-28",
+                              "io.modelcontextprotocol/clientCapabilities",
+                              Map.of()))),
               200);
       List<Map<String, Object>> tools =
           (List<Map<String, Object>>) resultMap(listResp).get("tools");
@@ -311,8 +316,7 @@ class McpHttpServerToolResultTest {
       Map<String, Object> memoryProps = (Map<String, Object>) memorySchema.get("properties");
       Map<String, Object> memoryParams = (Map<String, Object>) memoryProps.get("params");
       assertEquals(Map.of(), memoryParams.get("default"));
-      Map<String, Object> memoryParamProps =
-          (Map<String, Object>) memoryParams.get("properties");
+      Map<String, Object> memoryParamProps = (Map<String, Object>) memoryParams.get("properties");
       assertEquals(256, ((Map<String, Object>) memoryParamProps.get("length")).get("default"));
       assertEquals("hex", ((Map<String, Object>) memoryParamProps.get("encoding")).get("default"));
 
@@ -329,13 +333,12 @@ class McpHttpServerToolResultTest {
               .findFirst()
               .orElseThrow();
       Map<String, Object> dtCreateSchema = (Map<String, Object>) dtCreate.get("inputSchema");
-      Map<String, Object> dtCreateProps =
-          (Map<String, Object>) dtCreateSchema.get("properties");
-      Map<String, Object> dtResourceSchema =
-          (Map<String, Object>) dtCreateProps.get("resource");
+      Map<String, Object> dtCreateProps = (Map<String, Object>) dtCreateSchema.get("properties");
+      Map<String, Object> dtResourceSchema = (Map<String, Object>) dtCreateProps.get("resource");
       assertEquals(Map.of("propertyName", "kind"), dtResourceSchema.get("discriminator"));
 
-      // 2. Non-object arguments return HTTP 200 isError=true status=400 target=/arguments (never 500).
+      // 2. Non-object arguments return HTTP 200 isError=true status=400 target=/arguments (never
+      // 500).
       Map<String, Object> nonObjectArgs =
           postRawStateless(
               client,
@@ -352,16 +355,20 @@ class McpHttpServerToolResultTest {
                       Map.of(
                           "_meta",
                               Map.of(
-                                  "io.modelcontextprotocol/protocolVersion", "2026-07-28",
-                                  "io.modelcontextprotocol/clientCapabilities", Map.of()),
+                                  "io.modelcontextprotocol/protocolVersion",
+                                  "2026-07-28",
+                                  "io.modelcontextprotocol/clientCapabilities",
+                                  Map.of()),
                           "name", "ghidra_memory",
                           "arguments", List.of("bad"))),
               200);
       assertToolBadRequest(nonObjectArgs, "invalid_type", "/arguments", "JSON object");
 
-      // 3. Absent operation, non-text operation, unknown operation, dotted operation, unknown key, bad params.
+      // 3. Absent operation, non-text operation, unknown operation, dotted operation, unknown key,
+      // bad params.
       Map<String, Object> missingOp =
-          postStatelessToolCall(client, harness.endpoint(), "missing-op", "ghidra_memory", Map.of());
+          postStatelessToolCall(
+              client, harness.endpoint(), "missing-op", "ghidra_memory", Map.of());
       assertToolBadRequest(missingOp, "missing_field", "/operation", "Valid operations:");
 
       Map<String, Object> numericOp =
@@ -376,7 +383,8 @@ class McpHttpServerToolResultTest {
               "dotted-op",
               "ghidra_program",
               Map.of("operation", "program.get"));
-      assertToolBadRequest(dottedSameDomain, "invalid_enum", "/operation", "Use bare operation \"get\"");
+      assertToolBadRequest(
+          dottedSameDomain, "invalid_enum", "/operation", "Use bare operation \"get\"");
 
       Map<String, Object> dottedCrossDomain =
           postStatelessToolCall(
@@ -405,7 +413,8 @@ class McpHttpServerToolResultTest {
               Map.of("operation", "read", "params", "not-an-object"));
       assertToolBadRequest(nonObjectParams, "invalid_type", "/params", "JSON object");
 
-      // 4. Nested parameter validation preserves parameter-relative target pointers (/selector/address).
+      // 4. Nested parameter validation preserves parameter-relative target pointers
+      // (/selector/address).
       Map<String, Object> badSelector =
           postStatelessToolCall(
               client,
@@ -415,7 +424,8 @@ class McpHttpServerToolResultTest {
               Map.of("operation", "read", "params", Map.of("selector", Map.of("address", 99))));
       assertToolBadRequest(badSelector, "invalid_type", "/selector/address", "/selector/address");
 
-      // 5. ghidra_help unknown key, operation without domain, and dotted domain/operation suggestions.
+      // 5. ghidra_help unknown key, operation without domain, and dotted domain/operation
+      // suggestions.
       Map<String, Object> badHelpKey =
           postStatelessToolCall(
               client, harness.endpoint(), "help-key", "ghidra_help", Map.of("topic", "memory"));
@@ -433,7 +443,8 @@ class McpHttpServerToolResultTest {
               "help-dot-dom",
               "ghidra_help",
               Map.of("domain", "program.get"));
-      assertToolBadRequest(helpDottedDomain, "invalid_enum", "/domain", "Use bare domain \"program\"");
+      assertToolBadRequest(
+          helpDottedDomain, "invalid_enum", "/domain", "Use bare domain \"program\"");
 
       Map<String, Object> helpDottedOp =
           postStatelessToolCall(
@@ -442,9 +453,11 @@ class McpHttpServerToolResultTest {
               "help-dot-op",
               "ghidra_help",
               Map.of("domain", "program", "operation", "program.get"));
-      assertToolBadRequest(helpDottedOp, "invalid_enum", "/operation", "Use bare operation \"get\"");
+      assertToolBadRequest(
+          helpDottedOp, "invalid_enum", "/operation", "Use bare operation \"get\"");
 
-      // 6. Unknown tool name rethrows JsonRpcError (-32602) with bare-name suggestion and valid tools.
+      // 6. Unknown tool name rethrows JsonRpcError (-32602) with bare-name suggestion and valid
+      // tools.
       Map<String, Object> unknownToolRpc =
           postRawStateless(
               client,
@@ -461,8 +474,10 @@ class McpHttpServerToolResultTest {
                       Map.of(
                           "_meta",
                               Map.of(
-                                  "io.modelcontextprotocol/protocolVersion", "2026-07-28",
-                                  "io.modelcontextprotocol/clientCapabilities", Map.of()),
+                                  "io.modelcontextprotocol/protocolVersion",
+                                  "2026-07-28",
+                                  "io.modelcontextprotocol/clientCapabilities",
+                                  Map.of()),
                           "name", "program.get",
                           "arguments", Map.of())),
               400);
@@ -472,7 +487,8 @@ class McpHttpServerToolResultTest {
       assertTrue(unknownToolMsg.contains("ghidra_program"));
       assertTrue(unknownToolMsg.contains("Valid tools:"));
 
-      // 7. Header and protocol-version errors use plain English without HeaderMismatch or UnsupportedProtocolVersionError.
+      // 7. Header and protocol-version errors use plain English without HeaderMismatch or
+      // UnsupportedProtocolVersionError.
       Map<String, Object> headerErr =
           postRawStateless(
               client,
@@ -487,10 +503,13 @@ class McpHttpServerToolResultTest {
                   "params",
                       Map.of(
                           "_meta",
-                              Map.of(
-                                  "io.modelcontextprotocol/protocolVersion", "2026-07-28",
-                                  "io.modelcontextprotocol/clientCapabilities", Map.of()),
-                          "name", "ghidra_help")),
+                          Map.of(
+                              "io.modelcontextprotocol/protocolVersion",
+                              "2026-07-28",
+                              "io.modelcontextprotocol/clientCapabilities",
+                              Map.of()),
+                          "name",
+                          "ghidra_help")),
               400);
       String headerMsg =
           String.valueOf(((Map<String, Object>) headerErr.get("error")).get("message"));
@@ -511,9 +530,11 @@ class McpHttpServerToolResultTest {
                   "params",
                       Map.of(
                           "_meta",
-                              Map.of(
-                                  "io.modelcontextprotocol/protocolVersion", "2099-01-01",
-                                  "io.modelcontextprotocol/clientCapabilities", Map.of()))),
+                          Map.of(
+                              "io.modelcontextprotocol/protocolVersion",
+                              "2099-01-01",
+                              "io.modelcontextprotocol/clientCapabilities",
+                              Map.of()))),
               400);
       String versionMsg =
           String.valueOf(((Map<String, Object>) versionErr.get("error")).get("message"));
@@ -566,7 +587,8 @@ class McpHttpServerToolResultTest {
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(JsonUtil.toJson(requestBody)));
     extraHeaders.forEach(builder::header);
-    HttpResponse<String> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> response =
+        client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     assertEquals(expectedHttpStatus, response.statusCode());
     return JsonUtil.parseObject(response.body());
   }
@@ -588,11 +610,7 @@ class McpHttpServerToolResultTest {
   }
 
   private static Map<String, Object> postStatelessToolCall(
-      HttpClient client,
-      String endpoint,
-      String id,
-      String toolName,
-      Map<String, Object> arguments)
+      HttpClient client, String endpoint, String id, String toolName, Map<String, Object> arguments)
       throws IOException, InterruptedException {
     Map<String, Object> params = new LinkedHashMap<>();
     params.put(
@@ -727,7 +745,9 @@ class McpHttpServerToolResultTest {
     result.put("format", "text");
     result.put("completed", true);
     result.put("elapsed_ms", 18);
-    result.put("c", "int main(int argc, char **argv) {\n  puts(\"hello \\\"bridge\\\"\");\n  return 0;\n}\n");
+    result.put(
+        "c",
+        "int main(int argc, char **argv) {\n  puts(\"hello \\\"bridge\\\"\");\n  return 0;\n}\n");
     result.put("warnings", List.of());
     return Map.of("operation", "get", "result", result);
   }
@@ -735,7 +755,9 @@ class McpHttpServerToolResultTest {
   private static Map<String, Object> sampleMemoryPayload() {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("address", "ram:00100000");
-    result.put("bytes", Map.of("encoding", "hex", "data", "7f454c46020101000000000000000000", "length", 16));
+    result.put(
+        "bytes",
+        Map.of("encoding", "hex", "data", "7f454c46020101000000000000000000", "length", 16));
     return Map.of("operation", "read", "result", result);
   }
 
@@ -757,7 +779,8 @@ class McpHttpServerToolResultTest {
             "items",
             items,
             "scan",
-            Map.of("kind", "address", "complete", true, "stop_reason", "completed", "elapsed_ms", 2)));
+            Map.of(
+                "kind", "address", "complete", true, "stop_reason", "completed", "elapsed_ms", 2)));
   }
 
   private static Map<String, Object> nestedMaps(int depth) {
@@ -845,7 +868,8 @@ class McpHttpServerToolResultTest {
                 }
                 return new MemoryResource(
                     address,
-                    new ByteSequence(ByteSequence.Encoding.HEX, "7f454c46".repeat(length / 4), length));
+                    new ByteSequence(
+                        ByteSequence.Encoding.HEX, "7f454c46".repeat(length / 4), length));
               });
       FunctionService functions =
           proxy(

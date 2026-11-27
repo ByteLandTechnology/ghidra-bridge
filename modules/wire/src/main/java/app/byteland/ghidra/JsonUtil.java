@@ -7,9 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
-/**
- * Serializes objects to compact JSON and parses JSON text.
- */
+/** Serializes objects to compact JSON and parses JSON text. */
 public final class JsonUtil {
   private JsonUtil() {}
 

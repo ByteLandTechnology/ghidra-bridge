@@ -41,7 +41,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -53,8 +52,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 class BootstrapGuiAndSaveGuardTest {
-  private final String originalHeadless =
-      System.getProperty(SystemUtilities.HEADLESS_PROPERTY);
+  private final String originalHeadless = System.getProperty(SystemUtilities.HEADLESS_PROPERTY);
 
   @AfterEach
   void restoreHeadlessProperty() {
@@ -76,28 +74,25 @@ class BootstrapGuiAndSaveGuardTest {
     ExecutorService pool = Executors.newFixedThreadPool(2);
     try {
       Future<?> firstRun =
-          pool.submit(
-              () -> {
-                Bootstrap.startMcpFromScript(
-                    tab1.script, new String[0], null, ignored -> tab1.services, basePort);
-                return null;
-              });
+          pool.submit(() -> {
+            Bootstrap.startMcpFromScript(
+                tab1.script, new String[0], null, ignored -> tab1.services, basePort);
+            return null;
+          });
       waitForLogLine(tab1.stdout, "MCP endpoint is listening for HTTP clients.");
 
       assertTrue(
           tab1.joinedStdout().contains("Endpoint URL: http://127.0.0.1:" + basePort + "/mcp"));
       assertTrue(tab1.joinedStdout().contains("session_id: client.exe"));
       assertTrue(tab1.joinedStdout().contains("tool_prefix: ghidra"));
-      assertTrue(
-          tab1.joinedStdout().contains("Allowed Origins: loopback and host (default)"));
+      assertTrue(tab1.joinedStdout().contains("Allowed Origins: loopback and host (default)"));
 
       Future<?> secondRun =
-          pool.submit(
-              () -> {
-                Bootstrap.startMcpFromScript(
-                    tab2.script, new String[0], null, ignored -> tab2.services, basePort);
-                return null;
-              });
+          pool.submit(() -> {
+            Bootstrap.startMcpFromScript(
+                tab2.script, new String[0], null, ignored -> tab2.services, basePort);
+            return null;
+          });
       waitForLogLine(tab2.stdout, "MCP endpoint is listening for HTTP clients.");
 
       int fallbackPort = basePort + 1;
@@ -188,27 +183,24 @@ class BootstrapGuiAndSaveGuardTest {
     ExecutorService pool = Executors.newFixedThreadPool(2);
     try {
       Future<?> firstRun =
-          pool.submit(
-              () -> {
-                Bootstrap.startFromScript(
-                    tab1.script, new String[0], null, ignored -> tab1.services, basePort);
-                return null;
-              });
+          pool.submit(() -> {
+            Bootstrap.startFromScript(
+                tab1.script, new String[0], null, ignored -> tab1.services, basePort);
+            return null;
+          });
       waitForLogLine(tab1.stdout, "Embedded bridge is listening for WebSocket clients.");
 
       Future<?> secondRun =
-          pool.submit(
-              () -> {
-                Bootstrap.startFromScript(
-                    tab2.script, new String[0], null, ignored -> tab2.services, basePort);
-                return null;
-              });
+          pool.submit(() -> {
+            Bootstrap.startFromScript(
+                tab2.script, new String[0], null, ignored -> tab2.services, basePort);
+            return null;
+          });
       waitForLogLine(tab2.stdout, "Embedded bridge is listening for WebSocket clients.");
 
       int fallbackPort = basePort + 1;
       assertTrue(
-          tab1.joinedStdout()
-              .contains("Endpoint URL: ws://127.0.0.1:" + basePort + "/ws/agent"));
+          tab1.joinedStdout().contains("Endpoint URL: ws://127.0.0.1:" + basePort + "/ws/agent"));
       assertTrue(
           tab2.joinedStdout()
               .contains("Endpoint URL: ws://127.0.0.1:" + fallbackPort + "/ws/agent"));
@@ -220,12 +212,10 @@ class BootstrapGuiAndSaveGuardTest {
         WebSocket ws =
             client
                 .newWebSocketBuilder()
-                .buildAsync(
-                    URI.create("ws://127.0.0.1:" + fallbackPort + "/ws/agent"), listener)
+                .buildAsync(URI.create("ws://127.0.0.1:" + fallbackPort + "/ws/agent"), listener)
                 .get(5, TimeUnit.SECONDS);
         ws.sendText(
-                "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"session.get\",\"params\":{}}",
-                true)
+                "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"session.get\",\"params\":{}}", true)
             .get(5, TimeUnit.SECONDS);
         String reply = listener.messages.poll(5, TimeUnit.SECONDS);
         assertTrue(reply != null && reply.contains("beta_bin-" + fallbackPort));
@@ -306,18 +296,17 @@ class BootstrapGuiAndSaveGuardTest {
       // Headless outbound handshake failure fails before GracefulExit and does not save.
       System.setProperty(SystemUtilities.HEADLESS_PROPERTY, "true");
       Thread rejectOnce =
-          new Thread(
-              () -> {
-                try (var socket = occupied.accept()) {
-                  socket
-                      .getOutputStream()
-                      .write(
-                          "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"
-                              .getBytes(StandardCharsets.US_ASCII));
-                  socket.getOutputStream().flush();
-                } catch (IOException ignored) {
-                }
-              });
+          new Thread(() -> {
+            try (var socket = occupied.accept()) {
+              socket
+                  .getOutputStream()
+                  .write(
+                      "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"
+                          .getBytes(StandardCharsets.US_ASCII));
+              socket.getOutputStream().flush();
+            } catch (IOException ignored) {
+            }
+          });
       rejectOnce.setDaemon(true);
       rejectOnce.start();
 
@@ -347,16 +336,15 @@ class BootstrapGuiAndSaveGuardTest {
     ExecutorService pool = Executors.newSingleThreadExecutor();
     try {
       Future<?> run =
-          pool.submit(
-              () -> {
-                Bootstrap.startMcpFromScript(
-                    unchanged.script,
-                    new String[] {"port=" + port1},
-                    null,
-                    ignored -> unchanged.services,
-                    port1);
-                return null;
-              });
+          pool.submit(() -> {
+            Bootstrap.startMcpFromScript(
+                unchanged.script,
+                new String[] {"port=" + port1},
+                null,
+                ignored -> unchanged.services,
+                port1);
+            return null;
+          });
       waitForLogLine(unchanged.stdout, "MCP endpoint is listening for HTTP clients.");
       unchanged.monitor.cancel();
       run.get(10, TimeUnit.SECONDS);
@@ -369,16 +357,15 @@ class BootstrapGuiAndSaveGuardTest {
       int port2 = findConsecutivePortWindow(2);
       RecordingFixture dirty = new RecordingFixture("dirty.bin", true);
       Future<?> dirtyRun =
-          pool.submit(
-              () -> {
-                Bootstrap.startMcpFromScript(
-                    dirty.script,
-                    new String[] {"port=" + port2},
-                    null,
-                    ignored -> dirty.services,
-                    port2);
-                return null;
-              });
+          pool.submit(() -> {
+            Bootstrap.startMcpFromScript(
+                dirty.script,
+                new String[] {"port=" + port2},
+                null,
+                ignored -> dirty.services,
+                port2);
+            return null;
+          });
       waitForLogLine(dirty.stdout, "MCP endpoint is listening for HTTP clients.");
       assertEquals(
           1,

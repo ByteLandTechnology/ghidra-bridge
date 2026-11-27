@@ -41,20 +41,17 @@ class WireSchemaValidationTest {
   void validatesOneOfUnionsAndPreservesFirstBranchFailureDiagnostics() {
     Map<String, Object> selectorSchema = ApiSchemaCatalog.flowSelector();
 
-    assertDoesNotThrow(
-        () ->
-            WireSchema.validate(
-                Map.of("kind", "address", "address", "ram:00100000"), selectorSchema, "/selector"));
-    assertDoesNotThrow(
-        () ->
-            WireSchema.validate(
-                Map.of("kind", "function", "entry", "ram:00100000"), selectorSchema, "/selector"));
-    assertDoesNotThrow(
-        () ->
-            WireSchema.validate(
-                Map.of("kind", "range", "start", "ram:00100000", "end", "ram:00100020"),
-                selectorSchema,
-                "/selector"));
+    assertDoesNotThrow(() ->
+        WireSchema.validate(
+            Map.of("kind", "address", "address", "ram:00100000"), selectorSchema, "/selector"));
+    assertDoesNotThrow(() ->
+        WireSchema.validate(
+            Map.of("kind", "function", "entry", "ram:00100000"), selectorSchema, "/selector"));
+    assertDoesNotThrow(() ->
+        WireSchema.validate(
+            Map.of("kind", "range", "start", "ram:00100000", "end", "ram:00100020"),
+            selectorSchema,
+            "/selector"));
 
     // Tagged oneOf routes directly to the selected branch instead of the first branch.
     ApiException taggedBranchFailure =
@@ -74,7 +71,9 @@ class WireSchemaValidationTest {
     ApiException zeroMatch =
         assertThrows(
             ApiException.class,
-            () -> WireSchema.validate(Map.of("other", "ram:00100000"), untaggedSelector, "/selector"));
+            () ->
+                WireSchema.validate(
+                    Map.of("other", "ram:00100000"), untaggedSelector, "/selector"));
     assertEquals(400, zeroMatch.status());
     assertEquals("invalid_union", zeroMatch.error().code());
     assertEquals("/selector/address is required", zeroMatch.error().message());
@@ -84,8 +83,7 @@ class WireSchemaValidationTest {
     Map<String, Object> overlapping =
         WireSchema.oneOf(WireSchema.string(), WireSchema.nonBlankString());
     ApiException multipleWithoutFailure =
-        assertThrows(
-            ApiException.class, () -> WireSchema.validate("hello", overlapping, "/value"));
+        assertThrows(ApiException.class, () -> WireSchema.validate("hello", overlapping, "/value"));
     assertEquals(400, multipleWithoutFailure.status());
     assertEquals("invalid_union", multipleWithoutFailure.error().code());
     assertEquals("/value must match exactly one schema", multipleWithoutFailure.error().message());
@@ -94,9 +92,7 @@ class WireSchemaValidationTest {
     // Multiple branches match with a final failed branch: reports that failed branch.
     Map<String, Object> overlappingWithTrailingFailure =
         WireSchema.oneOf(
-            WireSchema.string(),
-            WireSchema.nonBlankString(),
-            WireSchema.integer(0, 10));
+            WireSchema.string(), WireSchema.nonBlankString(), WireSchema.integer(0, 10));
     ApiException trailingFailure =
         assertThrows(
             ApiException.class,
@@ -131,8 +127,7 @@ class WireSchemaValidationTest {
         assertThrows(
             ApiException.class,
             () ->
-                WireSchema.validate(
-                    Map.of("other", "x"), middleFailureWithTwoMatches, "/payload"));
+                WireSchema.validate(Map.of("other", "x"), middleFailureWithTwoMatches, "/payload"));
     assertEquals("invalid_union", middleFailure.error().code());
     assertEquals("/payload/id is required", middleFailure.error().message());
     assertEquals("/payload/id", middleFailure.error().target());
@@ -150,8 +145,7 @@ class WireSchemaValidationTest {
   void validatesRecursiveDataTypeReferenceSchemasAndDeepPointers() {
     Map<String, Object> schema =
         WireSchema.withDefinitions(
-            WireSchema.object(
-                Map.of("data_type", WireSchema.dataTypeReference()), "data_type"));
+            WireSchema.object(Map.of("data_type", WireSchema.dataTypeReference()), "data_type"));
 
     Map<String, Object> validNestedType =
         Map.of(
@@ -173,10 +167,9 @@ class WireSchemaValidationTest {
                         Map.of("kind", "named", "name", "uint32_t")))));
     assertDoesNotThrow(() -> WireSchema.validate(validNestedType, schema, "/resource"));
 
-    assertDoesNotThrow(
-        () ->
-            WireSchema.validate(
-                Map.of("data_type", Map.of("kind", "untyped_pointer")), schema, "/resource"));
+    assertDoesNotThrow(() ->
+        WireSchema.validate(
+            Map.of("data_type", Map.of("kind", "untyped_pointer")), schema, "/resource"));
 
     // Invalid leaf in recursive tagged data_type_reference routes directly to the exact leaf.
     Map<String, Object> invalidLeaf =
@@ -194,11 +187,11 @@ class WireSchemaValidationTest {
                     "element",
                     Map.of("kind", "named", "name", "uint32_t"))));
     ApiException ex =
-        assertThrows(ApiException.class, () -> WireSchema.validate(invalidLeaf, schema, "/resource"));
+        assertThrows(
+            ApiException.class, () -> WireSchema.validate(invalidLeaf, schema, "/resource"));
     assertEquals(400, ex.status());
     assertEquals("invalid_value", ex.error().code());
-    assertEquals(
-        "/resource/data_type/target/count must be in 1..2147483647", ex.error().message());
+    assertEquals("/resource/data_type/target/count must be in 1..2147483647", ex.error().message());
     assertEquals("/resource/data_type/target/count", ex.error().target());
 
     // Direct recursive schema where pointer is the first union branch reports deep leaf pointer.
@@ -207,8 +200,7 @@ class WireSchemaValidationTest {
     pointerFirstDef.put(ApiVocabulary.ADDITIONAL_PROPERTIES, false);
     pointerFirstDef.put(ApiVocabulary.REQUIRED, List.of("next"));
     pointerFirstDef.put(
-        ApiVocabulary.PROPERTIES,
-        Map.of("next", Map.of(ApiVocabulary.REFERENCE, "#/$defs/node")));
+        ApiVocabulary.PROPERTIES, Map.of("next", Map.of(ApiVocabulary.REFERENCE, "#/$defs/node")));
     Map<String, Object> leafDef =
         WireSchema.object(Map.of("leaf", WireSchema.nonBlankString()), "leaf");
     Map<String, Object> customRecursive = new LinkedHashMap<>();
@@ -229,19 +221,13 @@ class WireSchemaValidationTest {
   @Test
   void escapesPropertyPointersWhileKeepingRawNamesOnMissingAndUnknownFields() {
     Map<String, Object> nestedChild =
-        WireSchema.object(
-            Map.of("val~1/leaf", WireSchema.integer(1, 10)),
-            "raw/required~field");
+        WireSchema.object(Map.of("val~1/leaf", WireSchema.integer(1, 10)), "raw/required~field");
     Map<String, Object> rootSchema =
-        WireSchema.object(
-            Map.of("a/b~c", WireSchema.array(nestedChild, 1, 5)),
-            "a/b~c");
+        WireSchema.object(Map.of("a/b~c", WireSchema.array(nestedChild, 1, 5)), "a/b~c");
 
     // Known property and array element traversal escapes ~ as ~0 and / as ~1.
     Map<String, Object> invalidValuePayload =
-        Map.of(
-            "a/b~c",
-            List.of(Map.of("raw/required~field", "unused", "val~1/leaf", 99)));
+        Map.of("a/b~c", List.of(Map.of("raw/required~field", "unused", "val~1/leaf", 99)));
     // Add raw/required~field to properties for value test:
     Map<String, Object> nestedWithRequiredProp =
         WireSchema.object(
@@ -250,17 +236,14 @@ class WireSchemaValidationTest {
                 "val~1/leaf", WireSchema.integer(1, 10)),
             "raw/required~field");
     Map<String, Object> schemaForValueCheck =
-        WireSchema.object(
-            Map.of("a/b~c", WireSchema.array(nestedWithRequiredProp, 1, 5)),
-            "a/b~c");
+        WireSchema.object(Map.of("a/b~c", WireSchema.array(nestedWithRequiredProp, 1, 5)), "a/b~c");
 
     ApiException valueFailure =
         assertThrows(
             ApiException.class,
             () -> WireSchema.validate(invalidValuePayload, schemaForValueCheck, "/params"));
     assertEquals("invalid_value", valueFailure.error().code());
-    assertEquals(
-        "/params/a~1b~0c/0/val~01~1leaf must be in 1..10", valueFailure.error().message());
+    assertEquals("/params/a~1b~0c/0/val~01~1leaf must be in 1..10", valueFailure.error().message());
     assertEquals("/params/a~1b~0c/0/val~01~1leaf", valueFailure.error().target());
 
     // Absent required field keeps raw field name on leaf and escapes ancestor segments.
@@ -282,11 +265,7 @@ class WireSchemaValidationTest {
             () ->
                 WireSchema.validate(
                     Map.of(
-                        "a/b~c",
-                        List.of(
-                            Map.of(
-                                "raw/required~field", "ok",
-                                "extra/raw~key", 1))),
+                        "a/b~c", List.of(Map.of("raw/required~field", "ok", "extra/raw~key", 1))),
                     schemaForValueCheck,
                     ""));
     assertEquals("unknown_field", unknownFailure.error().code());
@@ -437,8 +416,7 @@ class WireSchemaValidationTest {
     functionItem.put("entry", "ram:00100000");
     functionItem.put("name", "main");
     functionItem.put(
-        "return_type",
-        Map.of("kind", "pointer", "target", Map.of("kind", "untyped_pointer")));
+        "return_type", Map.of("kind", "pointer", "target", Map.of("kind", "untyped_pointer")));
     functionItem.put("return_storage", Map.of("kind", "register", "register", "RAX"));
     functionItem.put(
         "parameters",
@@ -518,8 +496,7 @@ class WireSchemaValidationTest {
           RecordedEvent event = file.readEvent();
           if ("jdk.JavaExceptionThrow".equals(event.getEventType().getName())) {
             RecordedClass thrownClass = event.getValue("thrownClass");
-            if (thrownClass != null
-                && ApiException.class.getName().equals(thrownClass.getName())) {
+            if (thrownClass != null && ApiException.class.getName().equals(thrownClass.getName())) {
               apiExceptionCount++;
             }
           }
@@ -541,9 +518,7 @@ class WireSchemaValidationTest {
                 "ratio", WireSchema.number(0.0, 1.0)),
             "a/b");
     Map<String, Object> rootSchema =
-        WireSchema.object(
-            Map.of("items", WireSchema.array(itemSchema, 1, 2)),
-            "items");
+        WireSchema.object(Map.of("items", WireSchema.array(itemSchema, 1, 2)), "items");
 
     Map<String, Object> validPayload =
         Map.of("items", List.of(Map.of("a/b", "ok", "count", 3, "ratio", 0.5)));
@@ -666,19 +641,19 @@ class WireSchemaValidationTest {
             "name");
     Map<String, Object> stackStorage =
         WireSchema.object(
-            Map.of("kind", WireSchema.stringEnum("stack"), "offset", WireSchema.integer(-4096, 4096)),
+            Map.of(
+                "kind", WireSchema.stringEnum("stack"), "offset", WireSchema.integer(-4096, 4096)),
             "kind",
             "offset");
     Map<String, Object> concreteStorage = WireSchema.oneOf(registerStorage, stackStorage);
     Map<String, Object> autoStorage =
         WireSchema.object(Map.of("kind", WireSchema.stringEnum("auto")), "kind");
     Map<String, Object> nestedUnion =
-        WireSchema.oneOf(concreteStorage, autoStorage, Map.of(ApiVocabulary.TYPE, ApiVocabulary.NULL));
+        WireSchema.oneOf(
+            concreteStorage, autoStorage, Map.of(ApiVocabulary.TYPE, ApiVocabulary.NULL));
 
-    assertDoesNotThrow(
-        () ->
-            WireSchema.validate(
-                Map.of("kind", "register", "name", "RAX"), nestedUnion, "/storage"));
+    assertDoesNotThrow(() ->
+        WireSchema.validate(Map.of("kind", "register", "name", "RAX"), nestedUnion, "/storage"));
     assertDoesNotThrow(
         () -> WireSchema.validate(Map.of("kind", "stack", "offset", -16), nestedUnion, "/storage"));
     assertDoesNotThrow(() -> WireSchema.validate(Map.of("kind", "auto"), nestedUnion, "/storage"));
@@ -688,13 +663,16 @@ class WireSchemaValidationTest {
     ApiException zeroMatch =
         assertThrows(
             ApiException.class,
-            () -> WireSchema.validate(Map.of("kind", "stack", "offset", 99999), nestedUnion, "/storage"));
+            () ->
+                WireSchema.validate(
+                    Map.of("kind", "stack", "offset", 99999), nestedUnion, "/storage"));
     assertEquals("invalid_union", zeroMatch.error().code());
     assertEquals("/storage/name is required", zeroMatch.error().message());
     assertEquals("/storage/name", zeroMatch.error().target());
 
     // Inner oneOf matches and outer second branch also matches without any outer failure.
-    Map<String, Object> outerDoubleMatch = WireSchema.oneOf(concreteStorage, WireSchema.openObject());
+    Map<String, Object> outerDoubleMatch =
+        WireSchema.oneOf(concreteStorage, WireSchema.openObject());
     ApiException doubleMatch =
         assertThrows(
             ApiException.class,
@@ -712,8 +690,7 @@ class WireSchemaValidationTest {
         assertThrows(
             ApiException.class,
             () ->
-                WireSchema.validate(
-                    Map.of("kind", "auto"), failedInnerThenTwoMatches, "/storage"));
+                WireSchema.validate(Map.of("kind", "auto"), failedInnerThenTwoMatches, "/storage"));
     assertEquals("invalid_union", failedInner.error().code());
     assertEquals("/storage/name is required", failedInner.error().message());
     assertEquals("/storage/name", failedInner.error().target());
@@ -721,8 +698,7 @@ class WireSchemaValidationTest {
     // Malformed inner branch inside a later nested oneOf throws IllegalStateException immediately.
     Map<String, Object> badInner =
         WireSchema.oneOf(
-            WireSchema.integer(0, 10),
-            Map.of(ApiVocabulary.REFERENCE, "#/$defs/missing_inner"));
+            WireSchema.integer(0, 10), Map.of(ApiVocabulary.REFERENCE, "#/$defs/missing_inner"));
     Map<String, Object> validFirstWithMalformedNested =
         WireSchema.oneOf(WireSchema.string(), badInner);
     assertThrows(
@@ -810,19 +786,16 @@ class WireSchemaValidationTest {
     ApiMethod<Map<String, Object>, Object> functionList = methodOf(registry, "function.list");
     Map<String, Object> fnOmitted = functionList.decodeRequest(Map.of());
     Map<String, Object> fnEmptyContainers =
-        functionList.decodeRequest(
-            Map.of("filter", Map.of(), "scan", Map.of("range", Map.of())));
+        functionList.decodeRequest(Map.of("filter", Map.of(), "scan", Map.of("range", Map.of())));
     assertEquals(fnOmitted, fnEmptyContainers);
     assertFalse(fnEmptyContainers.containsKey("filter"));
     assertFalse(fnEmptyContainers.containsKey("range"));
     assertEquals(
-        CursorTokens.queryFingerprint(fnOmitted),
-        CursorTokens.queryFingerprint(fnEmptyContainers));
+        CursorTokens.queryFingerprint(fnOmitted), CursorTokens.queryFingerprint(fnEmptyContainers));
 
     ApiMethod<Map<String, Object>, Object> createDataType = methodOf(registry, "data_type.create");
     Map<String, Object> enumDecoded =
-        createDataType.decodeRequest(
-            Map.of("resource", Map.of("kind", "enum", "name", "Status")));
+        createDataType.decodeRequest(Map.of("resource", Map.of("kind", "enum", "name", "Status")));
     assertEquals(
         Map.of("kind", "enum", "name", "Status", "category_path", "/", "size", 4),
         enumDecoded.get("resource"));
@@ -862,7 +835,9 @@ class WireSchemaValidationTest {
     ApiException badBase64 =
         assertThrows(
             ApiException.class,
-            () -> CursorTokens.decode("%%%not-base64%%%", "code_unit", "session-1", "fp-1", "/page/cursor"));
+            () ->
+                CursorTokens.decode(
+                    "%%%not-base64%%%", "code_unit", "session-1", "fp-1", "/page/cursor"));
     assertEquals(Map.of("reason", "malformed_token"), badBase64.error().details());
 
     String tamperedSigToken =
@@ -941,11 +916,16 @@ class WireSchemaValidationTest {
             "unknown_cc",
             "signature",
             Map.of(
-                "return_type", Map.of("kind", "named", "name", "/int"),
-                "parameters", List.of(Map.of("data_type", Map.of("kind", "named", "name", "/int"))),
-                "calling_convention", "unknown",
-                "has_var_args", false,
-                "has_no_return", false));
+                "return_type",
+                Map.of("kind", "named", "name", "/int"),
+                "parameters",
+                List.of(Map.of("data_type", Map.of("kind", "named", "name", "/int"))),
+                "calling_convention",
+                "unknown",
+                "has_var_args",
+                false,
+                "has_no_return",
+                false));
     ApiException createUnknownCc =
         assertThrows(
             ApiException.class,
@@ -960,11 +940,16 @@ class WireSchemaValidationTest {
             "bad_cc",
             "signature",
             Map.of(
-                "return_type", Map.of("kind", "named", "name", "/int"),
-                "parameters", List.of(Map.of("data_type", Map.of("kind", "named", "name", "/int"))),
-                "calling_convention", "__bogus_cc",
-                "has_var_args", false,
-                "has_no_return", false));
+                "return_type",
+                Map.of("kind", "named", "name", "/int"),
+                "parameters",
+                List.of(Map.of("data_type", Map.of("kind", "named", "name", "/int"))),
+                "calling_convention",
+                "__bogus_cc",
+                "has_var_args",
+                false,
+                "has_no_return",
+                false));
     ApiException createCc =
         assertThrows(
             ApiException.class,
@@ -978,8 +963,7 @@ class WireSchemaValidationTest {
             ApiException.class,
             () -> registry.dispatch("data_type.upsert", Map.of("resource", upsertRetResource)));
     assertEquals("/resource/signature/return_type", upsertRet.error().target());
-    assertEquals(
-        "/resource/signature/return_type was not found", upsertRet.error().message());
+    assertEquals("/resource/signature/return_type was not found", upsertRet.error().message());
 
     Map<String, Object> paramResource = new LinkedHashMap<>(fnResource);
     paramResource.put("name", "bad_param");
@@ -1004,8 +988,10 @@ class WireSchemaValidationTest {
                                 "add_fields",
                                 List.of(
                                     Map.of(
-                                        "name", "f0",
-                                        "data_type", Map.of("kind", "named", "name", "/nope")))))));
+                                        "name",
+                                        "f0",
+                                        "data_type",
+                                        Map.of("kind", "named", "name", "/nope")))))));
     assertEquals("/patch/add_fields/0/data_type", patchField.error().target());
 
     // Batch validation rebases parameter-relative errors onto /items/<i>/arguments/...
@@ -1028,8 +1014,10 @@ class WireSchemaValidationTest {
                                     "selector", Map.of("path", "/MyEnum"),
                                     "patch",
                                         Map.of(
-                                            "kind", "enum",
-                                            "rename_values", List.of("not-an-object"))))))));
+                                            "kind",
+                                            "enum",
+                                            "rename_values",
+                                            List.of("not-an-object"))))))));
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> violations =
         (List<Map<String, Object>>) batchEnumError.error().details().get("violations");
@@ -1037,8 +1025,8 @@ class WireSchemaValidationTest {
   }
 
   @SuppressWarnings("unchecked")
-  private static ApiMethod<Map<String, Object>, Object> methodOf(
-      ApiRegistry registry, String name) throws Exception {
+  private static ApiMethod<Map<String, Object>, Object> methodOf(ApiRegistry registry, String name)
+      throws Exception {
     java.lang.reflect.Field field = ApiRegistry.class.getDeclaredField("methodsByName");
     field.setAccessible(true);
     Map<String, ApiMethod<Map<String, Object>, Object>> methods =

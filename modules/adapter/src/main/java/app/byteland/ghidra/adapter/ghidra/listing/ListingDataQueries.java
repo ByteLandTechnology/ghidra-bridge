@@ -18,8 +18,7 @@ final class ListingDataQueries {
     this.context = context;
   }
 
-  Page<DataUnitResource> listDataUnits(
-      AddressScanOptions options, int limit, String cursorRaw) {
+  Page<DataUnitResource> listDataUnits(AddressScanOptions options, int limit, String cursorRaw) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);

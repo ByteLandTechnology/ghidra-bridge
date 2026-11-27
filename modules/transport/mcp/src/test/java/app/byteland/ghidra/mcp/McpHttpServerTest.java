@@ -77,12 +77,11 @@ class McpHttpServerTest {
       try (ExecutorService clientPool = Executors.newVirtualThreadPerTaskExecutor()) {
         List<Callable<Integer>> sseTasks = new ArrayList<>();
         for (int i = 0; i < 80; i++) {
-          sseTasks.add(
-              () -> {
-                Socket socket = openRawSocket(port, sseReq);
-                openSockets.add(socket);
-                return readHttpStatusCode(socket);
-              });
+          sseTasks.add(() -> {
+            Socket socket = openRawSocket(port, sseReq);
+            openSockets.add(socket);
+            return readHttpStatusCode(socket);
+          });
         }
         List<Future<Integer>> sseFutures = clientPool.invokeAll(sseTasks);
 
@@ -107,14 +106,13 @@ class McpHttpServerTest {
           openSockets.add(socket);
           socket.setSoTimeout(800);
           postStatuses.add(
-              clientPool.submit(
-                  () -> {
-                    try {
-                      return readHttpStatusCode(socket);
-                    } catch (IOException blockedInReadBody) {
-                      return -1;
-                    }
-                  }));
+              clientPool.submit(() -> {
+                try {
+                  return readHttpStatusCode(socket);
+                } catch (IOException blockedInReadBody) {
+                  return -1;
+                }
+              }));
         }
 
         int stalledInFlight = 0;
@@ -212,10 +210,7 @@ class McpHttpServerTest {
         // The next SSE stream above `MAX_SSE_SESSIONS` receives `503`.
         HttpResponse<String> overflowSse =
             client.send(
-                HttpRequest.newBuilder(baseUri)
-                    .GET()
-                    .header("Accept", "text/event-stream")
-                    .build(),
+                HttpRequest.newBuilder(baseUri).GET().header("Accept", "text/event-stream").build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(503, overflowSse.statusCode());
 
@@ -373,8 +368,7 @@ class McpHttpServerTest {
 
         // Wait until all 32 virtual threads enter `JsonRpcHandler` and take permits.
         long waitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-        while (handle.server().availableRequestPermits() > 0
-            && System.nanoTime() < waitDeadline) {
+        while (handle.server().availableRequestPermits() > 0 && System.nanoTime() < waitDeadline) {
           Thread.sleep(10L);
         }
         assertEquals(
@@ -393,9 +387,7 @@ class McpHttpServerTest {
                     .build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(
-            503,
-            probe.statusCode(),
-            "Expected 33rd concurrent POST request to receive HTTP 503");
+            503, probe.statusCode(), "Expected 33rd concurrent POST request to receive HTTP 503");
 
         // Keep the first 8 sockets stalled and complete sockets 8..31 first.
         // Stalled reads must not block later `POST` requests.

@@ -164,7 +164,8 @@ class AgentWebSocketFrameAndKeepaliveTest {
         1002, client -> client.writeMaskedFrame(true, 0x3, new byte[0]));
 
     assertCloseStatusForClientAction(
-        1002, client -> client.writeMaskedFrame(true, WebSocketFrames.CLOSE_OPCODE, new byte[] {1}));
+        1002,
+        client -> client.writeMaskedFrame(true, WebSocketFrames.CLOSE_OPCODE, new byte[] {1}));
 
     assertCloseStatusForClientAction(
         1002,
@@ -535,8 +536,7 @@ class AgentWebSocketFrameAndKeepaliveTest {
     }
 
     @Override
-    public void onClose(
-        AgentWebSocketServer.Connection connection, int statusCode, String reason) {
+    public void onClose(AgentWebSocketServer.Connection connection, int statusCode, String reason) {
       closeEvents.add(new CloseEvent(statusCode, reason));
     }
 

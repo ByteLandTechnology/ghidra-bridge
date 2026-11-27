@@ -30,30 +30,54 @@ class SymbolDemangleMethodTest {
   @Test
   void demangleRunsInOneTransactionAndReturnsCounts() throws Exception {
     AtomicInteger transactions = new AtomicInteger();
-    SymbolService symbols = proxy(SymbolService.class, (method, args) -> {
-      assertEquals("demangleSymbols", method);
-      return new SymbolService.DemangleResult(2, 1, List.of("_Zbad: No supported C++ name"));
-    });
-    AnalysisService analysis = proxy(AnalysisService.class, (method, args) ->
-        new AnalysisResource(AnalysisResource.Kind.GHIDRA, AnalysisResource.Status.IDLE,
-            false, null, null, null, null));
-    TransactionRunner transaction = new TransactionRunner() {
-      @Override
-      public <T> T run(Operation<T> operation) {
-        transactions.incrementAndGet();
-        try {
-          return operation.execute();
-        } catch (Exception ex) {
-          throw new RuntimeException(ex);
-        }
-      }
-    };
-    BridgeServices services = new BridgeServices(
-        unused(ProgramService.class), unused(AddressService.class), unused(CommentService.class),
-        unused(ReferenceService.class), unused(MemoryService.class), unused(ListingService.class),
-        unused(FunctionService.class), unused(GlobalVariableService.class),
-        analysis, unused(DecompilationService.class),
-        symbols, unused(DataTypeService.class), transaction, "test");
+    SymbolService symbols =
+        proxy(
+            SymbolService.class,
+            (method, args) -> {
+              assertEquals("demangleSymbols", method);
+              return new SymbolService.DemangleResult(
+                  2, 1, List.of("_Zbad: No supported C++ name"));
+            });
+    AnalysisService analysis =
+        proxy(
+            AnalysisService.class,
+            (method, args) ->
+                new AnalysisResource(
+                    AnalysisResource.Kind.GHIDRA,
+                    AnalysisResource.Status.IDLE,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null));
+    TransactionRunner transaction =
+        new TransactionRunner() {
+          @Override
+          public <T> T run(Operation<T> operation) {
+            transactions.incrementAndGet();
+            try {
+              return operation.execute();
+            } catch (Exception ex) {
+              throw new RuntimeException(ex);
+            }
+          }
+        };
+    BridgeServices services =
+        new BridgeServices(
+            unused(ProgramService.class),
+            unused(AddressService.class),
+            unused(CommentService.class),
+            unused(ReferenceService.class),
+            unused(MemoryService.class),
+            unused(ListingService.class),
+            unused(FunctionService.class),
+            unused(GlobalVariableService.class),
+            analysis,
+            unused(DecompilationService.class),
+            symbols,
+            unused(DataTypeService.class),
+            transaction,
+            "test");
     ApiRegistry registry = new ApiRegistry(services, "test", Map::of, () -> {});
 
     Map<?, ?> result = (Map<?, ?>) registry.dispatch("symbol.demangle", Map.of());
@@ -64,8 +88,8 @@ class SymbolDemangleMethodTest {
     assertTrue(registry.method("symbol.demangle").effects().requiresTransaction());
     assertFalse(registry.method("symbol.demangle").effects().destructive());
     assertTrue(registry.method("symbol.demangle").effects().idempotent());
-    assertThrows(ApiException.class,
-        () -> registry.dispatch("symbol.demangle", Map.of("unknown", true)));
+    assertThrows(
+        ApiException.class, () -> registry.dispatch("symbol.demangle", Map.of("unknown", true)));
   }
 
   private interface Handler {
@@ -73,11 +97,18 @@ class SymbolDemangleMethodTest {
   }
 
   private static <T> T unused(Class<T> type) {
-    return proxy(type, (method, args) -> { throw new AssertionError(method); });
+    return proxy(
+        type,
+        (method, args) -> {
+          throw new AssertionError(method);
+        });
   }
 
   private static <T> T proxy(Class<T> type, Handler handler) {
-    return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type},
-        (proxy, method, args) -> handler.invoke(method.getName(), args)));
+    return type.cast(
+        Proxy.newProxyInstance(
+            type.getClassLoader(),
+            new Class<?>[] {type},
+            (proxy, method, args) -> handler.invoke(method.getName(), args)));
   }
 }

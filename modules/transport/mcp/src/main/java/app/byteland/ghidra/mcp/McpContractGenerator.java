@@ -31,7 +31,8 @@ public final class McpContractGenerator {
       Pattern.compile(
           "(?<![A-Za-z0-9_])(?:ghidra|sample|other|<prefix>)\\."
               + "(?:help|bridge|program|address|memory|listing|global_variable|function|analysis"
-              + "|decompilation|symbol|reference|comment|data_type|batch|<domain>)(?![A-Za-z0-9_.])");
+              + "|decompilation|symbol|reference|comment|data_type|batch|<domain>)"
+              + "(?![A-Za-z0-9_.])");
   private static final List<Pattern> STALE_MCP_SSE_PATTERNS =
       List.of(
           Pattern.compile("\\*\\*GET\\*\\*\\s*[:：].*\\b405\\b"),
@@ -58,9 +59,12 @@ public final class McpContractGenerator {
         JsonUtil.toJson(
                 JsonUtil.canonical(
                     Map.of(
-                        "version", ApiRegistry.INTERFACE_VERSION,
-                        "protocol_version", "2026-07-28",
-                        "tools", tools)))
+                        "version",
+                        ApiRegistry.INTERFACE_VERSION,
+                        "protocol_version",
+                        "2026-07-28",
+                        "tools",
+                        tools)))
             + "\n",
         StandardCharsets.UTF_8);
   }

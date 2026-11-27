@@ -15,8 +15,7 @@ final class FieldSelection {
   private final Entry[] entries;
   private final boolean selectAll;
 
-  private FieldSelection(
-      Map<String, FieldSelection> children, Entry[] entries, boolean selectAll) {
+  private FieldSelection(Map<String, FieldSelection> children, Entry[] entries, boolean selectAll) {
     this.children = children;
     this.entries = entries;
     this.selectAll = selectAll;

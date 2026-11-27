@@ -25,19 +25,14 @@ import org.junit.jupiter.api.Test;
 class WebSocketHostValidationTest {
 
   @Test
-  @DisplayName("readHandshake rejects missing, blank, malformed, and duplicate Host headers with 400")
+  @DisplayName(
+      "readHandshake rejects missing, blank, malformed, and duplicate Host headers with 400")
   void readHandshakeRejectsInvalidHostHeaders() {
     List<String> invalidHandshakes =
         List.of(
-            "GET /ws/agent HTTP/1.1\r\n"
-                + "Upgrade: websocket\r\n"
-                + "Connection: Upgrade\r\n\r\n",
-            "GET /ws/agent HTTP/1.1\r\n"
-                + "Host:   \r\n"
-                + "Upgrade: websocket\r\n\r\n",
-            "GET /ws/agent HTTP/1.1\r\n"
-                + "Host: [::1\r\n"
-                + "Upgrade: websocket\r\n\r\n",
+            "GET /ws/agent HTTP/1.1\r\n" + "Upgrade: websocket\r\n" + "Connection: Upgrade\r\n\r\n",
+            "GET /ws/agent HTTP/1.1\r\n" + "Host:   \r\n" + "Upgrade: websocket\r\n\r\n",
+            "GET /ws/agent HTTP/1.1\r\n" + "Host: [::1\r\n" + "Upgrade: websocket\r\n\r\n",
             "GET /ws/agent HTTP/1.1\r\n"
                 + "Host: 127.0.0.1:8765\r\n"
                 + "Host: rebind.example.invalid:8765\r\n"
@@ -58,7 +53,9 @@ class WebSocketHostValidationTest {
   }
 
   @Test
-  @DisplayName("WebSocketHandshakeValidator rejects external Host with 403 and missing/duplicate Host with 400")
+  @DisplayName(
+      "WebSocketHandshakeValidator rejects external Host with 403 and missing/duplicate Host with"
+          + " 400")
   void validatorEnforcesHostRulesBeforeUpgrade() {
     AgentConfig config =
         new AgentConfig(null, "127.0.0.1", 8765, "/ws/agent", null, "session-1", null);
@@ -116,7 +113,9 @@ class WebSocketHostValidationTest {
   }
 
   @Test
-  @DisplayName("AgentWebSocketServer rejects DNS rebinding probes (403) and missing/duplicate Host (400), while allowing loopback Hosts (101)")
+  @DisplayName(
+      "AgentWebSocketServer rejects DNS rebinding probes (403) and missing/duplicate Host (400),"
+          + " while allowing loopback Hosts (101)")
   void serverEnforcesHostRulesOverLiveSockets() throws Exception {
     AtomicInteger openCount = new AtomicInteger();
     try (RunningWsServer running = startWsServer("127.0.0.1", null, openCount)) {
@@ -201,7 +200,8 @@ class WebSocketHostValidationTest {
   }
 
   @Test
-  @DisplayName("Authenticated non-loopback AgentWebSocketServer enforces well-formed Host and bearer token")
+  @DisplayName(
+      "Authenticated non-loopback AgentWebSocketServer enforces well-formed Host and bearer token")
   void authenticatedNonLoopbackServerEnforcesHostAndToken() throws Exception {
     AtomicInteger openCount = new AtomicInteger();
     try (RunningWsServer running = startWsServer("0.0.0.0", "ws-secret-token", openCount)) {
@@ -255,7 +255,8 @@ class WebSocketHostValidationTest {
         }
         int status = Integer.parseInt(statusLine.split(" ", 3)[1]);
         if (status == 409 && attempt < 19) {
-          // Retry briefly if cleanup of the previous rejected socket slot races on the worker thread.
+          // Retry briefly if cleanup of the previous rejected socket slot races on the worker
+          // thread.
           Thread.sleep(25L);
           continue;
         }
@@ -324,8 +325,8 @@ class WebSocketHostValidationTest {
     public void onServerError(Throwable error) {}
   }
 
-  private record RunningWsServer(
-      AgentWebSocketServer server, TestWsHandler handler, int port) implements AutoCloseable {
+  private record RunningWsServer(AgentWebSocketServer server, TestWsHandler handler, int port)
+      implements AutoCloseable {
     CountDownLatch resetCloseLatch() {
       return handler.resetCloseLatch();
     }

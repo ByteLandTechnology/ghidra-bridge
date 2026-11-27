@@ -184,10 +184,7 @@ final class DataTypeQueries {
 
   private static DataTypeCategoryResource describeCategory(Category child, String path) {
     return new DataTypeCategoryResource(
-        path,
-        child.getName(),
-        child.getCategories().length,
-        child.getDataTypes().length);
+        path, child.getName(), child.getCategories().length, child.getDataTypes().length);
   }
 
   private static Page<DataTypeResource> selectDataTypesBounded(

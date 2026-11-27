@@ -27,36 +27,31 @@ class ListingCodeUnitQueriesTest {
   @Test
   void allKindStreamsForwardWithStatefulCodeUnitIterator() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("code_units_all")) {
-      holder.inTransaction(
-          program -> {
-            Address base =
-                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x1000L);
-            // 0x1000..0x1004: mov eax, 0x11223344 (5 bytes)
-            // 0x1005: undefined (1 byte)
-            // 0x1006..0x1009: dword (4 bytes)
-            // 0x100a: ret (1 byte)
-            byte[] bytes = {
-              (byte) 0xb8, 0x44, 0x33, 0x22, 0x11,
-              0x00,
-              0x78, 0x56, 0x34, 0x12,
-              (byte) 0xc3
-            };
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".text",
-                    base,
-                    new ByteArrayInputStream(bytes),
-                    bytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            new DisassembleCommand(base, new AddressSet(base, base.add(4)), false)
-                .applyTo(program, TaskMonitor.DUMMY);
-            program.getListing().createData(base.add(6), DWordDataType.dataType);
-            Address retAddr = base.add(10);
-            new DisassembleCommand(retAddr, new AddressSet(retAddr, retAddr), false)
-                .applyTo(program, TaskMonitor.DUMMY);
-          });
+      holder.inTransaction(program -> {
+        Address base = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x1000L);
+        // 0x1000..0x1004: mov eax, 0x11223344 (5 bytes)
+        // 0x1005: undefined (1 byte)
+        // 0x1006..0x1009: dword (4 bytes)
+        // 0x100a: ret (1 byte)
+        byte[] bytes = {
+          (byte) 0xb8, 0x44, 0x33, 0x22, 0x11, 0x00, 0x78, 0x56, 0x34, 0x12, (byte) 0xc3
+        };
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".text",
+                base,
+                new ByteArrayInputStream(bytes),
+                bytes.length,
+                TaskMonitor.DUMMY,
+                false);
+        new DisassembleCommand(base, new AddressSet(base, base.add(4)), false)
+            .applyTo(program, TaskMonitor.DUMMY);
+        program.getListing().createData(base.add(6), DWordDataType.dataType);
+        Address retAddr = base.add(10);
+        new DisassembleCommand(retAddr, new AddressSet(retAddr, retAddr), false)
+            .applyTo(program, TaskMonitor.DUMMY);
+      });
 
       SeekSpy spy = new SeekSpy();
       ListingCodeUnitQueries queries =
@@ -64,10 +59,7 @@ class ListingCodeUnitQueriesTest {
 
       Page<CodeUnitResource> forward =
           queries.listCodeUnits(
-              AddressScanOptions.of("ram:00001000", "ram:0000100a", 1000),
-              10,
-              "all",
-              null);
+              AddressScanOptions.of("ram:00001000", "ram:0000100a", 1000), 10, "all", null);
       assertEquals(1, spy.codeUnitIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
       assertEquals(
@@ -90,32 +82,30 @@ class ListingCodeUnitQueriesTest {
   @Test
   void filteredInstructionAndDataScansSkip64KbUndefinedGapAndPreserveScanBounds() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("code_units_gap")) {
-      holder.inTransaction(
-          program -> {
-            Address base =
-                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x100000L);
-            // 0x100000..0x10ffff: 64 KB undefined gap
-            // 0x110000: nop (1 byte)
-            // 0x110001: ret (1 byte)
-            // 0x110008..0x11000b: dword (4 bytes)
-            // 0x11000c..0x11001f: undefined tail
-            byte[] bytes = new byte[0x10020];
-            bytes[0x10000] = (byte) 0x90;
-            bytes[0x10001] = (byte) 0xc3;
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".bss_and_text",
-                    base,
-                    new ByteArrayInputStream(bytes),
-                    bytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            Address instStart = base.add(0x10000);
-            AddressSet instSet = new AddressSet(instStart, instStart.add(1));
-            new DisassembleCommand(instSet, instSet, false).applyTo(program, TaskMonitor.DUMMY);
-            program.getListing().createData(base.add(0x10008), DWordDataType.dataType);
-          });
+      holder.inTransaction(program -> {
+        Address base = program.getAddressFactory().getDefaultAddressSpace().getAddress(0x100000L);
+        // 0x100000..0x10ffff: 64 KB undefined gap
+        // 0x110000: nop (1 byte)
+        // 0x110001: ret (1 byte)
+        // 0x110008..0x11000b: dword (4 bytes)
+        // 0x11000c..0x11001f: undefined tail
+        byte[] bytes = new byte[0x10020];
+        bytes[0x10000] = (byte) 0x90;
+        bytes[0x10001] = (byte) 0xc3;
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".bss_and_text",
+                base,
+                new ByteArrayInputStream(bytes),
+                bytes.length,
+                TaskMonitor.DUMMY,
+                false);
+        Address instStart = base.add(0x10000);
+        AddressSet instSet = new AddressSet(instStart, instStart.add(1));
+        new DisassembleCommand(instSet, instSet, false).applyTo(program, TaskMonitor.DUMMY);
+        program.getListing().createData(base.add(0x10008), DWordDataType.dataType);
+      });
 
       SeekSpy spy = new SeekSpy();
       ListingCodeUnitQueries queries =
@@ -124,10 +114,7 @@ class ListingCodeUnitQueriesTest {
       // Completed instruction scan across 64 KB undefined gap and final undefined tail
       Page<CodeUnitResource> instructions =
           queries.listCodeUnits(
-              AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
-              10,
-              "instruction",
-              null);
+              AddressScanOptions.of("ram:00100000", "ram:0011001f", 100), 10, "instruction", null);
       assertEquals(1, spy.instructionIterators.get());
       assertEquals(0, spy.codeUnitIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
@@ -145,10 +132,7 @@ class ListingCodeUnitQueriesTest {
       spy.reset();
       Page<CodeUnitResource> page1 =
           queries.listCodeUnits(
-              AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
-              1,
-              "instruction",
-              null);
+              AddressScanOptions.of("ram:00100000", "ram:0011001f", 100), 1, "instruction", null);
       assertEquals(1, spy.instructionIterators.get());
       assertEquals(1, spy.boundaryLookups.get());
       assertEquals(
@@ -179,10 +163,7 @@ class ListingCodeUnitQueriesTest {
       spy.reset();
       Page<CodeUnitResource> dataUnits =
           queries.listCodeUnits(
-              AddressScanOptions.of("ram:00100000", "ram:0011001f", 100),
-              10,
-              "data",
-              null);
+              AddressScanOptions.of("ram:00100000", "ram:0011001f", 100), 10, "data", null);
       assertEquals(1, spy.definedDataIterators.get());
       assertEquals(0, spy.codeUnitIterators.get());
       assertEquals(0, spy.statelessAfterBeforeCalls.get());
@@ -199,10 +180,7 @@ class ListingCodeUnitQueriesTest {
       spy.reset();
       Page<CodeUnitResource> emptyGap =
           queries.listCodeUnits(
-              AddressScanOptions.of("ram:00100000", "ram:0010ffff", 100),
-              10,
-              "instruction",
-              null);
+              AddressScanOptions.of("ram:00100000", "ram:0010ffff", 100), 10, "instruction", null);
       assertEquals(1, spy.instructionIterators.get());
       assertTrue(spy.boundaryLookups.get() <= 2);
       assertTrue(emptyGap.items().isEmpty());
@@ -216,55 +194,54 @@ class ListingCodeUnitQueriesTest {
   @Test
   void multiByteBoundariesAndAddressSpaceExtremesNeverOverflow() {
     try (ProgramHolder holder = GhidraTestSupport.createX64Program("code_units_boundaries")) {
-      holder.inTransaction(
-          program -> {
-            AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-            Address minBlock = space.getMinAddress();
-            byte[] lowBytes = {(byte) 0x90, (byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".low",
-                    minBlock,
-                    new ByteArrayInputStream(lowBytes),
-                    lowBytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            AddressSet lowSet = new AddressSet(minBlock, minBlock.add(1));
-            new DisassembleCommand(lowSet, lowSet, false).applyTo(program, TaskMonitor.DUMMY);
+      holder.inTransaction(program -> {
+        AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+        Address minBlock = space.getMinAddress();
+        byte[] lowBytes = {(byte) 0x90, (byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".low",
+                minBlock,
+                new ByteArrayInputStream(lowBytes),
+                lowBytes.length,
+                TaskMonitor.DUMMY,
+                false);
+        AddressSet lowSet = new AddressSet(minBlock, minBlock.add(1));
+        new DisassembleCommand(lowSet, lowSet, false).applyTo(program, TaskMonitor.DUMMY);
 
-            // Multi-byte block at 0x2000:
-            // 0x2000..0x2004: 5-byte mov eax, imm32
-            // 0x2005..0x2008: 4-byte dword
-            Address mid = space.getAddress(0x2000L);
-            byte[] midBytes = {(byte) 0xb8, 1, 2, 3, 4, 9, 8, 7, 6};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".mid",
-                    mid,
-                    new ByteArrayInputStream(midBytes),
-                    midBytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            new DisassembleCommand(mid, new AddressSet(mid, mid.add(4)), false)
-                .applyTo(program, TaskMonitor.DUMMY);
-            program.getListing().createData(mid.add(5), DWordDataType.dataType);
+        // Multi-byte block at 0x2000:
+        // 0x2000..0x2004: 5-byte mov eax, imm32
+        // 0x2005..0x2008: 4-byte dword
+        Address mid = space.getAddress(0x2000L);
+        byte[] midBytes = {(byte) 0xb8, 1, 2, 3, 4, 9, 8, 7, 6};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".mid",
+                mid,
+                new ByteArrayInputStream(midBytes),
+                midBytes.length,
+                TaskMonitor.DUMMY,
+                false);
+        new DisassembleCommand(mid, new AddressSet(mid, mid.add(4)), false)
+            .applyTo(program, TaskMonitor.DUMMY);
+        program.getListing().createData(mid.add(5), DWordDataType.dataType);
 
-            Address highStart = space.getMaxAddress().subtract(1);
-            byte[] highBytes = {(byte) 0x90, (byte) 0xc3};
-            program
-                .getMemory()
-                .createInitializedBlock(
-                    ".high",
-                    highStart,
-                    new ByteArrayInputStream(highBytes),
-                    highBytes.length,
-                    TaskMonitor.DUMMY,
-                    false);
-            AddressSet highSet = new AddressSet(highStart, space.getMaxAddress());
-            new DisassembleCommand(highSet, highSet, false).applyTo(program, TaskMonitor.DUMMY);
-          });
+        Address highStart = space.getMaxAddress().subtract(1);
+        byte[] highBytes = {(byte) 0x90, (byte) 0xc3};
+        program
+            .getMemory()
+            .createInitializedBlock(
+                ".high",
+                highStart,
+                new ByteArrayInputStream(highBytes),
+                highBytes.length,
+                TaskMonitor.DUMMY,
+                false);
+        AddressSet highSet = new AddressSet(highStart, space.getMaxAddress());
+        new DisassembleCommand(highSet, highSet, false).applyTo(program, TaskMonitor.DUMMY);
+      });
 
       ListingCodeUnitQueries queries =
           new ListingCodeUnitQueries(GhidraTestSupport.sessionFor(holder.program()));
@@ -272,10 +249,7 @@ class ListingCodeUnitQueriesTest {
       // Start inside 5-byte instruction (0x2002) skips 0x2000 and starts at 0x2005
       Page<CodeUnitResource> midForward =
           queries.listCodeUnits(
-              AddressScanOptions.of("ram:00002002", "ram:00002007", 1000),
-              10,
-              "data",
-              null);
+              AddressScanOptions.of("ram:00002002", "ram:00002007", 1000), 10, "data", null);
       assertEquals(
           List.of("ram:00002005"),
           midForward.items().stream().map(CodeUnitResource::address).toList());
@@ -285,10 +259,7 @@ class ListingCodeUnitQueriesTest {
       // Interior slice [0x2001, 0x2003] inside 5-byte instruction has no code unit starts
       Page<CodeUnitResource> interiorSlice =
           queries.listCodeUnits(
-              AddressScanOptions.of("ram:00002001", "ram:00002003", 1000),
-              10,
-              "instruction",
-              null);
+              AddressScanOptions.of("ram:00002001", "ram:00002003", 1000), 10, "instruction", null);
       assertTrue(interiorSlice.items().isEmpty());
       assertNull(interiorSlice.scanProgress().scannedStart());
       assertNull(interiorSlice.scanProgress().scannedEnd());

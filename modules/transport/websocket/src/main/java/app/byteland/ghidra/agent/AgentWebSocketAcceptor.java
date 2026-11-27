@@ -24,13 +24,7 @@ final class AgentWebSocketAcceptor implements Runnable {
       AtomicBoolean running,
       AgentWebSocketServer.PendingSockets pendingSockets,
       AgentWebSocketConnectionRunner connectionRunner) {
-    this(
-        serverSocket,
-        handler,
-        running,
-        pendingSockets,
-        connectionRunner,
-        CONNECTION_THREADS);
+    this(serverSocket, handler, running, pendingSockets, connectionRunner, CONNECTION_THREADS);
   }
 
   AgentWebSocketAcceptor(

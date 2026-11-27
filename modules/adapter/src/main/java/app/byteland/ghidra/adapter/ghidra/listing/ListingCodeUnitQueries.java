@@ -32,12 +32,10 @@ final class ListingCodeUnitQueries {
     Listing listing = context.currentProgram().getListing();
 
     if ("instruction".equalsIgnoreCase(kind)) {
-      return listFiltered(
-          listing, range, cursor, scan, CodeUnitResource.Kind.INSTRUCTION, true);
+      return listFiltered(listing, range, cursor, scan, CodeUnitResource.Kind.INSTRUCTION, true);
     }
     if ("data".equalsIgnoreCase(kind)) {
-      return listFiltered(
-          listing, range, cursor, scan, CodeUnitResource.Kind.DATA, false);
+      return listFiltered(listing, range, cursor, scan, CodeUnitResource.Kind.DATA, false);
     }
 
     Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor);
@@ -126,23 +124,19 @@ final class ListingCodeUnitQueries {
         return null;
       }
       CodeUnit afterCursor = listing.getCodeUnitAfter(cursor);
-      return afterCursor != null && !range.afterEnd(afterCursor.getAddress())
-          ? afterCursor
-          : null;
+      return afterCursor != null && !range.afterEnd(afterCursor.getAddress()) ? afterCursor : null;
     }
     CodeUnit atStart = listing.getCodeUnitAt(range.start());
     CodeUnit first = atStart != null ? atStart : listing.getCodeUnitAfter(range.start());
     return first != null && !range.afterEnd(first.getAddress()) ? first : null;
   }
 
-  private static CodeUnit lastCodeUnitInWindow(
-      Listing listing, AddressScanRanges.Resolved range) {
+  private static CodeUnit lastCodeUnitInWindow(Listing listing, AddressScanRanges.Resolved range) {
     if (range.end() == null) {
       return null;
     }
     CodeUnit containingEnd = listing.getCodeUnitContaining(range.end());
-    CodeUnit last =
-        containingEnd != null ? containingEnd : listing.getCodeUnitBefore(range.end());
+    CodeUnit last = containingEnd != null ? containingEnd : listing.getCodeUnitBefore(range.end());
     return last != null
             && last.getAddress().compareTo(range.start()) >= 0
             && !range.afterEnd(last.getAddress())

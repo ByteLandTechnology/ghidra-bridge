@@ -47,8 +47,7 @@ class GhidraLauncherSnapshotTest {
     for (String launcherClassName : new String[] {"Bridge", "GhidraMcp"}) {
       for (String sourceMode : new String[] {"rw-r--r--", "rw-rw-r--"}) {
         Path sourceJar =
-            createValidRuntimeJar(
-                tempDir.resolve(launcherClassName + "-" + sourceMode + ".jar"));
+            createValidRuntimeJar(tempDir.resolve(launcherClassName + "-" + sourceMode + ".jar"));
         Set<PosixFilePermission> expectedSourcePerms = PosixFilePermissions.fromString(sourceMode);
         Files.setPosixFilePermissions(sourceJar, expectedSourcePerms);
         assertEquals(expectedSourcePerms, Files.getPosixFilePermissions(sourceJar));
@@ -133,14 +132,16 @@ class GhidraLauncherSnapshotTest {
   }
 
   @Test
-  void rootMessageIncludesEndpointAndNestedCausesAcrossInvocationTargetException() throws Exception {
+  void rootMessageIncludesEndpointAndNestedCausesAcrossInvocationTargetException()
+      throws Exception {
     for (String launcherClassName : new String[] {"Bridge", "GhidraMcp"}) {
       Throwable http401Chain =
           new InvocationTargetException(
               new IOException(
                   "Failed to connect to ws://127.0.0.1:8765/ws/agent",
                   new IOException(
-                      null, new IllegalStateException("Unexpected HTTP response status code 401"))));
+                      null,
+                      new IllegalStateException("Unexpected HTTP response status code 401"))));
       String formatted401 = invokeRootMessage(launcherClassName, http401Chain);
       assertEquals(
           "Failed to connect to ws://127.0.0.1:8765/ws/agent:"
@@ -226,11 +227,10 @@ class GhidraLauncherSnapshotTest {
   private static Set<Path> listRuntimeSnapshots(Path tmpDir) throws IOException {
     try (Stream<Path> entries = Files.list(tmpDir)) {
       return entries
-          .filter(
-              path -> {
-                String name = path.getFileName().toString();
-                return name.startsWith("ghidra-bridge-runtime-") && name.endsWith(".jar");
-              })
+          .filter(path -> {
+            String name = path.getFileName().toString();
+            return name.startsWith("ghidra-bridge-runtime-") && name.endsWith(".jar");
+          })
           .collect(Collectors.toSet());
     }
   }

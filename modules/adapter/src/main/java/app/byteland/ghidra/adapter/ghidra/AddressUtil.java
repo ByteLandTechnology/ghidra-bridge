@@ -11,9 +11,7 @@ import ghidra.program.model.listing.Program;
 import ghidra.program.util.AddressEvaluator;
 import java.util.Locale;
 
-/**
- * Utility methods that parse and format Ghidra addresses.
- */
+/** Utility methods that parse and format Ghidra addresses. */
 public final class AddressUtil {
   private AddressUtil() {}
 
@@ -107,9 +105,7 @@ public final class AddressUtil {
     for (int i = 0; i < value.length(); i++) {
       char ch = value.charAt(i);
       boolean hex =
-          (ch >= '0' && ch <= '9')
-              || (ch >= 'a' && ch <= 'f')
-              || (ch >= 'A' && ch <= 'F');
+          (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
       if (!hex) {
         return false;
       }

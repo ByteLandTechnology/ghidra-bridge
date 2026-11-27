@@ -9,9 +9,7 @@ import ghidra.util.task.TaskMonitor;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-/**
- * Provides active Ghidra program access and transaction control for script or GUI hosts.
- */
+/** Provides active Ghidra program access and transaction control for script or GUI hosts. */
 public interface ProgramHost {
   Program currentProgramOrNull();
 

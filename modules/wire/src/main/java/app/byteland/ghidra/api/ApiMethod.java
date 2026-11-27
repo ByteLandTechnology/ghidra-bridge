@@ -208,8 +208,7 @@ public record ApiMethod<Request, Response>(
         throw ApiException.badRequest(
             "invalid_fields", "/projection/fields is not supported", "/projection/fields");
       }
-      Set<String> selected =
-          java.util.LinkedHashSet.newLinkedHashSet(identityFields.size() + size);
+      Set<String> selected = java.util.LinkedHashSet.newLinkedHashSet(identityFields.size() + size);
       selected.addAll(identityFields);
       Set<String> explicitlyRequested = java.util.LinkedHashSet.newLinkedHashSet(size);
       for (int index = 0; index < size; index++) {

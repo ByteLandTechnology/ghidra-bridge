@@ -17,9 +17,7 @@ class ApiCatalogTest {
   @Test
   void apiMethodExposesEightRecordComponentsAndExpectedNestedTypes() {
     List<String> components =
-        Arrays.stream(ApiMethod.class.getRecordComponents())
-            .map(RecordComponent::getName)
-            .toList();
+        Arrays.stream(ApiMethod.class.getRecordComponents()).map(RecordComponent::getName).toList();
     assertEquals(
         List.of(
             "name",

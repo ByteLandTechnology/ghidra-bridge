@@ -2,12 +2,9 @@ package app.byteland.ghidra.api;
 
 import java.io.Serial;
 
-/**
- * Represents a structured API error with HTTP status and JSON pointer.
- */
+/** Represents a structured API error with HTTP status and JSON pointer. */
 public final class ApiException extends RuntimeException {
-  @Serial
-  private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
   private final int httpStatus;
   private final transient BridgeError bridgeError;
 

@@ -19,9 +19,8 @@ public record AddressResource(
     SymbolSummary symbol,
     CodeUnitSummary codeUnit) {
   public record CodeUnitSummary(String address, String end) {}
-  /**
-   * Summarizes memory block attributes for an address.
-   */
+
+  /** Summarizes memory block attributes for an address. */
   public record MemoryBlockSummary(
       String name,
       String start,
@@ -31,13 +30,9 @@ public record AddressResource(
       boolean write,
       boolean execute) {}
 
-  /**
-   * Summarizes the function that contains an address.
-   */
+  /** Summarizes the function that contains an address. */
   public record FunctionSummary(String entry, String name) {}
 
-  /**
-   * Summarizes the primary symbol for an address.
-   */
+  /** Summarizes the primary symbol for an address. */
   public record SymbolSummary(String id, String name, String type) {}
 }

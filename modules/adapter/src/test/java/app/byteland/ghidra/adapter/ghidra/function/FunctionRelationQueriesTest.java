@@ -54,7 +54,8 @@ class FunctionRelationQueriesTest {
     FunctionRelationQueries queries =
         new FunctionRelationQueries(fixture.session, fixture::resolve);
 
-    // Page 1 (cursor == null): bounded selection, zero snapshot retained, only 8 items materialized.
+    // Page 1 (cursor == null): bounded selection, zero snapshot retained, only 8 items
+    // materialized.
     Page<FunctionCallResource> p1 = queries.getCallers("ram:00100000", 8, null);
     assertEquals(8, p1.items().size());
     assertEquals("ram:00200000", p1.items().getFirst().entry());
@@ -144,8 +145,7 @@ class FunctionRelationQueriesTest {
     assertEquals(2, namespaceLookups.get());
     assertEquals(2, programLookups.get());
 
-    Page<FunctionCallResource> page2 =
-        queries.getCallers("ram:00400000", 2, page1.nextCursor());
+    Page<FunctionCallResource> page2 = queries.getCallers("ram:00400000", 2, page1.nextCursor());
     assertEquals(
         List.of("ram:00403000", "ram:00404000"),
         page2.items().stream().map(FunctionCallResource::entry).toList());
@@ -158,8 +158,7 @@ class FunctionRelationQueriesTest {
         List.of("ram:00401000", "ram:00402000"),
         exactLimitCallees.items().stream().map(FunctionCallResource::entry).toList());
     assertEquals(
-        FunctionCallResource.Direction.CALLEES,
-        exactLimitCallees.items().getFirst().direction());
+        FunctionCallResource.Direction.CALLEES, exactLimitCallees.items().getFirst().direction());
     assertNull(exactLimitCallees.nextCursor());
 
     Function emptyTarget = rootFunction(Set.of(), Set.of());
@@ -178,43 +177,38 @@ class FunctionRelationQueriesTest {
             GhidraTestSupport.createX64Program("fn-callers-primary");
         GhidraTestSupport.ProgramHolder secondary =
             GhidraTestSupport.createX64Program("fn-callers-secondary")) {
-      primary.inTransaction(
-          program -> {
-            try {
-              program.setExecutableFormat("Executable and Linking Format (ELF)");
-              AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
-              Address targetAddr = space.getAddress(0x00401000L);
-              program
-                  .getFunctionManager()
-                  .createFunction(
-                      "target_fn",
-                      targetAddr,
-                      new AddressSet(targetAddr, targetAddr.add(3)),
-                      SourceType.USER_DEFINED);
-              for (int i = 0; i < 6; i++) {
-                Address callerAddr = space.getAddress(0x00401100L + (i * 0x20L));
-                String fnName = "caller" + i;
-                String mangledName = "_ZN3pkg" + fnName.length() + fnName + "Ei";
-                program
-                    .getFunctionManager()
-                    .createFunction(
-                        mangledName,
-                        callerAddr,
-                        new AddressSet(callerAddr, callerAddr.add(7)),
-                        SourceType.USER_DEFINED);
-                program
-                    .getReferenceManager()
-                    .addMemoryReference(
-                        callerAddr,
-                        targetAddr,
-                        RefType.UNCONDITIONAL_CALL,
-                        SourceType.USER_DEFINED,
-                        0);
-              }
-            } catch (Exception error) {
-              throw new RuntimeException(error);
-            }
-          });
+      primary.inTransaction(program -> {
+        try {
+          program.setExecutableFormat("Executable and Linking Format (ELF)");
+          AddressSpace space = program.getAddressFactory().getDefaultAddressSpace();
+          Address targetAddr = space.getAddress(0x00401000L);
+          program
+              .getFunctionManager()
+              .createFunction(
+                  "target_fn",
+                  targetAddr,
+                  new AddressSet(targetAddr, targetAddr.add(3)),
+                  SourceType.USER_DEFINED);
+          for (int i = 0; i < 6; i++) {
+            Address callerAddr = space.getAddress(0x00401100L + (i * 0x20L));
+            String fnName = "caller" + i;
+            String mangledName = "_ZN3pkg" + fnName.length() + fnName + "Ei";
+            program
+                .getFunctionManager()
+                .createFunction(
+                    mangledName,
+                    callerAddr,
+                    new AddressSet(callerAddr, callerAddr.add(7)),
+                    SourceType.USER_DEFINED);
+            program
+                .getReferenceManager()
+                .addMemoryReference(
+                    callerAddr, targetAddr, RefType.UNCONDITIONAL_CALL, SourceType.USER_DEFINED, 0);
+          }
+        } catch (Exception error) {
+          throw new RuntimeException(error);
+        }
+      });
 
       AtomicReference<Program> activeProgram = new AtomicReference<>(primary.program());
       GhidraScript poisonScript =
@@ -247,20 +241,18 @@ class FunctionRelationQueriesTest {
         List<Future<List<FunctionCallResource>>> readers = new ArrayList<>();
         for (int t = 0; t < 8; t++) {
           readers.add(
-              pool.submit(
-                  () -> {
-                    start.await();
-                    List<FunctionCallResource> all = new ArrayList<>();
-                    String cursor = null;
-                    while (true) {
-                      Page<FunctionCallResource> page =
-                          service.getCallers("0x00401000", 2, cursor);
-                      all.addAll(page.items());
-                      cursor = page.nextCursor();
-                      if (cursor == null) break;
-                    }
-                    return all;
-                  }));
+              pool.submit(() -> {
+                start.await();
+                List<FunctionCallResource> all = new ArrayList<>();
+                String cursor = null;
+                while (true) {
+                  Page<FunctionCallResource> page = service.getCallers("0x00401000", 2, cursor);
+                  all.addAll(page.items());
+                  cursor = page.nextCursor();
+                  if (cursor == null) break;
+                }
+                return all;
+              }));
         }
         start.countDown();
         for (Future<List<FunctionCallResource>> reader : readers) {

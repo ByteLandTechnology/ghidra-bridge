@@ -118,9 +118,7 @@ class AgentConfigTest {
         "exit_deadline_sec requires ws_url",
         assertThrows(
                 IllegalArgumentException.class,
-                () ->
-                    AgentConfig.fromArgs(
-                        "port=8765", "session_id=demo", "exit_deadline_sec=5"))
+                () -> AgentConfig.fromArgs("port=8765", "session_id=demo", "exit_deadline_sec=5"))
             .getMessage());
 
     assertEquals(
@@ -138,7 +136,9 @@ class AgentConfigTest {
         "unknown startup argument: tool_prefix",
         assertThrows(
                 IllegalArgumentException.class,
-                () -> AgentConfig.fromMap(Map.of("port", "8765", "session_id", "d", "tool_prefix", "x")))
+                () ->
+                    AgentConfig.fromMap(
+                        Map.of("port", "8765", "session_id", "d", "tool_prefix", "x")))
             .getMessage());
   }
 
@@ -201,7 +201,8 @@ class AgentConfigTest {
   }
 
   @Test
-  @DisplayName("Rejects plain and percent-encoded token query parameters without leaking credentials")
+  @DisplayName(
+      "Rejects plain and percent-encoded token query parameters without leaking credentials")
   void rejectsQueryTokenParameters() {
     IllegalArgumentException plainEx =
         assertThrows(
@@ -272,10 +273,10 @@ class AgentConfigTest {
   }
 
   @Test
-  @DisplayName("Rejects URI userinfo and omits credentials from redactedWsUrl and exception messages")
+  @DisplayName(
+      "Rejects URI userinfo and omits credentials from redactedWsUrl and exception messages")
   void rejectsAndRedactsUserInfoWithoutLeakingCredentials() {
-    String urlWithUserInfo =
-        "ws://marker-user:marker-userinfo-cred@127.0.0.1:8765/ws/agent?foo=1";
+    String urlWithUserInfo = "ws://marker-user:marker-userinfo-cred@127.0.0.1:8765/ws/agent?foo=1";
 
     IllegalArgumentException userInfoEx =
         assertThrows(
@@ -295,11 +296,9 @@ class AgentConfigTest {
         AgentConfig.redactWsUrl("ws://marker-user:marker-userinfo-cred@127.0.0.1:8765/ws/agent"));
     assertEquals(
         "ws://[::1]:8765/ws/agent?<redacted>",
-        AgentConfig.redactWsUrl(
-            "ws://marker-user:marker-userinfo-cred@[::1]:8765/ws/agent#frag"));
+        AgentConfig.redactWsUrl("ws://marker-user:marker-userinfo-cred@[::1]:8765/ws/agent#frag"));
     assertEquals(
-        "ws://127.0.0.1:8765/ws/@agent",
-        AgentConfig.redactWsUrl("ws://127.0.0.1:8765/ws/@agent"));
+        "ws://127.0.0.1:8765/ws/@agent", AgentConfig.redactWsUrl("ws://127.0.0.1:8765/ws/@agent"));
     assertNull(AgentConfig.redactWsUrl(null));
 
     AgentConfig validWithQuery =

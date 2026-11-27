@@ -16,14 +16,21 @@ record FunctionComments(List<CommentResource> items, boolean complete) {
   static final long POST_DECOMPILE_GRACE_NANOS = TimeUnit.MILLISECONDS.toNanos(250);
 
   static FunctionComments read(
-      Function function, long startedAt, int timeoutMs, boolean decompileCompleted,
+      Function function,
+      long startedAt,
+      int timeoutMs,
+      boolean decompileCompleted,
       List<String> warnings) {
     return read(function, startedAt, timeoutMs, decompileCompleted, warnings, System::nanoTime);
   }
 
   static FunctionComments read(
-      Function function, long startedAt, int timeoutMs, boolean decompileCompleted,
-      List<String> warnings, LongSupplier nanoTime) {
+      Function function,
+      long startedAt,
+      int timeoutMs,
+      boolean decompileCompleted,
+      List<String> warnings,
+      LongSupplier nanoTime) {
     List<CommentResource> comments = new ArrayList<>();
     long deadline = deadlineNanos(startedAt, timeoutMs, decompileCompleted, nanoTime.getAsLong());
     try {
@@ -37,8 +44,9 @@ record FunctionComments(List<CommentResource> items, boolean complete) {
         }
         String text = listing.getComment(CommentType.REPEATABLE, address);
         if (text != null) {
-          comments.add(new CommentResource(
-              AddressUtil.canonicalAddress(address), CommentResource.Type.REPEATABLE, text));
+          comments.add(
+              new CommentResource(
+                  AddressUtil.canonicalAddress(address), CommentResource.Type.REPEATABLE, text));
         }
       }
       return new FunctionComments(List.copyOf(comments), true);

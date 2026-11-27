@@ -147,8 +147,8 @@ final class AgentWebSocketConnectionRunner {
     }
   }
 
-  private void runFrameLoop(
-      Socket socket, AgentServerConnection connection, CloseState closeState) throws IOException {
+  private void runFrameLoop(Socket socket, AgentServerConnection connection, CloseState closeState)
+      throws IOException {
     FragmentAssembler fragments = new FragmentAssembler();
     boolean awaitingPong = false;
     long pongDeadlineNanos = 0L;
