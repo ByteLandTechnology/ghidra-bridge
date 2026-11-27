@@ -163,6 +163,33 @@ class ProgramAndMemoryMutationTest {
     assertFalse(registry.method("memory_block.create").effects().allowedDuringAnalysis());
     assertTrue(registry.method("memory_block.create").effects().batchable());
 
+    Map<String, Object> decodedMinimalBlock =
+        registry
+            .method("memory_block.create")
+            .decodeRequest(
+                Map.of(
+                    "resource",
+                    Map.of("name", "SRAM", "start", "0x20000000", "length", 4096)));
+    assertEquals(
+        Map.of(
+            "name",
+            "SRAM",
+            "start",
+            "0x20000000",
+            "length",
+            4096,
+            "read",
+            true,
+            "write",
+            true,
+            "execute",
+            false,
+            "is_volatile",
+            false,
+            "overlay",
+            false),
+        decodedMinimalBlock.get("resource"));
+
     Map<?, ?> rebased =
         (Map<?, ?>) registry.dispatch("program.rebase", Map.of("image_base", "0x08000000"));
     assertEquals("ram:08000000", rebased.get("image_base"));

@@ -14,7 +14,7 @@ body:
       placeholder: |
         1. Build with `./gradlew buildGhidraScript`.
         2. Start `GhidraMcp.java` with `port=8766 session_id=demo`.
-        3. Send a `tools/call` request to `ghidra.function`.
+        3. Send a `tools/call` request to `ghidra_function`.
     validations:
       required: true
   - type: textarea
