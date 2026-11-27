@@ -103,10 +103,13 @@ public final class AnalysisServiceImpl implements AnalysisService {
       activeStates = List.copyOf(states.values());
       states.clear();
     }
-    for (ProgramAnalysisState state : activeStates) {
-      stopState(state);
+    try {
+      for (ProgramAnalysisState state : activeStates) {
+        stopState(state);
+      }
+    } finally {
+      context.close();
     }
-    context.close();
   }
 
   private ProgramAnalysisState stateFor(Program program) {

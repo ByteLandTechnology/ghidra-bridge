@@ -49,6 +49,7 @@ final class AnalysisTask {
   }
 
   private TaskOutcome performAnalysis() {
+    context.onAnalysisStarted(program);
     Map<String, String> previousAnalysisOptions = null;
     AnalysisResource.Status terminalStatus;
     String terminalError = null;
@@ -101,18 +102,22 @@ final class AnalysisTask {
         terminalError = appendError(terminalError, restoreError);
       }
     }
-    if (terminalStatus == AnalysisResource.Status.COMPLETED) {
-      if (monitor.isCancelled()) {
-        return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
+    try {
+      if (terminalStatus == AnalysisResource.Status.COMPLETED) {
+        if (monitor.isCancelled()) {
+          return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
+        }
+        context.withProgramTransaction(
+            program,
+            () -> {
+              GhidraProgramUtilities.markProgramAnalyzed(program);
+              return null;
+            });
       }
-      context.withProgramTransaction(
-          program,
-          () -> {
-            GhidraProgramUtilities.markProgramAnalyzed(program);
-            return null;
-          });
+      return new TaskOutcome(terminalStatus, terminalError);
+    } finally {
+      context.onAnalysisFinished(program);
     }
-    return new TaskOutcome(terminalStatus, terminalError);
   }
 
   boolean isRunning() {

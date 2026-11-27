@@ -3,6 +3,7 @@ package app.byteland.ghidra.adapter.ghidra;
 import app.byteland.ghidra.service.TransactionExecutionException;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.util.demangler.DemanglerUtil;
 import ghidra.framework.cmd.Command;
 import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
@@ -17,25 +18,35 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * Coordinates Ghidra program access, commands, and transaction lifecycles.
+ * Coordinates Ghidra program access, commands, transaction lifecycles, and session C++ indexing.
  */
 public final class GhidraSession implements AutoCloseable {
   private final ProgramHost host;
   private final QuerySnapshotCache querySnapshots;
   private final BooleanSupplier analyzingSupplier;
   private final boolean allowProxySnapshots;
-  private final Object executionLock = new Object();
+  private final ReentrantLock executionLock = new ReentrantLock();
   private final List<Consumer<Program>> programCloseListeners = new CopyOnWriteArrayList<>();
+  private final AtomicInteger bridgeAnalysisDepth = new AtomicInteger();
+  private final Object analysisProgramsLock = new Object();
+  private final Map<Program, Integer> analyzingPrograms = new IdentityHashMap<>();
+  private volatile boolean hasAnalyzingPrograms;
+  private final CppSymbolIndex cppSymbols;
   private volatile WeakReference<Program> snapshotProgram = new WeakReference<>(null);
-  private int transactionDepth;
+  private volatile WeakReference<Program> indexedProgram = new WeakReference<>(null);
+  private volatile int transactionDepth;
   private Program pinnedProgram;
 
   public GhidraSession(GhidraScript script) {
@@ -47,7 +58,7 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public GhidraSession(ProgramHost host) {
-    this(host, new QuerySnapshotCache(), null, false);
+    this(host, new QuerySnapshotCache(), null, false, null, null);
   }
 
   public GhidraSession(
@@ -58,7 +69,9 @@ public final class GhidraSession implements AutoCloseable {
         ProgramHost.forScript(Objects.requireNonNull(script, "script")),
         querySnapshots,
         Objects.requireNonNull(analyzingSupplier, "analyzingSupplier"),
-        true);
+        true,
+        null,
+        null);
   }
 
   public GhidraSession(
@@ -69,23 +82,61 @@ public final class GhidraSession implements AutoCloseable {
         host,
         querySnapshots,
         Objects.requireNonNull(analyzingSupplier, "analyzingSupplier"),
-        true);
+        true,
+        null,
+        null);
+  }
+
+  public GhidraSession(
+      GhidraScript script, CppSymbolIndexConfig indexConfig, CppDemangler demangler) {
+    this(
+        ProgramHost.forScript(Objects.requireNonNull(script, "script")),
+        indexConfig,
+        demangler);
+  }
+
+  public GhidraSession(
+      ProgramHost host, CppSymbolIndexConfig indexConfig, CppDemangler demangler) {
+    this(
+        host,
+        new QuerySnapshotCache(),
+        null,
+        false,
+        Objects.requireNonNull(indexConfig, "indexConfig"),
+        Objects.requireNonNull(demangler, "demangler"));
   }
 
   private GhidraSession(
       ProgramHost host,
       QuerySnapshotCache querySnapshots,
       BooleanSupplier analyzingSupplier,
-      boolean allowProxySnapshots) {
+      boolean allowProxySnapshots,
+      CppSymbolIndexConfig customConfig,
+      CppDemangler customDemangler) {
     this.host = Objects.requireNonNull(host, "host");
     this.querySnapshots = Objects.requireNonNull(querySnapshots, "querySnapshots");
     this.analyzingSupplier = analyzingSupplier;
     this.allowProxySnapshots = allowProxySnapshots;
+    this.cppSymbols =
+        customConfig == null
+            ? new CppSymbolIndex(this)
+            : new CppSymbolIndex(
+                this,
+                customConfig,
+                customDemangler != null ? customDemangler : DemanglerUtil::demangle);
+    Program initial = host.currentProgramOrNull();
+    if (initial != null) {
+      this.indexedProgram = new WeakReference<>(initial);
+      CppSymbolNames.bindSessionIndex(initial, this.cppSymbols);
+    }
   }
 
   public FlatProgramAPI flatApi() {
-    synchronized (executionLock) {
+    executionLock.lock();
+    try {
       return host.flatApi(pinnedProgram);
+    } finally {
+      executionLock.unlock();
     }
   }
 
@@ -102,16 +153,39 @@ public final class GhidraSession implements AutoCloseable {
     return querySnapshots;
   }
 
+  public CppSymbolIndex cppSymbols() {
+    syncActiveProgram();
+    return cppSymbols;
+  }
+
+  public void startCppSymbolPrewarm() {
+    syncActiveProgram();
+    Program current = currentProgramOrNull();
+    if (current != null) {
+      CppSymbolNames.bindSessionIndex(current, cppSymbols);
+    }
+    cppSymbols.startPrewarm();
+  }
+
   public long modificationNumber() {
     Program program = currentProgramOrNull();
     return program == null ? 0L : program.getModificationNumber();
   }
 
   public boolean isAnalyzing() {
+    return isAnalyzing(currentProgramOrNull());
+  }
+
+  boolean isAnalyzing(Program program) {
+    if (bridgeAnalysisDepth.get() > 0) {
+      return true;
+    }
+    if (program != null && hasAnalyzingPrograms && isBridgeAnalyzingProgram(program)) {
+      return true;
+    }
     if (analyzingSupplier != null) {
       return analyzingSupplier.getAsBoolean();
     }
-    Program program = currentProgramOrNull();
     return program != null
         && !Proxy.isProxyClass(program.getClass())
         && AutoAnalysisManager.hasAutoAnalysisManager(program)
@@ -119,14 +193,89 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public boolean canCacheSnapshots() {
-    Program program = currentProgramOrNull();
+    return canCacheSnapshots(currentProgramOrNull());
+  }
+
+  boolean canCacheSnapshots(Program program) {
     if (program == null) {
       return false;
     }
     if (!allowProxySnapshots && Proxy.isProxyClass(program.getClass())) {
       return false;
     }
-    return !isAnalyzing();
+    return !isAnalyzing(program);
+  }
+
+  boolean canCacheSymbolSnapshot(Program program) {
+    return program != null
+        && !Proxy.isProxyClass(program.getClass())
+        && !isAnalyzing(program);
+  }
+
+  public boolean holdsExecutionLock() {
+    return executionLock.isHeldByCurrentThread();
+  }
+
+  public void onAnalysisStarted() {
+    bridgeAnalysisDepth.incrementAndGet();
+    querySnapshots.clear();
+    cppSymbols.invalidateSnapshots();
+    cppSymbols.onSessionStateChanged();
+  }
+
+  public void onAnalysisFinished() {
+    bridgeAnalysisDepth.decrementAndGet();
+    querySnapshots.clear();
+    cppSymbols.onSessionStateChanged();
+  }
+
+  public void onAnalysisStarted(Program program) {
+    if (program == null) {
+      onAnalysisStarted();
+      return;
+    }
+    synchronized (analysisProgramsLock) {
+      analyzingPrograms.merge(program, 1, Integer::sum);
+      hasAnalyzingPrograms = true;
+    }
+    if (snapshotProgram.refersTo(program)) {
+      querySnapshots.clear();
+    }
+    if (indexedProgram.refersTo(program)) {
+      cppSymbols.invalidateSnapshots();
+      cppSymbols.onSessionStateChanged();
+    }
+  }
+
+  public void onAnalysisFinished(Program program) {
+    if (program == null) {
+      onAnalysisFinished();
+      return;
+    }
+    synchronized (analysisProgramsLock) {
+      Integer count = analyzingPrograms.get(program);
+      if (count != null) {
+        if (count <= 1) {
+          analyzingPrograms.remove(program);
+        } else {
+          analyzingPrograms.put(program, count - 1);
+        }
+      }
+      hasAnalyzingPrograms = !analyzingPrograms.isEmpty();
+    }
+    if (snapshotProgram.refersTo(program)) {
+      querySnapshots.clear();
+    }
+    if (indexedProgram.refersTo(program)) {
+      cppSymbols.invalidateSnapshots();
+      cppSymbols.onSessionStateChanged();
+    }
+  }
+
+  private boolean isBridgeAnalyzingProgram(Program program) {
+    synchronized (analysisProgramsLock) {
+      return analyzingPrograms.containsKey(program);
+    }
   }
 
   @Override
@@ -135,6 +284,17 @@ public final class GhidraSession implements AutoCloseable {
       querySnapshots.clear();
       snapshotProgram = new WeakReference<>(null);
     }
+    synchronized (analysisProgramsLock) {
+      analyzingPrograms.clear();
+      hasAnalyzingPrograms = false;
+    }
+    Program bound = indexedProgram.get();
+    CppSymbolNames.unbindSessionIndex(bound, cppSymbols);
+    Program current = host.currentProgramOrNull();
+    if (current != bound) {
+      CppSymbolNames.unbindSessionIndex(current, cppSymbols);
+    }
+    cppSymbols.close();
   }
 
   public Program currentProgram() {
@@ -146,10 +306,14 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public Program currentProgramOrNull() {
-    if (Thread.holdsLock(executionLock) && pinnedProgram != null) {
+    if (executionLock.isHeldByCurrentThread() && pinnedProgram != null) {
       return pinnedProgram;
     }
-    return host.currentProgramOrNull();
+    Program current = host.currentProgramOrNull();
+    if (!indexedProgram.refersTo(current) && canSyncActiveProgramNow()) {
+      syncActiveProgram();
+    }
+    return current;
   }
 
   public void onProgramClosed(Consumer<Program> listener) {
@@ -160,8 +324,15 @@ public final class GhidraSession implements AutoCloseable {
     if (program == null) {
       return;
     }
-    synchronized (executionLock) {
+    synchronized (analysisProgramsLock) {
+      analyzingPrograms.remove(program);
+      hasAnalyzingPrograms = !analyzingPrograms.isEmpty();
+    }
+    executionLock.lock();
+    try {
       host.releaseProgram(program);
+    } finally {
+      executionLock.unlock();
     }
     if (snapshotProgram.refersTo(program)) {
       synchronized (querySnapshots) {
@@ -171,13 +342,25 @@ public final class GhidraSession implements AutoCloseable {
         }
       }
     }
+    synchronized (cppSymbols) {
+      CppSymbolNames.unbindSessionIndex(program, cppSymbols);
+      if (indexedProgram.refersTo(program)) {
+        cppSymbols.resetForProgramSwitch();
+        indexedProgram = new WeakReference<>(null);
+      }
+    }
+    if (host.currentProgramOrNull() != program) {
+      syncActiveProgram();
+    }
+    cppSymbols.onSessionStateChanged();
     for (Consumer<Program> listener : programCloseListeners) {
       listener.accept(program);
     }
   }
 
   public void saveCurrentProgram() {
-    synchronized (executionLock) {
+    executionLock.lock();
+    try {
       try {
         host.saveProgram(currentProgram());
       } catch (Exception error) {
@@ -187,6 +370,8 @@ public final class GhidraSession implements AutoCloseable {
         }
         throw new IllegalStateException("Unable to save current program: " + detail, error);
       }
+    } finally {
+      unlockAndNotify();
     }
   }
 
@@ -256,7 +441,8 @@ public final class GhidraSession implements AutoCloseable {
   private <T> T withTransaction(
       Program explicitProgram, TransactionalOperation<T> operation, boolean commitChanges) {
     Objects.requireNonNull(operation, "operation");
-    synchronized (executionLock) {
+    executionLock.lock();
+    try {
       if (transactionDepth > 0) {
         if (!commitChanges) {
           throw new IllegalStateException("Temporary changes require an independent transaction");
@@ -267,6 +453,9 @@ public final class GhidraSession implements AutoCloseable {
         return runOperation(operation);
       }
 
+      if (explicitProgram == null) {
+        syncActiveProgram();
+      }
       Program targetProgram = host.resolveTransactionProgram(explicitProgram);
       int transactionId = host.beginTransaction(targetProgram);
       pinnedProgram = targetProgram;
@@ -283,14 +472,20 @@ public final class GhidraSession implements AutoCloseable {
           host.finishTransaction(targetProgram, transactionId, commit);
         } finally {
           querySnapshots.clear();
+          if (targetProgram == null || indexedProgram.refersTo(targetProgram)) {
+            cppSymbols.invalidateSnapshots();
+          }
         }
       }
+    } finally {
+      unlockAndNotify();
     }
   }
 
   public void runCommand(Command<Program> command, String failurePrefix) {
     Objects.requireNonNull(command, "command");
-    synchronized (executionLock) {
+    executionLock.lock();
+    try {
       try {
         if (transactionDepth == 0 && host.requiresCommandTransaction()) {
           if (withTransaction(() -> host.runCommand(currentProgram(), command))) {
@@ -301,13 +496,95 @@ public final class GhidraSession implements AutoCloseable {
         }
       } finally {
         querySnapshots.clear();
+        cppSymbols.invalidateSnapshots();
       }
+    } finally {
+      unlockAndNotify();
     }
     String status = command.getStatusMsg();
     if (status == null || status.isBlank()) {
       status = "command failed";
     }
     throw new TransactionExecutionException(failurePrefix + ": " + status);
+  }
+
+  Program peekCurrentProgramOrNull() {
+    if (executionLock.isHeldByCurrentThread() && pinnedProgram != null) {
+      return pinnedProgram;
+    }
+    return host.currentProgramOrNull();
+  }
+
+  boolean isIndexedProgram(Program program) {
+    return indexedProgram.refersTo(program);
+  }
+
+  void syncActiveProgramIfIdle() {
+    syncActiveProgram();
+  }
+
+  boolean isPausedForPrewarm(Program program) {
+    return transactionDepth > 0
+        || executionLock.isLocked()
+        || isAnalyzing(program)
+        || !indexedProgram.refersTo(program);
+  }
+
+  <T> T tryCollectForPrewarm(Program program, Supplier<T> collector, T pausedValue) {
+    syncActiveProgram();
+    if (transactionDepth > 0 || isAnalyzing(program) || !indexedProgram.refersTo(program)) {
+      return pausedValue;
+    }
+    if (!executionLock.tryLock()) {
+      return pausedValue;
+    }
+    try {
+      if (transactionDepth > 0 || isAnalyzing(program) || !indexedProgram.refersTo(program)) {
+        return pausedValue;
+      }
+      return collector.get();
+    } finally {
+      executionLock.unlock();
+    }
+  }
+
+  private boolean canSyncActiveProgramNow() {
+    return transactionDepth == 0
+        && (!executionLock.isLocked() || executionLock.isHeldByCurrentThread());
+  }
+
+  private void syncActiveProgram() {
+    if (!canSyncActiveProgramNow()) {
+      return;
+    }
+    Program current = host.currentProgramOrNull();
+    if (!indexedProgram.refersTo(current)) {
+      synchronized (cppSymbols) {
+        if (!canSyncActiveProgramNow()) {
+          return;
+        }
+        current = host.currentProgramOrNull();
+        if (!indexedProgram.refersTo(current)) {
+          Program previous = indexedProgram.get();
+          if (previous != null) {
+            CppSymbolNames.unbindSessionIndex(previous, cppSymbols);
+          }
+          cppSymbols.resetForProgramSwitch();
+          indexedProgram = new WeakReference<>(current);
+          if (current != null && !cppSymbols.isClosed()) {
+            CppSymbolNames.bindSessionIndex(current, cppSymbols);
+          }
+        }
+      }
+    }
+  }
+
+  private void unlockAndNotify() {
+    executionLock.unlock();
+    if (!executionLock.isHeldByCurrentThread()) {
+      syncActiveProgram();
+      cppSymbols.onSessionStateChanged();
+    }
   }
 
   @FunctionalInterface

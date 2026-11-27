@@ -28,6 +28,11 @@ public final class CppSymbolNames {
   private static final ConcurrentHashMap<Object, ProgramCache> CACHES = new ConcurrentHashMap<>();
   private static volatile LastProgramCache lastProgramCache;
 
+  private static final ReferenceQueue<Program> STALE_SESSION_PROGRAMS = new ReferenceQueue<>();
+  private static final ConcurrentHashMap<Object, WeakReference<CppSymbolIndex>> SESSION_INDEXES =
+      new ConcurrentHashMap<>();
+  private static volatile LastSessionIndex lastSessionIndex;
+
   private CppSymbolNames() {}
 
   public static String demangled(Program program, String name, Address address) {
@@ -36,6 +41,10 @@ public final class CppSymbolNames {
 
   public static DecodedSymbol decode(Program program, String name, Address address) {
     if (program == null || !isMangled(name)) return DecodedSymbol.EMPTY;
+    CppSymbolIndex sessionIndex = sessionIndexFor(program);
+    if (sessionIndex != null) {
+      return sessionIndex.lookup(program, name, address);
+    }
     ProgramCache cache = cacheFor(program);
     DecodedSymbol cached = cache.get(name);
     if (cached != null) return cached;
@@ -49,6 +58,98 @@ public final class CppSymbolNames {
   public static boolean isMangled(String name) {
     return name != null
         && (name.startsWith("_Z") || name.startsWith("__Z") || name.startsWith("?"));
+  }
+
+  static void bindSessionIndex(Program program, CppSymbolIndex index) {
+    expungeStaleSessionPrograms();
+    if (program == null || index == null || index.isClosed()) {
+      return;
+    }
+    SESSION_INDEXES.remove(new LookupKey(program));
+    WeakReference<CppSymbolIndex> indexRef = new WeakReference<>(index);
+    SESSION_INDEXES.put(new WeakProgramKey(program, STALE_SESSION_PROGRAMS), indexRef);
+    lastSessionIndex = new LastSessionIndex(new WeakReference<>(program), indexRef);
+  }
+
+  static void unbindSessionIndex(Program program, CppSymbolIndex index) {
+    expungeStaleSessionPrograms();
+    if (program == null || index == null) {
+      return;
+    }
+    LookupKey lookupKey = new LookupKey(program);
+    WeakReference<CppSymbolIndex> current = SESSION_INDEXES.get(lookupKey);
+    if (current != null && (current.refersTo(index) || current.refersTo(null))) {
+      SESSION_INDEXES.remove(lookupKey, current);
+    }
+    LastSessionIndex recent = lastSessionIndex;
+    if (recent != null
+        && (recent.indexRef.refersTo(index)
+            || recent.indexRef.refersTo(null)
+            || recent.programRef.refersTo(null))) {
+      lastSessionIndex = null;
+    }
+  }
+
+  static CppSymbolIndex sessionIndexFor(Program program) {
+    if (program == null) {
+      return null;
+    }
+    LastSessionIndex recent = lastSessionIndex;
+    if (recent != null && recent.programRef.refersTo(program)) {
+      CppSymbolIndex index = recent.indexRef.get();
+      if (index != null && !index.isClosed()) {
+        return index;
+      }
+      lastSessionIndex = null;
+    }
+    expungeStaleSessionPrograms();
+    LookupKey lookupKey = new LookupKey(program);
+    WeakReference<CppSymbolIndex> ref = SESSION_INDEXES.get(lookupKey);
+    if (ref == null) {
+      return null;
+    }
+    CppSymbolIndex index = ref.get();
+    if (index == null || index.isClosed()) {
+      SESSION_INDEXES.remove(lookupKey, ref);
+      return null;
+    }
+    lastSessionIndex = new LastSessionIndex(new WeakReference<>(program), ref);
+    return index;
+  }
+
+  static DecodedSymbol peekCached(Program program, String name) {
+    if (program == null || !isMangled(name)) {
+      return null;
+    }
+    LastProgramCache recent = lastProgramCache;
+    if (recent != null && recent.programRef.refersTo(program)) {
+      return recent.cache.get(name);
+    }
+    expungeStalePrograms();
+    ProgramCache existing = CACHES.get(new LookupKey(program));
+    return existing == null ? null : existing.get(name);
+  }
+
+  static DecodedSymbol decodeWith(
+      CppDemangler demangler, Program program, String name, Address address) {
+    List<DemangledObject> objects = demangler.demangle(program, name, address);
+    if (objects == null || objects.isEmpty()) return DecodedSymbol.EMPTY;
+    String signature = null;
+    List<NameCandidate> candidates = new ArrayList<>(objects.size());
+    for (DemangledObject object : objects) {
+      if (object == null) continue;
+      if (signature == null) {
+        String candidate = object.getSignature(false);
+        if (candidate != null && !candidate.isBlank() && !candidate.equals(name)) {
+          signature = candidate;
+        }
+      }
+      candidates.add(
+          new NameCandidate(
+              object.getOriginalDemangled(), object.getName(), object.getNamespace()));
+    }
+    if (signature == null && candidates.isEmpty()) return DecodedSymbol.EMPTY;
+    return new DecodedSymbol(signature, candidates);
   }
 
   static int targetCapacity(Program program) {
@@ -111,29 +212,23 @@ public final class CppSymbolNames {
     }
   }
 
-  private static DecodedSymbol runDemangler(Program program, String name, Address address) {
-    List<DemangledObject> objects = DemanglerUtil.demangle(program, name, address);
-    if (objects == null || objects.isEmpty()) return DecodedSymbol.EMPTY;
-    String signature = null;
-    List<NameCandidate> candidates = new ArrayList<>(objects.size());
-    for (DemangledObject object : objects) {
-      if (object == null) continue;
-      if (signature == null) {
-        String candidate = object.getSignature(false);
-        if (candidate != null && !candidate.isBlank() && !candidate.equals(name)) {
-          signature = candidate;
-        }
-      }
-      candidates.add(
-          new NameCandidate(
-              object.getOriginalDemangled(), object.getName(), object.getNamespace()));
+  private static void expungeStaleSessionPrograms() {
+    LastSessionIndex recent = lastSessionIndex;
+    if (recent != null && (recent.programRef.refersTo(null) || recent.indexRef.refersTo(null))) {
+      lastSessionIndex = null;
     }
-    if (signature == null && candidates.isEmpty()) return DecodedSymbol.EMPTY;
-    return new DecodedSymbol(signature, candidates);
+    Reference<? extends Program> reference;
+    while ((reference = STALE_SESSION_PROGRAMS.poll()) != null) {
+      SESSION_INDEXES.remove(reference);
+    }
+  }
+
+  private static DecodedSymbol runDemangler(Program program, String name, Address address) {
+    return decodeWith(DemanglerUtil::demangle, program, name, address);
   }
 
   public record DecodedSymbol(String signature, List<NameCandidate> candidates) {
-    static final DecodedSymbol EMPTY = new DecodedSymbol(null, List.of());
+    public static final DecodedSymbol EMPTY = new DecodedSymbol(null, List.of());
 
     public DecodedSymbol {
       candidates =
@@ -222,6 +317,9 @@ public final class CppSymbolNames {
   }
 
   private record LastProgramCache(WeakReference<Program> programRef, ProgramCache cache) {}
+
+  private record LastSessionIndex(
+      WeakReference<Program> programRef, WeakReference<CppSymbolIndex> indexRef) {}
 
   private record LookupKey(Program program) {
     @Override

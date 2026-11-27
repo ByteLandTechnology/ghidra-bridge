@@ -15,10 +15,8 @@ import app.byteland.ghidra.adapter.ghidra.symbol.SymbolServiceImpl;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
-import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeService;
-import app.byteland.ghidra.service.decompilation.DecompilationService;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
 import app.byteland.ghidra.service.listing.ListingService;
@@ -30,7 +28,7 @@ import ghidra.app.script.GhidraScript;
 import java.util.Objects;
 
 /**
- * Creates bridge service implementations for a Ghidra script session.
+ * Creates bridge service implementations for a Ghidra script or GUI session.
  */
 public final class GhidraServiceFactory {
   private GhidraServiceFactory() {}
@@ -43,8 +41,25 @@ public final class GhidraServiceFactory {
    */
   public static BridgeServices create(GhidraScript script) {
     Objects.requireNonNull(script, "script");
-    GhidraSession context = new GhidraSession(script);
-    return create(context, context.currentProgram().getName());
+    return create(new GhidraSession(script));
+  }
+
+  static BridgeServices create(
+      GhidraScript script, CppSymbolIndexConfig indexConfig, CppDemangler demangler) {
+    Objects.requireNonNull(script, "script");
+    return create(new GhidraSession(script, indexConfig, demangler));
+  }
+
+  static BridgeServices create(GhidraSession context) {
+    Objects.requireNonNull(context, "context");
+    String programName;
+    try {
+      programName = context.currentProgram().getName();
+    } catch (RuntimeException failure) {
+      context.close();
+      throw failure;
+    }
+    return create(context, programName);
   }
 
   /**
@@ -61,44 +76,67 @@ public final class GhidraServiceFactory {
             ? "ghidra-bridge"
             : fallbackProgramName;
 
-    ProgramService programService = new ProgramServiceImpl(context);
-    FunctionService functionService = new FunctionServiceImpl(context);
-    GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
-    MemoryService memoryService = new MemoryServiceImpl(context);
-    ListingService listingService = new ListingServiceImpl(context);
-    DecompilationServiceImpl decompilationService = new DecompilationServiceImpl(context);
-    AnalysisServiceImpl analysisService = new AnalysisServiceImpl(context);
-    context.onProgramClosed(decompilationService::releaseProgram);
-    context.onProgramClosed(analysisService::releaseProgram);
-    SymbolService symbolService = new SymbolServiceImpl(context);
-    ReferenceService referenceService = new ReferenceServiceImpl(context);
-    CommentService commentService = new CommentServiceImpl(context);
-    AddressService addressService = new AddressServiceImpl(context);
-    DataTypeService dataTypeService = new DataTypeServiceImpl(context);
+    DecompilationServiceImpl decompilationService = null;
+    AnalysisServiceImpl analysisService = null;
+    boolean initialized = false;
+    try {
+      ProgramService programService = new ProgramServiceImpl(context);
+      FunctionService functionService = new FunctionServiceImpl(context);
+      GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
+      MemoryService memoryService = new MemoryServiceImpl(context);
+      ListingService listingService = new ListingServiceImpl(context);
+      decompilationService = new DecompilationServiceImpl(context);
+      analysisService = new AnalysisServiceImpl(context);
+      context.onProgramClosed(decompilationService::releaseProgram);
+      context.onProgramClosed(analysisService::releaseProgram);
+      SymbolService symbolService = new SymbolServiceImpl(context);
+      ReferenceService referenceService = new ReferenceServiceImpl(context);
+      CommentService commentService = new CommentServiceImpl(context);
+      AddressService addressService = new AddressServiceImpl(context);
+      DataTypeService dataTypeService = new DataTypeServiceImpl(context);
 
-    return new BridgeServices(
-        programService,
-        addressService,
-        commentService,
-        referenceService,
-        memoryService,
-        listingService,
-        functionService,
-        globalVariableService,
-        analysisService,
-        decompilationService,
-        symbolService,
-        dataTypeService,
-        new TransactionRunner() {
-          @Override
-          public <T> T run(Operation<T> operation) {
-            return context.withTransaction(operation::execute);
+      context.startCppSymbolPrewarm();
+      BridgeServices services =
+          new BridgeServices(
+              programService,
+              addressService,
+              commentService,
+              referenceService,
+              memoryService,
+              listingService,
+              functionService,
+              globalVariableService,
+              analysisService,
+              decompilationService,
+              symbolService,
+              dataTypeService,
+              new TransactionRunner() {
+                @Override
+                public <T> T run(Operation<T> operation) {
+                  return context.withTransaction(operation::execute);
+                }
+              },
+              fallback,
+              () -> {
+                var program = context.currentProgramOrNull();
+                return program == null ? fallback : program.getName();
+              });
+      initialized = true;
+      return services;
+    } finally {
+      if (!initialized) {
+        try {
+          if (decompilationService != null) {
+            decompilationService.close();
           }
-        },
-        fallback,
-        () -> {
-          var program = context.currentProgramOrNull();
-          return program == null ? fallback : program.getName();
-        });
+        } finally {
+          if (analysisService != null) {
+            analysisService.close();
+          } else {
+            context.close();
+          }
+        }
+      }
+    }
   }
 }

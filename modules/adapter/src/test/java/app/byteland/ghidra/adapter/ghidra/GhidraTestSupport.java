@@ -3,6 +3,7 @@ package app.byteland.ghidra.adapter.ghidra;
 import ghidra.GhidraApplicationLayout;
 import ghidra.app.plugin.processors.sleigh.SleighLanguageProvider;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.util.demangler.Demangler;
 import ghidra.framework.Application;
 import ghidra.framework.ApplicationConfiguration;
 import ghidra.program.database.ProgramDB;
@@ -12,6 +13,7 @@ import ghidra.program.model.lang.LanguageID;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
+import ghidra.util.classfinder.ClassSearcher;
 import ghidra.util.task.TaskMonitor;
 import java.io.File;
 import java.io.IOException;
@@ -22,8 +24,23 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class GhidraTestSupport {
   private static Language cachedX64Language;
+  private static boolean demanglersInitialized;
 
   private GhidraTestSupport() {}
+
+  public static synchronized void ensureDemanglersInitialized() {
+    x64Language();
+    if (!demanglersInitialized) {
+      if (ClassSearcher.getInstances(Demangler.class).isEmpty()) {
+        try {
+          ClassSearcher.search(TaskMonitor.DUMMY);
+        } catch (Exception error) {
+          throw new IllegalStateException("Failed to initialize Ghidra ClassSearcher", error);
+        }
+      }
+      demanglersInitialized = true;
+    }
+  }
 
   public static synchronized Language x64Language() {
     if (cachedX64Language != null) {
@@ -60,8 +77,12 @@ public final class GhidraTestSupport {
     }
   }
 
+  public static GhidraScript scriptFor(Program program) {
+    return new HeadlessTestScript(program);
+  }
+
   public static GhidraSession sessionFor(Program program) {
-    return new GhidraSession(new HeadlessTestScript(program));
+    return new GhidraSession(scriptFor(program));
   }
 
   private static File locateGhidraInstallDir() {

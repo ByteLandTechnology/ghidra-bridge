@@ -121,6 +121,10 @@ public final class AddressUtil {
     if (address == null) {
       return null;
     }
+    String fast = formatGenericAddress(address);
+    if (fast != null) {
+      return fast;
+    }
     String space = address.getAddressSpace().getName();
     return canonicalAddress(space, address.toString());
   }
@@ -168,5 +172,39 @@ public final class AddressUtil {
 
   private static Address toAddress(FlatProgramAPI api, String value) {
     return api.toAddr(value);
+  }
+
+  private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
+
+  private static String formatGenericAddress(Address address) {
+    if (address.getClass() != ghidra.program.model.address.GenericAddress.class) {
+      return null;
+    }
+    AddressSpace space = address.getAddressSpace();
+    if (space == null
+        || space.isStackSpace()
+        || space.showSpaceName()
+        || space.getAddressableUnitSize() != 1) {
+      return null;
+    }
+    int spaceBits = space.getSize();
+    if (spaceBits <= 0) {
+      return null;
+    }
+    int minDigits = Math.min(8, ((spaceBits - 1) / 4) + 1);
+    long offset = address.getOffset();
+    int rawDigits = offset == 0L ? 1 : ((67 - Long.numberOfLeadingZeros(offset)) >>> 2);
+    int digits = Math.max(minDigits, rawDigits);
+    String spaceName = space.getName();
+    int prefixLen = spaceName.length();
+    char[] chars = new char[prefixLen + 1 + digits];
+    spaceName.getChars(0, prefixLen, chars, 0);
+    chars[prefixLen] = ':';
+    long value = offset;
+    for (int idx = chars.length - 1; idx > prefixLen; idx--) {
+      chars[idx] = HEX_DIGITS[(int) (value & 0xFL)];
+      value >>>= 4;
+    }
+    return new String(chars);
   }
 }
