@@ -121,7 +121,7 @@ class AgentClientOutboundUrlTest {
             "ws_url=ws://127.0.0.1:" + unusedPort + "/ws/agent?foo=marker-query-param",
             "session_id=outbound-fail");
 
-    try (AgentDispatcher dispatcher = new AgentDispatcher(stubBridgeServices(), config)) {
+    try (AgentDispatcher dispatcher = new AgentDispatcher(stubBridgeServices(), config.sessionId())) {
       AgentClient client =
           new AgentClient(
               config, dispatcher, new AgentClient.LifecycleListener() {}, Duration.ofSeconds(2));
@@ -160,7 +160,8 @@ class AgentClientOutboundUrlTest {
       AgentConfig config =
           AgentConfig.fromArgs(
               "ws_url=ws://127.0.0.1:" + port + "/ws/agent", "session_id=outbound-401");
-      try (AgentDispatcher dispatcher = new AgentDispatcher(stubBridgeServices(), config)) {
+      try (AgentDispatcher dispatcher =
+          new AgentDispatcher(stubBridgeServices(), config.sessionId())) {
         AgentClient client =
             new AgentClient(
                 config, dispatcher, new AgentClient.LifecycleListener() {}, Duration.ofSeconds(5));
@@ -231,7 +232,7 @@ class AgentClientOutboundUrlTest {
       assertEquals("ws://" + urlHost + ":" + port + "/ws/agent", outboundConfig.redactedWsUrl());
 
       try (AgentDispatcher dispatcher =
-          new AgentDispatcher(stubBridgeServices(), outboundConfig)) {
+          new AgentDispatcher(stubBridgeServices(), outboundConfig.sessionId())) {
         AgentClient client =
             new AgentClient(
                 outboundConfig,

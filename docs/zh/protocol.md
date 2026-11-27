@@ -76,7 +76,7 @@ WebSocket 消息严格遵循 JSON-RPC 2.0 协议规范。
       "status": 404,
       "code": "not_found",
       "message": "address not found",
-      "target": "/params/selector/address",
+      "target": "/selector/address",
       "details": {}
     }
   }

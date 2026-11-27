@@ -398,7 +398,7 @@ class McpHttpServerSseShutdownTest {
         }
         McpConfig mcpConfig =
             new McpConfig("127.0.0.1", candidatePort, "/mcp", null, "test-session", "ghidra");
-        AgentDispatcher dispatcher = new AgentDispatcher(services, mcpConfig.sessionId());
+        AgentDispatcher dispatcher = new AgentDispatcher(services, "test-session");
         try {
           McpHttpServer server =
               keepaliveMillis == null

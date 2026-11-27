@@ -65,4 +65,5 @@ runs:
           echo "Cannot find an extracted Ghidra directory under ${ghidra_dist}/" >&2
           exit 1
         fi
-        echo "GHIDRA_INSTALL_DIR=$(cd "$install_dir" && pwd)" >> "$GITHUB_ENV"
+        resolved_dir="$(cd "$install_dir" && pwd)"
+        echo "GHIDRA_INSTALL_DIR=${resolved_dir}" >> "$GITHUB_ENV"
