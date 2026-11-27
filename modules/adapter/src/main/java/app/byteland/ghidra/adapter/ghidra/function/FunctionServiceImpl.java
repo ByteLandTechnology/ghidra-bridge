@@ -4,6 +4,8 @@ import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource.FunctionCallGraphQuery;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService;
@@ -28,6 +30,7 @@ public final class FunctionServiceImpl implements FunctionService {
   private final FunctionLookupQueries lookupQueries;
   private final FunctionListQueries listQueries;
   private final FunctionRelationQueries relationQueries;
+  private final FunctionCallGraphQueries callGraphQueries;
   private final FunctionMutations.ParameterDataTypeResolver dataTypeResolver;
 
   public FunctionServiceImpl(GhidraSession context) {
@@ -35,6 +38,8 @@ public final class FunctionServiceImpl implements FunctionService {
     this.lookupQueries = new FunctionLookupQueries(context);
     this.listQueries = new FunctionListQueries(context, lookupQueries);
     this.relationQueries = new FunctionRelationQueries(context, lookupQueries);
+    this.callGraphQueries =
+        new FunctionCallGraphQueries(context, lookupQueries, this.relationQueries);
     this.dataTypeResolver =
         input ->
             GhidraDataTypeReferences.resolve(context.currentProgram().getDataTypeManager(), input);
@@ -139,6 +144,11 @@ public final class FunctionServiceImpl implements FunctionService {
   @Override
   public Page<FunctionCallResource> getCallees(String rawAddress, int limit, String cursor) {
     return relationQueries.getCallees(rawAddress, limit, cursor);
+  }
+
+  @Override
+  public FunctionCallGraphResource getCallGraph(FunctionCallGraphQuery query) {
+    return callGraphQueries.getCallGraph(query);
   }
 
   @Override

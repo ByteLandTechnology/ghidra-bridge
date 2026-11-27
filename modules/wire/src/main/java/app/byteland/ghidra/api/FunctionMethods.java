@@ -7,6 +7,7 @@ import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
 import static app.byteland.ghidra.api.ApiRegistry.nullableText;
+import static app.byteland.ghidra.api.ApiRegistry.object;
 import static app.byteland.ghidra.api.ApiRegistry.optionalInteger;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 import static app.byteland.ghidra.api.ApiRegistry.patch;
@@ -14,10 +15,15 @@ import static app.byteland.ghidra.api.ApiRegistry.requestedIncludes;
 import static app.byteland.ghidra.api.ApiRegistry.resource;
 import static app.byteland.ghidra.api.ApiRegistry.selector;
 import static app.byteland.ghidra.api.ApiRegistry.storage;
+import static app.byteland.ghidra.api.ApiRegistry.stringList;
 import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
+import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource.Expansion;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource.FunctionCallGraphQuery;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService.FunctionAttributePatch;
 import app.byteland.ghidra.service.function.FunctionService.FunctionQuery;
@@ -162,6 +168,69 @@ final class FunctionMethods implements ApiMethodProvider {
                   .services()
                   .functionService()
                   .getCallees(entry, page.limit(), page.cursor());
+        });
+    registerCallGraphMethod(entrySelector);
+  }
+
+  private void registerCallGraphMethod(Map<String, Object> entrySelector) {
+    registry.read(
+        "function_call_graph.get",
+        "Get a bounded call graph from a root function."
+            + " Return nodes, call site edges, and limit status.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.SELECTOR,
+                entrySelector,
+                "callers_depth",
+                ApiSchemaCatalog.integerWithDefault(
+                    0,
+                    FunctionCallGraphResource.MAX_DEPTH,
+                    FunctionCallGraphResource.DEFAULT_DEPTH),
+                "callees_depth",
+                ApiSchemaCatalog.integerWithDefault(
+                    0,
+                    FunctionCallGraphResource.MAX_DEPTH,
+                    FunctionCallGraphResource.DEFAULT_DEPTH),
+                "max_nodes",
+                ApiSchemaCatalog.integerWithDefault(
+                    1,
+                    FunctionCallGraphResource.MAX_NODES,
+                    FunctionCallGraphResource.DEFAULT_MAX_NODES),
+                "max_edges",
+                ApiSchemaCatalog.integerWithDefault(
+                    1,
+                    FunctionCallGraphResource.MAX_EDGES,
+                    FunctionCallGraphResource.DEFAULT_MAX_EDGES),
+                "expansion",
+                ApiSchemaCatalog.callGraphExpansionSchema(),
+                "timeout_ms",
+                ApiSchemaCatalog.scanTimeoutSchema(),
+                ApiVocabulary.FIELDS,
+                ApiRegistry.fieldsSchema()),
+            ApiVocabulary.SELECTOR),
+        ApiSchemaCatalog.callGraphFields(),
+        List.of("root"),
+        request -> {
+          Expansion expansion = null;
+          if (request.get("expansion") instanceof Map<?, ?>) {
+            Map<String, Object> rawExpansion = object(request, "expansion");
+            expansion =
+                new Expansion(
+                    stringList(rawExpansion.get("callers")),
+                    stringList(rawExpansion.get("callees")));
+          }
+          return registry
+              .services()
+              .functionService()
+              .getCallGraph(
+                  new FunctionCallGraphQuery(
+                      text(selector(request), ApiVocabulary.ENTRY),
+                      integer(request, "callers_depth", FunctionCallGraphResource.DEFAULT_DEPTH),
+                      integer(request, "callees_depth", FunctionCallGraphResource.DEFAULT_DEPTH),
+                      integer(request, "max_nodes", FunctionCallGraphResource.DEFAULT_MAX_NODES),
+                      integer(request, "max_edges", FunctionCallGraphResource.DEFAULT_MAX_EDGES),
+                      integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS),
+                      expansion));
         });
   }
 

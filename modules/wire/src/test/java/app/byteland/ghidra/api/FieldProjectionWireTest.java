@@ -25,12 +25,14 @@ import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.function.VariableStorageReference;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableResource;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
+import app.byteland.ghidra.service.listing.BasicBlockResource;
 import app.byteland.ghidra.service.listing.CodeUnitResource;
 import app.byteland.ghidra.service.listing.DataUnitResource;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
@@ -355,9 +357,9 @@ class FieldProjectionWireTest {
                 })
             .map(ApiCatalog.MethodDescriptor::name)
             .toList();
-    assertEquals(28, projectionMethods.size());
+    assertEquals(30, projectionMethods.size());
 
-    List<MethodCase> cases = fixture.allTwentyEightCases();
+    List<MethodCase> cases = fixture.allProjectionCases();
     assertEquals(
         Set.copyOf(projectionMethods),
         cases.stream().map(MethodCase::method).collect(java.util.stream.Collectors.toSet()));
@@ -716,6 +718,25 @@ class FieldProjectionWireTest {
               "fall_through",
               "fall_through",
               "ram:00401004");
+      BasicBlockResource basicBlock =
+          new BasicBlockResource(
+              "ram:00401000",
+              "ram:00401003",
+              4L,
+              "FALL_THROUGH",
+              false,
+              false,
+              List.of(
+                  new BasicBlockResource.InstructionSummary(
+                      "ram:00401000",
+                      4,
+                      "MOV",
+                      List.of("RBP", "RSP"),
+                      "FALL_THROUGH",
+                      "ram:00401004")),
+              List.of(
+                  new BasicBlockResource.FlowEdge(
+                      "ram:00401000", "ram:00401004", "FALL_THROUGH")));
 
       GlobalVariableResource globalVar =
           new GlobalVariableResource(
@@ -769,6 +790,20 @@ class FieldProjectionWireTest {
               FunctionCallResource.Direction.CALLEES,
               "Global",
               "helper()");
+      FunctionCallGraphResource callGraph =
+          new FunctionCallGraphResource(
+              "ram:00401000",
+              List.of(
+                  new FunctionCallGraphResource.NodeResource(
+                      "ram:00401000", "main", "Global", "main(int)", null, null, null),
+                  new FunctionCallGraphResource.NodeResource(
+                      "ram:00401050", "helper", "Global", "helper()", null, 1, null)),
+              List.of(
+                  new FunctionCallGraphResource.EdgeResource(
+                      "ram:00401000", "ram:00401050", List.of("ram:00401010"))),
+              false,
+              "completed",
+              2L);
 
       AnalysisResource analysis =
           new AnalysisResource(
@@ -875,6 +910,8 @@ class FieldProjectionWireTest {
                     case "getInstruction" -> instruction;
                     case "listInstructions", "getFlowOverrides" ->
                         Page.scanned(List.of(instruction), 10, "ram:00401004", scan);
+                    case "listBasicBlocks" ->
+                        Page.scanned(List.of(basicBlock), 10, "ram:00401004", scan);
                     default -> throw new AssertionError(name);
                   });
       GlobalVariableService globalVariableService =
@@ -904,6 +941,7 @@ class FieldProjectionWireTest {
                       yield Page.scanned(List.of(function), 10, "ram:00401030", scan);
                     }
                     case "getCallees", "getCallers" -> Page.of(List.of(call), 10, "ram:00401050");
+                    case "getCallGraph" -> callGraph;
                     default -> throw new AssertionError(name);
                   });
       AnalysisService analysisService = proxy(AnalysisService.class, (name, args) -> analysis);
@@ -935,7 +973,7 @@ class FieldProjectionWireTest {
       ReferenceService referenceService =
           proxy(
               ReferenceService.class,
-              (name, args) -> Page.of(List.of(reference), 10, "ram:00401010"));
+              (name, args) -> Page.scanned(List.of(reference), 10, "ram:00401010", scan));
       CommentService commentService =
           proxy(
               CommentService.class,
@@ -986,7 +1024,7 @@ class FieldProjectionWireTest {
               () -> {});
     }
 
-    List<MethodCase> allTwentyEightCases() {
+    List<MethodCase> allProjectionCases() {
       return List.of(
           new MethodCase("session.get", Map.of(), List.of("status")),
           new MethodCase("program.get", Map.of(), List.of("image_base", "function_count")),
@@ -1024,6 +1062,12 @@ class FieldProjectionWireTest {
                   Map.of("selector", Map.of("kind", "address", "address", "ram:00401000"))),
               List.of("flow_override")),
           new MethodCase(
+              "basic_block.list",
+              Map.of(
+                  "filter",
+                  Map.of("selector", Map.of("kind", "function", "entry", "ram:00401000"))),
+              List.of("flow_type", "destinations")),
+          new MethodCase(
               "function.get",
               Map.of("selector", Map.of("entry", "ram:00401000")),
               List.of("body.start", "parameters.name", "local_variables.storage")),
@@ -1035,6 +1079,10 @@ class FieldProjectionWireTest {
               "function_call.list",
               Map.of("filter", Map.of("entry", "ram:00401000")),
               List.of("call_site", "direction")),
+          new MethodCase(
+              "function_call_graph.get",
+              Map.of("selector", Map.of("entry", "ram:00401000")),
+              List.of("nodes", "edges")),
           new MethodCase("analysis.get", Map.of(), List.of("status", "progress")),
           new MethodCase(
               "decompilation.get",

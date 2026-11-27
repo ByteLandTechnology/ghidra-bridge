@@ -3,6 +3,7 @@ package app.byteland.ghidra.adapter.ghidra.listing;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
+import app.byteland.ghidra.service.listing.BasicBlockResource;
 import app.byteland.ghidra.service.listing.CodeUnitResource;
 import app.byteland.ghidra.service.listing.DataUnitResource;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
@@ -17,6 +18,7 @@ public final class ListingServiceImpl implements ListingService {
   private final ListingDataQueries dataQueries;
   private final ListingFlowOverrideQueries flowOverrideQueries;
   private final ListingFlowOverrideMutations flowOverrideMutations;
+  private final ListingBasicBlockQueries basicBlockQueries;
 
   public ListingServiceImpl(GhidraSession context) {
     this.codeUnitQueries = new ListingCodeUnitQueries(context);
@@ -25,6 +27,7 @@ public final class ListingServiceImpl implements ListingService {
     ListingFlowOverrideScopes flowOverrideScopes = new ListingFlowOverrideScopes(context);
     this.flowOverrideQueries = new ListingFlowOverrideQueries(context, flowOverrideScopes);
     this.flowOverrideMutations = new ListingFlowOverrideMutations(context, flowOverrideScopes);
+    this.basicBlockQueries = new ListingBasicBlockQueries(context, flowOverrideScopes);
   }
 
   @Override
@@ -65,5 +68,11 @@ public final class ListingServiceImpl implements ListingService {
       List<FlowOverrideValue> expectedFlowOverrides,
       FlowOverrideValue flowOverride) {
     flowOverrideMutations.setFlowOverrides(scope, expectedFlowOverrides, flowOverride);
+  }
+
+  @Override
+  public Page<BasicBlockResource> listBasicBlocks(
+      FlowOverrideScope scope, AddressScanOptions scan, int maxEdges, int limit, String cursor) {
+    return basicBlockQueries.listBasicBlocks(scope, scan, maxEdges, limit, cursor);
   }
 }

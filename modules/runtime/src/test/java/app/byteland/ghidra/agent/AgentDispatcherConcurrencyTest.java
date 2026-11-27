@@ -27,12 +27,15 @@ import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource.FunctionCallGraphQuery;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import app.byteland.ghidra.service.function.FunctionResource;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.function.VariableStorageReference;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableResource;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
+import app.byteland.ghidra.service.listing.BasicBlockResource;
 import app.byteland.ghidra.service.listing.CodeUnitResource;
 import app.byteland.ghidra.service.listing.DataUnitResource;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
@@ -90,7 +93,7 @@ class AgentDispatcherConcurrencyTest {
               .filter(m -> Boolean.TRUE.equals(((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
               .map(MethodDescriptor::name)
               .toList();
-      assertEquals(29, catalogReadOnly.size(), "Catalog must expose all 29 read-only methods");
+      assertEquals(31, catalogReadOnly.size(), "Catalog must expose all 31 read-only methods");
 
       Map<String, Map<String, Object>> readCalls = validReadRequests();
       assertEquals(Set.copyOf(catalogReadOnly), readCalls.keySet());
@@ -188,7 +191,7 @@ class AgentDispatcherConcurrencyTest {
   void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(58, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
       assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
@@ -718,11 +721,15 @@ class AgentDispatcherConcurrencyTest {
     calls.put(
         "flow_override.list",
         Map.of("filter", Map.of("selector", Map.of("kind", "address", "address", "ram:00100000"))));
+    calls.put(
+        "basic_block.list",
+        Map.of("filter", Map.of("selector", Map.of("kind", "address", "address", "ram:00100000"))));
     calls.put("global_variable.get", Map.of("selector", Map.of("address", "ram:00100100")));
     calls.put("global_variable.list", Map.of());
     calls.put("function.get", Map.of("selector", Map.of("entry", "ram:00100000")));
     calls.put("function.list", Map.of());
     calls.put("function_call.list", Map.of("filter", Map.of("entry", "ram:00100000")));
+    calls.put("function_call_graph.get", Map.of("selector", Map.of("entry", "ram:00100000")));
     calls.put("analysis.get", Map.of());
     calls.put("decompilation.get", Map.of("selector", Map.of("entry", "ram:00100000")));
     calls.put("symbol.get", Map.of("selector", Map.of("id", "1")));
@@ -1112,14 +1119,15 @@ class AgentDispatcherConcurrencyTest {
     }
 
     private ReferenceService referenceService() {
-      return (fromRaw, toRaw, type, direction, limit, cursor) -> {
+      return (fromRaw, toRaw, type, direction, scope, scan, limit, cursor) -> {
         observe("reference.list", false);
-        return Page.of(
+        return Page.scanned(
             List.of(
                 new ReferenceResource(
                     "ram:00100010", "ram:00100000", "UNCONDITIONAL_CALL", 0, true, "DEFAULT")),
             limit,
-            null);
+            null,
+            completedScan());
       };
     }
 
@@ -1250,6 +1258,37 @@ class AgentDispatcherConcurrencyTest {
             FlowOverrideValue flowOverride) {
           observe("flow_override.patch", true);
         }
+
+        @Override
+        public Page<BasicBlockResource> listBasicBlocks(
+            FlowOverrideScope scope,
+            AddressScanOptions scan,
+            int maxEdges,
+            int limit,
+            String cursor) {
+          observe("basic_block.list", false);
+          return Page.scanned(
+              List.of(
+                  new BasicBlockResource(
+                      "ram:00100000",
+                      "ram:00100000",
+                      1L,
+                      "FALL_THROUGH",
+                      false,
+                      false,
+                      List.of(
+                          new BasicBlockResource.InstructionSummary(
+                              "ram:00100000",
+                              1,
+                              "NOP",
+                              List.of(),
+                              "FALL_THROUGH",
+                              "ram:00100001")),
+                      List.of())),
+              limit,
+              null,
+              completedScan());
+        }
       };
     }
 
@@ -1345,6 +1384,20 @@ class AgentDispatcherConcurrencyTest {
                       null)),
               limit,
               null);
+        }
+
+        @Override
+        public FunctionCallGraphResource getCallGraph(FunctionCallGraphQuery query) {
+          observe("function_call_graph.get", false);
+          return new FunctionCallGraphResource(
+              "ram:00100000",
+              List.of(
+                  new FunctionCallGraphResource.NodeResource(
+                      "ram:00100000", "fn_main", "Global", null, null, null, null)),
+              List.of(),
+              false,
+              "completed",
+              1L);
         }
 
         @Override

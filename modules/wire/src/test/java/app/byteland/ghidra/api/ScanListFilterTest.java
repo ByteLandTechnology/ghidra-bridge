@@ -39,6 +39,7 @@ class ScanListFilterTest {
           "code_unit.list",
           "data_unit.list",
           "instruction.list",
+          "reference.list",
           "global_variable.list",
           "comment.list",
           "function.list",
@@ -63,6 +64,9 @@ class ScanListFilterTest {
     assertEquals(Map.of(), filterProperties(catalog, "data_unit.list"));
     assertEquals(Map.of(), filterProperties(catalog, "instruction.list"));
     assertEquals(Set.of("kind"), filterProperties(catalog, "code_unit.list").keySet());
+    assertEquals(
+        List.of("from", "to", "type", "direction", "selector"),
+        List.copyOf(filterProperties(catalog, "reference.list").keySet()));
     assertEquals(
         List.of("name", "namespace", "case_sensitive"),
         List.copyOf(filterProperties(catalog, "global_variable.list").keySet()));
@@ -96,21 +100,24 @@ class ScanListFilterTest {
       }
     }
 
-    for (String legacyKey : List.of("start", "end")) {
-      Map<String, Object> flowFilter = new LinkedHashMap<>();
-      flowFilter.put("selector", Map.of("kind", "address", "address", "0x1000"));
-      flowFilter.put(legacyKey, "0x1000");
-      Map<String, Object> params = Map.of("filter", flowFilter);
+    for (String requiredSelectorMethod : List.of("flow_override.list", "basic_block.list")) {
+      for (String legacyKey : List.of("start", "end")) {
+        Map<String, Object> flowFilter = new LinkedHashMap<>();
+        flowFilter.put("selector", Map.of("kind", "address", "address", "0x1000"));
+        flowFilter.put(legacyKey, "0x1000");
+        Map<String, Object> params = Map.of("filter", flowFilter);
 
-      ApiException directError =
-          assertThrows(
-              ApiException.class, () -> harness.registry.dispatch("flow_override.list", params));
-      assertEquals(400, directError.status());
-      assertEquals("unknown_field", directError.error().code());
-      assertEquals("/filter/" + legacyKey, directError.error().target());
+        ApiException directError =
+            assertThrows(
+                ApiException.class,
+                () -> harness.registry.dispatch(requiredSelectorMethod, params));
+        assertEquals(400, directError.status());
+        assertEquals("unknown_field", directError.error().code());
+        assertEquals("/filter/" + legacyKey, directError.error().target());
 
-      assertBatchUnknownField(
-          harness.registry, "flow_override.list", params, "/filter/" + legacyKey);
+        assertBatchUnknownField(
+            harness.registry, requiredSelectorMethod, params, "/filter/" + legacyKey);
+      }
     }
   }
 
@@ -132,6 +139,9 @@ class ScanListFilterTest {
     assertEquals(expected, harness.lastScan.get());
 
     harness.registry.dispatch("instruction.list", scanParams);
+    assertEquals(expected, harness.lastScan.get());
+
+    harness.registry.dispatch("reference.list", scanParams);
     assertEquals(expected, harness.lastScan.get());
 
     harness.registry.dispatch("global_variable.list", scanParams);
@@ -157,6 +167,13 @@ class ScanListFilterTest {
             "filter", Map.of("selector", Map.of("kind", "address", "address", "0x1000")),
             "scan", Map.of("timeout_ms", 1800)));
     assertEquals(new AddressScanOptions(null, null, 1800), harness.lastScan.get());
+
+    harness.registry.dispatch(
+        "basic_block.list",
+        Map.of(
+            "filter", Map.of("selector", Map.of("kind", "address", "address", "0x1000")),
+            "scan", Map.of("timeout_ms", 1900)));
+    assertEquals(new AddressScanOptions(null, null, 1900), harness.lastScan.get());
   }
 
   @Test
@@ -311,17 +328,23 @@ class ScanListFilterTest {
                       case "listCodeUnits", "listInstructions", "listDataUnits" ->
                           (AddressScanOptions) args[0];
                       case "getFlowOverrides" -> (AddressScanOptions) args[2];
+                      case "listBasicBlocks" -> (AddressScanOptions) args[1];
                       default -> throw new AssertionError(method);
                     };
                 lastScan.set(scan);
                 int limit =
                     switch (method) {
                       case "listCodeUnits", "listInstructions", "listDataUnits" -> (Integer) args[1];
-                      case "getFlowOverrides" -> (Integer) args[3];
+                      case "getFlowOverrides", "listBasicBlocks" -> (Integer) args[3];
                       default -> 100;
                     };
                 return emptyScannedPage(scan, limit);
               });
+      ReferenceService references =
+          (fromRaw, toRaw, type, direction, scope, scan, limit, cursor) -> {
+            lastScan.set(scan);
+            return emptyScannedPage(scan, limit);
+          };
       GlobalVariableService globalVariables =
           proxy(
               GlobalVariableService.class,
@@ -378,7 +401,7 @@ class ScanListFilterTest {
               unused(ProgramService.class),
               unused(AddressService.class),
               comments,
-              unused(ReferenceService.class),
+              references,
               unused(MemoryService.class),
               listing,
               functions,

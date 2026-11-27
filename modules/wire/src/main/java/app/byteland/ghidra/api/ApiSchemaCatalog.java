@@ -42,6 +42,8 @@ import static app.byteland.ghidra.api.ApiVocabulary.TYPE;
 import static app.byteland.ghidra.api.ApiVocabulary.VALUES;
 
 import app.byteland.ghidra.service.AddressScanOptions;
+import app.byteland.ghidra.service.function.FunctionCallGraphResource;
+import app.byteland.ghidra.service.listing.BasicBlockResource;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -197,6 +199,15 @@ final class ApiSchemaCatalog {
 
   static Map<String, Object> flowOverride() {
     return WireSchema.stringEnum("none", "branch", "call", "call_return", "return");
+  }
+
+  static Map<String, Object> callGraphExpansionSchema() {
+    return WireSchema.object(
+        props(
+            "callers",
+            WireSchema.array(WireSchema.nonBlankString(), 0, FunctionCallGraphResource.MAX_NODES),
+            "callees",
+            WireSchema.array(WireSchema.nonBlankString(), 0, FunctionCallGraphResource.MAX_NODES)));
   }
 
   static Map<String, Object> functionPatchSchema() {
@@ -494,7 +505,10 @@ final class ApiSchemaCatalog {
             "primary",
             "completed",
             "comments_complete",
-            "analyzed")
+            "analyzed",
+            "limited",
+            "unresolved_jump",
+            "edges_limited")
         .contains(field)) {
       return WireSchema.bool();
     }
@@ -632,9 +646,101 @@ final class ApiSchemaCatalog {
     }
     if (PROGRESS.equals(field)) return WireSchema.number(0.0, 100.0);
     if (MEMORY_BLOCK.equals(field)) return memoryBlockSummarySchema();
-    if (FUNCTION.equals(field)) return functionSummarySchema();
+    if (Set.of(FUNCTION, "from_function", "to_function").contains(field)) {
+      return functionSummarySchema();
+    }
     if (SYMBOL.equals(field)) return symbolSummarySchema();
+    if ("nodes".equals(field)) return callGraphNodesSchema();
+    if ("edges".equals(field)) return callGraphEdgesSchema();
+    if ("instructions".equals(field)) return basicBlockInstructionsSchema();
+    if ("destinations".equals(field)) return basicBlockDestinationsSchema();
     return WireSchema.string();
+  }
+
+  static Map<String, Object> callGraphNodesSchema() {
+    Map<String, Object> branchState =
+        WireSchema.object(
+            props("expanded", WireSchema.bool(), "count", WireSchema.integer(0, Integer.MAX_VALUE)),
+            "expanded");
+    Map<String, Object> branches =
+        WireSchema.object(props("callers", branchState, "callees", branchState));
+    return WireSchema.array(
+        WireSchema.object(
+            props(
+                ENTRY,
+                WireSchema.string(),
+                NAME,
+                WireSchema.string(),
+                NAMESPACE,
+                WireSchema.string(),
+                "demangled_name",
+                WireSchema.string(),
+                "caller_distance",
+                WireSchema.integer(0, Integer.MAX_VALUE),
+                "callee_distance",
+                WireSchema.integer(0, Integer.MAX_VALUE),
+                "branches",
+                branches),
+            ENTRY,
+            NAME),
+        0,
+        FunctionCallGraphResource.MAX_NODES);
+  }
+
+  static Map<String, Object> callGraphEdgesSchema() {
+    return WireSchema.array(
+        WireSchema.object(
+            props(
+                ApiVocabulary.FROM,
+                WireSchema.string(),
+                "to",
+                WireSchema.string(),
+                "sites",
+                WireSchema.array(WireSchema.string(), 0, Integer.MAX_VALUE)),
+            ApiVocabulary.FROM,
+            "to",
+            "sites"),
+        0,
+        FunctionCallGraphResource.MAX_EDGES);
+  }
+
+  static Map<String, Object> basicBlockInstructionsSchema() {
+    return WireSchema.array(
+        WireSchema.object(
+            props(
+                ADDRESS,
+                WireSchema.string(),
+                LENGTH,
+                WireSchema.integer(1, Integer.MAX_VALUE),
+                "mnemonic",
+                WireSchema.string(),
+                "operands",
+                WireSchema.array(WireSchema.string(), 0, Integer.MAX_VALUE),
+                "flow_type",
+                WireSchema.string(),
+                "fall_through",
+                WireSchema.string()),
+            ADDRESS,
+            LENGTH),
+        0,
+        Integer.MAX_VALUE);
+  }
+
+  static Map<String, Object> basicBlockDestinationsSchema() {
+    return WireSchema.array(
+        WireSchema.object(
+            props(
+                ApiVocabulary.FROM,
+                WireSchema.string(),
+                "to",
+                WireSchema.string(),
+                TYPE,
+                WireSchema.string()),
+            ApiVocabulary.FROM,
+            "to",
+            TYPE),
+        0,
+        BasicBlockResource.MAX_EDGES);
   }
 
   static Map<String, Object> memoryBlockSummarySchema() {
@@ -684,7 +790,11 @@ final class ApiSchemaCatalog {
             OPERAND_INDEX,
             WireSchema.integer(-1, Integer.MAX_VALUE),
             "primary",
-            WireSchema.bool()),
+            WireSchema.bool(),
+            "from_function",
+            functionSummarySchema(),
+            "to_function",
+            functionSummarySchema()),
         "from",
         "to",
         TYPE,
@@ -736,6 +846,22 @@ final class ApiSchemaCatalog {
         "default_flow_type",
         "flow_type",
         "fall_through");
+  }
+
+  static Set<String> basicBlockFields() {
+    return Set.of(
+        START,
+        END,
+        LENGTH,
+        "flow_type",
+        "unresolved_jump",
+        "edges_limited",
+        "instructions",
+        "destinations");
+  }
+
+  static Set<String> callGraphFields() {
+    return Set.of("root", "nodes", "edges", "limited", "stop_reason", "elapsed_ms");
   }
 
   static Set<String> functionFields() {

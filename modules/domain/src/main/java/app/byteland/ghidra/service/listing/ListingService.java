@@ -46,4 +46,10 @@ public interface ListingService {
       FlowOverrideScope scope,
       List<FlowOverrideValue> expectedFlowOverrides,
       FlowOverrideValue flowOverride);
+
+  /**
+   * Returns one page of basic blocks and intra-procedural flow edges.
+   */
+  Page<BasicBlockResource> listBasicBlocks(
+      FlowOverrideScope scope, AddressScanOptions scan, int maxEdges, int limit, String cursor);
 }

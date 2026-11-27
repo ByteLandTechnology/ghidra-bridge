@@ -88,9 +88,10 @@ final class McpToolRegistry {
       case "program_language" -> new String[] {"program", "language." + operation};
       case "address_space" -> new String[] {"address", "space." + operation};
       case "memory_block" -> new String[] {"memory", "block." + operation};
-      case "code_unit", "data_unit", "instruction", "flow_override" ->
+      case "code_unit", "data_unit", "instruction", "flow_override", "basic_block" ->
           new String[] {"listing", prefix + "." + operation};
       case "function_call" -> new String[] {"function", "call." + operation};
+      case "function_call_graph" -> new String[] {"function", "call_graph." + operation};
       case "function_parameter" -> new String[] {"function", "parameter." + operation};
       case "function_local_variable" -> new String[] {"function", "local_variable." + operation};
       case "data_type_category" -> new String[] {"data_type", "category." + operation};
@@ -116,7 +117,8 @@ final class McpToolRegistry {
     inputSchema.put("additionalProperties", false);
 
     String purpose = "listing".equals(domain)
-        ? "for code units, data units, instructions, and flow overrides" : "for " + domain + " data";
+        ? "for code units, data units, instructions, basic blocks, and flow overrides"
+        : "for " + domain + " data";
     boolean readOnlyHint =
         operations.values().stream().allMatch(op -> effectFlag(op, "read_only"));
     boolean destructiveHint =

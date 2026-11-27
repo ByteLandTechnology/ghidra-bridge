@@ -38,7 +38,7 @@ The domain module defines the core service interfaces and data transfer models:
 ### 2. `modules/wire`
 
 The wire module maintains the unified method catalog:
-- `ApiRegistry` defines all 56 public dotted methods and their input and output schemas.
+- `ApiRegistry` defines all 58 public dotted methods and their input and output schemas.
 - `JsonParser`, `JsonWriter`, and `JsonUtil` parse and format JSON.
 - `modules/contracts` generates `docs/api.md` and `docs/asyncapi.yaml` at build time.
 - `modules/transport/mcp` generates `docs/mcp-tools.json` at build time.
@@ -71,7 +71,7 @@ This module implements the WebSocket transport:
 
 This module implements the Model Context Protocol:
 - `McpHttpServer` implements a Streamable HTTP and SSE server that complies with protocol `2026-07-28`.
-- `McpToolRegistry` maps 55 public methods to 14 domain tools and `ghidra_help`.
+- `McpToolRegistry` maps 57 public methods to 14 domain tools and `ghidra_help`.
   It does not publish `interface.get`.
 - It serves the contract resource at `ghidra-bridge://<tool_prefix>/contracts/mcp-tools`.
 
