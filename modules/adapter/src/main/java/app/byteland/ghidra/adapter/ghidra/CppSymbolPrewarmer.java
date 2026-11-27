@@ -220,7 +220,7 @@ final class CppSymbolPrewarmer {
   }
 
   private boolean needsSnapshotRebuildLocked(Program program, long modNumber) {
-    return session.canCacheSnapshots(program)
+    return session.canCacheSymbolSnapshot(program)
         && !snapshotSkippedForSyncedMod
         && !owner.hasSymbolSnapshotFor(program, modNumber);
   }

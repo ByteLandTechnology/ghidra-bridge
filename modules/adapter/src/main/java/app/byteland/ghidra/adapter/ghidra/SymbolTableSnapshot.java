@@ -88,7 +88,7 @@ public final class SymbolTableSnapshot {
     return program != null
         && iterationStart != null
         && iterationStart.isMemoryAddress()
-        && session.canCacheSnapshots(program)
+        && session.canCacheSymbolSnapshot(program)
         && isCurrentForModification(program, program.getModificationNumber())
         && (singleAddressSpace == null
             || singleAddressSpace.equals(iterationStart.getAddressSpace()));
@@ -110,7 +110,7 @@ public final class SymbolTableSnapshot {
       BooleanSupplier cancelled,
       Consumer<SymbolTableSnapshot> publisher,
       Runnable clearSnapshot) {
-    if (!session.canCacheSnapshots(program)) {
+    if (!session.canCacheSymbolSnapshot(program)) {
       clearSnapshot.run();
       return Outcome.SKIPPED;
     }
@@ -126,7 +126,7 @@ public final class SymbolTableSnapshot {
       if (session.isPausedForPrewarm(program)) {
         return Outcome.ABORTED;
       }
-      if (!session.canCacheSnapshots(program)) {
+      if (!session.canCacheSymbolSnapshot(program)) {
         clearSnapshot.run();
         return Outcome.SKIPPED;
       }
@@ -206,7 +206,7 @@ public final class SymbolTableSnapshot {
           if (cancelled.getAsBoolean()) {
             return Outcome.ABORTED;
           }
-          if (!session.canCacheSnapshots(program)) {
+          if (!session.canCacheSymbolSnapshot(program)) {
             clearSnapshot.run();
             return Outcome.SKIPPED;
           }
