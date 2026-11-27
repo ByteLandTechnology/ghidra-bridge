@@ -1,8 +1,6 @@
 package app.byteland.ghidra.mcp;
 
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.network.NetworkBinding;
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collections;
@@ -38,6 +36,8 @@ public record McpConfig(
     Set<String> allowedOrigins) {
   /** Default TCP port for the MCP HTTP server. */
   public static final int DEFAULT_PORT = 8766;
+  /** Default HTTP endpoint path for the MCP server. */
+  public static final String DEFAULT_PATH = "/mcp";
 
   /** Default prefix for MCP tool names. */
   public static final String DEFAULT_TOOL_PREFIX = "ghidra";
@@ -46,8 +46,6 @@ public record McpConfig(
   public static final String ALLOWED_ORIGINS_ENV = "GHIDRA_MCP_ALLOWED_ORIGINS";
   private static final String NONE_ORIGINS = "none";
   private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,63}");
-  private static final String DEFAULT_LOOPBACK_HOST =
-      InetAddress.getLoopbackAddress().getHostAddress();
   private static final Set<String> ALLOWED =
       Set.of(
           "host",
@@ -76,14 +74,24 @@ public record McpConfig(
 
   /** Validates and normalizes MCP server configuration fields. */
   public McpConfig {
-    host = textOrDefault(host, DEFAULT_LOOPBACK_HOST);
-    AgentConfig.requireValidPort(port);
-    path = AgentConfig.normalizePath(path, "/mcp");
-    token = AgentConfig.optionalText(token);
+    host = NetworkBinding.textOrDefault(host, NetworkBinding.DEFAULT_LOOPBACK_HOST);
+    NetworkBinding.requireValidPort(port);
+    path = NetworkBinding.normalizePath(path, DEFAULT_PATH);
+    token = NetworkBinding.optionalText(token);
     NetworkBinding.requireTokenForNonLoopback(host, token);
-    sessionId = textOrDefault(sessionId, "ghidra-bridge");
-    toolPrefix = requireToolPrefix(textOrDefault(toolPrefix, DEFAULT_TOOL_PREFIX));
+    sessionId = NetworkBinding.defaultSessionId(sessionId);
+    toolPrefix = requireToolPrefix(NetworkBinding.textOrDefault(toolPrefix, DEFAULT_TOOL_PREFIX));
     allowedOrigins = normalizeAllowedOrigins(allowedOrigins, token);
+  }
+
+  /**
+   * Parses MCP server configuration from {@code key=value} startup arguments.
+   *
+   * @param args raw {@code key=value} argument strings
+   * @return validated MCP configuration
+   */
+  public static McpConfig fromArgs(String... args) {
+    return fromMap(NetworkBinding.parseArgs(args));
   }
 
   /**
@@ -99,7 +107,7 @@ public record McpConfig(
   static McpConfig fromMap(Map<String, String> args, Map<String, String> env) {
     Objects.requireNonNull(args, "args");
     Objects.requireNonNull(env, "env");
-    AgentConfig.rejectUnknown(args, ALLOWED);
+    NetworkBinding.rejectUnknown(args, ALLOWED);
     return new McpConfig(
         args.get("host"),
         portOrDefault(args.get("port")),
@@ -129,18 +137,18 @@ public record McpConfig(
 
   private static String resolveRawAllowedOrigins(
       Map<String, String> args, Map<String, String> env) {
-    String fromArgs = AgentConfig.optionalText(args.get("allowed_origins"));
+    String fromArgs = NetworkBinding.optionalText(args.get("allowed_origins"));
     if (fromArgs != null) {
       return fromArgs;
     }
     if (args.containsKey("allowed_origins")) {
       return null;
     }
-    return AgentConfig.optionalText(env.get(ALLOWED_ORIGINS_ENV));
+    return NetworkBinding.optionalText(env.get(ALLOWED_ORIGINS_ENV));
   }
 
   private static Set<String> parseAllowedOrigins(String value) {
-    String normalizedValue = AgentConfig.optionalText(value);
+    String normalizedValue = NetworkBinding.optionalText(value);
     if (normalizedValue == null) {
       return null;
     }
@@ -235,7 +243,7 @@ public record McpConfig(
       throw new IllegalArgumentException("origin must use canonical host[:port]: " + trimmed);
     }
     if (port != -1) {
-      AgentConfig.requireValidPort(port);
+      NetworkBinding.requireValidPort(port);
     }
     String host = rawHost.toLowerCase(Locale.ROOT);
     boolean defaultPort =
@@ -249,7 +257,7 @@ public record McpConfig(
   private record ParsedOrigin(String normalized, String host) {}
 
   private static int portOrDefault(String value) {
-    Integer parsed = AgentConfig.optionalInteger(value, "port");
+    Integer parsed = NetworkBinding.optionalInteger(value, "port");
     return parsed == null ? DEFAULT_PORT : parsed;
   }
 
@@ -276,7 +284,7 @@ public record McpConfig(
    * @return validated MCP tool prefix
    */
   public static String deriveFallbackToolPrefix(String programName, int port) {
-    AgentConfig.requireValidPort(port);
+    NetworkBinding.requireValidPort(port);
     String fallback = DEFAULT_TOOL_PREFIX + "_" + port;
     String sanitized = sanitizeProgramIdentifier(programName);
     if (sanitized.isEmpty() || DEFAULT_TOOL_PREFIX.equalsIgnoreCase(sanitized)) {
@@ -304,7 +312,7 @@ public record McpConfig(
    * @return fallback session identifier
    */
   public static String deriveFallbackSessionId(String programName, int port) {
-    AgentConfig.requireValidPort(port);
+    NetworkBinding.requireValidPort(port);
     String suffix = "-" + port;
     String sanitized = sanitizeProgramIdentifier(programName);
     if (sanitized.isEmpty()) {
@@ -360,10 +368,5 @@ public record McpConfig(
 
   private static boolean isAsciiLetter(char ch) {
     return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
-  }
-
-  private static String textOrDefault(String value, String fallback) {
-    String normalized = AgentConfig.optionalText(value);
-    return normalized == null ? fallback : normalized;
   }
 }

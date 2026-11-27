@@ -54,6 +54,24 @@ Follow these repository rules when you change code:
 
 ## Verification Commands
 
+### Workflow, Shell, and Hygiene Checks
+
+Check GitHub Actions workflows, shell scripts, tracked files, duplicates, API method counts, SHA-pinned GitHub Actions, URLs, and MCP tool names:
+
+```bash
+actionlint
+shellcheck .github/scripts/*.sh
+bash .github/scripts/verify-repository-hygiene.sh
+```
+
+### Architecture Check (`verifyArchitecture`)
+
+Check module import boundaries without a Ghidra installation:
+
+```bash
+./gradlew --no-daemon verifyArchitecture
+```
+
 ### Module Checks and Unit Tests (`check`)
 
 Run JUnit Platform test suites and module checks across all 8 Java subprojects:
@@ -119,14 +137,6 @@ Test runs write failure reports to:
 - JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
 - Headless regression failure log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
 
-### Repository Hygiene Check
-
-Check tracked files, build artifacts, duplicates, API method counts, and SHA-pinned GitHub Actions:
-
-```bash
-bash .github/scripts/verify-repository-hygiene.sh
-```
-
 ### Headless Regression Tests
 
 Run the headless function-mutation regression test on Linux x86-64 after `buildGhidraScript`, `verify`, or `clean verify`. This test needs `gcc` and `nm`:
@@ -137,9 +147,11 @@ python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analy
 
 ### Exact Local CI Sequence
 
-Run these four commands in order to match the `verify` job in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
+Run these six commands in order to match the `lint` and `verify` jobs in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
 
 ```bash
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
@@ -164,7 +176,7 @@ gh attestation verify ghidra-bridge-<version>.zip --repo ByteLandTechnology/ghid
 
 ## Releases
 
-- CI keeps the `verify -> release -> publish` job sequence without cross-job workflow artifacts.
+- CI keeps the `[lint, verify] -> release -> publish` job sequence without cross-job workflow artifacts.
 - `release-please` creates a `v<version>` tag and a draft GitHub release (`"draft": true` and `"force-tag-creation": true` in `release-please-config.json`).
 - `publish` gets `needs.release.outputs.sha` with `persist-credentials: false` and checks `HEAD`, the `v<version>` tag, the remote tag SHA, `isDraft == true`, `.release-please-manifest.json`, and `version.txt`.
 - `publish` runs `package-release.sh` (which runs `verify` in CI and `clean verify` locally) and `tests/function_mutation_regression.py` before asset upload.

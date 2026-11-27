@@ -82,9 +82,11 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
-Before you submit a change, run the verification suite that matches CI:
+Before you submit a change, run the local lint, hygiene, and verification checks:
 
 ```bash
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/release_archive_reproducibility.py
@@ -93,6 +95,12 @@ python3 tests/release_archive_reproducibility.py
 On Linux x86-64, CI also runs
 `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`
 after `clean verify`.
+
+To check module import boundaries without a Ghidra installation, run:
+
+```bash
+./gradlew --no-daemon verifyArchitecture
+```
 
 To run compiler lint, Javadoc, or unit test checks separately during local work, run:
 
@@ -107,7 +115,9 @@ To run compiler lint, Javadoc, or unit test checks separately during local work,
 ./gradlew --no-daemon test
 ```
 
-The `verify` task checks:
+The verification checks enforce these rules:
+- **Workflows and Shell Scripts**: `actionlint` and `shellcheck` validate GitHub Actions workflows, composite actions, and shell scripts.
+- **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, SHA-pinned GitHub Actions, URLs, and MCP tool names.
 - **Compiler Lints**: Java and script compile tasks use `-Xlint:all` and `-Werror` on Java 21.
 - **Javadoc**: `javadoc` checks all Java subprojects with `-Xdoclint:all` and `-Werror`.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
@@ -131,7 +141,7 @@ Every Gradle `Test` task sets:
 ## Releases
 
 The CI workflow uses release-please to manage versions and release notes.
-After a push to `main` passes the `verify` job, release-please creates or updates a release pull request.
+After a push to `main` passes the `lint` and `verify` jobs, release-please creates or updates a release pull request.
 The pull request updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
 Review the proposed version and notes in the pull request.
 Merge the pull request into `main` to start the release.

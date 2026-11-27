@@ -5,19 +5,33 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
- * Validates network host addresses and bearer authentication headers.
+ * Checks network addresses and parses startup arguments for bridge transports.
  */
 public final class NetworkBinding {
+  /** Default loopback host literal used when no listen host is configured. */
+  public static final String DEFAULT_LOOPBACK_HOST =
+      InetAddress.getLoopbackAddress().getHostAddress();
+
+  /** Default session identifier used when no program name or session argument is set. */
+  public static final String DEFAULT_SESSION_ID = "ghidra-bridge";
   private static final int IPV4_BYTE_LENGTH = 4;
   private static final int IPV6_BYTE_LENGTH = 16;
   private static final int MAX_HOST_NAME_LENGTH = 255;
   private static final HostValidationResult VALID_HOST_RESULT =
       new HostValidationResult(HostValidationStatus.VALID, "OK");
+
+  @FunctionalInterface
+  interface HostResolver {
+    InetAddress[] resolve(String host) throws UnknownHostException;
+  }
 
   private NetworkBinding() {}
 
@@ -92,8 +106,12 @@ public final class NetworkBinding {
    * @param token configured bearer token, or {@code null}
    */
   public static void requireTokenForNonLoopback(String host, String token) {
-    if (isLoopback(host)) return;
-    if (token == null || token.isBlank()) {
+    requireTokenForNonLoopback(host, token, InetAddress::getAllByName);
+  }
+
+  static void requireTokenForNonLoopback(String host, String token, HostResolver resolver) {
+    if (isLoopback(host, resolver)) return;
+    if (optionalText(token) == null) {
       throw new IllegalArgumentException("token is required when binding outside loopback");
     }
   }
@@ -105,12 +123,18 @@ public final class NetworkBinding {
    * @param token configured bearer token, or {@code null}
    */
   public static void requireTokenForNonLoopbackOrigin(String host, String token) {
-    if (token != null && !token.isBlank()) {
+    requireTokenForNonLoopbackOrigin(host, token, InetAddress::getAllByName);
+  }
+
+  static void requireTokenForNonLoopbackOrigin(
+      String host, String token, HostResolver resolver) {
+    Objects.requireNonNull(resolver, "resolver");
+    if (optionalText(token) != null) {
       return;
     }
     boolean loopback;
     try {
-      loopback = isLoopback(host);
+      loopback = isLoopback(host, resolver);
     } catch (IllegalArgumentException unresolved) {
       loopback = false;
     }
@@ -129,7 +153,7 @@ public final class NetworkBinding {
    * @return {@code true} if the header matches {@code Bearer <expectedToken>}
    */
   public static boolean bearerTokenMatches(String authorizationHeader, String expectedToken) {
-    if (authorizationHeader == null) {
+    if (authorizationHeader == null || expectedToken == null) {
       return false;
     }
     return MessageDigest.isEqual(
@@ -144,21 +168,157 @@ public final class NetworkBinding {
    * @return {@code true} if every resolved address is on loopback
    */
   public static boolean isLoopback(String host) {
-    if (host == null || host.isBlank()) {
-      throw new IllegalArgumentException("host is required");
-    }
-    InetAddress literal = parseIpLiteral(host);
+    return isLoopback(host, InetAddress::getAllByName);
+  }
+
+  static boolean isLoopback(String host, HostResolver resolver) {
+    Objects.requireNonNull(resolver, "resolver");
+    String normalized = requiredText(host, "host");
+    InetAddress literal = parseIpLiteral(normalized);
     if (literal != null) {
       return literal.isLoopbackAddress();
     }
     try {
-      for (InetAddress address : InetAddress.getAllByName(host.trim())) {
+      InetAddress[] addresses = resolver.resolve(normalized);
+      if (addresses.length == 0) {
+        return false;
+      }
+      for (InetAddress address : addresses) {
         if (!address.isLoopbackAddress()) return false;
       }
       return true;
     } catch (UnknownHostException error) {
       throw new IllegalArgumentException("host cannot be resolved: " + host, error);
     }
+  }
+
+  /**
+   * Parses {@code key=value} argument strings into an ordered map.
+   *
+   * @param args raw argument strings
+   * @return map of parsed argument keys and values
+   */
+  public static Map<String, String> parseArgs(String... args) {
+    Map<String, String> parsed = new LinkedHashMap<>();
+    if (args == null) return parsed;
+    for (String raw : args) {
+      if (raw == null || raw.isBlank()) continue;
+      String argument = raw.trim();
+      int separator = argument.indexOf('=');
+      if (separator <= 0) {
+        throw new IllegalArgumentException("expected key=value argument but got: " + argument);
+      }
+      String key = argument.substring(0, separator);
+      if (parsed.putIfAbsent(key, argument.substring(separator + 1)) != null) {
+        throw new IllegalArgumentException("duplicate startup argument: " + key);
+      }
+    }
+    return parsed;
+  }
+
+  /**
+   * Rejects startup argument keys outside the permitted set.
+   *
+   * @param args startup argument map
+   * @param permitted permitted argument keys
+   */
+  public static void rejectUnknown(Map<String, String> args, Set<String> permitted) {
+    Objects.requireNonNull(args, "args");
+    Objects.requireNonNull(permitted, "allowed");
+    for (String key : args.keySet()) {
+      if (!permitted.contains(key)) {
+        throw new IllegalArgumentException("unknown startup argument: " + key);
+      }
+    }
+  }
+
+  /**
+   * Checks that a TCP port number is in {@code 1..65535}.
+   *
+   * @param port TCP port number to check
+   */
+  public static void requireValidPort(int port) {
+    if (port < 1 || port > 65535) {
+      throw new IllegalArgumentException("port must be in 1..65535");
+    }
+  }
+
+  /**
+   * Parses an optional integer value from text.
+   *
+   * @param value raw text value, or {@code null}
+   * @param field argument name for error messages
+   * @return parsed integer, or {@code null} when blank
+   */
+  public static Integer optionalInteger(String value, String field) {
+    String normalized = optionalText(value);
+    if (normalized == null) return null;
+    try {
+      return Integer.valueOf(normalized);
+    } catch (NumberFormatException error) {
+      throw new IllegalArgumentException(field + " must be an integer", error);
+    }
+  }
+
+  /**
+   * Trims optional text and converts blank values to {@code null}.
+   *
+   * @param value raw text value, or {@code null}
+   * @return trimmed non-empty text, or {@code null}
+   */
+  public static String optionalText(String value) {
+    if (value == null) return null;
+    String normalized = value.trim();
+    return normalized.isEmpty() ? null : normalized;
+  }
+
+  /**
+   * Trims required text and fails when the value is {@code null} or blank.
+   *
+   * @param value raw text value
+   * @param field argument name for error messages
+   * @return trimmed non-empty text
+   */
+  public static String requiredText(String value, String field) {
+    String normalized = optionalText(value);
+    if (normalized == null) {
+      throw new IllegalArgumentException(field + " is required");
+    }
+    return normalized;
+  }
+
+  /**
+   * Returns trimmed text when non-blank, or {@code fallback} when blank.
+   *
+   * @param value candidate text value, or {@code null}
+   * @param fallback default value when {@code value} is blank
+   * @return trimmed text or {@code fallback}
+   */
+  public static String textOrDefault(String value, String fallback) {
+    String normalized = optionalText(value);
+    return normalized == null ? fallback : normalized;
+  }
+
+  /**
+   * Returns {@code candidate} trimmed when non-blank, or {@link #DEFAULT_SESSION_ID} when blank.
+   *
+   * @param candidate candidate session identifier, or {@code null}
+   * @return non-blank session identifier
+   */
+  public static String defaultSessionId(String candidate) {
+    return textOrDefault(candidate, DEFAULT_SESSION_ID);
+  }
+
+  /**
+   * Normalizes an HTTP or WebSocket path to start with {@code /}.
+   *
+   * @param value candidate path, or {@code null}
+   * @param fallback default path when {@code value} is blank
+   * @return normalized path that starts with {@code /}
+   */
+  public static String normalizePath(String value, String fallback) {
+    String normalized = textOrDefault(value, requiredText(fallback, "fallback"));
+    return normalized.startsWith("/") ? normalized : "/" + normalized;
   }
 
   /**

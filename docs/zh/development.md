@@ -73,14 +73,26 @@ Gradle 按以下优先级解析 Ghidra 安装路径：
 
 ## 质量检查
 
-在提交代码更改之前，必须运行全量验证套件：
+在提交代码更改之前，必须运行本地检查与全量验证套件：
 
 ```bash
-./gradlew --no-daemon clean verify
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
+./gradlew --no-daemon clean verify
+```
+
+在 Linux x86-64 环境中，CI 还会在 `clean verify` 之后运行 `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`。
+
+如需在不安装 Ghidra 的环境中单独检查模块导入边界，请运行：
+
+```bash
+./gradlew --no-daemon verifyArchitecture
 ```
 
 验证套件执行以下检查：
+- **工作流与脚本检查**：`actionlint` 与 `shellcheck` 校验 GitHub Actions 工作流、复合操作和 Shell 脚本。
+- **仓库卫生**：`verify-repository-hygiene.sh` 检查跟踪文件、重复文件、仓库链接与 MCP 工具名。
 - **单元测试**：`check` 运行所有 Java 模块的 JUnit 测试。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
 - **契约一致性**：`verifyApiContracts` 确保文档契约与代码完全一致。

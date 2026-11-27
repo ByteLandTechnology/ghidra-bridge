@@ -2,20 +2,18 @@ package app.byteland.ghidra.agent;
 
 import app.byteland.ghidra.network.NetworkBinding;
 import java.io.ByteArrayOutputStream;
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * Configuration values for a bridge runtime session.
+ * Configuration values for a WebSocket bridge session.
  *
  * @param wsUrl outbound WebSocket URL, or {@code null} in server mode
  * @param host server listen host, or {@code null} in outbound mode
@@ -33,19 +31,17 @@ public record AgentConfig(
     String token,
     String sessionId,
     Integer exitDeadlineSeconds) {
-  private static final String DEFAULT_LOOPBACK_HOST =
-      InetAddress.getLoopbackAddress().getHostAddress();
   private static final Set<String> ALLOWED =
       Set.of("ws_url", "host", "port", "path", "session_id", "token", "jar", "exit_deadline_sec");
 
   /** Validates and normalizes runtime configuration fields. */
   public AgentConfig {
-    boolean pathWasProvided = optionalText(path) != null;
-    wsUrl = optionalText(wsUrl);
-    host = optionalText(host);
-    path = normalizePath(path, "/ws/agent");
-    token = optionalText(token);
-    sessionId = required(sessionId, "session_id");
+    boolean pathWasProvided = NetworkBinding.optionalText(path) != null;
+    wsUrl = NetworkBinding.optionalText(wsUrl);
+    host = NetworkBinding.optionalText(host);
+    path = NetworkBinding.normalizePath(path, AgentWebSocketServer.DEFAULT_PATH);
+    token = NetworkBinding.optionalText(token);
+    sessionId = NetworkBinding.requiredText(sessionId, "session_id");
     if (wsUrl == null && port == null) {
       throw new IllegalArgumentException("either ws_url or port is required");
     }
@@ -56,8 +52,8 @@ public record AgentConfig(
       URI uri = parseWsUri(wsUrl);
       NetworkBinding.requireTokenForNonLoopback(uri.getHost(), token);
     }
-    if (port != null) requireValidPort(port);
-    if (port != null && host == null) host = DEFAULT_LOOPBACK_HOST;
+    if (port != null) NetworkBinding.requireValidPort(port);
+    if (port != null && host == null) host = NetworkBinding.DEFAULT_LOOPBACK_HOST;
     if (port != null) NetworkBinding.requireTokenForNonLoopback(host, token);
     if (exitDeadlineSeconds != null && wsUrl == null) {
       throw new IllegalArgumentException("exit_deadline_sec requires ws_url");
@@ -74,7 +70,7 @@ public record AgentConfig(
    * @return validated runtime configuration
    */
   public static AgentConfig fromArgs(String... args) {
-    return fromMap(parseArgs(args));
+    return fromMap(NetworkBinding.parseArgs(args));
   }
 
   /**
@@ -85,39 +81,15 @@ public record AgentConfig(
    */
   public static AgentConfig fromMap(Map<String, String> args) {
     Objects.requireNonNull(args, "args");
-    rejectUnknown(args, ALLOWED);
+    NetworkBinding.rejectUnknown(args, ALLOWED);
     return new AgentConfig(
         args.get("ws_url"),
         args.get("host"),
-        optionalInteger(args.get("port"), "port"),
+        NetworkBinding.optionalInteger(args.get("port"), "port"),
         args.get("path"),
         args.get("token"),
         args.get("session_id"),
-        optionalInteger(args.get("exit_deadline_sec"), "exit_deadline_sec"));
-  }
-
-  /**
-   * Parses {@code key=value} argument strings into an ordered map.
-   *
-   * @param args raw argument strings
-   * @return map of parsed argument keys and values
-   */
-  public static Map<String, String> parseArgs(String... args) {
-    Map<String, String> parsed = new LinkedHashMap<>();
-    if (args == null) return parsed;
-    for (String raw : args) {
-      if (raw == null || raw.isBlank()) continue;
-      String argument = raw.trim();
-      int separator = argument.indexOf('=');
-      if (separator <= 0) {
-        throw new IllegalArgumentException("expected key=value argument but got: " + argument);
-      }
-      String key = argument.substring(0, separator);
-      if (parsed.putIfAbsent(key, argument.substring(separator + 1)) != null) {
-        throw new IllegalArgumentException("duplicate startup argument: " + key);
-      }
-    }
-    return parsed;
+        NetworkBinding.optionalInteger(args.get("exit_deadline_sec"), "exit_deadline_sec"));
   }
 
   /**
@@ -168,7 +140,7 @@ public record AgentConfig(
    * @return redacted WebSocket URL, or {@code null} when blank
    */
   public static String redactWsUrl(String wsUrl) {
-    String normalized = optionalText(wsUrl);
+    String normalized = NetworkBinding.optionalText(wsUrl);
     if (normalized == null) return null;
     int query = normalized.indexOf('?');
     int fragment = normalized.indexOf('#');
@@ -188,7 +160,7 @@ public record AgentConfig(
    * @return validated WebSocket URI
    */
   public static URI parseWsUri(String wsUrl) {
-    String normalized = optionalText(wsUrl);
+    String normalized = NetworkBinding.optionalText(wsUrl);
     if (normalized == null) {
       throw new IllegalArgumentException("ws_url is invalid");
     }
@@ -213,7 +185,7 @@ public record AgentConfig(
       throw new IllegalArgumentException("ws_url must include a host");
     }
     if (uri.getPort() != -1) {
-      requireValidPort(uri.getPort());
+      NetworkBinding.requireValidPort(uri.getPort());
     }
     rejectQueryToken(uri.getRawQuery());
     return uri;
@@ -325,77 +297,5 @@ public record AgentConfig(
     if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
     if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
     return -1;
-  }
-
-  /**
-   * Rejects startup argument keys outside the permitted set.
-   *
-   * @param args startup argument map
-   * @param permitted permitted argument keys
-   */
-  public static void rejectUnknown(Map<String, String> args, Set<String> permitted) {
-    for (String key : args.keySet()) {
-      if (!permitted.contains(key))
-        throw new IllegalArgumentException("unknown startup argument: " + key);
-    }
-  }
-
-  /**
-   * Verifies that a TCP port number is in {@code 1..65535}.
-   *
-   * @param port TCP port number to check
-   */
-  public static void requireValidPort(int port) {
-    if (port < 1 || port > 65535) {
-      throw new IllegalArgumentException("port must be in 1..65535");
-    }
-  }
-
-  /**
-   * Parses an optional integer value from text.
-   *
-   * @param value raw text value, or {@code null}
-   * @param field argument name for error messages
-   * @return parsed integer, or {@code null} when blank
-   */
-  public static Integer optionalInteger(String value, String field) {
-    String normalized = optionalText(value);
-    if (normalized == null) return null;
-    try {
-      return Integer.valueOf(normalized);
-    } catch (NumberFormatException error) {
-      throw new IllegalArgumentException(field + " must be an integer", error);
-    }
-  }
-
-  private static String required(String value, String field) {
-    String normalized = optionalText(value);
-    if (normalized == null) throw new IllegalArgumentException(field + " is required");
-    return normalized;
-  }
-
-  /**
-   * Trims optional text and converts blank values to {@code null}.
-   *
-   * @param value raw text value, or {@code null}
-   * @return trimmed non-empty text, or {@code null}
-   */
-  public static String optionalText(String value) {
-    if (value == null) return null;
-    String normalized = value.trim();
-    return normalized.isEmpty() ? null : normalized;
-  }
-
-  /**
-   * Normalizes an HTTP or WebSocket path to start with {@code /}.
-   *
-   * @param value candidate path, or {@code null}
-   * @param fallback default path when {@code value} is blank
-   * @return normalized path that starts with {@code /}
-   */
-  public static String normalizePath(String value, String fallback) {
-    String normalized = optionalText(value);
-    if (normalized == null) normalized = fallback;
-    return normalized.startsWith("/") ? normalized : "/" + normalized;
   }
 }
