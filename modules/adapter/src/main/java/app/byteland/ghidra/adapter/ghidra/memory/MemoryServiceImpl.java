@@ -30,6 +30,11 @@ public final class MemoryServiceImpl implements MemoryService {
   }
 
   @Override
+  public MemoryBlockResource createMemoryBlock(MemoryBlockCreateRequest request) {
+    return memoryMutations.createMemoryBlock(request);
+  }
+
+  @Override
   public MemoryResource readMemoryRange(
       String startRaw, int length, ByteSequence.Encoding encoding) {
     return memoryRangeQueries.readMemoryRange(startRaw, length, encoding);

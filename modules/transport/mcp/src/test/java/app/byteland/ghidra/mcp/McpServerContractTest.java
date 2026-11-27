@@ -100,7 +100,7 @@ class McpServerContractTest {
     assertEquals(
         Map.of(
             "readOnlyHint", false,
-            "destructiveHint", false,
+            "destructiveHint", true,
             "idempotentHint", true,
             "openWorldHint", false),
         program.get("annotations"));
@@ -137,7 +137,7 @@ class McpServerContractTest {
 
     List<Map<String, Object>> operations =
         (List<Map<String, Object>>) domainHelp.get("operations");
-    assertEquals(4, operations.size());
+    assertEquals(5, operations.size());
     for (Map<String, Object> operation : operations) {
       assertNotNull(operation.get("name"));
       assertNotNull(operation.get("method"));

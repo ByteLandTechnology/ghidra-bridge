@@ -484,7 +484,198 @@ def run_test(headless, root):
             })["result"]
             assert "label_renamed(" in caller_after["c"]
             assert "label_only(" not in caller_after["c"]
-            print("Function mutation regression checks passed")
+
+            sram = tool(48, "ghidra_memory", {
+                "operation": "block.create",
+                "params": {
+                    "resource": {
+                        "name": "SRAM",
+                        "start": "0x20000000",
+                        "length": 4096,
+                        "initialized": False,
+                        "read": True,
+                        "write": True,
+                        "execute": False,
+                        "is_volatile": False,
+                        "comment": "On-chip SRAM",
+                    },
+                },
+            })["result"]
+            assert sram["name"] == "SRAM"
+            assert sram["initialized"] is False
+            assert sram["length"] == 4096
+
+            mmio = tool(49, "ghidra_memory", {
+                "operation": "block.create",
+                "params": {
+                    "resource": {
+                        "name": "MMIO",
+                        "start": "0x40000000",
+                        "length": 256,
+                        "initialized": False,
+                        "read": True,
+                        "write": True,
+                        "execute": False,
+                        "is_volatile": True,
+                        "comment": "Peripheral registers",
+                    },
+                },
+            })["result"]
+            assert mmio["volatile"] is True
+            assert mmio["comment"] == "Peripheral registers"
+
+            rom = tool(50, "ghidra_memory", {
+                "operation": "block.create",
+                "params": {
+                    "resource": {
+                        "name": "BOOTROM",
+                        "start": "0x10000000",
+                        "length": 8,
+                        "initialized": True,
+                        "bytes": {"encoding": "hex", "data": "909090c3", "length": 4},
+                        "fill_byte": 0xFF,
+                        "read": True,
+                        "write": False,
+                        "execute": True,
+                    },
+                },
+            })["result"]
+            assert rom["initialized"] is True
+            assert rom["execute"] is True
+            rom_bytes = tool(51, "ghidra_memory", {
+                "operation": "read",
+                "params": {"selector": {"address": "0x10000000"}, "length": 8},
+            })["result"]
+            assert rom_bytes["bytes"]["data"] == "909090c3ffffffff"
+
+            tool(52, "ghidra_memory", {
+                "operation": "block.create",
+                "params": {
+                    "resource": {
+                        "name": "TOO_LARGE_INIT",
+                        "start": "0x50000000",
+                        "length": 16 * 1024 * 1024 + 1,
+                        "initialized": True,
+                    },
+                },
+            }, success=False)
+
+            tool(53, "ghidra_memory", {
+                "operation": "block.create",
+                "params": {
+                    "resource": {
+                        "name": "SRAM_OVERLAP",
+                        "start": "0x20000800",
+                        "length": 256,
+                    },
+                },
+            }, success=False)
+
+            overlay = tool(54, "ghidra_memory", {
+                "operation": "block.create",
+                "params": {
+                    "resource": {
+                        "name": "SRAM_OVERLAY",
+                        "start": "0x20000800",
+                        "length": 256,
+                        "initialized": True,
+                        "fill_byte": 0x5A,
+                        "overlay": True,
+                    },
+                },
+            })["result"]
+            assert overlay["overlay"] is True
+
+            before_program = tool(55, "ghidra_program", {"operation": "get"})["result"]
+            old_base = int(before_program["image_base"].split(":")[-1], 16)
+            new_base = old_base + 0x100000
+            rebased = tool(56, "ghidra_program", {
+                "operation": "rebase",
+                "params": {"image_base": hex(new_base)},
+            })["result"]
+            assert int(rebased["image_base"].split(":")[-1], 16) == new_base
+            shifted_label = hex(int(symbols["label_only"], 16) + 0x100000)
+            assert function(57, "get", {"selector": {"entry": shifted_label}})["result"]["name"] == "label_renamed"
+
+            tool(58, "ghidra_program", {
+                "operation": "rebase",
+                "params": {"image_base": "0xfffffffffffffff0"},
+            }, success=False)
+
+            restored = tool(59, "ghidra_program", {
+                "operation": "rebase",
+                "params": {"image_base": hex(old_base)},
+            })["result"]
+            assert int(restored["image_base"].split(":")[-1], 16) == old_base
+
+            tool(60, "ghidra_batch", {
+                "operation": "execute",
+                "params": {
+                    "transaction_mode": "all_or_none",
+                    "items": [
+                        {
+                            "id": "rolled_back",
+                            "method": "memory_block.create",
+                            "arguments": {
+                                "resource": {
+                                    "name": "ROLLED_BACK",
+                                    "start": "0x30000000",
+                                    "length": 64,
+                                },
+                            },
+                        },
+                        {
+                            "id": "conflict",
+                            "method": "memory_block.create",
+                            "arguments": {
+                                "resource": {
+                                    "name": "CONFLICT",
+                                    "start": "0x40000000",
+                                    "length": 64,
+                                },
+                            },
+                        },
+                    ],
+                },
+            }, success=False)
+            blocks = tool(61, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
+            assert all(item["name"] != "ROLLED_BACK" for item in blocks)
+
+            per_item = tool(62, "ghidra_batch", {
+                "operation": "execute",
+                "params": {
+                    "transaction_mode": "per_item",
+                    "items": [
+                        {
+                            "id": "kept",
+                            "method": "memory_block.create",
+                            "arguments": {
+                                "resource": {
+                                    "name": "KEPT_BLOCK",
+                                    "start": "0x30000000",
+                                    "length": 64,
+                                },
+                            },
+                        },
+                        {
+                            "id": "conflict",
+                            "method": "memory_block.create",
+                            "arguments": {
+                                "resource": {
+                                    "name": "CONFLICT",
+                                    "start": "0x40000000",
+                                    "length": 64,
+                                },
+                            },
+                        },
+                    ],
+                },
+            })["result"]["items"]
+            assert "result" in per_item[0]
+            assert "error" in per_item[1]
+            blocks_after = tool(63, "ghidra_memory", {"operation": "block.list"})["result"]["items"]
+            assert any(item["name"] == "KEPT_BLOCK" for item in blocks_after)
+            print("Function, program rebase, and memory block regression checks passed")
         except BaseException as exc:
             primary_error = exc
             raise

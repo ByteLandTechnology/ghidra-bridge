@@ -185,13 +185,13 @@ class AgentDispatcherConcurrencyTest {
   }
 
   @Test
-  void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
+  void allTwentyEightMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(58, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
-      assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
+      assertEquals(27, writeCalls.size(), "All 27 single-mutation methods must be tested");
 
       for (Map.Entry<String, Map<String, Object>> call : writeCalls) {
         String method = call.getKey();
@@ -216,7 +216,7 @@ class AgentDispatcherConcurrencyTest {
         assertEquals(0, obs.readHoldCount(), "Mutation must not hold read lock: " + method);
       }
 
-      // Mutating batch (per_item), mutating batch (all_or_none), and mixed read+write batch (26th method: batch.execute)
+      // Test write batches in per_item and all_or_none modes (28th method: batch.execute).
       for (String mode : List.of("per_item", "all_or_none")) {
         harness.lastWriteMethodObservation.set(null);
         dispatcher.dispatch(
@@ -743,7 +743,14 @@ class AgentDispatcherConcurrencyTest {
   private static List<Map.Entry<String, Map<String, Object>>> validMutationRequests() {
     Map<String, Object> intRef = Map.of("kind", "named", "name", "int");
     List<Map.Entry<String, Map<String, Object>>> calls = new ArrayList<>();
+    calls.add(Map.entry("program.rebase", Map.of("image_base", "ram:00100000")));
     calls.add(Map.entry("program.save", Map.of()));
+    calls.add(
+        Map.entry(
+            "memory_block.create",
+            Map.of(
+                "resource",
+                Map.of("name", "SRAM", "start", "ram:20000000", "length", 4096))));
     calls.add(
         Map.entry(
             "memory.write",
@@ -1049,6 +1056,24 @@ class AgentDispatcherConcurrencyTest {
         public void saveProgram() {
           observe("program.save", true);
         }
+
+        @Override
+        public ProgramResource rebaseProgram(String imageBaseRaw) {
+          observe("program.rebase", true);
+          return new ProgramResource(
+              "test-program",
+              "/bin/test",
+              "ELF",
+              imageBaseRaw,
+              imageBaseRaw,
+              "ram:0010ffff",
+              "x86:LE:64:default",
+              "gcc",
+              Instant.EPOCH,
+              Instant.EPOCH,
+              1L,
+              1L);
+        }
       };
     }
 
@@ -1134,6 +1159,12 @@ class AgentDispatcherConcurrencyTest {
         @Override
         public MemoryBlockResource getMemoryBlockByName(String rawName) {
           observe("memory_block.get", false);
+          return sampleBlock();
+        }
+
+        @Override
+        public MemoryBlockResource createMemoryBlock(MemoryBlockCreateRequest request) {
+          observe("memory_block.create", true);
           return sampleBlock();
         }
 

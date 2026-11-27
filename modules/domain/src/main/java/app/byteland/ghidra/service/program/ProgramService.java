@@ -17,4 +17,7 @@ public interface ProgramService {
 
   /** Saves program changes to the project database. */
   void saveProgram();
+
+  /** Updates the program image base and returns updated program metadata. */
+  ProgramResource rebaseProgram(String imageBaseRaw);
 }
