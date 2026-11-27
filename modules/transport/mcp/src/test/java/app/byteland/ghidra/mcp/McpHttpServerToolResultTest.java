@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonRpc;
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.ByteSequence;
@@ -483,9 +482,7 @@ class McpHttpServerToolResultTest {
 
     static ServerHarness start() throws IOException {
       BridgeServices services = createStubServices();
-      AgentDispatcher dispatcher =
-          new AgentDispatcher(
-              services, new AgentConfig(null, "127.0.0.1", 8765, "/ws/agent", null, "test", null));
+      AgentDispatcher dispatcher = new AgentDispatcher(services, "test");
       for (int attempt = 0; attempt < 10; attempt++) {
         int port = reserveLoopbackPort();
         McpConfig config = new McpConfig("127.0.0.1", port, "/mcp", null, "test", "ghidra");
