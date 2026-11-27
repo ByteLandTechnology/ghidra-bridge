@@ -12,10 +12,21 @@ class DecompilationSchemasTest {
   void acceptsNativeLayoutAndCommentResults() {
     Map<String, Object> line = Map.of(
         "number", 0, "indent", 2, "tokens", List.of(Map.of(
-            "kind", "keyword", "text", "return", "start", 2, "end", 8,
-            "location_address", "ram:1008", "code_unit_address", "ram:1008")));
+            "kind", "variable", "text", "iVar1", "start", 2, "end", 7,
+            "location_address", "ram:1008", "code_unit_address", "ram:1008",
+            "symbol", Map.of(
+                "id", "local:1:HASH:5ff83d9281:4",
+                "name", "iVar1",
+                "address", "ram:1000",
+                "type", "Local Var"))));
     assertDoesNotThrow(() -> WireSchema.validate(
         List.of(line), ApiSchemaCatalog.outputFieldSchema("lines"), "/lines"));
+    assertDoesNotThrow(() -> WireSchema.validate(
+        List.of(Map.of(
+            "name", "iVar1",
+            "data_type", Map.of("kind", "named", "name", "/int"),
+            "storage", Map.of("kind", "serialization", "serialization", "HASH:5ff83d9281:4"))),
+        ApiSchemaCatalog.outputFieldSchema("local_variables"), "/local_variables"));
     assertDoesNotThrow(() -> WireSchema.validate(
         List.of(Map.of("address", "ram:1008", "type", "repeatable", "text", "note")),
         ApiSchemaCatalog.outputFieldSchema("comments"), "/comments"));

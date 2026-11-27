@@ -4569,6 +4569,49 @@
                         "maxItems": !!int "2147483647"
                         "minItems": !!int "0"
                         "type": "array"
+                      "local_variables":
+                        "items":
+                          "additionalProperties": !!bool "false"
+                          "minProperties": !!int "1"
+                          "properties":
+                            "data_type":
+                              "$ref": "#/$defs/data_type_reference"
+                            "name":
+                              "type": "string"
+                            "storage":
+                              "discriminator":
+                                "propertyName": "kind"
+                              "oneOf":
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "serialization"
+                                    "type": "string"
+                                  "serialization":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "serialization"
+                                "type": "object"
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "register"
+                                    "type": "string"
+                                  "register":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "register"
+                                "type": "object"
+                          "type": "object"
+                        "maxItems": !!int "1000"
+                        "minItems": !!int "0"
+                        "type": "array"
                       "name":
                         "type": "string"
                       "tokens":
@@ -10606,6 +10649,36 @@
                       "name":
                         "minLength": !!int "1"
                         "type": "string"
+                      "storage":
+                        "discriminator":
+                          "propertyName": "kind"
+                        "oneOf":
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "serialization"
+                              "type": "string"
+                            "serialization":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "serialization"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "register"
+                              "type": "string"
+                            "register":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "register"
+                          "type": "object"
                     "required":
                     - "entry"
                     - "name"
@@ -11026,6 +11099,10 @@
                           - "entry"
                           - "format"
                           - "lines"
+                          - "local_variables"
+                          - "local_variables.data_type"
+                          - "local_variables.name"
+                          - "local_variables.storage"
                           - "name"
                           - "tokens"
                           - "warnings"
@@ -15273,6 +15350,36 @@
                                   "name":
                                     "minLength": !!int "1"
                                     "type": "string"
+                                  "storage":
+                                    "discriminator":
+                                      "propertyName": "kind"
+                                    "oneOf":
+                                    - "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "kind":
+                                          "enum":
+                                          - "serialization"
+                                          "type": "string"
+                                        "serialization":
+                                          "minLength": !!int "1"
+                                          "type": "string"
+                                      "required":
+                                      - "kind"
+                                      - "serialization"
+                                      "type": "object"
+                                    - "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "kind":
+                                          "enum":
+                                          - "register"
+                                          "type": "string"
+                                        "register":
+                                          "minLength": !!int "1"
+                                          "type": "string"
+                                      "required":
+                                      - "kind"
+                                      - "register"
+                                      "type": "object"
                                 "required":
                                 - "entry"
                                 - "name"
@@ -15424,6 +15531,10 @@
                                       - "entry"
                                       - "format"
                                       - "lines"
+                                      - "local_variables"
+                                      - "local_variables.data_type"
+                                      - "local_variables.name"
+                                      - "local_variables.storage"
                                       - "name"
                                       - "tokens"
                                       - "warnings"
@@ -19398,6 +19509,36 @@
                         "name":
                           "minLength": !!int "1"
                           "type": "string"
+                        "storage":
+                          "discriminator":
+                            "propertyName": "kind"
+                          "oneOf":
+                          - "additionalProperties": !!bool "false"
+                            "properties":
+                              "kind":
+                                "enum":
+                                - "serialization"
+                                "type": "string"
+                              "serialization":
+                                "minLength": !!int "1"
+                                "type": "string"
+                            "required":
+                            - "kind"
+                            - "serialization"
+                            "type": "object"
+                          - "additionalProperties": !!bool "false"
+                            "properties":
+                              "kind":
+                                "enum":
+                                - "register"
+                                "type": "string"
+                              "register":
+                                "minLength": !!int "1"
+                                "type": "string"
+                            "required":
+                            - "kind"
+                            - "register"
+                            "type": "object"
                       "required":
                       - "entry"
                       - "name"
@@ -19549,6 +19690,10 @@
                             - "entry"
                             - "format"
                             - "lines"
+                            - "local_variables"
+                            - "local_variables.data_type"
+                            - "local_variables.name"
+                            - "local_variables.storage"
                             - "name"
                             - "tokens"
                             - "warnings"
@@ -24948,6 +25093,10 @@
                 - "entry"
                 - "format"
                 - "lines"
+                - "local_variables"
+                - "local_variables.data_type"
+                - "local_variables.name"
+                - "local_variables.storage"
                 - "name"
                 - "tokens"
                 - "warnings"
@@ -25254,6 +25403,49 @@
             - "tokens"
             "type": "object"
           "maxItems": !!int "2147483647"
+          "minItems": !!int "0"
+          "type": "array"
+        "local_variables":
+          "items":
+            "additionalProperties": !!bool "false"
+            "minProperties": !!int "1"
+            "properties":
+              "data_type":
+                "$ref": "#/$defs/data_type_reference"
+              "name":
+                "type": "string"
+              "storage":
+                "discriminator":
+                  "propertyName": "kind"
+                "oneOf":
+                - "additionalProperties": !!bool "false"
+                  "properties":
+                    "kind":
+                      "enum":
+                      - "serialization"
+                      "type": "string"
+                    "serialization":
+                      "minLength": !!int "1"
+                      "type": "string"
+                  "required":
+                  - "kind"
+                  - "serialization"
+                  "type": "object"
+                - "additionalProperties": !!bool "false"
+                  "properties":
+                    "kind":
+                      "enum":
+                      - "register"
+                      "type": "string"
+                    "register":
+                      "minLength": !!int "1"
+                      "type": "string"
+                  "required":
+                  - "kind"
+                  - "register"
+                  "type": "object"
+            "type": "object"
+          "maxItems": !!int "1000"
           "minItems": !!int "0"
           "type": "array"
         "name":
@@ -28158,6 +28350,36 @@
             "name":
               "minLength": !!int "1"
               "type": "string"
+            "storage":
+              "discriminator":
+                "propertyName": "kind"
+              "oneOf":
+              - "additionalProperties": !!bool "false"
+                "properties":
+                  "kind":
+                    "enum":
+                    - "serialization"
+                    "type": "string"
+                  "serialization":
+                    "minLength": !!int "1"
+                    "type": "string"
+                "required":
+                - "kind"
+                - "serialization"
+                "type": "object"
+              - "additionalProperties": !!bool "false"
+                "properties":
+                  "kind":
+                    "enum":
+                    - "register"
+                    "type": "string"
+                  "register":
+                    "minLength": !!int "1"
+                    "type": "string"
+                "required":
+                - "kind"
+                - "register"
+                "type": "object"
           "required":
           - "entry"
           - "name"

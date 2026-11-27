@@ -1,14 +1,18 @@
 package app.byteland.ghidra.adapter.ghidra.decompilation;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.function.FunctionDescriptions;
 import app.byteland.ghidra.adapter.ghidra.symbol.SymbolDescriptions;
 import app.byteland.ghidra.service.decompilation.DecompilationResource.Line;
 import app.byteland.ghidra.service.decompilation.DecompilationResource.LocatedToken;
+import app.byteland.ghidra.service.decompilation.DecompilationResource.Token;
 import app.byteland.ghidra.service.symbol.SymbolResource;
+import ghidra.app.decompiler.ClangFieldToken;
 import ghidra.app.decompiler.ClangFuncNameToken;
 import ghidra.app.decompiler.ClangLine;
 import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.ClangTokenGroup;
+import ghidra.app.decompiler.ClangVariableDecl;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.app.decompiler.DecompiledFunction;
 import ghidra.app.decompiler.PrettyPrinter;
@@ -18,6 +22,12 @@ import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.listing.VariableStorage;
+import ghidra.program.model.pcode.HighFunction;
+import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.symbol.SourceType;
+import ghidra.program.model.symbol.Symbol;
+import ghidra.program.model.symbol.SymbolType;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -45,17 +55,29 @@ record GuiDocument(String code, List<Line> lines) {
   }
 
   static GuiDocument render(Function function, ClangTokenGroup markup) {
+    return render(function, markup, null);
+  }
+
+  static GuiDocument render(
+      Function function, ClangTokenGroup markup, HighFunction highFunction) {
     if (markup == null) return new GuiDocument("", List.of());
-    return renderLines(function, new PrettyPrinter(function, markup, null).getLines());
+    return renderLines(function, new PrettyPrinter(function, markup, null).getLines(), highFunction);
   }
 
   static GuiDocument renderLines(Function function, List<ClangLine> nativeLines) {
+    return renderLines(function, nativeLines, null);
+  }
+
+  static GuiDocument renderLines(
+      Function function, List<ClangLine> nativeLines, HighFunction highFunction) {
     Program program = function.getProgram();
     Listing listing = program.getListing();
     Address entryPoint = function.getEntryPoint();
     Map<Address, String> canonicalAddresses = new HashMap<>();
     Map<Address, String> codeUnitAddresses = new HashMap<>();
     Map<Function, SymbolResource> functionSymbols = new HashMap<>();
+    Map<HighSymbol, SymbolResource> highSymbols = new HashMap<>();
+    String[] namespaceHolder = new String[1];
     List<Line> lines = new ArrayList<>(nativeLines.size());
     StringBuilder code = new StringBuilder();
     Address previous = null;
@@ -113,18 +135,22 @@ record GuiDocument(String code, List<Line> lines) {
                     ? locationAddress
                     : canonical(maxAddress, canonicalAddresses));
         String text = token.getText();
-        SymbolResource symbol = null;
-        if (token instanceof ClangFuncNameToken nameToken) {
-          Function target = DecompilerUtils.getFunction(program, nameToken);
-          if (target != null) {
-            symbol =
-                functionSymbols.computeIfAbsent(
-                    target, fn -> SymbolDescriptions.describe(fn.getSymbol()));
-          }
-        }
+        Token.Kind kind = DecompilationServiceImpl.tokenKind(token);
+        SymbolResource symbol =
+            describeTokenSymbol(
+                program,
+                function,
+                entryPoint,
+                canonicalAddresses,
+                functionSymbols,
+                highSymbols,
+                namespaceHolder,
+                token,
+                kind,
+                highFunction);
         tokens.add(
             new LocatedToken(
-                DecompilationServiceImpl.tokenKind(token),
+                kind,
                 text,
                 column,
                 column + text.length(),
@@ -142,6 +168,85 @@ record GuiDocument(String code, List<Line> lines) {
       }
     }
     return new GuiDocument(code.toString(), List.copyOf(lines));
+  }
+
+  private static SymbolResource describeTokenSymbol(
+      Program program,
+      Function function,
+      Address entryPoint,
+      Map<Address, String> canonicalAddresses,
+      Map<Function, SymbolResource> functionSymbols,
+      Map<HighSymbol, SymbolResource> highSymbols,
+      String[] namespaceHolder,
+      ClangToken token,
+      Token.Kind kind,
+      HighFunction highFunction) {
+    if (token instanceof ClangFuncNameToken nameToken) {
+      Function target = DecompilerUtils.getFunction(program, nameToken);
+      if (target == null) return null;
+      return functionSymbols.computeIfAbsent(
+          target, fn -> SymbolDescriptions.describe(fn.getSymbol()));
+    }
+    if ((kind != Token.Kind.VARIABLE && kind != Token.Kind.PARAMETER)
+        || token instanceof ClangFieldToken) {
+      return null;
+    }
+    HighSymbol highSymbol = resolveHighSymbol(token, highFunction);
+    if (highSymbol == null || highSymbol.isGlobal()) {
+      return null;
+    }
+    return highSymbols.computeIfAbsent(
+        highSymbol,
+        sym -> describeHighSymbol(function, entryPoint, canonicalAddresses, namespaceHolder, sym));
+  }
+
+  private static SymbolResource describeHighSymbol(
+      Function function,
+      Address entryPoint,
+      Map<Address, String> canonicalAddresses,
+      String[] namespaceHolder,
+      HighSymbol highSymbol) {
+    String entry = canonical(entryPoint, canonicalAddresses);
+    String namespace = namespaceHolder[0];
+    if (namespace == null) {
+      Symbol functionSymbol = function.getSymbol();
+      namespace = functionSymbol == null ? function.getName() : functionSymbol.getName(true);
+      namespaceHolder[0] = namespace;
+    }
+    Symbol dbSymbol = highSymbol.getSymbol();
+    String sourceType =
+        String.valueOf(dbSymbol == null ? SourceType.DEFAULT : dbSymbol.getSource());
+    boolean primary = dbSymbol == null || dbSymbol.isPrimary();
+    if (highSymbol.isParameter()) {
+      return new SymbolResource(
+          "parameter:" + highSymbol.getCategoryIndex(),
+          highSymbol.getName(),
+          entry,
+          namespace,
+          SymbolType.PARAMETER.toString(),
+          sourceType,
+          primary,
+          null);
+    }
+    VariableStorage storage = FunctionDescriptions.effectiveStorage(highSymbol);
+    String serialization = storage == null ? "" : storage.getSerializationString();
+    return new SymbolResource(
+        "local:" + highSymbol.getId() + ":" + serialization,
+        highSymbol.getName(),
+        entry,
+        namespace,
+        SymbolType.LOCAL_VAR.toString(),
+        sourceType,
+        primary,
+        null);
+  }
+
+  private static HighSymbol resolveHighSymbol(ClangToken token, HighFunction highFunction) {
+    HighSymbol symbol = token.getHighSymbol(highFunction);
+    if (symbol == null && token.Parent() instanceof ClangVariableDecl declaration) {
+      symbol = declaration.getHighSymbol();
+    }
+    return symbol;
   }
 
   private static String canonical(Address address, Map<Address, String> canonicalAddresses) {

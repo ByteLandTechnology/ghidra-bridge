@@ -5,6 +5,7 @@ import app.byteland.ghidra.adapter.ghidra.analysis.AnalysisServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.comment.CommentServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.datatype.DataTypeServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.decompilation.DecompilationServiceImpl;
+import app.byteland.ghidra.adapter.ghidra.decompilation.DecompilerPool;
 import app.byteland.ghidra.adapter.ghidra.function.FunctionServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.globalvariable.GlobalVariableServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.listing.ListingServiceImpl;
@@ -15,10 +16,8 @@ import app.byteland.ghidra.adapter.ghidra.symbol.SymbolServiceImpl;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
-import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeService;
-import app.byteland.ghidra.service.decompilation.DecompilationService;
 import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
 import app.byteland.ghidra.service.listing.ListingService;
@@ -60,13 +59,15 @@ public final class GhidraServiceFactory {
         fallbackProgramName == null || fallbackProgramName.isBlank()
             ? "ghidra-bridge"
             : fallbackProgramName;
+    DecompilerPool decompilerPool = DecompilerPool.forSession(context);
 
     ProgramService programService = new ProgramServiceImpl(context);
-    FunctionService functionService = new FunctionServiceImpl(context);
+    FunctionService functionService = new FunctionServiceImpl(context, decompilerPool);
     GlobalVariableService globalVariableService = new GlobalVariableServiceImpl(context);
     MemoryService memoryService = new MemoryServiceImpl(context);
     ListingService listingService = new ListingServiceImpl(context);
-    DecompilationServiceImpl decompilationService = new DecompilationServiceImpl(context);
+    DecompilationServiceImpl decompilationService =
+        DecompilationServiceImpl.withPool(context, decompilerPool);
     AnalysisServiceImpl analysisService = new AnalysisServiceImpl(context);
     context.onProgramClosed(decompilationService::releaseProgram);
     context.onProgramClosed(analysisService::releaseProgram);

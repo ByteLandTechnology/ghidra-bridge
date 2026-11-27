@@ -831,6 +831,7 @@ class McpHttpServerToolResultTest {
                     null,
                     null,
                     null,
+                    null,
                     List.of());
               });
       MemoryService memory =

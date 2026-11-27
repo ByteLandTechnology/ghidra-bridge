@@ -102,6 +102,36 @@ reserved_entry: nop
 .global label_only
 label_only: nop
  ret
+.global helper_calc
+helper_calc:
+ mov (%rdi), %eax
+ imul $3, %eax, %eax
+ add $7, %eax
+ ret
+.global locals_target
+locals_target:
+ push %rbp
+ mov %rsp, %rbp
+ push %rbx
+ sub $0x18, %rsp
+ movl %edi, -0x14(%rbp)
+ lea -0x14(%rbp), %rdi
+ call helper_calc
+ movl %eax, %ebx
+ lea -0x14(%rbp), %rdi
+ call helper_calc
+ addl %ebx, %eax
+ addl -0x14(%rbp), %eax
+ mov -0x8(%rbp), %rbx
+ leave
+ ret
+.global hash_target
+hash_target:
+ mov $5, %eax
+ xchg %eax, (%rdi)
+ imul $3, %eax, %eax
+ add (%rdi), %eax
+ ret
 .global caller_entry
 caller_entry: call label_only
  ret
@@ -484,6 +514,228 @@ def run_test(headless, root):
             })["result"]
             assert "label_renamed(" in caller_after["c"]
             assert "label_only(" not in caller_after["c"]
+
+            function(50, "create", {
+                "resource": {"entry": symbols["helper_calc"], "name": "helper_calc"},
+                "disassemble": True,
+            })
+            function(51, "create", {
+                "resource": {"entry": symbols["locals_target"], "name": "locals_target"},
+                "disassemble": True,
+            })
+            function(52, "parameter.create", {
+                "selector": {"entry": symbols["locals_target"]},
+                "resource": {
+                    "ordinal": 0,
+                    "name": "input_arg",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })
+
+            listed_before = function(53, "list", {
+                "filter": {"entry": symbols["locals_target"]},
+            })["result"]["items"]
+            assert len(listed_before) == 1
+            assert listed_before[0]["local_variables"] == []
+
+            got_before = function(54, "get", selector("locals_target"))["result"]
+            uncommitted_locals = got_before["local_variables"]
+            assert len(uncommitted_locals) >= 2, uncommitted_locals
+
+            decomp_before = tool(55, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {
+                    "selector": {"entry": symbols["locals_target"]},
+                    "format": "document",
+                },
+            })["result"]
+            assert decomp_before["local_variables"] == uncommitted_locals
+
+            token_symbols = [
+                tok["symbol"]
+                for line in decomp_before["lines"]
+                for tok in line["tokens"]
+                if "symbol" in tok
+            ]
+            assert any(sym["id"].startswith("parameter:0") for sym in token_symbols), token_symbols
+            assert any(sym["id"].startswith("local:") for sym in token_symbols), token_symbols
+
+            stack_local = next(
+                loc for loc in uncommitted_locals
+                if loc["storage"]["serialization"].startswith("Stack[")
+            )
+            non_stack_local = next(
+                loc for loc in uncommitted_locals
+                if not loc["storage"]["serialization"].startswith("Stack[")
+            )
+
+            patched_stack = function(56, "local_variable.patch", {
+                "selector": {
+                    "entry": symbols["locals_target"],
+                    "name": stack_local["name"],
+                    "storage": stack_local["storage"],
+                },
+                "patch": {"name": "saved_slot"},
+            })["result"]
+            assert patched_stack["name"] == "saved_slot"
+            assert patched_stack["storage"] == stack_local["storage"]
+
+            listed_after_one = function(57, "list", {
+                "filter": {"entry": symbols["locals_target"]},
+            })["result"]["items"][0]["local_variables"]
+            assert [v["name"] for v in listed_after_one] == ["saved_slot"], listed_after_one
+
+            patched_dynamic = function(58, "local_variable.patch", {
+                "selector": {
+                    "entry": symbols["locals_target"],
+                    "name": non_stack_local["name"],
+                    "storage": non_stack_local["storage"],
+                },
+                "patch": {
+                    "name": "calc_temp",
+                    "data_type": {"kind": "named", "name": "/int"},
+                },
+            })["result"]
+            assert patched_dynamic["name"] == "calc_temp"
+            assert patched_dynamic["storage"]["serialization"].split(":")[0] == (
+                non_stack_local["storage"]["serialization"].split(":")[0]
+            )
+
+            for idx, category in enumerate(("/CatA", "/CatB"), start=30):
+                tool(idx * 2, "ghidra_data_type", {
+                    "operation": "create",
+                    "params": {
+                        "resource": {
+                            "kind": "struct",
+                            "category_path": category,
+                            "name": "Packet",
+                            "size": 0,
+                        },
+                    },
+                })
+                tool(idx * 2 + 1, "ghidra_data_type", {
+                    "operation": "patch",
+                    "params": {
+                        "selector": {"path": f"{category}/Packet"},
+                        "patch": {
+                            "kind": "struct",
+                            "add_fields": [{
+                                "name": "val",
+                                "data_type": {"kind": "named", "name": "/int"},
+                            }],
+                        },
+                    },
+                })
+
+            retyped_a = function(65, "local_variable.patch", {
+                "selector": {"entry": symbols["locals_target"], "name": "saved_slot"},
+                "patch": {"data_type": {"kind": "named", "name": "/CatA/Packet"}},
+            })["result"]
+            assert retyped_a["data_type"] == {"kind": "named", "name": "/CatA/Packet"}, retyped_a
+
+            retyped_b = function(66, "local_variable.patch", {
+                "selector": {
+                    "entry": symbols["locals_target"],
+                    "name": "saved_slot",
+                    "storage": retyped_a["storage"],
+                },
+                "patch": {"data_type": {"kind": "named", "name": "/CatB/Packet"}},
+            })["result"]
+            assert retyped_b["data_type"] == {"kind": "named", "name": "/CatB/Packet"}, retyped_b
+
+            decomp_after = tool(67, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {
+                    "selector": {"entry": symbols["locals_target"]},
+                    "format": "document",
+                },
+            })["result"]
+            field_tokens = [
+                tok for line in decomp_after["lines"]
+                for tok in line["tokens"]
+                if tok.get("text") == "val"
+            ]
+            assert field_tokens, decomp_after["lines"]
+            assert all("symbol" not in tok for tok in field_tokens), field_tokens
+
+            function(68, "create", {
+                "resource": {"entry": symbols["hash_target"], "name": "hash_target"},
+                "disassemble": True,
+            })
+            hash_locals = function(69, "get", selector("hash_target"))["result"]["local_variables"]
+            hash_local = next(
+                (loc for loc in hash_locals if loc["storage"]["serialization"].startswith("HASH:")),
+                None,
+            )
+            assert hash_local is not None, hash_locals
+            patched_hash = function(70, "local_variable.patch", {
+                "selector": {
+                    "entry": symbols["hash_target"],
+                    "name": hash_local["name"],
+                    "storage": hash_local["storage"],
+                },
+                "patch": {"name": "branch_val"},
+            })["result"]
+            assert patched_hash["name"] == "branch_val"
+            assert patched_hash["storage"]["serialization"].startswith("HASH:"), patched_hash
+
+            helper_before = function(71, "get", selector("helper_calc"))["result"]
+            assert helper_before["parameter_count"] == 0, helper_before
+            assert helper_before["parameters"] == [], helper_before
+
+            helper_decomp_before = tool(72, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {
+                    "selector": {"entry": symbols["helper_calc"]},
+                    "format": "document",
+                },
+            })["result"]
+            helper_param_tokens = [
+                tok["symbol"]
+                for line in helper_decomp_before["lines"]
+                for tok in line["tokens"]
+                if tok.get("symbol", {}).get("id") == "parameter:0"
+            ]
+            assert helper_param_tokens, helper_decomp_before["lines"]
+
+            function(73, "parameter.patch", {
+                "selector": {"entry": symbols["helper_calc"], "ordinal": 4},
+                "patch": {"name": "out_of_range_param"},
+            }, success=False)
+            assert function(74, "get", selector("helper_calc"))["result"]["parameter_count"] == 0
+
+            patched_inferred = function(75, "parameter.patch", {
+                "selector": {"entry": symbols["helper_calc"], "ordinal": 0},
+                "patch": {
+                    "name": "factor_ptr",
+                    "data_type": {
+                        "kind": "pointer",
+                        "target": {"kind": "named", "name": "/CatA/Packet"},
+                    },
+                },
+            })["result"]
+            assert patched_inferred == {
+                "ordinal": 0,
+                "name": "factor_ptr",
+                "data_type": {
+                    "kind": "pointer",
+                    "target": {"kind": "named", "name": "/CatA/Packet"},
+                },
+                "storage": {"kind": "serialization", "serialization": "register:00000038:8"},
+            }, patched_inferred
+
+            helper_after = function(76, "get", selector("helper_calc"))["result"]
+            assert helper_after["parameter_count"] == 1, helper_after
+            assert helper_after["parameters"] == [patched_inferred], helper_after
+
+            helper_decomp_after = tool(77, "ghidra_decompilation", {
+                "operation": "get",
+                "params": {
+                    "selector": {"entry": symbols["helper_calc"]},
+                    "format": "text",
+                },
+            })["result"]
+            assert "factor_ptr" in helper_decomp_after["c"], helper_decomp_after["c"]
             print("Function mutation regression checks passed")
         except BaseException as exc:
             primary_error = exc

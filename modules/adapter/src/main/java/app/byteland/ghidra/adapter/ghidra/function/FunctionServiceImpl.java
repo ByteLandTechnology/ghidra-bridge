@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.function;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraDataTypeReferences;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.decompilation.DecompilerPool;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.FunctionCallResource;
@@ -16,22 +17,32 @@ import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.symbol.Namespace;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolType;
 import ghidra.util.exception.InvalidInputException;
+import java.util.Objects;
 import java.util.Set;
 
 public final class FunctionServiceImpl implements FunctionService {
   private final GhidraSession context;
+  private final DecompilerPool decompilerPool;
   private final FunctionLookupQueries lookupQueries;
   private final FunctionListQueries listQueries;
   private final FunctionRelationQueries relationQueries;
   private final FunctionMutations.ParameterDataTypeResolver dataTypeResolver;
 
   public FunctionServiceImpl(GhidraSession context) {
-    this.context = context;
+    this(
+        Objects.requireNonNull(context, "context"),
+        DecompilerPool.forSession(context));
+  }
+
+  public FunctionServiceImpl(GhidraSession context, DecompilerPool decompilerPool) {
+    this.context = Objects.requireNonNull(context, "context");
+    this.decompilerPool = Objects.requireNonNull(decompilerPool, "decompilerPool");
     this.lookupQueries = new FunctionLookupQueries(context);
     this.listQueries = new FunctionListQueries(context, lookupQueries);
     this.relationQueries = new FunctionRelationQueries(context, lookupQueries);
@@ -47,8 +58,13 @@ public final class FunctionServiceImpl implements FunctionService {
 
   @Override
   public FunctionResource getFunction(String rawAddress, Set<String> includes) {
-    return FunctionDescriptions.describe(
-        lookupQueries.resolveFunction(rawAddress), FunctionIncludes.normalize(includes));
+    Function function = lookupQueries.resolveFunction(rawAddress);
+    Set<String> normalizedIncludes = FunctionIncludes.normalize(includes);
+    HighFunction highFunction =
+        normalizedIncludes.contains("locals")
+            ? decompilerPool.decompileHighFunction(function)
+            : null;
+    return FunctionDescriptions.describe(function, normalizedIncludes, highFunction);
   }
 
   @Override
@@ -150,6 +166,7 @@ public final class FunctionServiceImpl implements FunctionService {
       VariableStorageReference storage) {
     FunctionParameterMutations.patchParameter(
         context,
+        decompilerPool,
         lookupQueries.resolveFunction(rawAddress),
         ordinal,
         newName,
@@ -183,11 +200,17 @@ public final class FunctionServiceImpl implements FunctionService {
 
   @Override
   public void patchLocalVariable(
-      String rawAddress, String variableName, String newName, DataTypeReference newDataType) {
+      String rawAddress,
+      String variableName,
+      VariableStorageReference selectorStorage,
+      String newName,
+      DataTypeReference newDataType) {
     FunctionLocalVariableMutations.patchLocalVariable(
         context,
+        decompilerPool,
         lookupQueries.resolveFunction(rawAddress),
         variableName,
+        selectorStorage,
         newName,
         newDataType,
         dataTypeResolver);

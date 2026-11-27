@@ -28,6 +28,16 @@ final class FunctionStorageSupport {
 
   static ParsedStorage parseExplicit(
       Program program, VariableStorageReference input, String field) {
+    return parseStorage(program, input, field, false);
+  }
+
+  static ParsedStorage parseLocalSelector(
+      Program program, VariableStorageReference input, String field) {
+    return parseStorage(program, input, field, true);
+  }
+
+  private static ParsedStorage parseStorage(
+      Program program, VariableStorageReference input, String field, boolean allowHashStorage) {
     if (input == null) {
       return null;
     }
@@ -49,7 +59,7 @@ final class FunctionStorageSupport {
               yield new VariableStorage(program, register);
             }
           };
-      requireRealStorage(storage, field);
+      requireRealStorage(storage, field, allowHashStorage);
       return new ParsedStorage(storage, storage.getSerializationString());
     } catch (InvalidInputException ex) {
       throw new IllegalArgumentException(field + " is invalid: " + failureDetail(ex), ex);
@@ -60,7 +70,7 @@ final class FunctionStorageSupport {
     if (isVoid(dataType)) {
       throw new IllegalArgumentException(field + " cannot be assigned to a void data type");
     }
-    requireRealStorage(storage, field);
+    requireRealStorage(storage, field, false);
     int dataTypeSize = dataType.getLength();
     if (dataTypeSize <= 0) {
       throw new IllegalArgumentException(
@@ -279,7 +289,8 @@ final class FunctionStorageSupport {
     return baseType;
   }
 
-  private static void requireRealStorage(VariableStorage storage, String field) {
+  private static void requireRealStorage(
+      VariableStorage storage, String field, boolean allowHashStorage) {
     if (storage == null
         || !storage.isValid()
         || storage.isBadStorage()
@@ -297,7 +308,12 @@ final class FunctionStorageSupport {
     }
     for (Varnode varnode : varnodes) {
       Address address = varnode.getAddress();
-      if (!address.isRegisterAddress() && !address.isStackAddress() && !address.isMemoryAddress()) {
+      boolean supported =
+          address.isRegisterAddress()
+              || address.isStackAddress()
+              || address.isMemoryAddress()
+              || (allowHashStorage && address.isHashAddress());
+      if (!supported) {
         throw new IllegalArgumentException(
             field + " uses unsupported address space " + address.getAddressSpace().getName());
       }

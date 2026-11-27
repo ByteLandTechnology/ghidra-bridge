@@ -13,12 +13,14 @@ import app.byteland.ghidra.service.decompilation.DecompilationResource.LocatedTo
 import app.byteland.ghidra.service.decompilation.DecompilationResource.Token;
 import app.byteland.ghidra.service.symbol.SymbolResource;
 import ghidra.app.decompiler.ClangBreak;
+import ghidra.app.decompiler.ClangFieldToken;
 import ghidra.app.decompiler.ClangFuncNameToken;
 import ghidra.app.decompiler.ClangLine;
 import ghidra.app.decompiler.ClangStatement;
 import ghidra.app.decompiler.ClangSyntaxToken;
 import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.ClangTokenGroup;
+import ghidra.app.decompiler.ClangVariableDecl;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.app.decompiler.DecompiledFunction;
 import ghidra.app.decompiler.PrettyPrinter;
@@ -30,7 +32,11 @@ import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.listing.VariableStorage;
+import ghidra.program.model.pcode.HighFunction;
+import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
+import ghidra.program.model.pcode.SymbolEntry;
 import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.symbol.Namespace;
 import ghidra.program.model.symbol.SourceType;
@@ -235,6 +241,140 @@ class GuiDocumentTest {
     assertEquals(2, helperSymbolCalls.get(), "second render must not retain prior symbol cache");
     assertEquals(2, codeUnitQueries.get(callSiteA).get(), "second render must re-query code unit");
     assertEquals("  helper_alpha(x);\n", secondRender.code());
+  }
+
+  @Test
+  void attachesAndCachesHighSymbolIdentitiesForParameterAndLocalTokens() {
+    Map<Long, AtomicInteger> canonicalCounts = new HashMap<>();
+    Address entry = countedAddress(0x1000L, canonicalCounts);
+    Address bodyAddr = countedAddress(0x1010L, canonicalCounts);
+
+    Map<Address, CodeUnit> codeUnitsByAddress = new HashMap<>();
+    codeUnitsByAddress.put(entry, codeUnit(entry));
+    codeUnitsByAddress.put(bodyAddr, codeUnit(bodyAddr));
+
+    Listing listing = countedListing(codeUnitsByAddress, new HashMap<>());
+    Program program = program(listing, functionManager(Map.of()), new AtomicInteger());
+    AtomicInteger ownerSymbolCalls = new AtomicInteger();
+    Symbol ownerSymbol =
+        proxy(
+            Symbol.class,
+            (self, method, args) -> {
+              if (method.getName().equals("getName") && args != null && args.length == 1) {
+                return "ns::worker";
+              }
+              throw new AssertionError("Symbol." + method.getName());
+            });
+    Function owner =
+        proxy(
+            Function.class,
+            (self, method, args) ->
+                switch (method.getName()) {
+                  case "getProgram" -> program;
+                  case "getEntryPoint" -> entry;
+                  case "getSymbol" -> {
+                    ownerSymbolCalls.incrementAndGet();
+                    yield ownerSymbol;
+                  }
+                  default -> throw new AssertionError("Function." + method.getName());
+                });
+
+    AtomicInteger paramDbCalls = new AtomicInteger();
+    CountingHighSymbol paramSymbol =
+        new CountingHighSymbol(11L, "param_1", true, 0, false, null, null, paramDbCalls, null);
+
+    AtomicInteger localDbCalls = new AtomicInteger();
+    AtomicInteger localStorageCalls = new AtomicInteger();
+    Symbol committedLocalDb =
+        proxy(
+            Symbol.class,
+            (self, method, args) ->
+                switch (method.getName()) {
+                  case "getSource" -> SourceType.USER_DEFINED;
+                  case "isPrimary" -> true;
+                  default -> throw new AssertionError("Symbol." + method.getName());
+                });
+    VariableStorage stackStorage = serializedStorage("Stack[-0x10]:4");
+    CountingHighSymbol localSymbol =
+        new CountingHighSymbol(
+            22L,
+            "saved_slot",
+            false,
+            -1,
+            false,
+            committedLocalDb,
+            stackStorage,
+            localDbCalls,
+            localStorageCalls);
+
+    CountingHighSymbol globalSymbol =
+        new CountingHighSymbol(
+            33L, "g_state", false, -1, true, null, null, new AtomicInteger(), null);
+
+    ClangVariableDecl declParent =
+        new ClangVariableDecl(null) {
+          @Override
+          public HighSymbol getHighSymbol() {
+            return localSymbol;
+          }
+        };
+
+    ClangLine line1 = new ClangLine(1, 1);
+    line1.addToken(declFallbackToken(declParent, "saved_slot", ClangToken.VARIABLE_COLOR, bodyAddr));
+    line1.addToken(token(" = ", ClangToken.DEFAULT_COLOR, null, null));
+    line1.addToken(highSymbolToken("param_1", ClangToken.PARAMETER_COLOR, bodyAddr, paramSymbol));
+    line1.addToken(token(";", ClangToken.DEFAULT_COLOR, null, null));
+
+    ClangLine line2 = new ClangLine(2, 1);
+    line2.addToken(highSymbolToken("saved_slot", ClangToken.VARIABLE_COLOR, bodyAddr, localSymbol));
+    line2.addToken(token(".", ClangToken.DEFAULT_COLOR, null, null));
+    line2.addToken(fieldToken("val", bodyAddr, localSymbol));
+    line2.addToken(token(" += ", ClangToken.DEFAULT_COLOR, null, null));
+    line2.addToken(highSymbolToken("param_1", ClangToken.PARAMETER_COLOR, bodyAddr, paramSymbol));
+    line2.addToken(token(" + ", ClangToken.DEFAULT_COLOR, null, null));
+    line2.addToken(highSymbolToken("g_state", ClangToken.VARIABLE_COLOR, bodyAddr, globalSymbol));
+    line2.addToken(token(";", ClangToken.DEFAULT_COLOR, null, null));
+
+    String expectedEntry = AddressUtil.canonicalAddress(entry);
+    canonicalCounts.values().forEach(counter -> counter.set(0));
+
+    GuiDocument rendered = GuiDocument.renderLines(owner, List.of(line1, line2), null);
+
+    SymbolResource firstLocal = rendered.lines().get(0).tokens().get(0).symbol();
+    SymbolResource firstParam = rendered.lines().get(0).tokens().get(2).symbol();
+    SymbolResource secondLocal = rendered.lines().get(1).tokens().get(0).symbol();
+    SymbolResource fieldSym = rendered.lines().get(1).tokens().get(2).symbol();
+    SymbolResource secondParam = rendered.lines().get(1).tokens().get(4).symbol();
+    SymbolResource globalSym = rendered.lines().get(1).tokens().get(6).symbol();
+
+    assertEquals("local:22:Stack[-0x10]:4", firstLocal.id());
+    assertEquals("saved_slot", firstLocal.name());
+    assertEquals(expectedEntry, firstLocal.address());
+    assertEquals("ns::worker", firstLocal.namespace());
+    assertEquals(SymbolType.LOCAL_VAR.toString(), firstLocal.type());
+    assertEquals("USER_DEFINED", firstLocal.sourceType());
+    assertTrue(firstLocal.primary());
+
+    assertEquals("parameter:0", firstParam.id());
+    assertEquals("param_1", firstParam.name());
+    assertEquals(expectedEntry, firstParam.address());
+    assertEquals("ns::worker", firstParam.namespace());
+    assertEquals(SymbolType.PARAMETER.toString(), firstParam.type());
+    assertEquals("DEFAULT", firstParam.sourceType());
+
+    assertSame(firstLocal, secondLocal, "repeated local HighSymbol must share cached SymbolResource");
+    assertSame(firstParam, secondParam, "repeated param HighSymbol must share cached SymbolResource");
+    assertNull(fieldSym, "ClangFieldToken must not emit local symbol");
+    assertNull(globalSym, "global HighSymbol must not emit local symbol");
+
+    assertEquals(1, ownerSymbolCalls.get(), "function symbol namespace resolved once per render");
+    assertEquals(1, paramDbCalls.get(), "parameter HighSymbol described once per render");
+    assertEquals(1, localDbCalls.get(), "local HighSymbol DB symbol read once per render");
+    assertEquals(1, localStorageCalls.get(), "local HighSymbol storage computed once per render");
+
+    GuiDocument secondRender = GuiDocument.renderLines(owner, List.of(line1), null);
+    assertEquals(2, localStorageCalls.get(), "subsequent render must not retain prior symbol cache");
+    assertEquals("local:22:Stack[-0x10]:4", secondRender.lines().get(0).tokens().get(0).symbol().id());
   }
 
   @Test
@@ -454,6 +594,169 @@ class GuiDocumentTest {
 
   private static ClangToken token(String text, int syntaxType, Address min, Address max) {
     return new TestToken(text, syntaxType, min, max);
+  }
+
+  private static ClangToken highSymbolToken(
+      String text, int syntaxType, Address address, HighSymbol symbol) {
+    return new TestToken(text, syntaxType, address, address) {
+      @Override
+      public HighSymbol getHighSymbol(HighFunction highFunction) {
+        return symbol;
+      }
+    };
+  }
+
+  private static ClangToken declFallbackToken(
+      ClangVariableDecl parent, String text, int syntaxType, Address address) {
+    return new ClangToken(parent, text, syntaxType) {
+      @Override
+      public Address getMinAddress() {
+        return address;
+      }
+
+      @Override
+      public Address getMaxAddress() {
+        return address;
+      }
+
+      @Override
+      public HighSymbol getHighSymbol(HighFunction highFunction) {
+        return null;
+      }
+    };
+  }
+
+  private static ClangFieldToken fieldToken(String text, Address address, HighSymbol ownerSymbol) {
+    return new ClangFieldToken(null) {
+      @Override
+      public String getText() {
+        return text;
+      }
+
+      @Override
+      public int getSyntaxType() {
+        return ClangToken.VARIABLE_COLOR;
+      }
+
+      @Override
+      public Address getMinAddress() {
+        return address;
+      }
+
+      @Override
+      public Address getMaxAddress() {
+        return address;
+      }
+
+      @Override
+      public HighSymbol getHighSymbol(HighFunction highFunction) {
+        return ownerSymbol;
+      }
+    };
+  }
+
+  private static VariableStorage serializedStorage(String serialization) {
+    return new VariableStorage() {
+      @Override
+      public boolean isHashStorage() {
+        return serialization.startsWith("HASH:");
+      }
+
+      @Override
+      public String getSerializationString() {
+        return serialization;
+      }
+    };
+  }
+
+  private static final class CountingHighSymbol extends HighSymbol {
+    private final boolean parameter;
+    private final int paramOrdinal;
+    private final boolean global;
+    private final Symbol dbSymbol;
+    private final VariableStorage storage;
+    private final SymbolEntry wholeMap;
+    private final AtomicInteger dbCalls;
+    private final AtomicInteger storageCalls;
+
+    private CountingHighSymbol(
+        long id,
+        String symbolName,
+        boolean parameter,
+        int paramOrdinal,
+        boolean global,
+        Symbol dbSymbol,
+        VariableStorage storage,
+        AtomicInteger dbCalls,
+        AtomicInteger storageCalls) {
+      super(id, symbolName, null, false, false, null);
+      this.parameter = parameter;
+      this.paramOrdinal = paramOrdinal;
+      this.global = global;
+      this.dbSymbol = dbSymbol;
+      this.storage = storage;
+      this.dbCalls = dbCalls;
+      this.storageCalls = storageCalls;
+      this.wholeMap =
+          new SymbolEntry(this) {
+            @Override
+            public void decode(
+                ghidra.program.model.pcode.Decoder decoder) {}
+
+            @Override
+            public void encode(
+                ghidra.program.model.pcode.Encoder encoder) {}
+
+            @Override
+            public VariableStorage getStorage() {
+              return storage;
+            }
+
+            @Override
+            public int getSize() {
+              return 4;
+            }
+
+            @Override
+            public int getMutability() {
+              return 0;
+            }
+          };
+    }
+
+    @Override
+    public boolean isParameter() {
+      return parameter;
+    }
+
+    @Override
+    public int getCategoryIndex() {
+      return paramOrdinal;
+    }
+
+    @Override
+    public boolean isGlobal() {
+      return global;
+    }
+
+    @Override
+    public Symbol getSymbol() {
+      dbCalls.incrementAndGet();
+      return dbSymbol;
+    }
+
+    @Override
+    public SymbolEntry getFirstWholeMap() {
+      return wholeMap;
+    }
+
+    @Override
+    public VariableStorage getStorage() {
+      if (storageCalls != null) {
+        storageCalls.incrementAndGet();
+      }
+      return storage;
+    }
   }
 
   private static ClangFuncNameToken callToken(

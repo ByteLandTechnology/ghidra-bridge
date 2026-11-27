@@ -814,6 +814,11 @@ class FieldProjectionWireTest {
                               "ram:00401000",
                               "ram:00401000",
                               symOne)))),
+              List.of(
+                  new FunctionResource.LocalVariableResource(
+                      "local_0",
+                      DataTypeReference.named("/int"),
+                      VariableStorageReference.serialization("Stack[-0x8]:4"))),
               List.of(comment),
               true,
               List.of());

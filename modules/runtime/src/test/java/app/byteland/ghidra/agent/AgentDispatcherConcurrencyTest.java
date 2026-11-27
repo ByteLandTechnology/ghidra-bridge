@@ -1376,6 +1376,7 @@ class AgentDispatcherConcurrencyTest {
         public void patchLocalVariable(
             String rawAddress,
             String variableName,
+            VariableStorageReference selectorStorage,
             String newName,
             DataTypeReference newDataType) {
           observe("function_local_variable.patch", true);
@@ -1486,6 +1487,7 @@ class AgentDispatcherConcurrencyTest {
               true,
               5L,
               "int fn_main(void) { return 0; }",
+              null,
               null,
               null,
               null,

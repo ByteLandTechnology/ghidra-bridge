@@ -328,6 +328,7 @@ class McpHttpServerConcurrencyTest {
                   null,
                   null,
                   null,
+                  null,
                   List.of());
             } catch (InterruptedException ex) {
               Thread.currentThread().interrupt();

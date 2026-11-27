@@ -499,7 +499,11 @@ class ListPaginationParityTest {
 
       @Override
       public void patchLocalVariable(
-          String rawAddress, String currentName, String newName, DataTypeReference dataType) {
+          String rawAddress,
+          String currentName,
+          VariableStorageReference selectorStorage,
+          String newName,
+          DataTypeReference dataType) {
         throw new UnsupportedOperationException();
       }
     };

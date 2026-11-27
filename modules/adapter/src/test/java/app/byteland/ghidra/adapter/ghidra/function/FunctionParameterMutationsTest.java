@@ -17,6 +17,8 @@ import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.function.VariableStorageReference;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressFactory;
+import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.GenericAddressSpace;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.FunctionDefinitionDataType;
@@ -27,6 +29,7 @@ import ghidra.program.model.data.VoidDataType;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Function.FunctionUpdateType;
+import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Listing;
 import ghidra.program.model.listing.Parameter;
 import ghidra.program.model.listing.ParameterImpl;
@@ -34,8 +37,13 @@ import ghidra.program.model.listing.Program;
 import ghidra.program.model.listing.ReturnParameterImpl;
 import ghidra.program.model.listing.Variable;
 import ghidra.program.model.listing.VariableStorage;
+import ghidra.program.model.pcode.HighFunction;
+import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.pcode.LocalSymbolMap;
 import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.symbol.SourceType;
+import ghidra.program.model.symbol.Symbol;
+import ghidra.program.model.symbol.SymbolTable;
 import ghidra.util.UniversalIdGenerator;
 import ghidra.util.exception.DuplicateNameException;
 import ghidra.util.exception.InvalidInputException;
@@ -45,7 +53,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class FunctionParameterMutationsTest {
@@ -256,6 +266,183 @@ class FunctionParameterMutationsTest {
     assertEquals("unable to add parameter: Duplicate parameter name 'dup'", error.getMessage());
     assertEquals(500, error.status());
     assertEquals("transaction_failed", error.code());
+  }
+
+  @Test
+  void commitsInferredParametersBeforeRenamingAndRetypingUncommittedOrdinal() {
+    Harness harness = new Harness(false, List.of());
+    List<HighSymbol> inferred =
+        List.of(
+            new StubParamHighSymbol(1L, "param_1", IntegerDataType.dataType),
+            new StubParamHighSymbol(2L, "param_2", IntegerDataType.dataType));
+    HighFunction highFunction = new StubParamHighFunction(harness.function, inferred);
+    AtomicInteger lookups = new AtomicInteger();
+    AtomicInteger commits = new AtomicInteger();
+
+    FunctionParameterMutations.patchParameter(
+        harness.session,
+        fn -> {
+          lookups.incrementAndGet();
+          return highFunction;
+        },
+        (fn, hf) -> {
+          commits.incrementAndGet();
+          harness.commitInferredParameters(inferred);
+        },
+        harness.function,
+        1,
+        "count",
+        LONGLONG_REF,
+        null,
+        DATA_TYPES::get);
+
+    assertEquals(1, lookups.get());
+    assertEquals(1, commits.get());
+    assertEquals(2, harness.function.getParameterCount());
+    assertEquals("param_1", harness.function.getParameters()[0].getName());
+    assertEquals("count", harness.function.getParameters()[1].getName());
+    assertSame(LongLongDataType.dataType, harness.function.getParameters()[1].getFormalDataType());
+
+    FunctionParameterMutations.patchParameter(
+        harness.session,
+        fn -> {
+          lookups.incrementAndGet();
+          return highFunction;
+        },
+        (fn, hf) -> commits.incrementAndGet(),
+        harness.function,
+        0,
+        "head",
+        null,
+        null,
+        DATA_TYPES::get);
+
+    assertEquals(1, lookups.get());
+    assertEquals(1, commits.get());
+    assertEquals("head", harness.function.getParameters()[0].getName());
+  }
+
+  @Test
+  void skipsInferredCommitWhenGuardFailsOrInputIsInvalid() {
+    List<HighSymbol> inferred =
+        List.of(new StubParamHighSymbol(1L, "param_1", IntegerDataType.dataType));
+    AtomicInteger lookups = new AtomicInteger();
+    AtomicInteger commits = new AtomicInteger();
+
+    Harness normal = new Harness(false, List.of());
+    HighFunction highFunction = new StubParamHighFunction(normal.function, inferred);
+
+    assertThrows(
+        NoSuchElementException.class,
+        () ->
+            FunctionParameterMutations.patchParameter(
+                normal.session,
+                fn -> {
+                  lookups.incrementAndGet();
+                  return highFunction;
+                },
+                (fn, hf) -> commits.incrementAndGet(),
+                normal.function,
+                -1,
+                "bad",
+                null,
+                null,
+                DATA_TYPES::get));
+    assertEquals(0, lookups.get());
+
+    assertThrows(
+        NoSuchElementException.class,
+        () ->
+            FunctionParameterMutations.patchParameter(
+                normal.session,
+                fn -> {
+                  lookups.incrementAndGet();
+                  return highFunction;
+                },
+                (fn, hf) -> commits.incrementAndGet(),
+                normal.function,
+                3,
+                "missing",
+                null,
+                null,
+                DATA_TYPES::get));
+    assertEquals(1, lookups.get());
+    assertEquals(0, commits.get());
+
+    for (DataTypeReference badType : List.of(UNKNOWN_REF, FUNC_DEF_REF, VOID_REF)) {
+      IllegalArgumentException rejected =
+          assertThrows(
+              IllegalArgumentException.class,
+              () ->
+                  FunctionParameterMutations.patchParameter(
+                      normal.session,
+                      fn -> highFunction,
+                      (fn, hf) -> commits.incrementAndGet(),
+                      normal.function,
+                      0,
+                      "arg",
+                      badType,
+                      null,
+                      DATA_TYPES::get));
+      assertEquals(400, ApiFailures.normalize(rejected).status());
+      assertEquals(0, commits.get());
+    }
+
+    Harness external = new Harness(false, true, false, List.of());
+    Harness thunk = new Harness(false, false, true, List.of());
+    Harness custom = new Harness(true, false, false, List.of());
+    for (Harness guarded : List.of(external, thunk, custom)) {
+      AtomicInteger guardedLookups = new AtomicInteger();
+      assertThrows(
+          NoSuchElementException.class,
+          () ->
+              FunctionParameterMutations.patchParameter(
+                  guarded.session,
+                  fn -> {
+                    guardedLookups.incrementAndGet();
+                    return highFunction;
+                  },
+                  (fn, hf) -> commits.incrementAndGet(),
+                  guarded.function,
+                  0,
+                  "arg",
+                  null,
+                  null,
+                  DATA_TYPES::get));
+      assertEquals(0, guardedLookups.get());
+    }
+    assertEquals(0, commits.get());
+  }
+
+  @Test
+  void mapsHighSymbolMutationExceptionsToBadRequest() {
+    DuplicateNameException duplicate = new DuplicateNameException("duplicate parameter");
+    IllegalArgumentException dupMapped =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                FunctionVariableMutationSupport.runHighSymbolMutation(
+                    "unable to commit inferred parameters",
+                    () -> {
+                      throw duplicate;
+                    }));
+    assertSame(duplicate, dupMapped.getCause());
+    assertEquals(400, ApiFailures.normalize(dupMapped).status());
+
+    InvalidInputException invalid = new InvalidInputException((String) null);
+    IllegalArgumentException invalidMapped =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                FunctionVariableMutationSupport.runHighSymbolMutation(
+                    "unable to commit inferred parameters",
+                    () -> {
+                      throw invalid;
+                    }));
+    assertSame(invalid, invalidMapped.getCause());
+    assertEquals(
+        "unable to commit inferred parameters: InvalidInputException", invalidMapped.getMessage());
+    assertEquals(400, ApiFailures.normalize(invalidMapped).status());
   }
 
   @Test
@@ -493,6 +680,8 @@ class FunctionParameterMutationsTest {
         new GenericAddressSpace("ram", 64, GenericAddressSpace.TYPE_RAM, 0).getAddress(0x100000);
 
     private boolean customStorage;
+    private final boolean external;
+    private final boolean thunk;
     private boolean keepDynamicOnCustomUpdate;
     private List<Parameter> parameters;
     private Parameter returnParameter;
@@ -503,7 +692,15 @@ class FunctionParameterMutationsTest {
     private final GhidraSession session;
 
     private Harness(boolean customStorage, List<Parameter> initialParameters) {
-      this(customStorage, initialParameters, null, SourceType.USER_DEFINED, null);
+      this(customStorage, false, false, initialParameters, null, SourceType.USER_DEFINED, null);
+    }
+
+    private Harness(
+        boolean customStorage,
+        boolean external,
+        boolean thunk,
+        List<Parameter> initialParameters) {
+      this(customStorage, external, thunk, initialParameters, null, SourceType.USER_DEFINED, null);
     }
 
     private Harness(
@@ -512,10 +709,43 @@ class FunctionParameterMutationsTest {
         Parameter initialReturnParameter,
         SourceType initialSignatureSource,
         Language language) {
+      this(
+          customStorage,
+          false,
+          false,
+          initialParameters,
+          initialReturnParameter,
+          initialSignatureSource,
+          language);
+    }
+
+    private Harness(
+        boolean customStorage,
+        boolean external,
+        boolean thunk,
+        List<Parameter> initialParameters,
+        Parameter initialReturnParameter,
+        SourceType initialSignatureSource,
+        Language language) {
       this.customStorage = customStorage;
+      this.external = external;
+      this.thunk = thunk;
       this.parameters = new ArrayList<>(initialParameters);
       this.returnParameter = initialReturnParameter;
       this.signatureSource = initialSignatureSource;
+      AddressSpace stackSpace =
+          new GenericAddressSpace("stack", 64, GenericAddressSpace.TYPE_STACK, 0);
+      AddressFactory addressFactory =
+          (AddressFactory)
+              Proxy.newProxyInstance(
+                  AddressFactory.class.getClassLoader(),
+                  new Class<?>[] {AddressFactory.class},
+                  (proxy, method, args) -> {
+                    if (method.getName().equals("getStackSpace")) {
+                      return stackSpace;
+                    }
+                    throw new AssertionError("Unexpected AddressFactory." + method.getName());
+                  });
       this.function =
           (Function)
               Proxy.newProxyInstance(
@@ -524,9 +754,13 @@ class FunctionParameterMutationsTest {
                   (proxy, method, args) ->
                       switch (method.getName()) {
                         case "getEntryPoint" -> ENTRY;
+                        case "getProgram" -> program();
                         case "getParameterCount" -> parameters.size();
                         case "getParameters" -> parameters.toArray(Parameter[]::new);
                         case "hasCustomVariableStorage" -> this.customStorage;
+                        case "hasVarArgs", "isInline", "hasNoReturn" -> false;
+                        case "isExternal" -> this.external;
+                        case "isThunk" -> this.thunk;
                         case "getReturnType" -> returnParameter.getDataType();
                         case "getReturn" -> returnParameter;
                         case "getSignatureSource" -> this.signatureSource;
@@ -536,6 +770,37 @@ class FunctionParameterMutationsTest {
                         }
                         default ->
                             throw new AssertionError("Unexpected Function." + method.getName());
+                      });
+      FunctionManager functionManager =
+          (FunctionManager)
+              Proxy.newProxyInstance(
+                  FunctionManager.class.getClassLoader(),
+                  new Class<?>[] {FunctionManager.class},
+                  (proxy, method, args) -> {
+                    if (method.getName().equals("getFunctionAt")) {
+                      return ENTRY.equals(args[0]) ? function : null;
+                    }
+                    throw new AssertionError("Unexpected FunctionManager." + method.getName());
+                  });
+      SymbolTable symbolTable =
+          (SymbolTable)
+              Proxy.newProxyInstance(
+                  SymbolTable.class.getClassLoader(),
+                  new Class<?>[] {SymbolTable.class},
+                  (proxy, method, args) ->
+                      switch (method.getName()) {
+                        case "getParameterSymbol" -> {
+                          String targetName = (String) args[0];
+                          for (Parameter param : parameters) {
+                            if (param.getName().equals(targetName)) {
+                              yield parameterSymbol(param);
+                            }
+                          }
+                          yield null;
+                        }
+                        case "getLocalVariableSymbol" -> null;
+                        default ->
+                            throw new AssertionError("Unexpected SymbolTable." + method.getName());
                       });
       Listing listing =
           (Listing)
@@ -560,14 +825,14 @@ class FunctionParameterMutationsTest {
                         case "isClosed" -> false;
                         case "getDataTypeManager" -> null;
                         case "getListing" -> listing;
+                        case "getFunctionManager" -> functionManager;
+                        case "getSymbolTable" -> symbolTable;
                         case "getLanguage" -> {
                           assertNotNull(language);
                           yield language;
                         }
-                        case "getAddressFactory" -> {
-                          assertNotNull(language);
-                          yield language.getAddressFactory();
-                        }
+                        case "getAddressFactory" ->
+                            language != null ? language.getAddressFactory() : addressFactory;
                         case "getCompilerSpec" -> {
                           assertNotNull(language);
                           yield language.getDefaultCompilerSpec();
@@ -584,6 +849,29 @@ class FunctionParameterMutationsTest {
             protected void run() {}
           };
       this.session = new GhidraSession(script);
+    }
+
+    private Program program() {
+      return program;
+    }
+
+    private void commitInferredParameters(List<HighSymbol> symbols) {
+      List<Parameter> committed = new ArrayList<>();
+      for (int ordinal = 0; ordinal < symbols.size(); ordinal++) {
+        HighSymbol symbol = symbols.get(ordinal);
+        DataType dt = symbol.getDataType();
+        committed.add(
+            mutableParameter(
+                function,
+                symbol.getName(),
+                ordinal,
+                dt,
+                SourceType.USER_DEFINED,
+                false,
+                registerStorage(ordinal * 8L, dt.getLength()),
+                null));
+      }
+      this.parameters = committed;
     }
 
     private static Program languageProgram(Language language) {
@@ -699,6 +987,115 @@ class FunctionParameterMutationsTest {
     @Override
     public String getSerializationString() {
       return varnode.getAddress().toString(true) + ":" + varnode.getSize();
+    }
+  }
+
+  private static Parameter mutableParameter(
+      Function owner,
+      String initialName,
+      int ordinal,
+      DataType initialDataType,
+      SourceType initialSource,
+      boolean autoParameter,
+      VariableStorage storage,
+      Parameter ignored) {
+    final String[] nameRef = {initialName};
+    final DataType[] typeRef = {initialDataType};
+    final SourceType[] sourceRef = {initialSource};
+    return (Parameter)
+        Proxy.newProxyInstance(
+            Parameter.class.getClassLoader(),
+            new Class<?>[] {Parameter.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getFunction" -> owner;
+                  case "getName" -> nameRef[0];
+                  case "setName" -> {
+                    nameRef[0] = (String) args[0];
+                    sourceRef[0] = (SourceType) args[1];
+                    yield null;
+                  }
+                  case "getOrdinal" -> ordinal;
+                  case "getDataType", "getFormalDataType" -> typeRef[0];
+                  case "setDataType" -> {
+                    typeRef[0] = (DataType) args[0];
+                    sourceRef[0] = (SourceType) args[args.length - 1];
+                    yield null;
+                  }
+                  case "getLength" -> typeRef[0].getLength();
+                  case "getSource" -> sourceRef[0];
+                  case "isAutoParameter" -> autoParameter;
+                  case "getVariableStorage" -> storage;
+                  case "getComment" -> null;
+                  case "equals" -> proxy == args[0];
+                  case "hashCode" -> System.identityHashCode(proxy);
+                  case "toString" -> nameRef[0] + "@" + ordinal;
+                  default -> throw new AssertionError("Unexpected Parameter." + method.getName());
+                });
+  }
+
+  private static Symbol parameterSymbol(Parameter parameter) {
+    return (Symbol)
+        Proxy.newProxyInstance(
+            Symbol.class.getClassLoader(),
+            new Class<?>[] {Symbol.class},
+            (proxy, method, args) -> {
+              if (method.getName().equals("getObject")) {
+                return parameter;
+              }
+              throw new AssertionError("Unexpected Symbol." + method.getName());
+            });
+  }
+
+  private static final class StubParamHighFunction extends HighFunction {
+    private final LocalSymbolMap symbolMap;
+
+    private StubParamHighFunction(Function function, List<HighSymbol> params) {
+      super(function, null, null, null);
+      AddressSpace stackSpace = function.getProgram().getAddressFactory().getStackSpace();
+      this.symbolMap =
+          new LocalSymbolMap(this, stackSpace) {
+            @Override
+            public int getNumParams() {
+              return params.size();
+            }
+
+            @Override
+            public HighSymbol getParamSymbol(int index) {
+              return index >= 0 && index < params.size() ? params.get(index) : null;
+            }
+          };
+    }
+
+    @Override
+    public LocalSymbolMap getLocalSymbolMap() {
+      return symbolMap;
+    }
+  }
+
+  private static final class StubParamHighSymbol extends HighSymbol {
+    private final String symbolName;
+    private final DataType symbolType;
+
+    private StubParamHighSymbol(long id, String symbolName, DataType symbolType) {
+      super(id, symbolName, symbolType, false, false, null);
+      this.symbolName = symbolName;
+      this.symbolType = symbolType;
+    }
+
+    @Override
+    public String getName() {
+      return symbolName;
+    }
+
+    @Override
+    public DataType getDataType() {
+      return symbolType;
+    }
+
+    @Override
+    public boolean isParameter() {
+      return true;
     }
   }
 
