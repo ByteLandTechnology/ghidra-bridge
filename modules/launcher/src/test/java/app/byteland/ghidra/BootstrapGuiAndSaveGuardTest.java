@@ -25,6 +25,7 @@ import ghidra.program.model.listing.Program;
 import ghidra.util.SystemUtilities;
 import ghidra.util.task.TaskMonitorAdapter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Proxy;
 import java.net.BindException;
 import java.net.InetSocketAddress;
@@ -35,6 +36,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -109,54 +111,58 @@ class BootstrapGuiAndSaveGuardTest {
 
       // Verify live MCP calls succeed on the fallback server with the derived tool_prefix.
       HttpClient httpClient = HttpClient.newHttpClient();
-      String fallbackEndpoint = "http://127.0.0.1:" + fallbackPort + "/mcp";
-      Map<String, Object> initResponse =
-          postJsonRpc(
-              httpClient,
-              fallbackEndpoint,
-              Map.of(
-                  "jsonrpc",
-                  "2.0",
-                  "id",
-                  1,
-                  "method",
-                  "initialize",
-                  "params",
-                  Map.of(
-                      "protocolVersion",
-                      "2025-11-25",
-                      "capabilities",
-                      Map.of(),
-                      "clientInfo",
-                      Map.of("name", "gui-tab-test", "version", "1.0"))));
-      assertNull(initResponse.get("error"));
+      try {
+        String fallbackEndpoint = "http://127.0.0.1:" + fallbackPort + "/mcp";
+        Map<String, Object> initResponse =
+            postJsonRpc(
+                httpClient,
+                fallbackEndpoint,
+                Map.of(
+                    "jsonrpc",
+                    "2.0",
+                    "id",
+                    1,
+                    "method",
+                    "initialize",
+                    "params",
+                    Map.of(
+                        "protocolVersion",
+                        "2025-11-25",
+                        "capabilities",
+                        Map.of(),
+                        "clientInfo",
+                        Map.of("name", "gui-tab-test", "version", "1.0"))));
+        assertNull(initResponse.get("error"));
 
-      Map<String, Object> callResponse =
-          postJsonRpc(
-              httpClient,
-              fallbackEndpoint,
-              Map.of(
-                  "jsonrpc",
-                  "2.0",
-                  "id",
-                  2,
-                  "method",
-                  "tools/call",
-                  "params",
-                  Map.of(
-                      "name",
-                      "server_elf_bridge",
-                      "arguments",
-                      Map.of("operation", "get", "params", Map.of()))));
-      @SuppressWarnings("unchecked")
-      Map<String, Object> result = (Map<String, Object>) callResponse.get("result");
-      assertEquals(Boolean.FALSE, result.get("isError"));
-      @SuppressWarnings("unchecked")
-      Map<String, Object> structured = (Map<String, Object>) result.get("structuredContent");
-      @SuppressWarnings("unchecked")
-      Map<String, Object> sessionInfo = (Map<String, Object>) structured.get("result");
-      assertEquals("server_elf-" + fallbackPort, sessionInfo.get("id"));
-      assertEquals("server.elf", sessionInfo.get("program_name"));
+        Map<String, Object> callResponse =
+            postJsonRpc(
+                httpClient,
+                fallbackEndpoint,
+                Map.of(
+                    "jsonrpc",
+                    "2.0",
+                    "id",
+                    2,
+                    "method",
+                    "tools/call",
+                    "params",
+                    Map.of(
+                        "name",
+                        "server_elf_bridge",
+                        "arguments",
+                        Map.of("operation", "get", "params", Map.of()))));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) callResponse.get("result");
+        assertEquals(Boolean.FALSE, result.get("isError"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> structured = (Map<String, Object>) result.get("structuredContent");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sessionInfo = (Map<String, Object>) structured.get("result");
+        assertEquals("server_elf-" + fallbackPort, sessionInfo.get("id"));
+        assertEquals("server.elf", sessionInfo.get("program_name"));
+      } finally {
+        closeHttpClient(httpClient);
+      }
 
       // Cancel both GUI sessions and confirm neither checkpoint nor GracefulExit saved.
       tab2.monitor.cancel();
@@ -215,9 +221,11 @@ class BootstrapGuiAndSaveGuardTest {
       assertTrue(tab2.joinedStdout().contains("session_id: beta_bin-" + fallbackPort));
 
       // Connect a WebSocket client to the fallback tab and verify session.get works.
-      try (HttpClient client = HttpClient.newHttpClient()) {
+      HttpClient client = HttpClient.newHttpClient();
+      WebSocket ws = null;
+      try {
         WsReplyListener listener = new WsReplyListener();
-        WebSocket ws =
+        ws =
             client
                 .newWebSocketBuilder()
                 .buildAsync(
@@ -230,6 +238,12 @@ class BootstrapGuiAndSaveGuardTest {
         String reply = listener.messages.poll(5, TimeUnit.SECONDS);
         assertTrue(reply != null && reply.contains("beta_bin-" + fallbackPort));
         ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+        listener.closed.await(2, TimeUnit.SECONDS);
+      } finally {
+        if (ws != null) {
+          ws.abort();
+        }
+        closeHttpClient(client);
       }
 
       tab2.monitor.cancel();
@@ -309,10 +323,12 @@ class BootstrapGuiAndSaveGuardTest {
           new Thread(
               () -> {
                 try (var socket = occupied.accept()) {
+                  socket.setSoTimeout(5_000);
+                  drainHttpHeader(socket.getInputStream());
                   socket
                       .getOutputStream()
                       .write(
-                          "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"
+                          "HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
                               .getBytes(StandardCharsets.US_ASCII));
                   socket.getOutputStream().flush();
                 } catch (IOException ignored) {
@@ -344,6 +360,7 @@ class BootstrapGuiAndSaveGuardTest {
 
     // Unchanged headless program never triggers checkpoint or exit saves.
     RecordingFixture unchanged = new RecordingFixture("clean.bin", false);
+    RecordingFixture dirty = null;
     ExecutorService pool = Executors.newSingleThreadExecutor();
     try {
       Future<?> run =
@@ -367,15 +384,16 @@ class BootstrapGuiAndSaveGuardTest {
 
       // Changed headless program saves checkpoint after bind and saves on exit.
       int port2 = findConsecutivePortWindow(2);
-      RecordingFixture dirty = new RecordingFixture("dirty.bin", true);
+      dirty = new RecordingFixture("dirty.bin", true);
+      RecordingFixture dirtyFixture = dirty;
       Future<?> dirtyRun =
           pool.submit(
               () -> {
                 Bootstrap.startMcpFromScript(
-                    dirty.script,
+                    dirtyFixture.script,
                     new String[] {"port=" + port2},
                     null,
-                    ignored -> dirty.services,
+                    ignored -> dirtyFixture.services,
                     port2);
                 return null;
               });
@@ -390,6 +408,194 @@ class BootstrapGuiAndSaveGuardTest {
       assertEquals(1, dirty.checkpointSaves.get());
       assertEquals(1, dirty.exitSaves.get());
       assertTrue(dirty.joinedStdout().contains("Program save on exit completed."));
+    } finally {
+      unchanged.monitor.cancel();
+      if (dirty != null) {
+        dirty.monitor.cancel();
+      }
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void headlessCheckpointSaveFinishesBeforeFirstRpcDispatches() throws Exception {
+    System.setProperty(SystemUtilities.HEADLESS_PROPERTY, "true");
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      int mcpPort = findConsecutivePortWindow(2);
+      CountDownLatch mcpSaveEntered = new CountDownLatch(1);
+      CountDownLatch mcpAllowSaveFinish = new CountDownLatch(1);
+      AtomicBoolean mcpSaveInProgress = new AtomicBoolean(false);
+      AtomicBoolean mcpOverlapDetected = new AtomicBoolean(false);
+
+      RecordingFixture mcpFixture =
+          new RecordingFixture(
+              "mcp-race.bin",
+              true,
+              () -> {
+                mcpSaveInProgress.set(true);
+                mcpSaveEntered.countDown();
+                try {
+                  mcpAllowSaveFinish.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                  Thread.currentThread().interrupt();
+                } finally {
+                  mcpSaveInProgress.set(false);
+                }
+              },
+              () -> {
+                if (mcpSaveInProgress.get()) {
+                  mcpOverlapDetected.set(true);
+                }
+              });
+
+      Future<?> mcpServer =
+          pool.submit(
+              () -> {
+                Bootstrap.startMcpFromScript(
+                    mcpFixture.script,
+                    new String[] {"port=" + mcpPort},
+                    null,
+                    ignored -> mcpFixture.services,
+                    mcpPort);
+                return null;
+              });
+
+      HttpClient httpClient = HttpClient.newHttpClient();
+      try {
+        assertTrue(mcpSaveEntered.await(5, TimeUnit.SECONDS));
+        String mcpEndpoint = "http://127.0.0.1:" + mcpPort + "/mcp";
+        Future<Map<String, Object>> initCall =
+            pool.submit(
+                () ->
+                    postJsonRpc(
+                        httpClient,
+                        mcpEndpoint,
+                        Map.of(
+                            "jsonrpc",
+                            "2.0",
+                            "id",
+                            1,
+                            "method",
+                            "initialize",
+                            "params",
+                            Map.of(
+                                "protocolVersion",
+                                "2025-11-25",
+                                "capabilities",
+                                Map.of(),
+                                "clientInfo",
+                                Map.of("name", "race-test", "version", "1.0")))));
+
+        Thread.sleep(75L);
+        assertFalse(initCall.isDone(), "HTTP initialize must wait until checkpoint save finishes");
+
+        mcpAllowSaveFinish.countDown();
+        assertNull(initCall.get(5, TimeUnit.SECONDS).get("error"));
+        Map<String, Object> bridgeCall =
+            postJsonRpc(
+                httpClient,
+                mcpEndpoint,
+                Map.of(
+                    "jsonrpc",
+                    "2.0",
+                    "id",
+                    2,
+                    "method",
+                    "tools/call",
+                    "params",
+                    Map.of(
+                        "name",
+                        "ghidra_bridge",
+                        "arguments",
+                        Map.of("operation", "get", "params", Map.of()))));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) bridgeCall.get("result");
+        assertEquals(Boolean.FALSE, result.get("isError"));
+        assertFalse(mcpOverlapDetected.get());
+        assertEquals(1, mcpFixture.checkpointSaves.get());
+      } finally {
+        mcpAllowSaveFinish.countDown();
+        mcpFixture.monitor.cancel();
+        closeHttpClient(httpClient);
+      }
+      mcpServer.get(10, TimeUnit.SECONDS);
+
+      int wsPort = findConsecutivePortWindow(2);
+      CountDownLatch wsSaveEntered = new CountDownLatch(1);
+      CountDownLatch wsAllowSaveFinish = new CountDownLatch(1);
+      AtomicBoolean wsSaveInProgress = new AtomicBoolean(false);
+      AtomicBoolean wsOverlapDetected = new AtomicBoolean(false);
+
+      RecordingFixture wsFixture =
+          new RecordingFixture(
+              "ws-race.bin",
+              true,
+              () -> {
+                wsSaveInProgress.set(true);
+                wsSaveEntered.countDown();
+                try {
+                  wsAllowSaveFinish.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                  Thread.currentThread().interrupt();
+                } finally {
+                  wsSaveInProgress.set(false);
+                }
+              },
+              () -> {
+                if (wsSaveInProgress.get()) {
+                  wsOverlapDetected.set(true);
+                }
+              });
+
+      Future<?> wsServer =
+          pool.submit(
+              () -> {
+                Bootstrap.startFromScript(
+                    wsFixture.script,
+                    new String[] {"port=" + wsPort},
+                    null,
+                    ignored -> wsFixture.services,
+                    wsPort);
+                return null;
+              });
+
+      HttpClient wsHttpClient = HttpClient.newHttpClient();
+      WebSocket ws = null;
+      try {
+        assertTrue(wsSaveEntered.await(5, TimeUnit.SECONDS));
+        WsReplyListener listener = new WsReplyListener();
+        ws =
+            wsHttpClient
+                .newWebSocketBuilder()
+                .buildAsync(URI.create("ws://127.0.0.1:" + wsPort + "/ws/agent"), listener)
+                .get(5, TimeUnit.SECONDS);
+        String readyNotification = listener.messages.poll(5, TimeUnit.SECONDS);
+        assertTrue(readyNotification != null && readyNotification.contains("ghidra.ready"));
+
+        ws.sendText(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"program.get\",\"params\":{}}", true)
+            .get(5, TimeUnit.SECONDS);
+
+        assertNull(
+            listener.messages.poll(75, TimeUnit.MILLISECONDS),
+            "WebSocket RPC must wait until checkpoint save finishes");
+
+        wsAllowSaveFinish.countDown();
+        String reply = listener.messages.poll(5, TimeUnit.SECONDS);
+        assertTrue(reply != null && reply.contains("ws-race.bin"));
+        assertFalse(wsOverlapDetected.get());
+        ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+        listener.closed.await(2, TimeUnit.SECONDS);
+      } finally {
+        wsAllowSaveFinish.countDown();
+        if (ws != null) {
+          ws.abort();
+        }
+        wsFixture.monitor.cancel();
+        closeHttpClient(wsHttpClient);
+      }
+      wsServer.get(10, TimeUnit.SECONDS);
     } finally {
       pool.shutdownNow();
     }
@@ -412,7 +618,7 @@ class BootstrapGuiAndSaveGuardTest {
 
   private static void waitForLogLine(List<String> lines, String substring)
       throws InterruptedException {
-    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
     while (System.nanoTime() < deadline) {
       for (String line : lines) {
         if (line.contains(substring)) {
@@ -422,6 +628,42 @@ class BootstrapGuiAndSaveGuardTest {
       Thread.sleep(20L);
     }
     throw new AssertionError("Timed out waiting for log '" + substring + "'; got: " + lines);
+  }
+
+  private static void drainHttpHeader(InputStream input) throws IOException {
+    int matched = 0;
+    int limit = 16 * 1024;
+    for (int readCount = 0; readCount < limit; readCount++) {
+      int value = input.read();
+      if (value < 0) {
+        return;
+      }
+      if ((matched == 0 || matched == 2) && value == '\r') {
+        matched++;
+      } else if ((matched == 1 || matched == 3) && value == '\n') {
+        matched++;
+        if (matched == 4) {
+          return;
+        }
+      } else {
+        matched = value == '\r' ? 1 : 0;
+      }
+    }
+  }
+
+  private static void closeHttpClient(HttpClient client) {
+    if (client == null) {
+      return;
+    }
+    client.shutdown();
+    try {
+      if (!client.awaitTermination(Duration.ofSeconds(2))) {
+        client.shutdownNow();
+      }
+    } catch (InterruptedException interrupted) {
+      client.shutdownNow();
+      Thread.currentThread().interrupt();
+    }
   }
 
   private static int findConsecutivePortWindow(int count) throws IOException {
@@ -476,6 +718,14 @@ class BootstrapGuiAndSaveGuardTest {
     final GhidraScript script;
 
     RecordingFixture(String programName, boolean initiallyChanged) {
+      this(programName, initiallyChanged, () -> {}, () -> {});
+    }
+
+    RecordingFixture(
+        String programName,
+        boolean initiallyChanged,
+        Runnable onCheckpointSave,
+        Runnable onProgramGet) {
       this.changed = new AtomicBoolean(initiallyChanged);
       this.program =
           (Program)
@@ -497,6 +747,22 @@ class BootstrapGuiAndSaveGuardTest {
                     if ("saveProgram".equals(method.getName())) {
                       exitSaves.incrementAndGet();
                       return null;
+                    }
+                    if ("getProgram".equals(method.getName())) {
+                      onProgramGet.run();
+                      return new app.byteland.ghidra.service.program.ProgramResource(
+                          programName,
+                          "/" + programName,
+                          "ELF",
+                          "ram:00400000",
+                          "ram:00400000",
+                          "ram:00401000",
+                          "x86:LE:64:default",
+                          "gcc",
+                          null,
+                          null,
+                          0,
+                          0);
                     }
                     throw new UnsupportedOperationException(method.getName());
                   });
@@ -564,6 +830,7 @@ class BootstrapGuiAndSaveGuardTest {
             @Override
             public void saveProgram(Program target) {
               checkpointSaves.incrementAndGet();
+              onCheckpointSave.run();
             }
           };
     }
@@ -598,6 +865,7 @@ class BootstrapGuiAndSaveGuardTest {
 
   private static final class WsReplyListener implements WebSocket.Listener {
     final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
+    final CountDownLatch closed = new CountDownLatch(1);
     private final StringBuilder buffer = new StringBuilder();
 
     @Override
@@ -614,6 +882,18 @@ class BootstrapGuiAndSaveGuardTest {
       }
       webSocket.request(1);
       return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+      closed.countDown();
+      return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public void onError(WebSocket webSocket, Throwable error) {
+      webSocket.abort();
+      closed.countDown();
     }
   }
 }

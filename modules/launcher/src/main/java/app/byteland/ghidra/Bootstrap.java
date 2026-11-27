@@ -184,7 +184,6 @@ public final class Bootstrap {
       }
       throw startupFailure;
     }
-
     try (GracefulExit gracefulExit =
             gracefulExit(services.programService(), program, script, MCP_PREFIX, headless);
         AgentDispatcher activeDispatcher = boundDispatcher;
@@ -268,9 +267,17 @@ public final class Bootstrap {
 
     AgentClient.ActiveSession session;
     try {
-      session = client.openSession(cancelRequested);
+      session =
+          dispatcher.runExclusive(
+              () -> {
+                AgentClient.ActiveSession opened = client.openSession(cancelRequested);
+                if (opened != null && headless) {
+                  saveCheckpoint(script, program, BRIDGE_PREFIX);
+                }
+                return opened;
+              });
     } catch (Exception | Error connectFailure) {
-      services.close();
+      dispatcher.close();
       throw connectFailure;
     }
 
@@ -281,9 +288,6 @@ public final class Bootstrap {
     }
 
     printWsBanner(script, program, config, config.redactedWsUrl());
-    if (headless) {
-      dispatcher.runExclusive(() -> saveCheckpoint(script, program, BRIDGE_PREFIX));
-    }
 
     try (GracefulExit gracefulExit =
             gracefulExit(services.programService(), program, script, BRIDGE_PREFIX, headless);
@@ -336,7 +340,15 @@ public final class Bootstrap {
         AgentDispatcher dispatcher = new AgentDispatcher(services, candidate.config().sessionId());
         AgentClient client = new AgentClient(candidate.config(), dispatcher);
         try {
-          AgentClient.ActiveSession session = client.openSession(cancelRequested);
+          AgentClient.ActiveSession session =
+              dispatcher.runExclusive(
+                  () -> {
+                    AgentClient.ActiveSession opened = client.openSession(cancelRequested);
+                    if (headless) {
+                      saveCheckpoint(script, program, BRIDGE_PREFIX);
+                    }
+                    return opened;
+                  });
           boundEffective = candidate;
           boundDispatcher = dispatcher;
           boundClient = client;
@@ -369,10 +381,6 @@ public final class Bootstrap {
               + ".");
     }
     printWsBanner(script, program, config, config.serverEndpoint());
-    if (headless) {
-      AgentDispatcher checkpointDispatcher = boundDispatcher;
-      checkpointDispatcher.runExclusive(() -> saveCheckpoint(script, program, BRIDGE_PREFIX));
-    }
     script.println("[ghidra-bridge] Embedded bridge is listening for WebSocket clients.");
 
     try (GracefulExit gracefulExit =

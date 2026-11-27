@@ -84,6 +84,59 @@ class AgentDispatcherTest {
   }
 
   @Test
+  @DisplayName("Serializes runExclusive with concurrent dispatch")
+  void serializesRunExclusiveWithDispatch() throws Exception {
+    BridgeServices services =
+        createServices("sample.elf", new AtomicInteger(), new AtomicInteger());
+    try (AgentDispatcher dispatcher = new AgentDispatcher(services, "exclusive-session")) {
+      java.util.concurrent.CountDownLatch enteredExclusive =
+          new java.util.concurrent.CountDownLatch(1);
+      java.util.concurrent.CountDownLatch releaseExclusive =
+          new java.util.concurrent.CountDownLatch(1);
+      java.util.concurrent.atomic.AtomicBoolean dispatchCompleted =
+          new java.util.concurrent.atomic.AtomicBoolean(false);
+
+      Thread exclusiveThread =
+          new Thread(
+              () ->
+                  dispatcher.runExclusive(
+                      () -> {
+                        enteredExclusive.countDown();
+                        try {
+                          releaseExclusive.await(5, java.util.concurrent.TimeUnit.SECONDS);
+                        } catch (InterruptedException interrupted) {
+                          Thread.currentThread().interrupt();
+                        }
+                      }));
+      exclusiveThread.start();
+      assertTrue(enteredExclusive.await(5, java.util.concurrent.TimeUnit.SECONDS));
+
+      java.util.concurrent.CompletableFuture<Object> dispatchFuture =
+          java.util.concurrent.CompletableFuture.supplyAsync(
+              () -> {
+                try {
+                  Object response = dispatcher.dispatch("session.get", Map.of());
+                  dispatchCompleted.set(true);
+                  return response;
+                } catch (Exception error) {
+                  throw new AssertionError(error);
+                }
+              });
+
+      Thread.sleep(50L);
+      assertFalse(dispatchCompleted.get());
+
+      releaseExclusive.countDown();
+      exclusiveThread.join(5000L);
+      @SuppressWarnings("unchecked")
+      Map<String, Object> info =
+          (Map<String, Object>) dispatchFuture.get(5, java.util.concurrent.TimeUnit.SECONDS);
+      assertEquals("exclusive-session", info.get("id"));
+      assertTrue(dispatchCompleted.get());
+    }
+  }
+
+  @Test
   @DisplayName("Resolves active program name dynamically from BridgeServices")
   void resolvesProgramNameDynamically() throws Exception {
     AtomicReference<String> activeName = new AtomicReference<>("alpha.elf");

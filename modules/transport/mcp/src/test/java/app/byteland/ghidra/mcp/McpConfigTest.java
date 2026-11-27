@@ -198,7 +198,18 @@ class McpConfigTest {
         ProcessHandle.current()
             .info()
             .command()
-            .orElseGet(() -> Path.of(System.getProperty("java.home"), "bin", "java").toString());
+            .orElseGet(
+                () ->
+                    Path.of(
+                            System.getProperty("java.home"),
+                            "bin",
+                            System.getProperty("os.name", "")
+                                    .toLowerCase(java.util.Locale.ROOT)
+                                    .contains("win")
+                                ? "java.exe"
+                                : "java")
+                        .toAbsolutePath()
+                        .toString());
     Process process =
         new ProcessBuilder(
                 javaBin,

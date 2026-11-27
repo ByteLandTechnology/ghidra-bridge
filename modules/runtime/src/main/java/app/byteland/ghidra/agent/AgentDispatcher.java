@@ -32,6 +32,19 @@ public final class AgentDispatcher implements AutoCloseable {
     services.close();
   }
 
+  @FunctionalInterface
+  public interface ExclusiveOperation<T> {
+    T execute() throws Exception;
+  }
+
+  /**
+   * Runs a lifecycle operation under the fair write lock while the dispatcher is open.
+   */
+  public <T> T runExclusive(ExclusiveOperation<T> operation) throws Exception {
+    Objects.requireNonNull(operation, "operation");
+    return dispatchBarrier.run(() -> dispatchBarrier.runWrite(operation::execute));
+  }
+
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {
@@ -50,13 +63,11 @@ public final class AgentDispatcher implements AutoCloseable {
   public void runExclusive(Runnable action) {
     Objects.requireNonNull(action, "action");
     try {
-      dispatchBarrier.run(
-          () ->
-              dispatchBarrier.runWrite(
-                  () -> {
-                    action.run();
-                    return null;
-                  }));
+      runExclusive(
+          () -> {
+            action.run();
+            return null;
+          });
     } catch (RuntimeException error) {
       throw error;
     } catch (Exception error) {

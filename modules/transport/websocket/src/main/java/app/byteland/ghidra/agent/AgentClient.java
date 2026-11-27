@@ -22,6 +22,8 @@ public final class AgentClient {
 
   private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(30);
 
+  private static final Duration HTTP_CLIENT_CLOSE_TIMEOUT = Duration.ofSeconds(2);
+
   private static final long CANCELLATION_POLL_INTERVAL_MILLIS = 100L;
 
   /** The interval of the keepalive pings to the host. */
@@ -110,7 +112,7 @@ public final class AgentClient {
       WebSocket ws = awaitHandshake(wsFuture, displayUrl, connectTimeout, cancellationRequested);
       if (ws == null) {
         disconnect();
-        client.close();
+        closeHttpClient(client);
         return null;
       }
       AgentClientChannels.OutboundMessageChannel channel =
@@ -121,7 +123,7 @@ public final class AgentClient {
       try {
         disconnect();
       } finally {
-        client.close();
+        closeHttpClient(client);
       }
       throw connectFailure;
     }
@@ -150,9 +152,7 @@ public final class AgentClient {
       try {
         disconnect();
       } finally {
-        if (httpClient != null) {
-          httpClient.close();
-        }
+        closeHttpClient(httpClient);
       }
     }
   }
@@ -277,6 +277,21 @@ public final class AgentClient {
         Throwable cause = executionException.getCause();
         throw new IOException("Failed to connect to " + wsUrl, cause);
       }
+    }
+  }
+
+  private static void closeHttpClient(HttpClient client) {
+    if (client == null) {
+      return;
+    }
+    client.shutdown();
+    try {
+      if (!client.awaitTermination(HTTP_CLIENT_CLOSE_TIMEOUT)) {
+        client.shutdownNow();
+      }
+    } catch (InterruptedException interrupted) {
+      client.shutdownNow();
+      Thread.currentThread().interrupt();
     }
   }
 

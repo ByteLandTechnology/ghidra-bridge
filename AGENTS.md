@@ -11,9 +11,10 @@ CI checks compliance with these rules.
 ## Environment Setup
 
 - **JDK**: Use Java 21 (JDK 21).
-- **Ghidra**: Use Ghidra 12.1 or newer (CI uses Ghidra `12.1.2`).
-- **`GHIDRA_INSTALL_DIR`**: Set `GHIDRA_INSTALL_DIR` to the local Ghidra installation directory, or pass `-PghidraInstallDir=/path/to/ghidra`. Gradle needs Ghidra to compile `:adapter`, `:launcher`, and generated scripts, and to run `:adapter` and headless tests.
-- **Gradle Wrapper**: Always run `./gradlew` from the repository root instead of a system Gradle binary.
+- **Ghidra**: Use Ghidra 12.1 or newer (CI uses Ghidra `12.1.4`). On macOS and Linux ARM64, run `./support/gradle/gradlew --no-daemon buildNatives` in the Ghidra installation directory before you run tests.
+- **`GHIDRA_INSTALL_DIR` / `GHIDRA_HOME`**: Set `GHIDRA_INSTALL_DIR` or `GHIDRA_HOME` to the local Ghidra installation directory, or pass `-PghidraInstallDir=/path/to/ghidra`, when Gradle cannot find Ghidra automatically. Gradle needs Ghidra to compile `:adapter`, `:launcher`, and generated scripts, and to run `:adapter` and headless tests.
+- **Gradle Wrapper**: Always run `./gradlew` (or `.\gradlew.bat` in PowerShell and `./gradlew.bat` in Git Bash on Windows) from the repository root instead of a system Gradle binary.
+- **Windows Git Checkout**: Set `git config core.autocrlf false` so checked-out contract files keep LF line endings.
 
 ## Module Layout and Guardrails
 
@@ -29,7 +30,7 @@ The build defines 8 Java subprojects under `modules/`:
 
 Follow these repository rules when you change code:
 - **Ghidra API boundary**: Only `modules/adapter` and `modules/launcher` can import `ghidra.*` packages (`verifyArchitecture` enforces this rule).
-- **Generated contracts**: Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand. Run `./gradlew generateApiContracts` after public interface changes.
+- **Generated contracts**: Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand. Run `./gradlew generateApiContracts` (or `.\gradlew.bat generateApiContracts` on Windows) after public interface changes.
 - **Repository hygiene**: Do not commit build directories, IDE files, generated scripts (`Bridge.java`, `GhidraMcp.java`), zero-byte files, or duplicate tracked files.
 
 ## GitHub Actions
@@ -86,7 +87,7 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
 
 ### Full Build and Verification (`clean verify`)
 
-Run the full local Gradle verification check. CI runs `./gradlew --no-daemon verify` on a new checkout for pull requests and release archives. Keep `clean verify` locally to delete previous build output:
+Run the full local Gradle verification check. CI runs `./gradlew --no-daemon verify` (`./gradlew.bat --no-daemon verify` on Windows) on a new checkout for pull requests and release archives. Keep `clean verify` locally to delete previous build output:
 
 ```bash
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
@@ -121,19 +122,27 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon -Djunit.jupiter.executi
 Test runs write failure reports to:
 - JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
 - JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
-- Headless regression failure log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
+- Headless regression failure log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics-<os>` and `publish-test-diagnostics`)
 
 ### Headless Regression Tests
 
-Run the headless function-mutation regression test on Linux x86-64 after `buildGhidraScript`, `verify`, or `clean verify`. This test needs `gcc` and `nm`:
+Run the headless function-mutation regression test on Linux or macOS after `buildGhidraScript`, `verify`, or `clean verify`. This script builds its own x86-64 ELF binary without `gcc` or `nm`:
 
 ```bash
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
+On Windows in PowerShell:
+
+```powershell
+python tests/function_mutation_regression.py "$env:GHIDRA_INSTALL_DIR\support\analyzeHeadless.bat"
+```
+
 ### Exact Local CI Sequence
 
-Run these six commands in order to match the `lint` and `verify` jobs in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
+Run these six commands in order to match the `lint` and `verify-matrix` jobs in `.github/workflows/ci.yml`. CI runs `./gradlew --no-daemon verify` (`./gradlew.bat --no-daemon verify` on Windows) on a new checkout, and local runs use `clean verify` as documented in `CONTRIBUTING.md`:
+
+On Linux and macOS:
 
 ```bash
 actionlint
@@ -144,9 +153,25 @@ python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analy
 python3 tests/release_archive_reproducibility.py
 ```
 
+On Windows in PowerShell (run `verify-repository-hygiene.sh` in Git Bash):
+
+```powershell
+bash .github/scripts/verify-repository-hygiene.sh
+.\gradlew.bat --no-daemon clean verify
+python tests/function_mutation_regression.py "$env:GHIDRA_INSTALL_DIR\support\analyzeHeadless.bat"
+```
+
+On Windows in Git Bash:
+
+```bash
+bash .github/scripts/verify-repository-hygiene.sh
+./gradlew.bat --no-daemon clean verify
+python tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless.bat"
+```
+
 ### Release Archives and Provenance
 
-Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest, run Gradle verification with `--stacktrace`, and build the deterministic release archive and SHA-256 checksum in `build/release/`. Run `tests/release_archive_reproducibility.py` to test archive reproducibility across delayed runs:
+Check `version.txt`, `.release-please-manifest.json`, and the JAR manifest. Run Gradle with `--stacktrace` and build the release archive and SHA-256 checksum in `build/release/`. Run `tests/release_archive_reproducibility.py` to test archive reproducibility across delayed runs:
 
 ```bash
 bash .github/scripts/package-release.sh

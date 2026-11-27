@@ -67,6 +67,9 @@ final class AgentWebSocketConnectionRunner {
   }
 
   void runConnection(Socket socket) {
+    if (!pendingSockets.claimForRead(socket)) {
+      return;
+    }
     AgentServerConnection connection = null;
     boolean opened = false;
     CloseState closeState =
@@ -81,7 +84,10 @@ final class AgentWebSocketConnectionRunner {
           WebSocketHandshakeValidator.validate(config, loopbackListener, request);
         } catch (WebSocketHandshake.HttpHandshakeException e) {
           closeState.reason = e.getMessage();
-          writeHandshakeFailure(socket, e);
+          pendingSockets.remove(socket);
+          if (running.get()) {
+            writeHandshakeFailure(socket, e);
+          }
           return;
         }
         if (!running.get()) {
@@ -91,13 +97,15 @@ final class AgentWebSocketConnectionRunner {
         AgentServerConnection candidate = new AgentServerConnection(socket);
         if (!activeConnection.compareAndSet(null, candidate)) {
           candidate.markClosed();
+          pendingSockets.remove(socket);
           if (running.get()) {
             WebSocketHandshake.writeHttpResponse(
                 socket.getOutputStream(),
                 409,
                 "Conflict",
-                List.of(),
+                List.of("Connection: close"),
                 "Bridge already has an active client");
+            WebSocketHandshake.closeAfterHttpError(socket, 250, 16 * 1024);
           }
           return;
         }
@@ -138,7 +146,12 @@ final class AgentWebSocketConnectionRunner {
   private void writeHandshakeFailure(Socket socket, WebSocketHandshake.HttpHandshakeException e) {
     try {
       WebSocketHandshake.writeHttpResponse(
-          socket.getOutputStream(), e.status(), e.reason(), List.of(), e.getMessage());
+          socket.getOutputStream(),
+          e.status(),
+          e.reason(),
+          List.of("Connection: close"),
+          e.getMessage());
+      WebSocketHandshake.closeAfterHttpError(socket, 1_000, 128 * 1024);
     } catch (IOException responseFailure) {
       e.addSuppressed(responseFailure);
       if (running.get()) {
@@ -295,11 +308,11 @@ final class AgentWebSocketConnectionRunner {
     }
   }
 
-  private static void closeWith(
+  private void closeWith(
       AgentServerConnection connection, CloseState closeState, int code, String reason) {
     closeState.code = code;
     closeState.reason = reason;
-    connection.close(code, reason);
+    connection.closeFromRunner(code, reason, running::get);
   }
 
   private static Duration requirePositiveDuration(Duration duration, String name) {

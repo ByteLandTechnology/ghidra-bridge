@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 final class WebSocketHandshake {
   private static final String WEBSOCKET_ACCEPT_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -202,6 +203,37 @@ final class WebSocketHandshake {
       output.write(response.toString().getBytes(StandardCharsets.US_ASCII));
     }
     output.flush();
+  }
+
+  static void closeAfterHttpError(Socket socket, int drainTimeoutMillis, int maxDrainBytes) {
+    try {
+      if (!socket.isClosed() && !socket.isOutputShutdown()) {
+        socket.shutdownOutput();
+      }
+      if (!socket.isClosed() && !socket.isInputShutdown()) {
+        InputStream input = socket.getInputStream();
+        byte[] discard = new byte[4096];
+        int drained = 0;
+        long deadlineNanos =
+            System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(drainTimeoutMillis);
+        while (drained < maxDrainBytes) {
+          long remainingMillis =
+              TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
+          if (remainingMillis <= 0) {
+            break;
+          }
+          socket.setSoTimeout((int) Math.max(1L, remainingMillis));
+          int step = Math.min(discard.length, maxDrainBytes - drained);
+          int read = input.read(discard, 0, step);
+          if (read < 0) {
+            break;
+          }
+          drained += read;
+        }
+      }
+    } catch (IOException ignored) {
+      // Ignore socket close or read errors after the HTTP error reply.
+    }
   }
 
   static Map<String, String> parseQuery(String rawQuery) {

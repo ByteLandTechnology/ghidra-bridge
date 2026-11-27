@@ -5,20 +5,23 @@ This guide describes how to build, extend, and verify the Ghidra Bridge codebase
 ## Prerequisites
 
 - **Java Development Kit**: Use JDK 21.
-- **Ghidra**: Use Ghidra 12.1 or newer to compile adapters.
-- **Environment**: Set `GHIDRA_INSTALL_DIR` to the Ghidra installation path.
+- **Ghidra**: Use Ghidra 12.1 or newer to compile adapters. CI uses Ghidra `12.1.4`.
+- **Ghidra Native Tools**: On macOS and Linux ARM64, run `./support/gradle/gradlew --no-daemon buildNatives` in your Ghidra folder before you run tests.
+- **Environment**: Set `GHIDRA_INSTALL_DIR` or `GHIDRA_HOME` when Ghidra is not in a standard location.
+- **Windows Git Checkout**: Set `git config core.autocrlf false` so generated contract files keep LF line endings.
 
-Gradle resolves Ghidra from:
+Gradle resolves Ghidra in this sequence:
 1. The `-PghidraInstallDir` command line property.
-2. The `GHIDRA_INSTALL_DIR` environment variable.
-3. The `ghidraRun` executable on your system `PATH`.
-4. Homebrew installations of Ghidra.
-5. The `analyzeHeadless` executable on your system `PATH`.
-6. Standard installation directories on your machine.
+2. The `GHIDRA_INSTALL_DIR` and `GHIDRA_HOME` environment variables.
+3. The `analyzeHeadless` and `ghidraRun` launchers on `PATH` (`analyzeHeadless.bat` and `ghidraRun.bat` on Windows).
+4. Homebrew installations of Ghidra on macOS and Linux.
+5. Standard install folders on Linux, macOS (`Ghidra.app` bundles and `/Applications`), and Windows, newest version first.
 
 ## Use Gradle
 
-Always use the Gradle Wrapper in this repository:
+Always use the Gradle Wrapper in this repository.
+
+On Linux and macOS:
 
 ```bash
 # Build the user distribution
@@ -27,6 +30,18 @@ Always use the Gradle Wrapper in this repository:
 # Run all verification checks
 ./gradlew --no-daemon clean verify
 ```
+
+On Windows in PowerShell:
+
+```powershell
+# Build the user distribution
+.\gradlew.bat buildGhidraScript
+
+# Run all verification checks
+.\gradlew.bat --no-daemon clean verify
+```
+
+On Windows in Git Bash, run `./gradlew.bat` with the same arguments.
 
 The `buildGhidraScript` task creates three files in `build/ghidra-script/`:
 - `Bridge.java`
@@ -60,7 +75,11 @@ Register the new operation in `modules/wire` with `ApiRegistry`:
 Run the contract generator task:
 
 ```bash
+# Linux and macOS
 ./gradlew generateApiContracts
+
+# Windows (PowerShell)
+.\gradlew.bat generateApiContracts
 ```
 
 This task regenerates:
@@ -71,28 +90,45 @@ This task regenerates:
 Do not edit these files by hand.
 The build fails if repository files differ from the generator output.
 
-To test function mutations in an isolated Ghidra project on Linux x86-64, run:
+To test function mutations in an isolated headless Ghidra project on Linux or macOS, run:
 
 ```bash
 ./gradlew buildGhidraScript
 python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 ```
 
-The test requires `gcc` and `nm`.
+On Windows in PowerShell, run:
+
+```powershell
+.\gradlew.bat buildGhidraScript
+python tests/function_mutation_regression.py "$env:GHIDRA_INSTALL_DIR\support\analyzeHeadless.bat"
+```
+
+The Python script builds its own x86-64 ELF test binary and symbol map without external compilers.
 
 ## Quality Checks
 
-Before you submit a change, run the local lint, hygiene, and verification checks:
+CI runs verification across Linux, macOS, and Windows on x86-64 and ARM64.
+Before you submit a change, run the local lint, hygiene, and verification checks.
+
+On Linux and macOS:
 
 ```bash
 actionlint
 shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
+python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 python3 tests/release_archive_reproducibility.py
 ```
 
-On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
+On Windows in PowerShell (run the hygiene script in Git Bash):
+
+```powershell
+bash .github/scripts/verify-repository-hygiene.sh
+.\gradlew.bat --no-daemon clean verify
+python tests/function_mutation_regression.py "$env:GHIDRA_INSTALL_DIR\support\analyzeHeadless.bat"
+```
 
 To check module import boundaries without a Ghidra installation, run:
 
@@ -100,15 +136,16 @@ To check module import boundaries without a Ghidra installation, run:
 ./gradlew --no-daemon verifyArchitecture
 ```
 
-The verification checks enforce these rules:
-- **Workflows and Shell Scripts**: `actionlint` and `shellcheck` validate GitHub Actions workflows, composite actions, and shell scripts.
-- **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, SHA-pinned GitHub Actions, URLs, and MCP tool names.
+The verification tasks check:
+- **Workflows and Shell Scripts**: `actionlint` and `shellcheck` check GitHub Actions workflows, composite actions, and shell scripts.
+- **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, the `docs/api.md` method count, SHA-pinned GitHub Actions, URLs, and MCP tool names.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
 - **MCP Documentation**: `verifyMcpDocumentation` checks `docs/mcp-tools.json`, the nine guides, and MCP Javadocs.
 - **Script Validation**: `compileGeneratedScripts` verifies that generated scripts compile.
 - **Distribution**: `verifyDistribution` verifies the contents of `build/ghidra-script/`.
+- **Headless Regression**: `function_mutation_regression.py` verifies function mutations in headless Ghidra.
 
 ### Test Timeouts, Debugging, and Failure Reports
 
@@ -119,7 +156,7 @@ Every Gradle `Test` task sets:
 - **Failure-only output and reports**: Gradle prints `FULL` exception stack traces, causes, and buffered `stdout` and `stderr` streams only when a test fails. On failure, check:
   - JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
   - JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
-  - Headless Ghidra regression log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
+  - Headless Ghidra regression log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics-<os>` and `publish-test-diagnostics`)
 
 ## Releases
 
