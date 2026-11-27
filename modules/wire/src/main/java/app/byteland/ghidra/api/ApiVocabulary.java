@@ -14,10 +14,12 @@ final class ApiVocabulary {
   static final String CASE_SENSITIVE = "case_sensitive";
   static final String CATEGORY_PATH = "category_path";
   static final String COMMENT = "comment";
+  static final String CONFLICT_MODE = "conflict_mode";
   static final String CONST = "const";
   static final String CURSOR = "cursor";
   static final String DATA = "data";
   static final String DATA_TYPE = "data_type";
+  static final String DECLARATIONS = "declarations";
   static final String DEFAULT = "default";
   static final String DELETED = "deleted";
   static final String DEFINITIONS = "$defs";

@@ -3,12 +3,29 @@ package app.byteland.ghidra.service.function;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
+import java.util.List;
 import java.util.Set;
 
 /**
  * Manages functions, parameters, local variables, and call graphs.
  */
 public interface FunctionService {
+  /** Maximum UTF-8 byte length accepted for a C function prototype signature. */
+  int MAX_SIGNATURE_BYTES = 8_192;
+
+  /**
+   * Parameter definition for atomic function prototype updates.
+   */
+  record ParameterPatch(
+      String name, DataTypeReference dataType, VariableStorageReference storage) {
+    public ParameterPatch {
+      if (dataType == null) {
+        throw new IllegalArgumentException("parameter dataType is required");
+      }
+      name = name == null || name.isBlank() ? null : name.trim();
+    }
+  }
+
   /**
    * Patch for Boolean and integer function attributes.
    */
@@ -69,7 +86,7 @@ public interface FunctionService {
   /**
    * Updates function name, comments, signature, and attributes.
    */
-  void patchFunction(
+  default void patchFunction(
       String rawAddress,
       String newName,
       String newComment,
@@ -77,7 +94,61 @@ public interface FunctionService {
       DataTypeReference returnType,
       VariableStorageReference returnStorage,
       String callingConvention,
+      FunctionAttributePatch attributes) {
+    patchFunction(
+        rawAddress,
+        newName,
+        newComment,
+        commentPresent,
+        null,
+        returnType,
+        returnStorage,
+        callingConvention,
+        attributes);
+  }
+
+  /**
+   * Updates function name, comments, C signature or structured signature fields, and attributes.
+   */
+  void patchFunction(
+      String rawAddress,
+      String newName,
+      String newComment,
+      boolean commentPresent,
+      String signature,
+      DataTypeReference returnType,
+      VariableStorageReference returnStorage,
+      String callingConvention,
       FunctionAttributePatch attributes);
+
+  /**
+   * Updates function name, comments, C signature or atomic parameter list, and attributes.
+   */
+  default void patchFunction(
+      String rawAddress,
+      String newName,
+      String newComment,
+      boolean commentPresent,
+      String signature,
+      DataTypeReference returnType,
+      VariableStorageReference returnStorage,
+      String callingConvention,
+      List<ParameterPatch> parameters,
+      FunctionAttributePatch attributes) {
+    if (parameters != null) {
+      throw new UnsupportedOperationException("parameter list patch is not supported");
+    }
+    patchFunction(
+        rawAddress,
+        newName,
+        newComment,
+        commentPresent,
+        signature,
+        returnType,
+        returnStorage,
+        callingConvention,
+        attributes);
+  }
 
   /**
    * Returns one page of functions that call the target function.

@@ -108,6 +108,9 @@ final class WireValues {
   static Object normalize(Object value) {
     if (value instanceof Instant instant) return instant.toString();
     if (value instanceof DataTypeReference reference) {
+      if (reference instanceof DataTypeReference.CExpression cExpression) {
+        return cExpression.expression();
+      }
       Map<String, Object> result = LinkedHashMap.newLinkedHashMap(3);
       result.put(ApiVocabulary.KIND, reference.kind());
       switch (reference) {
@@ -119,6 +122,7 @@ final class WireValues {
           result.put("count", array.count());
         }
         case DataTypeReference.UntypedPointer ignored -> {}
+        case DataTypeReference.CExpression ignored -> {}
       }
       return result;
     }

@@ -381,6 +381,12 @@ class ListPaginationParityTest {
       }
 
       @Override
+      public List<DataTypeResource> parseCDeclarations(
+          String declarations, String categoryPath, ConflictMode conflictMode) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
       public boolean deleteDataType(String path) {
         throw new UnsupportedOperationException();
       }
@@ -465,6 +471,7 @@ class ListPaginationParityTest {
           String name,
           String comment,
           boolean updateComment,
+          String signature,
           DataTypeReference returnType,
           VariableStorageReference returnStorage,
           String callingConvention,

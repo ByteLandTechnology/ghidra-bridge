@@ -13,6 +13,7 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.Structure;
 import ghidra.program.model.data.Union;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 public final class DataTypeServiceImpl implements DataTypeService {
@@ -82,6 +83,13 @@ public final class DataTypeServiceImpl implements DataTypeService {
         EnumMutations.edit(enumType, enumPatch);
       }
     }
+  }
+
+  @Override
+  public List<DataTypeResource> parseCDeclarations(
+      String declarations, String categoryPath, ConflictMode conflictMode) {
+    return CDeclarationParser.parseAndStore(
+        dataTypeManager(), declarations, categoryPath, conflictMode);
   }
 
   @Override

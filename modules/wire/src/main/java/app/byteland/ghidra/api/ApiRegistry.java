@@ -501,6 +501,9 @@ public final class ApiRegistry {
       List<String> identityFields,
       ApiMethod.Handler<Map<String, Object>, Page<?>> handler) {
     Set<String> allowedRoots = WireValues.rootFields(fields);
+    boolean projectable =
+        input.get("properties") instanceof Map<?, ?> properties
+            && properties.containsKey(ApiVocabulary.FIELDS);
     register(
         name,
         effects,
@@ -511,7 +514,7 @@ public final class ApiRegistry {
                 Map.of(
                     ApiVocabulary.ITEMS,
                     WireSchema.array(
-                        ApiSchemaCatalog.resourceSchema(fields, identityFields, false),
+                        ApiSchemaCatalog.resourceSchema(fields, identityFields, projectable),
                         0,
                         Integer.MAX_VALUE)),
                 ApiVocabulary.ITEMS)),
@@ -958,8 +961,29 @@ public final class ApiRegistry {
         : new VariableStorageReference.Serialization(String.valueOf(storage.get("serialization")));
   }
 
+  static boolean utf8BytesExceed(String text, int maxBytes) {
+    return text.length() > maxBytes
+        || text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > maxBytes;
+  }
+
   static DataTypeReference dataType(Object raw, String target) {
     if (raw == null) return null;
+    if (raw instanceof String expression) {
+      if (utf8BytesExceed(expression, DataTypeReference.MAX_EXPRESSION_BYTES)) {
+        throw ApiException.badRequest(
+            ApiVocabulary.INVALID_VALUE,
+            target
+                + " exceeds maximum size of "
+                + DataTypeReference.MAX_EXPRESSION_BYTES
+                + " UTF-8 bytes",
+            target);
+      }
+      if (expression.isBlank()) {
+        throw ApiException.badRequest(
+            "invalid_data_type_reference", target + " must be a non-empty C type string", target);
+      }
+      return DataTypeReference.cExpression(expression);
+    }
     Map<String, Object> value = objectAt(raw, target);
     String kind = text(value, ApiVocabulary.KIND);
     return switch (kind) {

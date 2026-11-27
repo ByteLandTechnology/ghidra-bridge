@@ -18,7 +18,7 @@ import java.util.TreeSet;
 final class McpParamsSchema {
   private static final int SINGLE_OPERATION_MAX_DEPTH = 4;
   private static final int SUMMARY_MAX_DEPTH = 2;
-  private static final String DATA_TYPE_REF = "#/$defs/data_type_reference";
+  private static final String DEF_PREFIX = "#/$defs/";
 
   private McpParamsSchema() {}
 
@@ -30,7 +30,13 @@ final class McpParamsSchema {
             : SUMMARY_MAX_DEPTH;
     List<Map<String, Object>> flattened =
         descriptors.stream()
-            .map(descriptor -> flatten(descriptor.inputSchema(), 0, maxDepth))
+            .map(
+                descriptor ->
+                    flatten(
+                        descriptor.inputSchema(),
+                        schemaDefinitions(descriptor.inputSchema()),
+                        0,
+                        maxDepth))
             .toList();
     Map<String, Object> merged =
         flattened.size() == 1 ? flattened.getFirst() : mergeSchemas(flattened);
@@ -50,17 +56,28 @@ final class McpParamsSchema {
   }
 
   @SuppressWarnings("unchecked")
+  private static Map<String, Map<String, Object>> schemaDefinitions(Map<String, Object> schema) {
+    if (schema.get("$defs") instanceof Map<?, ?> defs) {
+      return (Map<String, Map<String, Object>>) defs;
+    }
+    return Map.of();
+  }
+
+  @SuppressWarnings("unchecked")
   private static Map<String, Object> flatten(
-      Map<String, Object> schema, int depth, int maxDepth) {
+      Map<String, Object> schema,
+      Map<String, Map<String, Object>> definitions,
+      int depth,
+      int maxDepth) {
     if (schema.get("$ref") instanceof String reference) {
-      return flattenReference(reference, depth, maxDepth);
+      return flattenReference(reference, definitions, depth, maxDepth);
     }
     List<Map<String, Object>> unionBranches = unionBranches(schema);
     if (unionBranches != null) {
       List<Map<String, Object>> nonNull =
           unionBranches.stream()
               .filter(branch -> !"null".equals(branch.get("type")))
-              .map(branch -> flatten(branch, depth, maxDepth))
+              .map(branch -> flatten(branch, definitions, depth, maxDepth))
               .toList();
       if (nonNull.isEmpty()) {
         return Map.of();
@@ -72,41 +89,42 @@ final class McpParamsSchema {
       return copyDescriptionOnly(schema);
     }
     return switch (type) {
-      case "object" -> flattenObject(schema, depth, maxDepth);
-      case "array" -> flattenArray(schema, depth, maxDepth);
+      case "object" -> flattenObject(schema, definitions, depth, maxDepth);
+      case "array" -> flattenArray(schema, definitions, depth, maxDepth);
       case "string", "integer", "number", "boolean" -> flattenScalar(schema, type);
       default -> Map.of("type", type);
     };
   }
 
   private static Map<String, Object> flattenReference(
-      String reference, int depth, int maxDepth) {
-    if (!DATA_TYPE_REF.equals(reference) || depth >= maxDepth) {
+      String reference,
+      Map<String, Map<String, Object>> definitions,
+      int depth,
+      int maxDepth) {
+    if (!reference.startsWith(DEF_PREFIX)) {
       return Map.of("type", "object");
     }
-    Map<String, Object> properties = new LinkedHashMap<>();
-    properties.put(
-        "kind",
-        Map.of(
-            "type", "string",
-            "enum", List.of("array", "named", "pointer", "untyped_pointer")));
-    properties.put("name", Map.of("type", "string", "minLength", 1));
-    properties.put("target", flattenReference(reference, depth + 1, maxDepth));
-    properties.put("element", flattenReference(reference, depth + 1, maxDepth));
-    properties.put(
-        "count", Map.of("type", "integer", "minimum", 1, "maximum", Integer.MAX_VALUE));
-
-    Map<String, Object> result = new LinkedHashMap<>();
-    result.put("type", "object");
-    result.put("additionalProperties", false);
-    result.put("properties", Collections.unmodifiableMap(properties));
-    result.put("required", List.of("kind"));
-    return Collections.unmodifiableMap(result);
+    Map<String, Object> target = definitions.get(reference.substring(DEF_PREFIX.length()));
+    if (target == null) {
+      return Map.of("type", "object");
+    }
+    if (depth >= maxDepth) {
+      List<Map<String, Object>> branches = unionBranches(target);
+      if (branches != null) {
+        String shared = commonType(branches);
+        return shared == null ? Map.of() : Map.of("type", shared);
+      }
+      return target.get("type") instanceof String type ? Map.of("type", type) : Map.of();
+    }
+    return flatten(target, definitions, depth + 1, maxDepth);
   }
 
   @SuppressWarnings("unchecked")
   private static Map<String, Object> flattenObject(
-      Map<String, Object> schema, int depth, int maxDepth) {
+      Map<String, Object> schema,
+      Map<String, Map<String, Object>> definitions,
+      int depth,
+      int maxDepth) {
     if (Boolean.TRUE.equals(schema.get("additionalProperties"))
         || !(schema.get("properties") instanceof Map<?, ?> rawProperties)) {
       return withDescription(Map.of("type", "object"), schema);
@@ -125,7 +143,7 @@ final class McpParamsSchema {
     for (Map.Entry<?, ?> entry : rawProperties.entrySet()) {
       String key = String.valueOf(entry.getKey());
       Map<String, Object> child = (Map<String, Object>) entry.getValue();
-      properties.put(key, flatten(child, depth + 1, maxDepth));
+      properties.put(key, flatten(child, definitions, depth + 1, maxDepth));
     }
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("type", "object");
@@ -142,12 +160,16 @@ final class McpParamsSchema {
 
   @SuppressWarnings("unchecked")
   private static Map<String, Object> flattenArray(
-      Map<String, Object> schema, int depth, int maxDepth) {
+      Map<String, Object> schema,
+      Map<String, Map<String, Object>> definitions,
+      int depth,
+      int maxDepth) {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("type", "array");
     copyIfPresent(schema, result, "description");
     if (schema.get("items") instanceof Map<?, ?> itemSchema) {
-      result.put("items", flatten((Map<String, Object>) itemSchema, depth, maxDepth));
+      result.put(
+          "items", flatten((Map<String, Object>) itemSchema, definitions, depth, maxDepth));
     }
     copyIfPresent(schema, result, "minItems");
     copyIfPresent(schema, result, "maxItems");

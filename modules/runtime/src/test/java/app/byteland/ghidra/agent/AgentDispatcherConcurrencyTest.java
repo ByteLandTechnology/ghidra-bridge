@@ -185,13 +185,13 @@ class AgentDispatcherConcurrencyTest {
   }
 
   @Test
-  void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
+  void allMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(57, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
-      assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
+      assertEquals(26, writeCalls.size(), "All 26 single-mutation methods must be tested");
 
       for (Map.Entry<String, Map<String, Object>> call : writeCalls) {
         String method = call.getKey();
@@ -873,6 +873,10 @@ class AgentDispatcherConcurrencyTest {
                         "has_var_args", false,
                         "has_no_return", false)))));
     calls.add(
+        Map.entry(
+            "data_type.parse_c",
+            Map.of("declarations", "struct DemoStruct { int x; };")));
+    calls.add(
         Map.entry("data_type.delete", Map.of("selector", Map.of("path", "/DemoStruct"))));
     return calls;
   }
@@ -1318,6 +1322,7 @@ class AgentDispatcherConcurrencyTest {
             String newName,
             String newComment,
             boolean commentPresent,
+            String signature,
             DataTypeReference returnType,
             VariableStorageReference returnStorage,
             String callingConvention,
@@ -1584,6 +1589,13 @@ class AgentDispatcherConcurrencyTest {
         @Override
         public void patchDataType(String path, DataTypePatch patch) {
           observe("data_type.patch", true);
+        }
+
+        @Override
+        public List<DataTypeResource> parseCDeclarations(
+            String declarations, String categoryPath, ConflictMode conflictMode) {
+          observe("data_type.parse_c", true);
+          return List.of(dt);
         }
 
         @Override

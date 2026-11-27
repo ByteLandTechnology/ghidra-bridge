@@ -591,6 +591,105 @@ class DynamicProgramSwitchingTest {
     }
   }
 
+  @Test
+  @SuppressWarnings("unchecked")
+  void cDeclarationsAndSignaturePatchesIsolateAcrossSwitchedPrograms() throws Exception {
+    try (var alphaHolder = GhidraTestSupport.createX64Program("alpha.elf");
+        var betaHolder = GhidraTestSupport.createX64Program("beta.elf")) {
+      alphaHolder.inTransaction(
+          program -> {
+            Address start =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+            byte[] code = new byte[] {(byte) 0xb8, 0x2a, 0x00, 0x00, 0x00, (byte) 0xc3};
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    start,
+                    new ByteArrayInputStream(code),
+                    code.length,
+                    TaskMonitor.DUMMY,
+                    false);
+          });
+      betaHolder.inTransaction(
+          program -> {
+            Address start =
+                program.getAddressFactory().getDefaultAddressSpace().getAddress(0x401000);
+            byte[] code = new byte[] {(byte) 0xb8, 0x07, 0x00, 0x00, 0x00, (byte) 0xc3};
+            program
+                .getMemory()
+                .createInitializedBlock(
+                    ".text",
+                    start,
+                    new ByteArrayInputStream(code),
+                    code.length,
+                    TaskMonitor.DUMMY,
+                    false);
+          });
+
+      Program alpha = alphaHolder.program();
+      Program beta = betaHolder.program();
+      AtomicReference<Program> active = new AtomicReference<>(alpha);
+      GhidraSession session = new GhidraSession(active::get);
+
+      try (var services = GhidraServiceFactory.create(session, "gui-fallback");
+          AgentDispatcher dispatcher = new AgentDispatcher(services, "dynamic-c-decls")) {
+        Map<String, Object> parsedEnvelope =
+            (Map<String, Object>)
+                dispatcher.dispatch(
+                    "data_type.parse_c",
+                    Map.of(
+                        "declarations", "typedef struct { int fd; } AlphaHandle;",
+                        "category_path", "/alpha",
+                        "projection", Map.of("fields", List.of("name", "category_path"))));
+        List<Map<String, Object>> parsed =
+            (List<Map<String, Object>>) parsedEnvelope.get("items");
+        assertEquals(1, parsed.size());
+        assertEquals("/alpha/AlphaHandle", parsed.get(0).get("path"));
+        assertEquals("AlphaHandle", parsed.get(0).get("name"));
+        assertEquals("/alpha", parsed.get(0).get("category_path"));
+        assertEquals(false, parsed.get(0).containsKey("length"));
+
+        dispatcher.dispatch(
+            "function.create",
+            Map.of(
+                "resource", Map.of("entry", "0x401000", "name", "alpha_open"),
+                "disassemble", true));
+        dispatcher.dispatch(
+            "function.patch",
+            Map.of(
+                "selector", Map.of("entry", "0x401000"),
+                "patch", Map.of("signature", "int alpha_open(const AlphaHandle *handle)")));
+        Map<String, Object> projectedAlpha =
+            (Map<String, Object>)
+                dispatcher.dispatch(
+                    "function.get",
+                    Map.of(
+                        "selector", Map.of("entry", "0x401000"),
+                        "projection", Map.of("fields", List.of("name", "signature"))));
+        assertEquals("alpha_open", projectedAlpha.get("name"));
+        assertTrue(String.valueOf(projectedAlpha.get("signature")).contains("AlphaHandle"));
+        assertEquals(false, projectedAlpha.containsKey("calling_convention"));
+
+        // Switch active program to beta.elf and verify AlphaHandle stays isolated to alpha.elf.
+        dispatcher.runExclusive(() -> active.set(beta));
+        dispatcher.dispatch(
+            "function.create",
+            Map.of(
+                "resource", Map.of("entry", "0x401000", "name", "beta_open"),
+                "disassemble", true));
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                dispatcher.dispatch(
+                    "function.patch",
+                    Map.of(
+                        "selector", Map.of("entry", "0x401000"),
+                        "patch", Map.of("signature", "int beta_open(const AlphaHandle *handle)"))));
+      }
+    }
+  }
+
   private static AnalysisResource awaitAnalysisCompletion(
       app.byteland.ghidra.service.BridgeServices services) throws InterruptedException {
     long deadlineNanos = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);

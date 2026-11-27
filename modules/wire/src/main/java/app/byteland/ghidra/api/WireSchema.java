@@ -250,7 +250,10 @@ public final class WireSchema {
     array.put(ApiVocabulary.PROPERTIES, arrayProperties);
     Map<String, Object> untyped =
         object(Map.of(ApiVocabulary.KIND, stringEnum("untyped_pointer")), ApiVocabulary.KIND);
-    return taggedOneOf(ApiVocabulary.KIND, named, pointer, array, untyped);
+    Map<String, Object> union = new LinkedHashMap<>();
+    union.put(ApiVocabulary.ONE_OF, List.of(named, pointer, array, untyped, nonBlankString()));
+    union.put(ApiVocabulary.DISCRIMINATOR, Map.of("propertyName", ApiVocabulary.KIND));
+    return Collections.unmodifiableMap(union);
   }
 
   private static final Integer MAX_INT = Integer.MAX_VALUE;
@@ -561,6 +564,13 @@ public final class WireSchema {
       PointerCursor cursor,
       Map<String, Map<String, Object>> definitions) {
     if (!(value instanceof Map<?, ?> object)) {
+      Map<String, Object> stringBranch = findStringBranch(alternatives);
+      if (stringBranch != null) {
+        if (value instanceof String) {
+          return evaluate(value, stringBranch, cursor, definitions);
+        }
+        return failure(ApiVocabulary.INVALID_TYPE, cursor, " must be an object or a string");
+      }
       return failure(ApiVocabulary.INVALID_TYPE, cursor, " must be an object");
     }
     for (Map.Entry<?, ?> entry : object.entrySet()) {
@@ -744,6 +754,17 @@ public final class WireSchema {
         && discriminator.get("propertyName") instanceof String propertyName
         && !propertyName.isBlank()) {
       return propertyName;
+    }
+    return null;
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static Map<String, Object> findStringBranch(List<?> alternatives) {
+    for (Object rawAlternative : alternatives) {
+      Map<String, Object> branch = (Map<String, Object>) rawAlternative;
+      if (ApiVocabulary.STRING.equals(branch.get(ApiVocabulary.TYPE))) {
+        return branch;
+      }
     }
     return null;
   }

@@ -2,9 +2,9 @@
 
 Ghidra Bridge 为正在运行的 Ghidra 程序提供网络访问。
 该桥接支持两种网络传输协议：WebSocket JSON-RPC 2.0 与 MCP Streamable HTTP `2026-07-28`。
-注册表定义 56 个公共点分方法，从 `interface.get` 到 `batch.execute`。
-WebSocket 发布全部 56 个方法。
-MCP 发布 55 个方法，且不发布 `interface.get`。
+注册表定义 57 个公共点分方法，从 `interface.get` 到 `batch.execute`。
+WebSocket 发布全部 57 个方法。
+MCP 发布 56 个方法，且不发布 `interface.get`。
 运行时 JAR 包不包含任何第三方依赖。
 
 ## 设计目标
@@ -116,9 +116,23 @@ token 的 `location_address` 是 Ghidra GUI 为该 token 选择的地址。
 客户端删除全局变量时，桥接会清除其数据定义。
 除非客户端请求删除标签，否则桥接会保留标签。
 
+## C 声明与函数原型
+
+数据类型写入字段既接受结构化 `data_type_reference` 对象，也接受 C 类型字符串，例如 `const uint8_t *` 或 `int (*)(void *)`。
+读取结果始终返回规范的结构化 `data_type_reference` 对象。
+
+`data_type.parse_c` 在一个事务中解析 C 声明（`struct`、`union`、`enum` 和 `typedef`），并将创建的类型保存到目标分类。
+`function.patch` 接受可选的 `patch.signature` 字符串，以单步应用 C 函数原型。
+该原型会同时设置返回类型、函数名、调用约定、可变参数标志和参数列表。
+`function.patch` 还接受 `patch.parameters`，可在单个事务中原子替换完整参数列表。
+`patch.signature` 与 `patch.parameters` 均会保留兼容的自定义变量存储位置。
+
+C 类型字符串最大为 4,096 UTF-8 字节。
+`patch.signature` 最大为 8,192 UTF-8 字节，`declarations` 最大为 65,536 UTF-8 字节。
+
 ## 后续阅读
 
 - 查阅[体系架构指南](architecture.md)了解模块划分。
 - 阅读[协议规范](protocol.md)掌握信封格式与错误定义。
 - 查阅[批处理与事务](batch-and-transactions.md)了解原子执行机制。
-- 查阅[方法参考](../api.md)获取 56 个方法的完整列表。
+- 查阅[方法参考](../api.md)获取 57 个方法的完整列表。

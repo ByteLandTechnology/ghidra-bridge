@@ -341,7 +341,7 @@ class FieldProjectionWireTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void allTwentyEightProjectionMethodsReturnIdenticalProjectedPayloadsAndCursors()
+  void allTwentyNineProjectionMethodsReturnIdenticalProjectedPayloadsAndCursors()
       throws Exception {
     TestFixture fixture = new TestFixture();
     ApiCatalog catalog = fixture.registry.methodCatalog();
@@ -355,9 +355,9 @@ class FieldProjectionWireTest {
                 })
             .map(ApiCatalog.MethodDescriptor::name)
             .toList();
-    assertEquals(28, projectionMethods.size());
+    assertEquals(29, projectionMethods.size());
 
-    List<MethodCase> cases = fixture.allTwentyEightCases();
+    List<MethodCase> cases = fixture.allProjectionCases();
     assertEquals(
         Set.copyOf(projectionMethods),
         cases.stream().map(MethodCase::method).collect(java.util.stream.Collectors.toSet()));
@@ -948,6 +948,7 @@ class FieldProjectionWireTest {
                     case "listCategories" -> Page.of(List.of(category), 10, "/types");
                     case "getDataType" -> funcSigType;
                     case "searchDataTypes" -> Page.of(List.of(funcSigType), 10, "/FuncSig");
+                    case "parseCDeclarations" -> List.of(funcSigType);
                     default -> throw new AssertionError(name);
                   });
       TransactionRunner txRunner =
@@ -986,7 +987,7 @@ class FieldProjectionWireTest {
               () -> {});
     }
 
-    List<MethodCase> allTwentyEightCases() {
+    List<MethodCase> allProjectionCases() {
       return List.of(
           new MethodCase("session.get", Map.of(), List.of("status")),
           new MethodCase("program.get", Map.of(), List.of("image_base", "function_count")),
@@ -1062,6 +1063,10 @@ class FieldProjectionWireTest {
           new MethodCase(
               "data_type.list",
               Map.of(),
+              List.of("signature.parameters")),
+          new MethodCase(
+              "data_type.parse_c",
+              Map.of("declarations", "typedef int FuncSig(int x);"),
               List.of("signature.parameters")));
     }
 

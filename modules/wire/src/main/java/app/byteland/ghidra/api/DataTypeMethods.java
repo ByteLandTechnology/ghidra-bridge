@@ -1,5 +1,6 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.MAX_LIMIT;
 import static app.byteland.ghidra.api.ApiRegistry.dataType;
 import static app.byteland.ghidra.api.ApiRegistry.dataTypePath;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
@@ -14,12 +15,15 @@ import static app.byteland.ghidra.api.ApiRegistry.selector;
 import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
+import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.datatype.DataTypePatch;
 import app.byteland.ghidra.service.datatype.DataTypeReference;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
+import app.byteland.ghidra.service.datatype.DataTypeService;
 import app.byteland.ghidra.service.datatype.FunctionSignature;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -131,6 +135,25 @@ final class DataTypeMethods implements ApiMethodProvider {
           upsertFunctionDataType(request);
           return registry.services().dataTypeService().getDataType(dataTypePath(resource(request)));
         });
+    registry.writeListResult(
+        "data_type.parse_c",
+        MethodEffects.mutation(true, false),
+        "Parse C declarations and create data types in the active program.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.DECLARATIONS,
+                WireSchema.nonBlankString(),
+                ApiVocabulary.CATEGORY_PATH,
+                WireSchema.withDefault(WireSchema.string(), "/"),
+                ApiVocabulary.CONFLICT_MODE,
+                WireSchema.withDefault(
+                    WireSchema.stringEnum("keep", "rename", "replace"), "replace"),
+                ApiVocabulary.FIELDS,
+                ApiRegistry.fieldsSchema()),
+            ApiVocabulary.DECLARATIONS),
+        ApiSchemaCatalog.dataTypeFields(),
+        List.of(ApiVocabulary.PATH),
+        this::parseCDeclarations);
     registry.writeResult(
         "data_type.delete",
         MethodEffects.mutation(true, true),
@@ -146,6 +169,33 @@ final class DataTypeMethods implements ApiMethodProvider {
           }
           return Map.of(ApiVocabulary.DELETED, true);
         });
+  }
+
+  private Page<DataTypeResource> parseCDeclarations(Map<String, Object> request) {
+    String declarations = text(request, ApiVocabulary.DECLARATIONS);
+    if (ApiRegistry.utf8BytesExceed(declarations, DataTypeService.MAX_DECLARATIONS_BYTES)) {
+      throw ApiException.badRequest(
+          ApiVocabulary.INVALID_VALUE,
+          "/declarations exceeds maximum size of "
+              + DataTypeService.MAX_DECLARATIONS_BYTES
+              + " UTF-8 bytes",
+          "/declarations");
+    }
+    if (declarations.isBlank()) {
+      throw ApiException.badRequest(
+          ApiVocabulary.INVALID_VALUE, "/declarations must not be blank", "/declarations");
+    }
+    String categoryPath = optionalText(request, ApiVocabulary.CATEGORY_PATH, "/");
+    String rawConflictMode = optionalText(request, ApiVocabulary.CONFLICT_MODE, "replace");
+    DataTypeService.ConflictMode conflictMode =
+        DataTypeService.ConflictMode.valueOf(rawConflictMode.toUpperCase(Locale.ROOT));
+    return Page.of(
+        registry
+            .services()
+            .dataTypeService()
+            .parseCDeclarations(declarations, categoryPath, conflictMode),
+        MAX_LIMIT,
+        null);
   }
 
   private void createDataType(Map<String, Object> request) {

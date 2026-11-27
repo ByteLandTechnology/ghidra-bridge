@@ -51,8 +51,8 @@
                           - "output_schema"
                           - "effects"
                           "type": "object"
-                        "maxItems": !!int "56"
-                        "minItems": !!int "56"
+                        "maxItems": !!int "57"
+                        "minItems": !!int "57"
                         "type": "array"
                     "required":
                     - "interface_version"
@@ -114,6 +114,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "id":
@@ -188,6 +190,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "compiler_spec_id":
@@ -284,6 +288,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address_size":
@@ -357,6 +363,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -417,6 +425,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "default":
@@ -501,6 +511,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -626,6 +638,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "comment":
@@ -713,6 +727,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -773,6 +789,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "comment":
@@ -869,6 +887,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -961,6 +981,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -1021,6 +1043,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -1163,6 +1187,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -1223,6 +1249,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -1357,6 +1385,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -1436,6 +1466,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -1496,6 +1528,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -1617,6 +1651,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -1696,6 +1732,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -1775,6 +1813,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -1861,6 +1901,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -1963,6 +2005,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -2023,6 +2067,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -2167,6 +2213,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -2227,6 +2275,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -2371,6 +2421,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -2431,6 +2483,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -2539,6 +2593,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "body":
@@ -2810,6 +2866,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -2870,6 +2928,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "body":
@@ -3183,6 +3243,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "body":
@@ -3464,6 +3526,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "body":
@@ -3752,6 +3816,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "data_type":
@@ -3851,6 +3917,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "data_type":
@@ -3957,6 +4025,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "data_type":
@@ -4052,6 +4122,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -4112,6 +4184,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "call_site":
@@ -4194,6 +4268,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "analyzed":
@@ -4271,6 +4347,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "analyzed":
@@ -4348,6 +4426,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "c":
@@ -4410,6 +4490,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -4528,6 +4610,8 @@
                                           "required":
                                           - "kind"
                                           "type": "object"
+                                        - "minLength": !!int "1"
+                                          "type": "string"
                                     "additionalProperties": !!bool "false"
                                     "properties":
                                       "address":
@@ -4686,6 +4770,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -4763,6 +4849,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -4823,6 +4911,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -4943,6 +5033,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -5020,6 +5112,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -5080,6 +5174,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "from":
@@ -5167,6 +5263,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -5235,6 +5333,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -5295,6 +5395,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "address":
@@ -5405,6 +5507,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -5473,6 +5577,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -5541,6 +5647,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "address":
@@ -5616,6 +5724,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -5676,6 +5786,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "category_count":
@@ -5758,6 +5870,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "base_type":
@@ -5922,6 +6036,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -5982,6 +6098,8 @@
                                 "required":
                                 - "kind"
                                 "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
                           "additionalProperties": !!bool "false"
                           "properties":
                             "base_type":
@@ -6155,6 +6273,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "base_type":
@@ -6324,6 +6444,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "base_type":
@@ -6493,6 +6615,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "base_type":
@@ -6605,6 +6729,240 @@
                         "type": "array"
                     "required":
                     - "path"
+                    "type": "object"
+                  - "$defs":
+                      "data_type_reference":
+                        "discriminator":
+                          "propertyName": "kind"
+                        "oneOf":
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "named"
+                              "type": "string"
+                            "name":
+                              "minLength": !!int "1"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "name"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "pointer"
+                              "type": "string"
+                            "target":
+                              "$ref": "#/$defs/data_type_reference"
+                          "required":
+                          - "kind"
+                          - "target"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "count":
+                              "maximum": !!int "2147483647"
+                              "minimum": !!int "1"
+                              "type": "integer"
+                            "element":
+                              "$ref": "#/$defs/data_type_reference"
+                            "kind":
+                              "enum":
+                              - "array"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          - "element"
+                          - "count"
+                          "type": "object"
+                        - "additionalProperties": !!bool "false"
+                          "properties":
+                            "kind":
+                              "enum":
+                              - "untyped_pointer"
+                              "type": "string"
+                          "required":
+                          - "kind"
+                          "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "items":
+                        "items":
+                          "$defs":
+                            "data_type_reference":
+                              "discriminator":
+                                "propertyName": "kind"
+                              "oneOf":
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "named"
+                                    "type": "string"
+                                  "name":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "name"
+                                "type": "object"
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "pointer"
+                                    "type": "string"
+                                  "target":
+                                    "$ref": "#/$defs/data_type_reference"
+                                "required":
+                                - "kind"
+                                - "target"
+                                "type": "object"
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "count":
+                                    "maximum": !!int "2147483647"
+                                    "minimum": !!int "1"
+                                    "type": "integer"
+                                  "element":
+                                    "$ref": "#/$defs/data_type_reference"
+                                  "kind":
+                                    "enum":
+                                    - "array"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "element"
+                                - "count"
+                                "type": "object"
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "untyped_pointer"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                "type": "object"
+                              - "minLength": !!int "1"
+                                "type": "string"
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "base_type":
+                              "$ref": "#/$defs/data_type_reference"
+                            "category_path":
+                              "type": "string"
+                            "description":
+                              "type": "string"
+                            "fields":
+                              "items":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "comment":
+                                    "type": "string"
+                                  "data_type":
+                                    "$ref": "#/$defs/data_type_reference"
+                                  "end_offset":
+                                    "maximum": !!int "2147483647"
+                                    "minimum": !!int "0"
+                                    "type": "integer"
+                                  "is_undefined":
+                                    "type": "boolean"
+                                  "kind":
+                                    "type": "string"
+                                  "length":
+                                    "maximum": !!int "2147483647"
+                                    "minimum": !!int "0"
+                                    "type": "integer"
+                                  "name":
+                                    "type": "string"
+                                  "offset":
+                                    "maximum": !!int "2147483647"
+                                    "minimum": !!int "0"
+                                    "type": "integer"
+                                  "ordinal":
+                                    "maximum": !!int "2147483647"
+                                    "minimum": !!int "0"
+                                    "type": "integer"
+                                "type": "object"
+                              "maxItems": !!int "1000"
+                              "minItems": !!int "0"
+                              "type": "array"
+                            "kind":
+                              "type": "string"
+                            "length":
+                              "maximum": !!int "9223372036854775807"
+                              "minimum": !!int "0"
+                              "type": "integer"
+                            "name":
+                              "type": "string"
+                            "path":
+                              "type": "string"
+                            "signature":
+                              "oneOf":
+                              - "type": "string"
+                              - "additionalProperties": !!bool "false"
+                                "minProperties": !!int "1"
+                                "properties":
+                                  "calling_convention":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                  "has_no_return":
+                                    "type": "boolean"
+                                  "has_var_args":
+                                    "type": "boolean"
+                                  "parameters":
+                                    "items":
+                                      "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "data_type":
+                                          "$ref": "#/$defs/data_type_reference"
+                                        "name":
+                                          "type": "string"
+                                      "required":
+                                      - "data_type"
+                                      "type": "object"
+                                    "maxItems": !!int "1000"
+                                    "minItems": !!int "0"
+                                    "type": "array"
+                                  "return_type":
+                                    "$ref": "#/$defs/data_type_reference"
+                                "type": "object"
+                            "size":
+                              "maximum": !!int "9223372036854775807"
+                              "minimum": !!int "0"
+                              "type": "integer"
+                            "values":
+                              "items":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "comment":
+                                    "type": "string"
+                                  "name":
+                                    "type": "string"
+                                  "value":
+                                    "maximum": !!int "9223372036854775807"
+                                    "minimum": !!int "-9223372036854775808"
+                                    "type": "integer"
+                                "required":
+                                - "name"
+                                - "value"
+                                "type": "object"
+                              "maxItems": !!int "1000"
+                              "minItems": !!int "0"
+                              "type": "array"
+                          "required":
+                          - "path"
+                          "type": "object"
+                        "maxItems": !!int "2147483647"
+                        "minItems": !!int "0"
+                        "type": "array"
+                    "required":
+                    - "items"
                     "type": "object"
                   - "additionalProperties": !!bool "false"
                     "properties":
@@ -6669,6 +7027,8 @@
                           "required":
                           - "kind"
                           "type": "object"
+                        - "minLength": !!int "1"
+                          "type": "string"
                     "additionalProperties": !!bool "false"
                     "properties":
                       "items":
@@ -6850,6 +7210,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties": {}
                 "type": "object"
@@ -6929,6 +7291,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -7023,6 +7387,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties": {}
                 "type": "object"
@@ -7102,6 +7468,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -7205,6 +7573,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties": {}
                 "type": "object"
@@ -7284,6 +7654,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -7380,6 +7752,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -7493,6 +7867,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -7602,6 +7978,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -7716,6 +8094,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -7843,6 +8223,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "encoding":
@@ -7961,6 +8343,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -8077,6 +8461,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -8216,6 +8602,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -8346,6 +8734,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -8456,6 +8846,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -8595,6 +8987,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
@@ -8692,6 +9086,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -8793,6 +9189,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
@@ -8890,6 +9288,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "delete_symbol":
@@ -8983,6 +9383,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -9094,6 +9496,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -9227,6 +9631,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -9420,6 +9826,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -9581,6 +9989,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -9715,6 +10125,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -9881,6 +10293,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "disassemble":
@@ -9977,6 +10391,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -10000,6 +10416,50 @@
                       "name":
                         "minLength": !!int "1"
                         "type": "string"
+                      "parameters":
+                        "items":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "data_type":
+                              "$ref": "#/$defs/data_type_reference"
+                            "name":
+                              "type": "string"
+                            "storage":
+                              "discriminator":
+                                "propertyName": "kind"
+                              "oneOf":
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "serialization"
+                                    "type": "string"
+                                  "serialization":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "serialization"
+                                "type": "object"
+                              - "additionalProperties": !!bool "false"
+                                "properties":
+                                  "kind":
+                                    "enum":
+                                    - "register"
+                                    "type": "string"
+                                  "register":
+                                    "minLength": !!int "1"
+                                    "type": "string"
+                                "required":
+                                - "kind"
+                                - "register"
+                                "type": "object"
+                          "required":
+                          - "data_type"
+                          "type": "object"
+                        "maxItems": !!int "1000"
+                        "minItems": !!int "0"
+                        "type": "array"
                       "return_storage":
                         "discriminator":
                           "propertyName": "kind"
@@ -10032,6 +10492,9 @@
                           "type": "object"
                       "return_type":
                         "$ref": "#/$defs/data_type_reference"
+                      "signature":
+                        "minLength": !!int "1"
+                        "type": "string"
                       "stack_purge_size":
                         "maximum": !!int "2147483647"
                         "minimum": !!int "0"
@@ -10126,6 +10589,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "selector":
@@ -10216,6 +10681,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
@@ -10354,6 +10821,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -10490,6 +10959,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "selector":
@@ -10585,6 +11056,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -10690,6 +11163,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -10816,6 +11291,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -10914,6 +11391,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "analyzers":
@@ -11000,6 +11479,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "format":
@@ -11132,6 +11613,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties": {}
                 "type": "object"
@@ -11211,6 +11694,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -11321,6 +11806,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -11466,6 +11953,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -11566,6 +12055,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -11694,6 +12185,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -11808,6 +12301,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -11947,6 +12442,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
@@ -12050,6 +12547,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -12159,6 +12658,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
@@ -12262,6 +12763,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "selector":
@@ -12361,6 +12864,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -12475,6 +12980,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "projection":
@@ -12590,6 +13097,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "filter":
@@ -12717,6 +13226,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
@@ -12929,6 +13440,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "patch":
@@ -13291,6 +13804,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
@@ -13346,6 +13861,127 @@
                     "type": "object"
                 "required":
                 - "resource"
+                "type": "object"
+            "required":
+            - "jsonrpc"
+            - "id"
+            - "method"
+            - "params"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "id":
+                "oneOf":
+                - "minLength": !!int "1"
+                  "type": "string"
+                - "type": "number"
+              "jsonrpc":
+                "const": "2.0"
+                "type": "string"
+              "method":
+                "const": "data_type.parse_c"
+                "type": "string"
+              "params":
+                "$defs":
+                  "data_type_reference":
+                    "discriminator":
+                      "propertyName": "kind"
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "named"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "pointer"
+                          "type": "string"
+                        "target":
+                          "$ref": "#/$defs/data_type_reference"
+                      "required":
+                      - "kind"
+                      - "target"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "count":
+                          "maximum": !!int "2147483647"
+                          "minimum": !!int "1"
+                          "type": "integer"
+                        "element":
+                          "$ref": "#/$defs/data_type_reference"
+                        "kind":
+                          "enum":
+                          - "array"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "element"
+                      - "count"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "untyped_pointer"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "category_path":
+                    "default": "/"
+                    "type": "string"
+                  "conflict_mode":
+                    "default": "replace"
+                    "enum":
+                    - "keep"
+                    - "rename"
+                    - "replace"
+                    "type": "string"
+                  "declarations":
+                    "minLength": !!int "1"
+                    "type": "string"
+                  "projection":
+                    "additionalProperties": !!bool "false"
+                    "properties":
+                      "fields":
+                        "items":
+                          "enum":
+                          - "base_type"
+                          - "category_path"
+                          - "description"
+                          - "fields"
+                          - "kind"
+                          - "length"
+                          - "name"
+                          - "path"
+                          - "signature"
+                          - "signature.parameters"
+                          - "signature.return_type"
+                          - "size"
+                          - "values"
+                          "type": "string"
+                        "maxItems": !!int "256"
+                        "minItems": !!int "1"
+                        "type": "array"
+                        "uniqueItems": !!bool "true"
+                    "type": "object"
+                "required":
+                - "declarations"
                 "type": "object"
             "required":
             - "jsonrpc"
@@ -13423,6 +14059,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "selector":
@@ -13513,6 +14151,8 @@
                       "required":
                       - "kind"
                       "type": "object"
+                    - "minLength": !!int "1"
+                      "type": "string"
                 "additionalProperties": !!bool "false"
                 "properties":
                   "items":
@@ -14972,6 +15612,50 @@
                                   "name":
                                     "minLength": !!int "1"
                                     "type": "string"
+                                  "parameters":
+                                    "items":
+                                      "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "data_type":
+                                          "$ref": "#/$defs/data_type_reference"
+                                        "name":
+                                          "type": "string"
+                                        "storage":
+                                          "discriminator":
+                                            "propertyName": "kind"
+                                          "oneOf":
+                                          - "additionalProperties": !!bool "false"
+                                            "properties":
+                                              "kind":
+                                                "enum":
+                                                - "serialization"
+                                                "type": "string"
+                                              "serialization":
+                                                "minLength": !!int "1"
+                                                "type": "string"
+                                            "required":
+                                            - "kind"
+                                            - "serialization"
+                                            "type": "object"
+                                          - "additionalProperties": !!bool "false"
+                                            "properties":
+                                              "kind":
+                                                "enum":
+                                                - "register"
+                                                "type": "string"
+                                              "register":
+                                                "minLength": !!int "1"
+                                                "type": "string"
+                                            "required":
+                                            - "kind"
+                                            - "register"
+                                            "type": "object"
+                                      "required":
+                                      - "data_type"
+                                      "type": "object"
+                                    "maxItems": !!int "1000"
+                                    "minItems": !!int "0"
+                                    "type": "array"
                                   "return_storage":
                                     "discriminator":
                                       "propertyName": "kind"
@@ -15004,6 +15688,9 @@
                                       "type": "object"
                                   "return_type":
                                     "$ref": "#/$defs/data_type_reference"
+                                  "signature":
+                                    "minLength": !!int "1"
+                                    "type": "string"
                                   "stack_purge_size":
                                     "maximum": !!int "2147483647"
                                     "minimum": !!int "0"
@@ -16725,6 +17412,64 @@
                           "arguments":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "category_path":
+                                "default": "/"
+                                "type": "string"
+                              "conflict_mode":
+                                "default": "replace"
+                                "enum":
+                                - "keep"
+                                - "rename"
+                                - "replace"
+                                "type": "string"
+                              "declarations":
+                                "minLength": !!int "1"
+                                "type": "string"
+                              "projection":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "fields":
+                                    "items":
+                                      "enum":
+                                      - "base_type"
+                                      - "category_path"
+                                      - "description"
+                                      - "fields"
+                                      - "kind"
+                                      - "length"
+                                      - "name"
+                                      - "path"
+                                      - "signature"
+                                      - "signature.parameters"
+                                      - "signature.return_type"
+                                      - "size"
+                                      - "values"
+                                      "type": "string"
+                                    "maxItems": !!int "256"
+                                    "minItems": !!int "1"
+                                    "type": "array"
+                                    "uniqueItems": !!bool "true"
+                                "type": "object"
+                            "required":
+                            - "declarations"
+                            "type": "object"
+                          "id":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "method":
+                            "enum":
+                            - "data_type.parse_c"
+                            "type": "string"
+                        "required":
+                        - "id"
+                        - "method"
+                        - "arguments"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "arguments":
+                            "additionalProperties": !!bool "false"
+                            "properties":
                               "selector":
                                 "additionalProperties": !!bool "false"
                                 "properties":
@@ -16843,6 +17588,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -16933,6 +17680,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -17068,6 +17817,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -17162,6 +17913,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -17222,6 +17975,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "default":
@@ -17316,6 +18071,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -17395,6 +18152,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "analyzed":
@@ -17482,6 +18241,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "analyzers":
@@ -17549,6 +18310,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "analyzed":
@@ -17638,6 +18401,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -19097,6 +19862,50 @@
                         "name":
                           "minLength": !!int "1"
                           "type": "string"
+                        "parameters":
+                          "items":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "data_type":
+                                "$ref": "#/$defs/data_type_reference"
+                              "name":
+                                "type": "string"
+                              "storage":
+                                "discriminator":
+                                  "propertyName": "kind"
+                                "oneOf":
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "kind":
+                                      "enum":
+                                      - "serialization"
+                                      "type": "string"
+                                    "serialization":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "serialization"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "kind":
+                                      "enum":
+                                      - "register"
+                                      "type": "string"
+                                    "register":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "register"
+                                  "type": "object"
+                            "required":
+                            - "data_type"
+                            "type": "object"
+                          "maxItems": !!int "1000"
+                          "minItems": !!int "0"
+                          "type": "array"
                         "return_storage":
                           "discriminator":
                             "propertyName": "kind"
@@ -19129,6 +19938,9 @@
                             "type": "object"
                         "return_type":
                           "$ref": "#/$defs/data_type_reference"
+                        "signature":
+                          "minLength": !!int "1"
+                          "type": "string"
                         "stack_purge_size":
                           "maximum": !!int "2147483647"
                           "minimum": !!int "0"
@@ -20850,6 +21662,64 @@
                 "arguments":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "category_path":
+                      "default": "/"
+                      "type": "string"
+                    "conflict_mode":
+                      "default": "replace"
+                      "enum":
+                      - "keep"
+                      - "rename"
+                      - "replace"
+                      "type": "string"
+                    "declarations":
+                      "minLength": !!int "1"
+                      "type": "string"
+                    "projection":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "fields":
+                          "items":
+                            "enum":
+                            - "base_type"
+                            - "category_path"
+                            - "description"
+                            - "fields"
+                            - "kind"
+                            - "length"
+                            - "name"
+                            - "path"
+                            - "signature"
+                            - "signature.parameters"
+                            - "signature.return_type"
+                            - "size"
+                            - "values"
+                            "type": "string"
+                          "maxItems": !!int "256"
+                          "minItems": !!int "1"
+                          "type": "array"
+                          "uniqueItems": !!bool "true"
+                      "type": "object"
+                  "required":
+                  - "declarations"
+                  "type": "object"
+                "id":
+                  "minLength": !!int "1"
+                  "type": "string"
+                "method":
+                  "enum":
+                  - "data_type.parse_c"
+                  "type": "string"
+              "required":
+              - "id"
+              - "method"
+              - "arguments"
+              "type": "object"
+            - "additionalProperties": !!bool "false"
+              "properties":
+                "arguments":
+                  "additionalProperties": !!bool "false"
+                  "properties":
                     "selector":
                       "additionalProperties": !!bool "false"
                       "properties":
@@ -20943,6 +21813,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -21063,6 +21935,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -21183,6 +22057,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -21243,6 +22119,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -21395,6 +22273,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
@@ -21479,6 +22359,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -21557,6 +22439,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "selector":
@@ -21654,6 +22538,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -21749,6 +22635,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -21828,6 +22716,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -21948,6 +22838,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -22008,6 +22900,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -22128,6 +23022,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -22218,6 +23114,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -22296,6 +23194,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
@@ -22380,6 +23280,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -22458,6 +23360,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
@@ -22651,6 +23555,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "base_type":
@@ -22830,6 +23736,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "selector":
@@ -22918,6 +23826,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -23014,6 +23924,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "base_type":
@@ -23188,6 +24100,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -23296,6 +24210,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -23356,6 +24272,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "base_type":
@@ -23473,6 +24391,353 @@
       "required":
       - "items"
       "type": "object"
+  "data_type.parse_c":
+    "description": "Parse C declarations and create data types in the active\
+      \ program."
+    "effects":
+      "allowed_during_analysis": !!bool "false"
+      "destructive": !!bool "true"
+      "idempotent": !!bool "false"
+      "mutates_program": !!bool "true"
+      "read_only": !!bool "false"
+      "requires_transaction": !!bool "true"
+    "input_schema":
+      "$defs":
+        "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "category_path":
+          "default": "/"
+          "type": "string"
+        "conflict_mode":
+          "default": "replace"
+          "enum":
+          - "keep"
+          - "rename"
+          - "replace"
+          "type": "string"
+        "declarations":
+          "minLength": !!int "1"
+          "type": "string"
+        "projection":
+          "additionalProperties": !!bool "false"
+          "properties":
+            "fields":
+              "items":
+                "enum":
+                - "base_type"
+                - "category_path"
+                - "description"
+                - "fields"
+                - "kind"
+                - "length"
+                - "name"
+                - "path"
+                - "signature"
+                - "signature.parameters"
+                - "signature.return_type"
+                - "size"
+                - "values"
+                "type": "string"
+              "maxItems": !!int "256"
+              "minItems": !!int "1"
+              "type": "array"
+              "uniqueItems": !!bool "true"
+          "type": "object"
+      "required":
+      - "declarations"
+      "type": "object"
+    "output_schema":
+      "$defs":
+        "data_type_reference":
+          "discriminator":
+            "propertyName": "kind"
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "named"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "pointer"
+                "type": "string"
+              "target":
+                "$ref": "#/$defs/data_type_reference"
+            "required":
+            - "kind"
+            - "target"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "count":
+                "maximum": !!int "2147483647"
+                "minimum": !!int "1"
+                "type": "integer"
+              "element":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "array"
+                "type": "string"
+            "required":
+            - "kind"
+            - "element"
+            - "count"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "kind":
+                "enum":
+                - "untyped_pointer"
+                "type": "string"
+            "required":
+            - "kind"
+            "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
+      "additionalProperties": !!bool "false"
+      "properties":
+        "items":
+          "items":
+            "$defs":
+              "data_type_reference":
+                "discriminator":
+                  "propertyName": "kind"
+                "oneOf":
+                - "additionalProperties": !!bool "false"
+                  "properties":
+                    "kind":
+                      "enum":
+                      - "named"
+                      "type": "string"
+                    "name":
+                      "minLength": !!int "1"
+                      "type": "string"
+                  "required":
+                  - "kind"
+                  - "name"
+                  "type": "object"
+                - "additionalProperties": !!bool "false"
+                  "properties":
+                    "kind":
+                      "enum":
+                      - "pointer"
+                      "type": "string"
+                    "target":
+                      "$ref": "#/$defs/data_type_reference"
+                  "required":
+                  - "kind"
+                  - "target"
+                  "type": "object"
+                - "additionalProperties": !!bool "false"
+                  "properties":
+                    "count":
+                      "maximum": !!int "2147483647"
+                      "minimum": !!int "1"
+                      "type": "integer"
+                    "element":
+                      "$ref": "#/$defs/data_type_reference"
+                    "kind":
+                      "enum":
+                      - "array"
+                      "type": "string"
+                  "required":
+                  - "kind"
+                  - "element"
+                  - "count"
+                  "type": "object"
+                - "additionalProperties": !!bool "false"
+                  "properties":
+                    "kind":
+                      "enum":
+                      - "untyped_pointer"
+                      "type": "string"
+                  "required":
+                  - "kind"
+                  "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
+            "additionalProperties": !!bool "false"
+            "properties":
+              "base_type":
+                "$ref": "#/$defs/data_type_reference"
+              "category_path":
+                "type": "string"
+              "description":
+                "type": "string"
+              "fields":
+                "items":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "comment":
+                      "type": "string"
+                    "data_type":
+                      "$ref": "#/$defs/data_type_reference"
+                    "end_offset":
+                      "maximum": !!int "2147483647"
+                      "minimum": !!int "0"
+                      "type": "integer"
+                    "is_undefined":
+                      "type": "boolean"
+                    "kind":
+                      "type": "string"
+                    "length":
+                      "maximum": !!int "2147483647"
+                      "minimum": !!int "0"
+                      "type": "integer"
+                    "name":
+                      "type": "string"
+                    "offset":
+                      "maximum": !!int "2147483647"
+                      "minimum": !!int "0"
+                      "type": "integer"
+                    "ordinal":
+                      "maximum": !!int "2147483647"
+                      "minimum": !!int "0"
+                      "type": "integer"
+                  "type": "object"
+                "maxItems": !!int "1000"
+                "minItems": !!int "0"
+                "type": "array"
+              "kind":
+                "type": "string"
+              "length":
+                "maximum": !!int "9223372036854775807"
+                "minimum": !!int "0"
+                "type": "integer"
+              "name":
+                "type": "string"
+              "path":
+                "type": "string"
+              "signature":
+                "oneOf":
+                - "type": "string"
+                - "additionalProperties": !!bool "false"
+                  "minProperties": !!int "1"
+                  "properties":
+                    "calling_convention":
+                      "minLength": !!int "1"
+                      "type": "string"
+                    "has_no_return":
+                      "type": "boolean"
+                    "has_var_args":
+                      "type": "boolean"
+                    "parameters":
+                      "items":
+                        "additionalProperties": !!bool "false"
+                        "properties":
+                          "data_type":
+                            "$ref": "#/$defs/data_type_reference"
+                          "name":
+                            "type": "string"
+                        "required":
+                        - "data_type"
+                        "type": "object"
+                      "maxItems": !!int "1000"
+                      "minItems": !!int "0"
+                      "type": "array"
+                    "return_type":
+                      "$ref": "#/$defs/data_type_reference"
+                  "type": "object"
+              "size":
+                "maximum": !!int "9223372036854775807"
+                "minimum": !!int "0"
+                "type": "integer"
+              "values":
+                "items":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "comment":
+                      "type": "string"
+                    "name":
+                      "type": "string"
+                    "value":
+                      "maximum": !!int "9223372036854775807"
+                      "minimum": !!int "-9223372036854775808"
+                      "type": "integer"
+                  "required":
+                  - "name"
+                  - "value"
+                  "type": "object"
+                "maxItems": !!int "1000"
+                "minItems": !!int "0"
+                "type": "array"
+            "required":
+            - "path"
+            "type": "object"
+          "maxItems": !!int "2147483647"
+          "minItems": !!int "0"
+          "type": "array"
+      "required":
+      - "items"
+      "type": "object"
   "data_type.patch":
     "description": "Change data type data in the active program."
     "effects":
@@ -23539,6 +24804,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -23882,6 +25149,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "base_type":
@@ -24061,6 +25330,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
@@ -24174,6 +25445,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "base_type":
@@ -24353,6 +25626,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -24448,6 +25723,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -24508,6 +25785,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "category_count":
@@ -24601,6 +25880,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -24712,6 +25993,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -24772,6 +26055,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -24922,6 +26207,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "format":
@@ -25035,6 +26322,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "c":
@@ -25097,6 +26386,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -25215,6 +26506,8 @@
                             "required":
                             - "kind"
                             "type": "object"
+                          - "minLength": !!int "1"
+                            "type": "string"
                       "additionalProperties": !!bool "false"
                       "properties":
                         "address":
@@ -25363,6 +26656,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -25537,6 +26832,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -25597,6 +26894,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -25752,6 +27051,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -25894,6 +27195,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -25954,6 +27257,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -26073,6 +27378,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "disassemble":
@@ -26150,6 +27457,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "body":
@@ -26441,6 +27750,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "selector":
@@ -26529,6 +27840,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -26644,6 +27957,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "body":
@@ -26926,6 +28241,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -27073,6 +28390,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -27133,6 +28452,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "body":
@@ -27456,6 +28777,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -27479,6 +28802,50 @@
             "name":
               "minLength": !!int "1"
               "type": "string"
+            "parameters":
+              "items":
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "data_type":
+                    "$ref": "#/$defs/data_type_reference"
+                  "name":
+                    "type": "string"
+                  "storage":
+                    "discriminator":
+                      "propertyName": "kind"
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "serialization"
+                          "type": "string"
+                        "serialization":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "serialization"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "kind":
+                          "enum":
+                          - "register"
+                          "type": "string"
+                        "register":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "register"
+                      "type": "object"
+                "required":
+                - "data_type"
+                "type": "object"
+              "maxItems": !!int "1000"
+              "minItems": !!int "0"
+              "type": "array"
             "return_storage":
               "discriminator":
                 "propertyName": "kind"
@@ -27511,6 +28878,9 @@
                 "type": "object"
             "return_type":
               "$ref": "#/$defs/data_type_reference"
+            "signature":
+              "minLength": !!int "1"
+              "type": "string"
             "stack_purge_size":
               "maximum": !!int "2147483647"
               "minimum": !!int "0"
@@ -27586,6 +28956,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "body":
@@ -27878,6 +29250,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -27985,6 +29359,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -28045,6 +29421,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "call_site":
@@ -28137,6 +29515,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -28223,6 +29603,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "data_type":
@@ -28328,6 +29710,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
@@ -28447,6 +29831,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "data_type":
@@ -28556,6 +29942,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "selector":
@@ -28649,6 +30037,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -28766,6 +30156,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "data_type":
@@ -28876,6 +30268,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
@@ -28954,6 +30348,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -29044,6 +30440,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "delete_symbol":
@@ -29135,6 +30533,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -29226,6 +30626,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -29316,6 +30718,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -29436,6 +30840,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -29496,6 +30902,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -29627,6 +31035,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -29709,6 +31119,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -29799,6 +31211,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
@@ -29877,6 +31291,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -29966,6 +31382,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -30058,6 +31476,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -30171,6 +31591,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -30285,6 +31707,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -30345,6 +31769,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -30499,6 +31925,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties": {}
       "type": "object"
@@ -30534,8 +31962,8 @@
             - "output_schema"
             - "effects"
             "type": "object"
-          "maxItems": !!int "56"
-          "minItems": !!int "56"
+          "maxItems": !!int "57"
+          "minItems": !!int "57"
           "type": "array"
       "required":
       - "interface_version"
@@ -30608,6 +32036,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "encoding":
@@ -30707,6 +32137,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -30796,6 +32228,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -30916,6 +32350,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -31011,6 +32447,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "comment":
@@ -31108,6 +32546,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -31216,6 +32656,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -31276,6 +32718,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "comment":
@@ -31382,6 +32826,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -31466,6 +32912,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "compiler_spec_id":
@@ -31565,6 +33013,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties": {}
       "type": "object"
@@ -31642,6 +33092,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -31719,6 +33171,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address_size":
@@ -31802,6 +33256,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -31911,6 +33367,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -31971,6 +33429,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "from":
@@ -32068,6 +33528,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -32143,6 +33605,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "id":
@@ -32220,6 +33684,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties": {}
       "type": "object"
@@ -32298,6 +33764,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties": {}
       "type": "object"
@@ -32389,6 +33857,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "projection":
@@ -32480,6 +33950,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
@@ -32568,6 +34040,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "filter":
@@ -32694,6 +34168,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "items":
@@ -32754,6 +34230,8 @@
                   "required":
                   - "kind"
                   "type": "object"
+                - "minLength": !!int "1"
+                  "type": "string"
             "additionalProperties": !!bool "false"
             "properties":
               "address":
@@ -32884,6 +34362,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "patch":
@@ -32965,6 +34445,8 @@
             "required":
             - "kind"
             "type": "object"
+          - "minLength": !!int "1"
+            "type": "string"
       "additionalProperties": !!bool "false"
       "properties":
         "address":
