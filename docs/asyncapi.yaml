@@ -12728,6 +12728,30 @@
                         "category_path":
                           "default": "/"
                           "type": "string"
+                        "fields":
+                          "items":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
+                              "data_type":
+                                "$ref": "#/$defs/data_type_reference"
+                              "length":
+                                "maximum": !!int "1048576"
+                                "minimum": !!int "1"
+                                "type": "integer"
+                              "name":
+                                "type": "string"
+                              "offset":
+                                "maximum": !!int "1048576"
+                                "minimum": !!int "0"
+                                "type": "integer"
+                            "type": "object"
+                          "maxItems": !!int "1000"
+                          "minItems": !!int "0"
+                          "type": "array"
                         "kind":
                           "enum":
                           - "struct"
@@ -12737,7 +12761,7 @@
                           "type": "string"
                         "size":
                           "default": !!int "0"
-                          "maximum": !!int "2147483647"
+                          "maximum": !!int "1048576"
                           "minimum": !!int "0"
                           "type": "integer"
                       "required":
@@ -12749,6 +12773,30 @@
                         "category_path":
                           "default": "/"
                           "type": "string"
+                        "fields":
+                          "items":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
+                              "data_type":
+                                "$ref": "#/$defs/data_type_reference"
+                              "length":
+                                "maximum": !!int "1048576"
+                                "minimum": !!int "1"
+                                "type": "integer"
+                              "name":
+                                "type": "string"
+                              "offset":
+                                "maximum": !!int "1048576"
+                                "minimum": !!int "0"
+                                "type": "integer"
+                            "type": "object"
+                          "maxItems": !!int "1000"
+                          "minItems": !!int "0"
+                          "type": "array"
                         "kind":
                           "enum":
                           - "union"
@@ -12777,6 +12825,24 @@
                           "maximum": !!int "8"
                           "minimum": !!int "1"
                           "type": "integer"
+                        "values":
+                          "items":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
+                              "name":
+                                "type": "string"
+                              "value":
+                                "maximum": !!int "9223372036854775807"
+                                "minimum": !!int "-9223372036854775808"
+                                "type": "integer"
+                            "type": "object"
+                          "maxItems": !!int "1000"
+                          "minItems": !!int "0"
+                          "type": "array"
                       "required":
                       - "kind"
                       - "name"
@@ -12941,10 +13007,14 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12952,7 +13022,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12967,10 +13037,14 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -12978,7 +13052,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -12989,10 +13063,14 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -13000,7 +13078,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -13011,10 +13089,14 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -13022,7 +13104,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -13038,10 +13120,14 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -13049,7 +13135,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -13064,10 +13150,14 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -13075,7 +13165,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -13086,10 +13176,14 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -13097,7 +13191,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -13108,10 +13202,14 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "data_type":
                                 "$ref": "#/$defs/data_type_reference"
                               "length":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "1"
                                 "type": "integer"
                               "name":
@@ -13119,7 +13217,7 @@
                               "new_name":
                                 "type": "string"
                               "offset":
-                                "maximum": !!int "2147483647"
+                                "maximum": !!int "1048576"
                                 "minimum": !!int "0"
                                 "type": "integer"
                             "type": "object"
@@ -13135,6 +13233,10 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "name":
                                 "type": "string"
                               "new_name":
@@ -13155,6 +13257,10 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "name":
                                 "type": "string"
                               "new_name":
@@ -13171,6 +13277,10 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "name":
                                 "type": "string"
                               "new_name":
@@ -13187,6 +13297,10 @@
                           "items":
                             "additionalProperties": !!bool "false"
                             "properties":
+                              "comment":
+                                "oneOf":
+                                - "type": "string"
+                                - "type": "null"
                               "name":
                                 "type": "string"
                               "new_name":
@@ -13201,6 +13315,18 @@
                           "type": "array"
                       "required":
                       - "kind"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "base_type":
+                          "$ref": "#/$defs/data_type_reference"
+                        "kind":
+                          "enum":
+                          - "typedef"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "base_type"
                       "type": "object"
                   "selector":
                     "additionalProperties": !!bool "false"
@@ -13294,56 +13420,78 @@
                 "additionalProperties": !!bool "false"
                 "properties":
                   "resource":
-                    "additionalProperties": !!bool "false"
-                    "properties":
-                      "category_path":
-                        "default": "/"
-                        "type": "string"
-                      "kind":
-                        "enum":
-                        - "function"
-                        "type": "string"
-                      "name":
-                        "minLength": !!int "1"
-                        "type": "string"
-                      "signature":
-                        "additionalProperties": !!bool "false"
-                        "properties":
-                          "calling_convention":
-                            "minLength": !!int "1"
-                            "type": "string"
-                          "has_no_return":
-                            "type": "boolean"
-                          "has_var_args":
-                            "type": "boolean"
-                          "parameters":
-                            "items":
-                              "additionalProperties": !!bool "false"
-                              "properties":
-                                "data_type":
-                                  "$ref": "#/$defs/data_type_reference"
-                                "name":
-                                  "type": "string"
-                              "required":
-                              - "data_type"
-                              "type": "object"
-                            "maxItems": !!int "1000"
-                            "minItems": !!int "0"
-                            "type": "array"
-                          "return_type":
-                            "$ref": "#/$defs/data_type_reference"
-                        "required":
-                        - "return_type"
-                        - "parameters"
-                        - "calling_convention"
-                        - "has_var_args"
-                        - "has_no_return"
-                        "type": "object"
-                    "required":
-                    - "kind"
-                    - "name"
-                    - "signature"
-                    "type": "object"
+                    "discriminator":
+                      "propertyName": "kind"
+                    "oneOf":
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "base_type":
+                          "$ref": "#/$defs/data_type_reference"
+                        "category_path":
+                          "default": "/"
+                          "type": "string"
+                        "kind":
+                          "enum":
+                          - "typedef"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                      "required":
+                      - "kind"
+                      - "name"
+                      - "base_type"
+                      "type": "object"
+                    - "additionalProperties": !!bool "false"
+                      "properties":
+                        "category_path":
+                          "default": "/"
+                          "type": "string"
+                        "kind":
+                          "enum":
+                          - "function"
+                          "type": "string"
+                        "name":
+                          "minLength": !!int "1"
+                          "type": "string"
+                        "signature":
+                          "additionalProperties": !!bool "false"
+                          "properties":
+                            "calling_convention":
+                              "minLength": !!int "1"
+                              "type": "string"
+                            "has_no_return":
+                              "type": "boolean"
+                            "has_var_args":
+                              "type": "boolean"
+                            "parameters":
+                              "items":
+                                "additionalProperties": !!bool "false"
+                                "properties":
+                                  "data_type":
+                                    "$ref": "#/$defs/data_type_reference"
+                                  "name":
+                                    "type": "string"
+                                "required":
+                                - "data_type"
+                                "type": "object"
+                              "maxItems": !!int "1000"
+                              "minItems": !!int "0"
+                              "type": "array"
+                            "return_type":
+                              "$ref": "#/$defs/data_type_reference"
+                          "required":
+                          - "return_type"
+                          - "parameters"
+                          - "calling_convention"
+                          - "has_var_args"
+                          - "has_no_return"
+                          "type": "object"
+                      "required":
+                      - "kind"
+                      - "name"
+                      - "signature"
+                      "type": "object"
                 "required":
                 - "resource"
                 "type": "object"
@@ -16211,6 +16359,30 @@
                                     "category_path":
                                       "default": "/"
                                       "type": "string"
+                                    "fields":
+                                      "items":
+                                        "additionalProperties": !!bool "false"
+                                        "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
+                                          "data_type":
+                                            "$ref": "#/$defs/data_type_reference"
+                                          "length":
+                                            "maximum": !!int "1048576"
+                                            "minimum": !!int "1"
+                                            "type": "integer"
+                                          "name":
+                                            "type": "string"
+                                          "offset":
+                                            "maximum": !!int "1048576"
+                                            "minimum": !!int "0"
+                                            "type": "integer"
+                                        "type": "object"
+                                      "maxItems": !!int "1000"
+                                      "minItems": !!int "0"
+                                      "type": "array"
                                     "kind":
                                       "enum":
                                       - "struct"
@@ -16220,7 +16392,7 @@
                                       "type": "string"
                                     "size":
                                       "default": !!int "0"
-                                      "maximum": !!int "2147483647"
+                                      "maximum": !!int "1048576"
                                       "minimum": !!int "0"
                                       "type": "integer"
                                   "required":
@@ -16232,6 +16404,30 @@
                                     "category_path":
                                       "default": "/"
                                       "type": "string"
+                                    "fields":
+                                      "items":
+                                        "additionalProperties": !!bool "false"
+                                        "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
+                                          "data_type":
+                                            "$ref": "#/$defs/data_type_reference"
+                                          "length":
+                                            "maximum": !!int "1048576"
+                                            "minimum": !!int "1"
+                                            "type": "integer"
+                                          "name":
+                                            "type": "string"
+                                          "offset":
+                                            "maximum": !!int "1048576"
+                                            "minimum": !!int "0"
+                                            "type": "integer"
+                                        "type": "object"
+                                      "maxItems": !!int "1000"
+                                      "minItems": !!int "0"
+                                      "type": "array"
                                     "kind":
                                       "enum":
                                       - "union"
@@ -16260,6 +16456,24 @@
                                       "maximum": !!int "8"
                                       "minimum": !!int "1"
                                       "type": "integer"
+                                    "values":
+                                      "items":
+                                        "additionalProperties": !!bool "false"
+                                        "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
+                                          "name":
+                                            "type": "string"
+                                          "value":
+                                            "maximum": !!int "9223372036854775807"
+                                            "minimum": !!int "-9223372036854775808"
+                                            "type": "integer"
+                                        "type": "object"
+                                      "maxItems": !!int "1000"
+                                      "minItems": !!int "0"
+                                      "type": "array"
                                   "required":
                                   - "kind"
                                   - "name"
@@ -16363,10 +16577,14 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16374,7 +16592,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16389,10 +16607,14 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16400,7 +16622,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16411,10 +16633,14 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16422,7 +16648,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16433,10 +16659,14 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16444,7 +16674,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16460,10 +16690,14 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16471,7 +16705,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16486,10 +16720,14 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16497,7 +16735,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16508,10 +16746,14 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16519,7 +16761,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16530,10 +16772,14 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "data_type":
                                             "$ref": "#/$defs/data_type_reference"
                                           "length":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "1"
                                             "type": "integer"
                                           "name":
@@ -16541,7 +16787,7 @@
                                           "new_name":
                                             "type": "string"
                                           "offset":
-                                            "maximum": !!int "2147483647"
+                                            "maximum": !!int "1048576"
                                             "minimum": !!int "0"
                                             "type": "integer"
                                         "type": "object"
@@ -16557,6 +16803,10 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "name":
                                             "type": "string"
                                           "new_name":
@@ -16577,6 +16827,10 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "name":
                                             "type": "string"
                                           "new_name":
@@ -16593,6 +16847,10 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "name":
                                             "type": "string"
                                           "new_name":
@@ -16609,6 +16867,10 @@
                                       "items":
                                         "additionalProperties": !!bool "false"
                                         "properties":
+                                          "comment":
+                                            "oneOf":
+                                            - "type": "string"
+                                            - "type": "null"
                                           "name":
                                             "type": "string"
                                           "new_name":
@@ -16623,6 +16885,18 @@
                                       "type": "array"
                                   "required":
                                   - "kind"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "base_type":
+                                      "$ref": "#/$defs/data_type_reference"
+                                    "kind":
+                                      "enum":
+                                      - "typedef"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "base_type"
                                   "type": "object"
                               "selector":
                                 "additionalProperties": !!bool "false"
@@ -16655,56 +16929,78 @@
                             "additionalProperties": !!bool "false"
                             "properties":
                               "resource":
-                                "additionalProperties": !!bool "false"
-                                "properties":
-                                  "category_path":
-                                    "default": "/"
-                                    "type": "string"
-                                  "kind":
-                                    "enum":
-                                    - "function"
-                                    "type": "string"
-                                  "name":
-                                    "minLength": !!int "1"
-                                    "type": "string"
-                                  "signature":
-                                    "additionalProperties": !!bool "false"
-                                    "properties":
-                                      "calling_convention":
-                                        "minLength": !!int "1"
-                                        "type": "string"
-                                      "has_no_return":
-                                        "type": "boolean"
-                                      "has_var_args":
-                                        "type": "boolean"
-                                      "parameters":
-                                        "items":
-                                          "additionalProperties": !!bool "false"
-                                          "properties":
-                                            "data_type":
-                                              "$ref": "#/$defs/data_type_reference"
-                                            "name":
-                                              "type": "string"
-                                          "required":
-                                          - "data_type"
-                                          "type": "object"
-                                        "maxItems": !!int "1000"
-                                        "minItems": !!int "0"
-                                        "type": "array"
-                                      "return_type":
-                                        "$ref": "#/$defs/data_type_reference"
-                                    "required":
-                                    - "return_type"
-                                    - "parameters"
-                                    - "calling_convention"
-                                    - "has_var_args"
-                                    - "has_no_return"
-                                    "type": "object"
-                                "required":
-                                - "kind"
-                                - "name"
-                                - "signature"
-                                "type": "object"
+                                "discriminator":
+                                  "propertyName": "kind"
+                                "oneOf":
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "base_type":
+                                      "$ref": "#/$defs/data_type_reference"
+                                    "category_path":
+                                      "default": "/"
+                                      "type": "string"
+                                    "kind":
+                                      "enum":
+                                      - "typedef"
+                                      "type": "string"
+                                    "name":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                  "required":
+                                  - "kind"
+                                  - "name"
+                                  - "base_type"
+                                  "type": "object"
+                                - "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "category_path":
+                                      "default": "/"
+                                      "type": "string"
+                                    "kind":
+                                      "enum":
+                                      - "function"
+                                      "type": "string"
+                                    "name":
+                                      "minLength": !!int "1"
+                                      "type": "string"
+                                    "signature":
+                                      "additionalProperties": !!bool "false"
+                                      "properties":
+                                        "calling_convention":
+                                          "minLength": !!int "1"
+                                          "type": "string"
+                                        "has_no_return":
+                                          "type": "boolean"
+                                        "has_var_args":
+                                          "type": "boolean"
+                                        "parameters":
+                                          "items":
+                                            "additionalProperties": !!bool "false"
+                                            "properties":
+                                              "data_type":
+                                                "$ref": "#/$defs/data_type_reference"
+                                              "name":
+                                                "type": "string"
+                                            "required":
+                                            - "data_type"
+                                            "type": "object"
+                                          "maxItems": !!int "1000"
+                                          "minItems": !!int "0"
+                                          "type": "array"
+                                        "return_type":
+                                          "$ref": "#/$defs/data_type_reference"
+                                      "required":
+                                      - "return_type"
+                                      - "parameters"
+                                      - "calling_convention"
+                                      - "has_var_args"
+                                      - "has_no_return"
+                                      "type": "object"
+                                  "required":
+                                  - "kind"
+                                  - "name"
+                                  - "signature"
+                                  "type": "object"
                             "required":
                             - "resource"
                             "type": "object"
@@ -20336,6 +20632,30 @@
                           "category_path":
                             "default": "/"
                             "type": "string"
+                          "fields":
+                            "items":
+                              "additionalProperties": !!bool "false"
+                              "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
+                                "data_type":
+                                  "$ref": "#/$defs/data_type_reference"
+                                "length":
+                                  "maximum": !!int "1048576"
+                                  "minimum": !!int "1"
+                                  "type": "integer"
+                                "name":
+                                  "type": "string"
+                                "offset":
+                                  "maximum": !!int "1048576"
+                                  "minimum": !!int "0"
+                                  "type": "integer"
+                              "type": "object"
+                            "maxItems": !!int "1000"
+                            "minItems": !!int "0"
+                            "type": "array"
                           "kind":
                             "enum":
                             - "struct"
@@ -20345,7 +20665,7 @@
                             "type": "string"
                           "size":
                             "default": !!int "0"
-                            "maximum": !!int "2147483647"
+                            "maximum": !!int "1048576"
                             "minimum": !!int "0"
                             "type": "integer"
                         "required":
@@ -20357,6 +20677,30 @@
                           "category_path":
                             "default": "/"
                             "type": "string"
+                          "fields":
+                            "items":
+                              "additionalProperties": !!bool "false"
+                              "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
+                                "data_type":
+                                  "$ref": "#/$defs/data_type_reference"
+                                "length":
+                                  "maximum": !!int "1048576"
+                                  "minimum": !!int "1"
+                                  "type": "integer"
+                                "name":
+                                  "type": "string"
+                                "offset":
+                                  "maximum": !!int "1048576"
+                                  "minimum": !!int "0"
+                                  "type": "integer"
+                              "type": "object"
+                            "maxItems": !!int "1000"
+                            "minItems": !!int "0"
+                            "type": "array"
                           "kind":
                             "enum":
                             - "union"
@@ -20385,6 +20729,24 @@
                             "maximum": !!int "8"
                             "minimum": !!int "1"
                             "type": "integer"
+                          "values":
+                            "items":
+                              "additionalProperties": !!bool "false"
+                              "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
+                                "name":
+                                  "type": "string"
+                                "value":
+                                  "maximum": !!int "9223372036854775807"
+                                  "minimum": !!int "-9223372036854775808"
+                                  "type": "integer"
+                              "type": "object"
+                            "maxItems": !!int "1000"
+                            "minItems": !!int "0"
+                            "type": "array"
                         "required":
                         - "kind"
                         - "name"
@@ -20488,10 +20850,14 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20499,7 +20865,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20514,10 +20880,14 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20525,7 +20895,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20536,10 +20906,14 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20547,7 +20921,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20558,10 +20932,14 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20569,7 +20947,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20585,10 +20963,14 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20596,7 +20978,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20611,10 +20993,14 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20622,7 +21008,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20633,10 +21019,14 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20644,7 +21034,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20655,10 +21045,14 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "data_type":
                                   "$ref": "#/$defs/data_type_reference"
                                 "length":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "1"
                                   "type": "integer"
                                 "name":
@@ -20666,7 +21060,7 @@
                                 "new_name":
                                   "type": "string"
                                 "offset":
-                                  "maximum": !!int "2147483647"
+                                  "maximum": !!int "1048576"
                                   "minimum": !!int "0"
                                   "type": "integer"
                               "type": "object"
@@ -20682,6 +21076,10 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "name":
                                   "type": "string"
                                 "new_name":
@@ -20702,6 +21100,10 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "name":
                                   "type": "string"
                                 "new_name":
@@ -20718,6 +21120,10 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "name":
                                   "type": "string"
                                 "new_name":
@@ -20734,6 +21140,10 @@
                             "items":
                               "additionalProperties": !!bool "false"
                               "properties":
+                                "comment":
+                                  "oneOf":
+                                  - "type": "string"
+                                  - "type": "null"
                                 "name":
                                   "type": "string"
                                 "new_name":
@@ -20748,6 +21158,18 @@
                             "type": "array"
                         "required":
                         - "kind"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "base_type":
+                            "$ref": "#/$defs/data_type_reference"
+                          "kind":
+                            "enum":
+                            - "typedef"
+                            "type": "string"
+                        "required":
+                        - "kind"
+                        - "base_type"
                         "type": "object"
                     "selector":
                       "additionalProperties": !!bool "false"
@@ -20780,56 +21202,78 @@
                   "additionalProperties": !!bool "false"
                   "properties":
                     "resource":
-                      "additionalProperties": !!bool "false"
-                      "properties":
-                        "category_path":
-                          "default": "/"
-                          "type": "string"
-                        "kind":
-                          "enum":
-                          - "function"
-                          "type": "string"
-                        "name":
-                          "minLength": !!int "1"
-                          "type": "string"
-                        "signature":
-                          "additionalProperties": !!bool "false"
-                          "properties":
-                            "calling_convention":
-                              "minLength": !!int "1"
-                              "type": "string"
-                            "has_no_return":
-                              "type": "boolean"
-                            "has_var_args":
-                              "type": "boolean"
-                            "parameters":
-                              "items":
-                                "additionalProperties": !!bool "false"
-                                "properties":
-                                  "data_type":
-                                    "$ref": "#/$defs/data_type_reference"
-                                  "name":
-                                    "type": "string"
-                                "required":
-                                - "data_type"
-                                "type": "object"
-                              "maxItems": !!int "1000"
-                              "minItems": !!int "0"
-                              "type": "array"
-                            "return_type":
-                              "$ref": "#/$defs/data_type_reference"
-                          "required":
-                          - "return_type"
-                          - "parameters"
-                          - "calling_convention"
-                          - "has_var_args"
-                          - "has_no_return"
-                          "type": "object"
-                      "required":
-                      - "kind"
-                      - "name"
-                      - "signature"
-                      "type": "object"
+                      "discriminator":
+                        "propertyName": "kind"
+                      "oneOf":
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "base_type":
+                            "$ref": "#/$defs/data_type_reference"
+                          "category_path":
+                            "default": "/"
+                            "type": "string"
+                          "kind":
+                            "enum":
+                            - "typedef"
+                            "type": "string"
+                          "name":
+                            "minLength": !!int "1"
+                            "type": "string"
+                        "required":
+                        - "kind"
+                        - "name"
+                        - "base_type"
+                        "type": "object"
+                      - "additionalProperties": !!bool "false"
+                        "properties":
+                          "category_path":
+                            "default": "/"
+                            "type": "string"
+                          "kind":
+                            "enum":
+                            - "function"
+                            "type": "string"
+                          "name":
+                            "minLength": !!int "1"
+                            "type": "string"
+                          "signature":
+                            "additionalProperties": !!bool "false"
+                            "properties":
+                              "calling_convention":
+                                "minLength": !!int "1"
+                                "type": "string"
+                              "has_no_return":
+                                "type": "boolean"
+                              "has_var_args":
+                                "type": "boolean"
+                              "parameters":
+                                "items":
+                                  "additionalProperties": !!bool "false"
+                                  "properties":
+                                    "data_type":
+                                      "$ref": "#/$defs/data_type_reference"
+                                    "name":
+                                      "type": "string"
+                                  "required":
+                                  - "data_type"
+                                  "type": "object"
+                                "maxItems": !!int "1000"
+                                "minItems": !!int "0"
+                                "type": "array"
+                              "return_type":
+                                "$ref": "#/$defs/data_type_reference"
+                            "required":
+                            - "return_type"
+                            - "parameters"
+                            - "calling_convention"
+                            - "has_var_args"
+                            - "has_no_return"
+                            "type": "object"
+                        "required":
+                        - "kind"
+                        - "name"
+                        - "signature"
+                        "type": "object"
                   "required":
                   - "resource"
                   "type": "object"
@@ -22469,6 +22913,30 @@
               "category_path":
                 "default": "/"
                 "type": "string"
+              "fields":
+                "items":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
+                    "data_type":
+                      "$ref": "#/$defs/data_type_reference"
+                    "length":
+                      "maximum": !!int "1048576"
+                      "minimum": !!int "1"
+                      "type": "integer"
+                    "name":
+                      "type": "string"
+                    "offset":
+                      "maximum": !!int "1048576"
+                      "minimum": !!int "0"
+                      "type": "integer"
+                  "type": "object"
+                "maxItems": !!int "1000"
+                "minItems": !!int "0"
+                "type": "array"
               "kind":
                 "enum":
                 - "struct"
@@ -22478,7 +22946,7 @@
                 "type": "string"
               "size":
                 "default": !!int "0"
-                "maximum": !!int "2147483647"
+                "maximum": !!int "1048576"
                 "minimum": !!int "0"
                 "type": "integer"
             "required":
@@ -22490,6 +22958,30 @@
               "category_path":
                 "default": "/"
                 "type": "string"
+              "fields":
+                "items":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
+                    "data_type":
+                      "$ref": "#/$defs/data_type_reference"
+                    "length":
+                      "maximum": !!int "1048576"
+                      "minimum": !!int "1"
+                      "type": "integer"
+                    "name":
+                      "type": "string"
+                    "offset":
+                      "maximum": !!int "1048576"
+                      "minimum": !!int "0"
+                      "type": "integer"
+                  "type": "object"
+                "maxItems": !!int "1000"
+                "minItems": !!int "0"
+                "type": "array"
               "kind":
                 "enum":
                 - "union"
@@ -22518,6 +23010,24 @@
                 "maximum": !!int "8"
                 "minimum": !!int "1"
                 "type": "integer"
+              "values":
+                "items":
+                  "additionalProperties": !!bool "false"
+                  "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
+                    "name":
+                      "type": "string"
+                    "value":
+                      "maximum": !!int "9223372036854775807"
+                      "minimum": !!int "-9223372036854775808"
+                      "type": "integer"
+                  "type": "object"
+                "maxItems": !!int "1000"
+                "minItems": !!int "0"
+                "type": "array"
             "required":
             - "kind"
             - "name"
@@ -23551,10 +24061,14 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23562,7 +24076,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23577,10 +24091,14 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23588,7 +24106,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23599,10 +24117,14 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23610,7 +24132,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23621,10 +24143,14 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23632,7 +24158,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23648,10 +24174,14 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23659,7 +24189,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23674,10 +24204,14 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23685,7 +24219,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23696,10 +24230,14 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23707,7 +24245,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23718,10 +24256,14 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "data_type":
                       "$ref": "#/$defs/data_type_reference"
                     "length":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "1"
                       "type": "integer"
                     "name":
@@ -23729,7 +24271,7 @@
                     "new_name":
                       "type": "string"
                     "offset":
-                      "maximum": !!int "2147483647"
+                      "maximum": !!int "1048576"
                       "minimum": !!int "0"
                       "type": "integer"
                   "type": "object"
@@ -23745,6 +24287,10 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "name":
                       "type": "string"
                     "new_name":
@@ -23765,6 +24311,10 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "name":
                       "type": "string"
                     "new_name":
@@ -23781,6 +24331,10 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "name":
                       "type": "string"
                     "new_name":
@@ -23797,6 +24351,10 @@
                 "items":
                   "additionalProperties": !!bool "false"
                   "properties":
+                    "comment":
+                      "oneOf":
+                      - "type": "string"
+                      - "type": "null"
                     "name":
                       "type": "string"
                     "new_name":
@@ -23811,6 +24369,18 @@
                 "type": "array"
             "required":
             - "kind"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "base_type":
+                "$ref": "#/$defs/data_type_reference"
+              "kind":
+                "enum":
+                - "typedef"
+                "type": "string"
+            "required":
+            - "kind"
+            - "base_type"
             "type": "object"
         "selector":
           "additionalProperties": !!bool "false"
@@ -24064,56 +24634,78 @@
       "additionalProperties": !!bool "false"
       "properties":
         "resource":
-          "additionalProperties": !!bool "false"
-          "properties":
-            "category_path":
-              "default": "/"
-              "type": "string"
-            "kind":
-              "enum":
-              - "function"
-              "type": "string"
-            "name":
-              "minLength": !!int "1"
-              "type": "string"
-            "signature":
-              "additionalProperties": !!bool "false"
-              "properties":
-                "calling_convention":
-                  "minLength": !!int "1"
-                  "type": "string"
-                "has_no_return":
-                  "type": "boolean"
-                "has_var_args":
-                  "type": "boolean"
-                "parameters":
-                  "items":
-                    "additionalProperties": !!bool "false"
-                    "properties":
-                      "data_type":
-                        "$ref": "#/$defs/data_type_reference"
-                      "name":
-                        "type": "string"
-                    "required":
-                    - "data_type"
-                    "type": "object"
-                  "maxItems": !!int "1000"
-                  "minItems": !!int "0"
-                  "type": "array"
-                "return_type":
-                  "$ref": "#/$defs/data_type_reference"
-              "required":
-              - "return_type"
-              - "parameters"
-              - "calling_convention"
-              - "has_var_args"
-              - "has_no_return"
-              "type": "object"
-          "required":
-          - "kind"
-          - "name"
-          - "signature"
-          "type": "object"
+          "discriminator":
+            "propertyName": "kind"
+          "oneOf":
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "base_type":
+                "$ref": "#/$defs/data_type_reference"
+              "category_path":
+                "default": "/"
+                "type": "string"
+              "kind":
+                "enum":
+                - "typedef"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+            "required":
+            - "kind"
+            - "name"
+            - "base_type"
+            "type": "object"
+          - "additionalProperties": !!bool "false"
+            "properties":
+              "category_path":
+                "default": "/"
+                "type": "string"
+              "kind":
+                "enum":
+                - "function"
+                "type": "string"
+              "name":
+                "minLength": !!int "1"
+                "type": "string"
+              "signature":
+                "additionalProperties": !!bool "false"
+                "properties":
+                  "calling_convention":
+                    "minLength": !!int "1"
+                    "type": "string"
+                  "has_no_return":
+                    "type": "boolean"
+                  "has_var_args":
+                    "type": "boolean"
+                  "parameters":
+                    "items":
+                      "additionalProperties": !!bool "false"
+                      "properties":
+                        "data_type":
+                          "$ref": "#/$defs/data_type_reference"
+                        "name":
+                          "type": "string"
+                      "required":
+                      - "data_type"
+                      "type": "object"
+                    "maxItems": !!int "1000"
+                    "minItems": !!int "0"
+                    "type": "array"
+                  "return_type":
+                    "$ref": "#/$defs/data_type_reference"
+                "required":
+                - "return_type"
+                - "parameters"
+                - "calling_convention"
+                - "has_var_args"
+                - "has_no_return"
+                "type": "object"
+            "required":
+            - "kind"
+            - "name"
+            - "signature"
+            "type": "object"
       "required":
       - "resource"
       "type": "object"

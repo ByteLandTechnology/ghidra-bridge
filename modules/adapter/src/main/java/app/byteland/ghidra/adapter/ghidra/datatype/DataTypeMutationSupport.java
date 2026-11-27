@@ -6,6 +6,7 @@ import ghidra.program.model.data.Array;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
 import ghidra.util.exception.DuplicateNameException;
+import java.util.Objects;
 import java.util.function.Function;
 
 final class DataTypeMutationSupport {
@@ -14,10 +15,7 @@ final class DataTypeMutationSupport {
   static DataType resolveFieldDataType(
       DataTypeReference reference, Function<DataTypeReference, DataType> resolver) {
     DataTypeReference selected = reference == null ? DataTypeReference.named("byte") : reference;
-    DataType dataType = resolver.apply(selected);
-    if (dataType == null) throw new IllegalArgumentException("unknown data type: " + selected);
-    requireCompositeValueType(dataType, "data_type");
-    return dataType;
+    return requireDataType(resolver, selected);
   }
 
   static DataType requireDataType(
@@ -48,7 +46,12 @@ final class DataTypeMutationSupport {
     }
   }
 
-  static void applyMetadataPatch(DataTypeComponent component, String newName, String newComment) {
+  static String normalizeComment(String comment) {
+    return comment == null || comment.isBlank() ? null : comment;
+  }
+
+  static void applyMetadataPatch(
+      DataTypeComponent component, String newName, String newComment, boolean commentPresent) {
     if (newName != null && !newName.equals(component.getFieldName())) {
       try {
         component.setFieldName(newName);
@@ -60,8 +63,11 @@ final class DataTypeMutationSupport {
         throw new IllegalStateException("cannot rename data type field", exception);
       }
     }
-    if (!String.valueOf(component.getComment()).equals(String.valueOf(newComment))) {
-      component.setComment(newComment);
+    if (commentPresent) {
+      String normalizedComment = normalizeComment(newComment);
+      if (!Objects.equals(component.getComment(), normalizedComment)) {
+        component.setComment(normalizedComment);
+      }
     }
   }
 }

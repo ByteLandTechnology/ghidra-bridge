@@ -371,7 +371,9 @@ class ListPaginationParityTest {
           String name,
           DataTypeReference baseType,
           int size,
-          FunctionSignature signature) {
+          FunctionSignature signature,
+          List<DataTypePatch.CompositeField> fields,
+          List<DataTypePatch.EnumValue> values) {
         throw new UnsupportedOperationException();
       }
 

@@ -5,6 +5,7 @@ import static app.byteland.ghidra.api.ApiRegistry.dataTypePath;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.functionSignature;
 import static app.byteland.ghidra.api.ApiRegistry.integer;
+import static app.byteland.ghidra.api.ApiRegistry.nullableText;
 import static app.byteland.ghidra.api.ApiRegistry.objectAt;
 import static app.byteland.ghidra.api.ApiRegistry.optionalInteger;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
@@ -123,12 +124,12 @@ final class DataTypeMethods implements ApiMethodProvider {
         MethodEffects.mutation(true, true),
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
-                ApiVocabulary.RESOURCE, ApiSchemaCatalog.functionDataTypeResourceSchema()),
+                ApiVocabulary.RESOURCE, ApiSchemaCatalog.upsertDataTypeResourceSchema()),
             ApiVocabulary.RESOURCE),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
         request -> {
-          upsertFunctionDataType(request);
+          upsertDataType(request);
           return registry.services().dataTypeService().getDataType(dataTypePath(resource(request)));
         });
     registry.writeResult(
@@ -158,7 +159,7 @@ final class DataTypeMethods implements ApiMethodProvider {
     createDataTypeResource(resource);
   }
 
-  private void upsertFunctionDataType(Map<String, Object> request) {
+  private void upsertDataType(Map<String, Object> request) {
     createDataTypeResource(resource(request));
   }
 
@@ -169,6 +170,10 @@ final class DataTypeMethods implements ApiMethodProvider {
       signature = functionSignature(resource.get("signature"), "/resource/signature");
     }
     DataTypeReference baseType = dataType(resource.get("base_type"), "/resource/base_type");
+    List<DataTypePatch.CompositeField> fields =
+        convertedDataTypeFields(resource.get(ApiVocabulary.FIELDS), "/resource/fields");
+    List<DataTypePatch.EnumValue> values =
+        convertedEnumValues(resource.get(ApiVocabulary.VALUES), "/resource/values");
     registry
         .services()
         .dataTypeService()
@@ -178,7 +183,9 @@ final class DataTypeMethods implements ApiMethodProvider {
             text(resource, ApiVocabulary.NAME),
             baseType,
             integer(resource, "size", 0),
-            signature);
+            signature,
+            fields,
+            values);
   }
 
   private void patchDataType(Map<String, Object> request) {
@@ -194,6 +201,9 @@ final class DataTypeMethods implements ApiMethodProvider {
                   convertedEnumValues(patch.get("remove_values"), "/patch/remove_values"),
                   convertedEnumValues(patch.get("rename_values"), "/patch/rename_values"),
                   convertedEnumValues(patch.get("update_values"), "/patch/update_values"));
+          case "typedef" ->
+              new DataTypePatch.Typedef(
+                  dataType(patch.get(ApiVocabulary.BASE_TYPE), "/patch/base_type"));
           default -> throw new AssertionError(kind);
         };
     registry.services().dataTypeService().patchDataType(path, typedPatch);
@@ -224,7 +234,9 @@ final class DataTypeMethods implements ApiMethodProvider {
               optionalText(field, "new_name"),
               optionalInteger(field, "offset"),
               optionalInteger(field, ApiVocabulary.LENGTH),
-              dataType(field.get(ApiVocabulary.DATA_TYPE), target + "/" + index + "/data_type")));
+              dataType(field.get(ApiVocabulary.DATA_TYPE), target + "/" + index + "/data_type"),
+              nullableText(field, ApiVocabulary.COMMENT),
+              field.containsKey(ApiVocabulary.COMMENT)));
     }
     return List.copyOf(result);
   }
@@ -238,7 +250,9 @@ final class DataTypeMethods implements ApiMethodProvider {
           new DataTypePatch.EnumValue(
               optionalText(value, ApiVocabulary.NAME),
               optionalText(value, "new_name"),
-              value.get("value") instanceof Number number ? number.longValue() : null));
+              value.get("value") instanceof Number number ? number.longValue() : null,
+              nullableText(value, ApiVocabulary.COMMENT),
+              value.containsKey(ApiVocabulary.COMMENT)));
     }
     return List.copyOf(result);
   }
