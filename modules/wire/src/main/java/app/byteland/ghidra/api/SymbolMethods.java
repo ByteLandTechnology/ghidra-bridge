@@ -50,7 +50,7 @@ final class SymbolMethods implements ApiMethodProvider {
                 ApiVocabulary.TYPE, WireSchema.string(),
                 ApiVocabulary.NAMESPACE, WireSchema.string(),
                 ApiVocabulary.SOURCE_TYPE, WireSchema.string(),
-                ApiVocabulary.CASE_SENSITIVE, WireSchema.bool()));
+                ApiVocabulary.CASE_SENSITIVE, WireSchema.withDefault(WireSchema.bool(), false)));
     registry.scanList(
         "symbol.list",
         ApiSchemaCatalog.scanListInput(symbolFilter),

@@ -36,9 +36,11 @@ final class DecompilationMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 entrySelector,
                 "format",
-                WireSchema.stringEnum(ApiVocabulary.TEXT, "tokens", "document"),
+                WireSchema.withDefault(
+                    WireSchema.stringEnum(ApiVocabulary.TEXT, "tokens", "document"),
+                    ApiVocabulary.TEXT),
                 "include_comments",
-                WireSchema.bool(),
+                WireSchema.withDefault(WireSchema.bool(), false),
                 "timeout_ms",
                 ApiSchemaCatalog.integerWithDefault(
                     DecompilationService.MIN_TIMEOUT_MS,
