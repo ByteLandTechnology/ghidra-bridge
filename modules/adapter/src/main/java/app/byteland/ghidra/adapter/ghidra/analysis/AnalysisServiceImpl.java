@@ -55,7 +55,49 @@ public final class AnalysisServiceImpl implements AnalysisService {
 
   @Override
   public AnalysisResource getStatus() {
+    return statusFor(context.currentProgram());
+  }
+
+  @Override
+  public AnalysisResource cancelAnalysis() {
+    synchronized (lock) {
+      if (closed) {
+        throw new IllegalStateException("analysis service is closed");
+      }
+    }
     Program program = context.currentProgram();
+    AnalysisTask task;
+    AutoAnalysisManager manager;
+    synchronized (lock) {
+      if (closed) {
+        throw new IllegalStateException("analysis service is closed");
+      }
+      ProgramAnalysisState state = states.get(program);
+      task = state != null ? state.currentTask : null;
+      manager = state != null ? state.manager : AutoAnalysisManager.getAnalysisManager(program);
+    }
+    if (task != null && task.isRunning()) {
+      task.cancel();
+    }
+    manager.cancelQueuedTasks();
+    return statusFor(program);
+  }
+
+  /** Cancels and releases background analysis resources for a closed program. */
+  public void releaseProgram(Program program) {
+    if (program == null) {
+      return;
+    }
+    ProgramAnalysisState state;
+    synchronized (lock) {
+      state = states.remove(program);
+    }
+    if (state != null) {
+      stopState(state);
+    }
+  }
+
+  private AnalysisResource statusFor(Program program) {
     synchronized (lock) {
       ProgramAnalysisState state = states.get(program);
       AutoAnalysisManager manager =
@@ -71,20 +113,6 @@ public final class AnalysisServiceImpl implements AnalysisService {
                 program,
                 ghidraRunning ? AnalysisResource.Status.RUNNING : AnalysisResource.Status.IDLE);
       };
-    }
-  }
-
-  /** Cancels and releases background analysis resources for a closed program. */
-  public void releaseProgram(Program program) {
-    if (program == null) {
-      return;
-    }
-    ProgramAnalysisState state;
-    synchronized (lock) {
-      state = states.remove(program);
-    }
-    if (state != null) {
-      stopState(state);
     }
   }
 
@@ -127,6 +155,7 @@ public final class AnalysisServiceImpl implements AnalysisService {
         AnalysisResource.Kind.GHIDRA,
         state,
         GhidraProgramUtilities.isAnalyzed(program),
+        null,
         null,
         null,
         null,

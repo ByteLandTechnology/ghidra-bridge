@@ -2,9 +2,9 @@
 
 Ghidra Bridge gives network access to one active Ghidra program.
 The bridge supports two network transports: WebSocket JSON-RPC 2.0 and MCP Streamable HTTP `2026-07-28`.
-The registry defines 56 public dotted methods, from `interface.get` to `batch.execute`.
-WebSocket publishes all 56 methods.
-MCP publishes 55 methods, and does not publish `interface.get`.
+The registry defines 57 public dotted methods, from `interface.get` to `batch.execute`.
+WebSocket publishes all 57 methods.
+MCP publishes 56 methods, and does not publish `interface.get`.
 The runtime JAR has zero third-party dependencies.
 
 ## Design Goals
@@ -24,7 +24,7 @@ The dispatcher uses a fair read-write lock to coordinate program access:
 
 Ghidra background analysis runs in a separate thread.
 While analysis runs:
-- Read operations remain available.
+- Read operations and `analysis.cancel` remain available.
 - Mutation operations return an error with HTTP status `409` and code `analysis_in_progress`.
 - A request for another analysis returns status `409` and code `analysis_already_running`.
 
@@ -121,4 +121,4 @@ The bridge preserves the label unless the client requests its deletion.
 - Read the [Architecture Guide](architecture.md) for the module structure.
 - Read the [Protocol Specification](protocol.md) for envelope details and error formats.
 - Read [Batch and Transactions](batch-and-transactions.md) for atomic execution behavior.
-- Read the [Method Reference](api.md) for the complete list of 56 methods.
+- Read the [Method Reference](api.md) for the complete list of 57 methods.

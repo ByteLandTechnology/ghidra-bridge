@@ -301,6 +301,7 @@ class ScanListFilterTest {
                       null,
                       null,
                       null,
+                      null,
                       null));
       ListingService listing =
           proxy(

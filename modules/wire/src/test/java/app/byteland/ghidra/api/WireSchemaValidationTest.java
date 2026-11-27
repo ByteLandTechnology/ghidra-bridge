@@ -1072,6 +1072,7 @@ class WireSchemaValidationTest {
                     null,
                     null,
                     null,
+                    null,
                     null);
               }
               throw new AssertionError("Unexpected call: " + method);

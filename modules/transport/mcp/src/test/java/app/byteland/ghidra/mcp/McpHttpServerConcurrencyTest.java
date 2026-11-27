@@ -290,11 +290,17 @@ class McpHttpServerConcurrencyTest {
           }
 
           @Override
+          public AnalysisResource cancelAnalysis() {
+            throw new UnsupportedOperationException();
+          }
+
+          @Override
           public AnalysisResource getStatus() {
             return new AnalysisResource(
                 AnalysisResource.Kind.GHIDRA,
                 AnalysisResource.Status.IDLE,
                 true,
+                null,
                 null,
                 null,
                 null,

@@ -708,6 +708,7 @@ public final class ApiRegistry {
       case "delete" -> "Delete " + resource + " data from the active program.";
       case "save" -> "Save the active program to its project file.";
       case ApiVocabulary.START -> "Start automatic analysis of the active program.";
+      case "cancel" -> "Cancel automatic analysis of the active program.";
       case "shutdown" -> "Stop the current Ghidra Bridge session.";
       case "execute" -> "Run a batch of methods in order.";
       default -> "Run the " + name + " method.";

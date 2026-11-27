@@ -55,7 +55,7 @@ class AgentDispatcherTest {
 
     AgentDispatcher dispatcher = new AgentDispatcher(services, "  session-42  ");
     assertEquals("sample.elf", dispatcher.getProgramName());
-    assertEquals(56, dispatcher.methodCatalog().methods().size());
+    assertEquals(57, dispatcher.methodCatalog().methods().size());
     assertFalse(dispatcher.isShuttingDown());
 
     assertEquals(
@@ -143,6 +143,7 @@ class AgentDispatcherTest {
                   AnalysisResource.Kind.GHIDRA,
                   AnalysisResource.Status.IDLE,
                   false,
+                  null,
                   null,
                   null,
                   null,

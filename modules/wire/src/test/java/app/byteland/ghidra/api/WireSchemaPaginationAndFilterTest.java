@@ -600,6 +600,7 @@ class WireSchemaPaginationAndFilterTest {
                     null,
                     null,
                     null,
+                    null,
                     null));
     TransactionRunner transaction =
         new TransactionRunner() {

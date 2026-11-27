@@ -22,6 +22,13 @@ public interface AnalysisService extends AutoCloseable {
   AnalysisResource getStatus();
 
   /**
+   * Requests cancellation of active background analysis and returns the current status.
+   *
+   * @return analysis progress and state
+   */
+  AnalysisResource cancelAnalysis();
+
+  /**
    * Rejects new analysis requests and waits until the active analysis finishes.
    */
   @Override

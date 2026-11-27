@@ -15,40 +15,59 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 final class AnalysisTask {
   private final String id = UUID.randomUUID().toString();
-  private final GhidraSession context;
-  private final AutoAnalysisManager manager;
-  private final Program program;
-  private final AnalyzerSelection selection;
+  private final BooleanSupplier analyzed;
+  private final TaskBody body;
   private final AnalysisTaskMonitor monitor = new AnalysisTaskMonitor();
   private volatile AnalysisResource.Status status = AnalysisResource.Status.RUNNING;
   private final long startedAt = System.currentTimeMillis();
   private volatile Long completedAt;
+  private volatile String error;
 
   AnalysisTask(
       GhidraSession context,
       Program program,
       AutoAnalysisManager manager,
       AnalyzerSelection selection) {
-    this.context = Objects.requireNonNull(context, "context");
-    this.program = Objects.requireNonNull(program, "program");
-    this.manager = Objects.requireNonNull(manager, "manager");
-    this.selection = Objects.requireNonNull(selection, "selection");
+    GhidraSession session = Objects.requireNonNull(context, "context");
+    Program targetProgram = Objects.requireNonNull(program, "program");
+    AutoAnalysisManager analysisManager = Objects.requireNonNull(manager, "manager");
+    AnalyzerSelection analyzerSelection = Objects.requireNonNull(selection, "selection");
+    this.analyzed = () -> GhidraProgramUtilities.isAnalyzed(targetProgram);
+    this.body = () -> performAnalysis(session, analysisManager, targetProgram, analyzerSelection);
+  }
+
+  AnalysisTask(BooleanSupplier analyzed, Runnable operation) {
+    this.analyzed = Objects.requireNonNull(analyzed, "analyzed");
+    Objects.requireNonNull(operation, "operation");
+    this.body =
+        () -> {
+          operation.run();
+          if (monitor.isCancelled()) {
+            return new TaskOutcome(AnalysisResource.Status.CANCELLED, "analysis cancelled");
+          }
+          return new TaskOutcome(AnalysisResource.Status.COMPLETED, null);
+        };
   }
 
   void run() {
     TaskOutcome outcome;
     try {
-      outcome = Objects.requireNonNull(performAnalysis(), "analysis task outcome");
+      outcome = Objects.requireNonNull(body.run(), "analysis task outcome");
     } catch (RuntimeException failure) {
       outcome = new TaskOutcome(AnalysisResource.Status.FAILED, errorMessage(failure));
     }
     publish(outcome);
   }
 
-  private TaskOutcome performAnalysis() {
+  private TaskOutcome performAnalysis(
+      GhidraSession context,
+      AutoAnalysisManager manager,
+      Program program,
+      AnalyzerSelection selection) {
     Map<String, String> previousAnalysisOptions = null;
     AnalysisResource.Status terminalStatus;
     String terminalError = null;
@@ -74,7 +93,7 @@ final class AnalysisTask {
       monitor.setMessage("Running analysis");
       manager.initializeOptions();
       manager.reAnalyzeAll(null);
-      runAndWaitForAnalysis(manager);
+      runAndWaitForAnalysis(program, manager);
       AnalysisManagerWait.awaitIdle(manager);
       if (monitor.isCancelled() || managerCancelled.get()) {
         terminalStatus = AnalysisResource.Status.CANCELLED;
@@ -128,11 +147,12 @@ final class AnalysisTask {
     return new AnalysisResource(
         AnalysisResource.Kind.BRIDGE,
         status,
-        GhidraProgramUtilities.isAnalyzed(program),
+        analyzed.getAsBoolean(),
         id,
         java.time.Instant.ofEpochMilli(startedAt),
         completedAt == null ? null : java.time.Instant.ofEpochMilli(completedAt),
-        monitor.percent());
+        monitor.percent(),
+        error);
   }
 
   private void publish(TaskOutcome outcome) {
@@ -141,6 +161,7 @@ final class AnalysisTask {
     } else if (outcome.status() == AnalysisResource.Status.COMPLETED) {
       monitor.setMessage("Analysis completed");
     }
+    error = outcome.error();
     completedAt = System.currentTimeMillis();
     status = outcome.status();
   }
@@ -203,7 +224,7 @@ final class AnalysisTask {
     }
   }
 
-  private void runAndWaitForAnalysis(AutoAnalysisManager manager) {
+  private void runAndWaitForAnalysis(Program program, AutoAnalysisManager manager) {
     PluginTool tool = manager.getAnalysisTool();
     if (tool == null) {
       int transactionId = program.startTransaction("Ghidra Bridge Analysis");
@@ -245,6 +266,11 @@ final class AnalysisTask {
     private static Map<String, String> immutableCopy(Map<String, String> values) {
       return Collections.unmodifiableMap(new LinkedHashMap<>(values));
     }
+  }
+
+  @FunctionalInterface
+  private interface TaskBody {
+    TaskOutcome run();
   }
 
   private record TaskOutcome(AnalysisResource.Status status, String error) {}

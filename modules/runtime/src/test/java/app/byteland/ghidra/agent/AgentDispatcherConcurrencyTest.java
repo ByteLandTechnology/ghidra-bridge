@@ -185,13 +185,13 @@ class AgentDispatcherConcurrencyTest {
   }
 
   @Test
-  void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
+  void allTwentySevenMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(57, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
-      assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
+      assertEquals(26, writeCalls.size(), "All 26 single-mutation methods must be tested");
 
       for (Map.Entry<String, Map<String, Object>> call : writeCalls) {
         String method = call.getKey();
@@ -216,7 +216,7 @@ class AgentDispatcherConcurrencyTest {
         assertEquals(0, obs.readHoldCount(), "Mutation must not hold read lock: " + method);
       }
 
-      // Mutating batch (per_item), mutating batch (all_or_none), and mixed read+write batch (26th method: batch.execute)
+      // Mutating batch (per_item), mutating batch (all_or_none), and mixed read+write batch (27th method: batch.execute)
       for (String mode : List.of("per_item", "all_or_none")) {
         harness.lastWriteMethodObservation.set(null);
         dispatcher.dispatch(
@@ -635,11 +635,13 @@ class AgentDispatcherConcurrencyTest {
         "batch.execute",
         Map.of("items", List.of(Map.of("id", "1", "method", "analysis.get", "arguments", Map.of()))));
 
-    // analysis.start returns 409 analysis_already_running
+    // analysis.start returns 409 analysis_already_running. analysis.cancel succeeds.
     ApiException alreadyRunning =
         assertThrows(ApiException.class, () -> dispatcher.dispatch("analysis.start", Map.of()));
     assertEquals(409, alreadyRunning.status());
     assertEquals("analysis_already_running", alreadyRunning.error().code());
+    assertEquals(
+        "cancelled", ((Map<?, ?>) dispatcher.dispatch("analysis.cancel", Map.of())).get("status"));
 
     // Mutations and mutating batches return 409 analysis_in_progress
     ApiException inProgress =
@@ -816,6 +818,7 @@ class AgentDispatcherConcurrencyTest {
                 "selector", Map.of("entry", "ram:00100000", "name", "local_0"),
                 "patch", Map.of("name", "local_0"))));
     calls.add(Map.entry("analysis.start", Map.of()));
+    calls.add(Map.entry("analysis.cancel", Map.of()));
     calls.add(Map.entry("symbol.demangle", Map.of()));
     calls.add(
         Map.entry(
@@ -1431,7 +1434,22 @@ class AgentDispatcherConcurrencyTest {
               "task-1",
               Instant.EPOCH,
               null,
-              0.0);
+              0.0,
+              null);
+        }
+
+        @Override
+        public AnalysisResource cancelAnalysis() {
+          observe("analysis.cancel", true);
+          return new AnalysisResource(
+              AnalysisResource.Kind.BRIDGE,
+              AnalysisResource.Status.CANCELLED,
+              false,
+              "task-1",
+              Instant.EPOCH,
+              Instant.EPOCH,
+              0.0,
+              "analysis cancelled");
         }
 
         @Override
@@ -1445,6 +1463,7 @@ class AgentDispatcherConcurrencyTest {
                   ? AnalysisResource.Status.RUNNING
                   : AnalysisResource.Status.IDLE,
               true,
+              null,
               null,
               null,
               null,

@@ -616,6 +616,7 @@ class AgentClientWebSocketListenerTest {
                   null,
                   null,
                   null,
+                  null,
                   null);
             });
     DecompilationService decompilation =

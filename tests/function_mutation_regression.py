@@ -484,6 +484,30 @@ def run_test(headless, root):
             })["result"]
             assert "label_renamed(" in caller_after["c"]
             assert "label_only(" not in caller_after["c"]
+
+            idle_cancel = tool(48, "ghidra_analysis", {"operation": "cancel", "params": {}})["result"]
+            assert idle_cancel["kind"] == "ghidra"
+            assert idle_cancel["status"] == "idle"
+            assert "error" not in idle_cancel
+
+            tool(49, "ghidra_analysis", {
+                "operation": "start",
+                "params": {"analyzers": ["NoSuchAnalyzer"]},
+            })
+            failed_snapshot = None
+            for _ in range(40):
+                snapshot = tool(50, "ghidra_analysis", {"operation": "get", "params": {}})["result"]
+                if snapshot["status"] != "running":
+                    failed_snapshot = snapshot
+                    break
+                time.sleep(0.1)
+            assert failed_snapshot is not None
+            assert failed_snapshot["status"] == "failed"
+            assert failed_snapshot.get("error") == "unknown analyzer: NoSuchAnalyzer"
+
+            after_cancel = tool(51, "ghidra_analysis", {"operation": "cancel", "params": {}})["result"]
+            assert after_cancel["status"] == "failed"
+            assert after_cancel.get("error") == "unknown analyzer: NoSuchAnalyzer"
             print("Function mutation regression checks passed")
         except BaseException as exc:
             primary_error = exc

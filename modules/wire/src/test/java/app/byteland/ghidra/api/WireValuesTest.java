@@ -69,7 +69,8 @@ class WireValuesTest {
             "task-1",
             startedAt,
             null,
-            50.0);
+            50.0,
+            null);
 
     Map<String, Object> analysisWire = WireValues.resource(analysis);
     assertEquals("bridge", analysisWire.get("kind"));
@@ -79,6 +80,7 @@ class WireValuesTest {
     assertEquals("2026-06-05T12:00:00Z", analysisWire.get("started_at"));
     assertFalse(analysisWire.containsKey("finished_at"));
     assertEquals(50.0, analysisWire.get("progress"));
+    assertFalse(analysisWire.containsKey("error"));
   }
 
   @Test
@@ -234,6 +236,7 @@ class WireValuesTest {
                     null,
                     null,
                     null,
+                    null,
                     null));
     BridgeServices services =
         new BridgeServices(
@@ -315,6 +318,7 @@ class WireValuesTest {
                     AnalysisResource.Kind.GHIDRA,
                     AnalysisResource.Status.IDLE,
                     true,
+                    null,
                     null,
                     null,
                     null,

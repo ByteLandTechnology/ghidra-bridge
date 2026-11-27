@@ -778,7 +778,8 @@ class FieldProjectionWireTest {
               "task-1",
               Instant.parse("2026-06-05T00:00:00Z"),
               Instant.parse("2026-06-05T00:00:05Z"),
-              100.0);
+              100.0,
+              null);
 
       SymbolResource symTwo =
           new SymbolResource(

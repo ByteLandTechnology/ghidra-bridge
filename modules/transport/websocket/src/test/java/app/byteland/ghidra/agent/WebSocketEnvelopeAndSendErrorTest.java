@@ -571,7 +571,7 @@ class WebSocketEnvelopeAndSendErrorTest {
               if ("close".equals(method)) return null;
               return new AnalysisResource(
                   AnalysisResource.Kind.GHIDRA, AnalysisResource.Status.IDLE, false, null, null,
-                  null, null);
+                  null, null, null);
             });
     DecompilationService decompilationService =
         proxy(
