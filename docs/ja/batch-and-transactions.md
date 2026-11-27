@@ -56,6 +56,8 @@
 バッチ内へのネストが禁止されているメソッド:
 - `interface.get`
 - `program.save`
+- `program.undo`
+- `program.redo`
 - `analysis.start`
 - `session.shutdown`
 - `batch.execute`

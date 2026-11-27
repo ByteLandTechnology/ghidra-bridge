@@ -153,7 +153,6 @@ public final class Bootstrap {
           throw failure;
         }
       }
-
       script.println("[ghidra-mcp] Starting MCP HTTP service");
       if (usedFallback) {
         script.println(
@@ -184,7 +183,6 @@ public final class Bootstrap {
       }
       throw startupFailure;
     }
-
     try (GracefulExit gracefulExit =
             gracefulExit(services.programService(), program, script, MCP_PREFIX, headless);
         AgentDispatcher activeDispatcher = boundDispatcher;
@@ -446,6 +444,16 @@ public final class Bootstrap {
       script.println(prefix + " Program save checkpoint completed.");
     } catch (Exception failure) {
       script.println(prefix + " Program save checkpoint skipped: " + failure.getMessage());
+    } finally {
+      endScriptTransaction(script);
+    }
+  }
+
+  private static void endScriptTransaction(GhidraScript script) {
+    try {
+      script.end(true);
+    } catch (Exception ignored) {
+      // No ambient script transaction is active.
     }
   }
 

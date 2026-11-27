@@ -19,7 +19,11 @@ public interface ProgramHost {
 
   Program resolveTransactionProgram(Program explicitProgram);
 
-  int beginTransaction(Program program);
+  default int beginTransaction(Program program) {
+    return beginTransaction(program, "bridge.write");
+  }
+
+  int beginTransaction(Program program, String description);
 
   void finishTransaction(Program program, int transactionId, boolean commit);
 
@@ -28,6 +32,8 @@ public interface ProgramHost {
   boolean runCommand(Program program, Command<Program> command);
 
   void saveProgram(Program program) throws Exception;
+
+  default void ensureIdle() {}
 
   default void releaseProgram(Program program) {}
 
@@ -38,6 +44,10 @@ public interface ProgramHost {
   static ProgramHost forProgramSupplier(Supplier<Program> programSupplier) {
     return new DynamicProgramHost(programSupplier);
   }
+
+  static String normalizeTransactionName(String description) {
+    return description == null || description.isBlank() ? "bridge.write" : description;
+  }
 }
 
 final class ScriptProgramHost implements ProgramHost {
@@ -45,6 +55,7 @@ final class ScriptProgramHost implements ProgramHost {
 
   ScriptProgramHost(GhidraScript script) {
     this.script = Objects.requireNonNull(script, "script");
+    endAmbientScriptTransaction();
   }
 
   @Override
@@ -66,25 +77,18 @@ final class ScriptProgramHost implements ProgramHost {
   }
 
   @Override
-  public int beginTransaction(Program program) {
-    if (program != null && program != script.getCurrentProgram()) {
-      return program.startTransaction("Ghidra Bridge");
+  public int beginTransaction(Program program, String description) {
+    endAmbientScriptTransaction();
+    if (program == null) {
+      return -1;
     }
-    script.end(true);
-    script.start();
-    return 0;
+    return program.startTransaction(ProgramHost.normalizeTransactionName(description));
   }
 
   @Override
   public void finishTransaction(Program program, int transactionId, boolean commit) {
-    if (program != null && program != script.getCurrentProgram()) {
+    if (program != null) {
       program.endTransaction(transactionId, commit);
-      return;
-    }
-    try {
-      script.end(commit);
-    } finally {
-      script.start();
     }
   }
 
@@ -109,16 +113,26 @@ final class ScriptProgramHost implements ProgramHost {
       monitor.clearCancelled();
     }
     try {
-      try {
-        script.end(true);
-      } catch (Exception ignored) {
-        // No ambient transaction exists, or the transaction ended.
-      }
+      endAmbientScriptTransaction();
       script.saveProgram(program);
     } finally {
+      endAmbientScriptTransaction();
       if (restoreCancellation) {
         monitor.cancel();
       }
+    }
+  }
+
+  @Override
+  public void ensureIdle() {
+    endAmbientScriptTransaction();
+  }
+
+  private void endAmbientScriptTransaction() {
+    try {
+      script.end(true);
+    } catch (Exception ignored) {
+      // No ambient script transaction is active.
     }
   }
 }
@@ -160,9 +174,9 @@ final class DynamicProgramHost implements ProgramHost {
   }
 
   @Override
-  public int beginTransaction(Program program) {
+  public int beginTransaction(Program program, String description) {
     Program target = Objects.requireNonNull(program, "program");
-    return target.startTransaction("Ghidra Bridge");
+    return target.startTransaction(ProgramHost.normalizeTransactionName(description));
   }
 
   @Override

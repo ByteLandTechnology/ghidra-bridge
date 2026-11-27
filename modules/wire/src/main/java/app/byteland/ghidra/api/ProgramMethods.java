@@ -31,6 +31,28 @@ final class ProgramMethods implements ApiMethodProvider {
           registry.services().programService().saveProgram();
           return Map.of("saved", true);
         });
+    Map<String, Object> historyInput = WireSchema.object(Map.of());
+    registry.read(
+        "program.history",
+        "Get the transaction undo and redo stacks for the active program.",
+        historyInput,
+        ApiSchemaCatalog.programHistoryFields(),
+        List.of("can_undo", "can_redo", "undo_list", "redo_list"),
+        request -> registry.services().programService().getHistory());
+    registry.writeResult(
+        "program.undo",
+        MethodEffects.mutationWithoutTransaction(false, false),
+        "Undo the latest committed transaction in the active program.",
+        historyInput,
+        ApiSchemaCatalog.PROGRAM_UNDO_REDO_SCHEMA,
+        request -> registry.services().programService().undo());
+    registry.writeResult(
+        "program.redo",
+        MethodEffects.mutationWithoutTransaction(false, false),
+        "Redo the latest undone transaction in the active program.",
+        historyInput,
+        ApiSchemaCatalog.PROGRAM_UNDO_REDO_SCHEMA,
+        request -> registry.services().programService().redo());
     registry.read(
         "program_language.get",
         ApiSchemaCatalog.input(ApiSchemaCatalog.props(ApiVocabulary.FIELDS, fields)),

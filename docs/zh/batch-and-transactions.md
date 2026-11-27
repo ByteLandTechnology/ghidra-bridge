@@ -56,6 +56,8 @@
 批处理中严禁嵌套以下操作：
 - `interface.get`
 - `program.save`
+- `program.undo`
+- `program.redo`
 - `analysis.start`
 - `session.shutdown`
 - `batch.execute`

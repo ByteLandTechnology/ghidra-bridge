@@ -15,6 +15,18 @@ public interface TransactionRunner {
   <T> T run(Operation<T> operation);
 
   /**
+   * Runs the given operation inside a named transaction.
+   *
+   * @param description transaction name
+   * @param operation operation to run
+   * @param <T> result type
+   * @return result of the operation
+   */
+  default <T> T run(String description, Operation<T> operation) {
+    return run(operation);
+  }
+
+  /**
    * Represents an operation to run inside a program transaction.
    *
    * @param <T> result type

@@ -94,6 +94,11 @@ public final class GhidraServiceFactory {
           public <T> T run(Operation<T> operation) {
             return context.withTransaction(operation::execute);
           }
+
+          @Override
+          public <T> T run(String description, Operation<T> operation) {
+            return context.withTransaction(description, operation::execute);
+          }
         },
         fallback,
         () -> {

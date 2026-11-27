@@ -4,16 +4,17 @@ import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
+import app.byteland.ghidra.service.program.ProgramHistoryConflictException;
+import app.byteland.ghidra.service.program.ProgramHistoryResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
-import ghidra.program.model.address.Address;
+import app.byteland.ghidra.service.program.ProgramUndoRedoResult;
+import ghidra.framework.model.DomainObject;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.lang.CompilerSpec;
 import ghidra.program.model.lang.Language;
-import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
-import ghidra.program.model.symbol.Symbol;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -83,6 +84,77 @@ public final class ProgramServiceImpl implements ProgramService {
   @Override
   public void saveProgram() {
     context.saveCurrentProgram();
+  }
+
+  @Override
+  public ProgramHistoryResource getHistory() {
+    return context.withProgramLock(ProgramServiceImpl::snapshotHistory);
+  }
+
+  @Override
+  public ProgramUndoRedoResult undo() {
+    return context.withIdleProgram(
+        activeProgram -> {
+          DomainObject domainObject = activeProgram;
+          if (!domainObject.canUndo()) {
+            throw ProgramHistoryConflictException.nothingToUndo();
+          }
+          String transactionName = normalizeTransactionName(domainObject.getUndoName());
+          domainObject.undo();
+          ProgramHistoryResource history = snapshotHistory(domainObject);
+          return new ProgramUndoRedoResult(
+              "undo",
+              transactionName == null ? "" : transactionName,
+              history.canUndo(),
+              history.canRedo(),
+              history.undoName(),
+              history.redoName(),
+              history.undoList(),
+              history.redoList());
+        });
+  }
+
+  @Override
+  public ProgramUndoRedoResult redo() {
+    return context.withIdleProgram(
+        activeProgram -> {
+          DomainObject domainObject = activeProgram;
+          if (!domainObject.canRedo()) {
+            throw ProgramHistoryConflictException.nothingToRedo();
+          }
+          String transactionName = normalizeTransactionName(domainObject.getRedoName());
+          domainObject.redo();
+          ProgramHistoryResource history = snapshotHistory(domainObject);
+          return new ProgramUndoRedoResult(
+              "redo",
+              transactionName == null ? "" : transactionName,
+              history.canUndo(),
+              history.canRedo(),
+              history.undoName(),
+              history.redoName(),
+              history.undoList(),
+              history.redoList());
+        });
+  }
+
+  private static ProgramHistoryResource snapshotHistory(DomainObject domainObject) {
+    boolean canUndo = domainObject.canUndo();
+    boolean canRedo = domainObject.canRedo();
+    String undoName = canUndo ? normalizeTransactionName(domainObject.getUndoName()) : null;
+    String redoName = canRedo ? normalizeTransactionName(domainObject.getRedoName()) : null;
+    List<String> undoList = domainObject.getAllUndoNames();
+    List<String> redoList = domainObject.getAllRedoNames();
+    return new ProgramHistoryResource(
+        canUndo,
+        canRedo,
+        undoName,
+        redoName,
+        undoList == null ? List.of() : List.copyOf(undoList),
+        redoList == null ? List.of() : List.copyOf(redoList));
+  }
+
+  private static String normalizeTransactionName(String rawName) {
+    return rawName == null || rawName.isBlank() ? null : rawName;
   }
 
   private static AddressSpaceResource.Kind describeAddressSpaceType(AddressSpace space) {

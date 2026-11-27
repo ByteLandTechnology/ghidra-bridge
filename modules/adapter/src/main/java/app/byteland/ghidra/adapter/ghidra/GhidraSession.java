@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra;
 
 import app.byteland.ghidra.service.TransactionExecutionException;
+import app.byteland.ghidra.service.program.ProgramHistoryConflictException;
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager;
 import ghidra.app.script.GhidraScript;
 import ghidra.framework.cmd.Command;
@@ -28,6 +29,9 @@ import java.util.function.Supplier;
  * Coordinates Ghidra program access, commands, and transaction lifecycles.
  */
 public final class GhidraSession implements AutoCloseable {
+  private static final String DEFAULT_TRANSACTION_NAME = "bridge.write";
+  private static final String TEMPORARY_TRANSACTION_NAME = "bridge.temporary";
+
   private final ProgramHost host;
   private final QuerySnapshotCache querySnapshots;
   private final BooleanSupplier analyzingSupplier;
@@ -242,20 +246,72 @@ public final class GhidraSession implements AutoCloseable {
   }
 
   public <T> T withTransaction(TransactionalOperation<T> operation) {
-    return withTransaction(null, operation, true);
+    return withTransaction(null, DEFAULT_TRANSACTION_NAME, operation, true);
+  }
+
+  public <T> T withTransaction(String description, TransactionalOperation<T> operation) {
+    return withTransaction(null, description, operation, true);
   }
 
   public <T> T withProgramTransaction(Program program, TransactionalOperation<T> operation) {
-    return withTransaction(Objects.requireNonNull(program, "program"), operation, true);
+    return withTransaction(
+        Objects.requireNonNull(program, "program"), DEFAULT_TRANSACTION_NAME, operation, true);
+  }
+
+  public <T> T withProgramTransaction(
+      Program program, String description, TransactionalOperation<T> operation) {
+    return withTransaction(
+        Objects.requireNonNull(program, "program"), description, operation, true);
   }
 
   public <T> T withTemporaryChanges(TransactionalOperation<T> operation) {
-    return withTransaction(null, operation, false);
+    return withTransaction(null, TEMPORARY_TRANSACTION_NAME, operation, false);
+  }
+
+  public <T> T withProgramLock(ProgramOperation<T> operation) {
+    Objects.requireNonNull(operation, "operation");
+    synchronized (executionLock) {
+      Program program = currentProgram();
+      try {
+        return operation.run(program);
+      } catch (RuntimeException ex) {
+        throw ex;
+      } catch (Exception ex) {
+        throw new TransactionExecutionException(ex.getMessage(), ex);
+      }
+    }
+  }
+
+  public <T> T withIdleProgram(ProgramOperation<T> operation) {
+    Objects.requireNonNull(operation, "operation");
+    synchronized (executionLock) {
+      if (transactionDepth > 0) {
+        throw ProgramHistoryConflictException.transactionInProgress();
+      }
+      host.ensureIdle();
+      Program program = currentProgram();
+      if (program.getCurrentTransactionInfo() != null) {
+        throw ProgramHistoryConflictException.transactionInProgress();
+      }
+      try {
+        return operation.run(program);
+      } catch (RuntimeException ex) {
+        throw ex;
+      } catch (Exception ex) {
+        throw new TransactionExecutionException(ex.getMessage(), ex);
+      } finally {
+        querySnapshots.clear();
+      }
+    }
   }
 
   private <T> T withTransaction(
-      Program explicitProgram, TransactionalOperation<T> operation, boolean commitChanges) {
+      Program explicitProgram,
+      String description,
+      TransactionalOperation<T> operation,
+      boolean commitChanges) {
     Objects.requireNonNull(operation, "operation");
+    String transactionName = ProgramHost.normalizeTransactionName(description);
     synchronized (executionLock) {
       if (transactionDepth > 0) {
         if (!commitChanges) {
@@ -268,7 +324,7 @@ public final class GhidraSession implements AutoCloseable {
       }
 
       Program targetProgram = host.resolveTransactionProgram(explicitProgram);
-      int transactionId = host.beginTransaction(targetProgram);
+      int transactionId = host.beginTransaction(targetProgram, transactionName);
       pinnedProgram = targetProgram;
       transactionDepth++;
       boolean commit = false;
@@ -293,7 +349,8 @@ public final class GhidraSession implements AutoCloseable {
     synchronized (executionLock) {
       try {
         if (transactionDepth == 0 && host.requiresCommandTransaction()) {
-          if (withTransaction(() -> host.runCommand(currentProgram(), command))) {
+          if (withTransaction(
+              commandTransactionName(command), () -> host.runCommand(currentProgram(), command))) {
             return;
           }
         } else if (host.runCommand(currentProgramOrNull(), command)) {
@@ -310,9 +367,19 @@ public final class GhidraSession implements AutoCloseable {
     throw new TransactionExecutionException(failurePrefix + ": " + status);
   }
 
+  private static String commandTransactionName(Command<Program> command) {
+    String name = command.getName();
+    return name == null || name.isBlank() ? DEFAULT_TRANSACTION_NAME : name;
+  }
+
   @FunctionalInterface
   public interface TransactionalOperation<T> {
     T run() throws Exception;
+  }
+
+  @FunctionalInterface
+  public interface ProgramOperation<T> {
+    T run(Program program) throws Exception;
   }
 
   private static <T> T runOperation(TransactionalOperation<T> operation) {

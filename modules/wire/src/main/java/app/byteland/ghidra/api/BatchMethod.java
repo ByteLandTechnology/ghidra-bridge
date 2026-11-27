@@ -380,7 +380,8 @@ final class BatchMethod {
       boolean requiresTransaction =
           items.stream().anyMatch(item -> item.method().effects().requiresTransaction());
       if (requiresTransaction) {
-        return runtime.inTransaction(() -> batchEnvelope(executeAllOrNoneTransactional(items)));
+        return runtime.inTransaction(
+            NAME, () -> batchEnvelope(executeAllOrNoneTransactional(items)));
       }
       return new PendingBatchResponse(List.copyOf(executeAllOrNoneItems(items)), true);
     } catch (BatchRollback rollback) {
@@ -558,6 +559,6 @@ final class BatchMethod {
         boolean ownTransaction)
         throws Exception;
 
-    <T> T inTransaction(TransactionRunner.Operation<T> operation);
+    <T> T inTransaction(String description, TransactionRunner.Operation<T> operation);
   }
 }

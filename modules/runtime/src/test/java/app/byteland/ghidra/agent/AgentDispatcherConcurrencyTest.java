@@ -43,9 +43,11 @@ import app.byteland.ghidra.service.memory.MemoryBlockResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
+import app.byteland.ghidra.service.program.ProgramHistoryResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
+import app.byteland.ghidra.service.program.ProgramUndoRedoResult;
 import app.byteland.ghidra.service.reference.ReferenceResource;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolResource;
@@ -82,7 +84,7 @@ class AgentDispatcherConcurrencyTest {
   }
 
   @Test
-  void allTwentyNineReadOnlyMethodsAndReadOnlyBatchAcquireSharedReadLock() throws Exception {
+  void allThirtyReadOnlyMethodsAndReadOnlyBatchAcquireSharedReadLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
       List<String> catalogReadOnly =
@@ -90,7 +92,7 @@ class AgentDispatcherConcurrencyTest {
               .filter(m -> Boolean.TRUE.equals(((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
               .map(MethodDescriptor::name)
               .toList();
-      assertEquals(29, catalogReadOnly.size(), "Catalog must expose all 29 read-only methods");
+      assertEquals(30, catalogReadOnly.size(), "Catalog must expose all 30 read-only methods");
 
       Map<String, Map<String, Object>> readCalls = validReadRequests();
       assertEquals(Set.copyOf(catalogReadOnly), readCalls.keySet());
@@ -185,13 +187,13 @@ class AgentDispatcherConcurrencyTest {
   }
 
   @Test
-  void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
+  void allTwentyEightMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(59, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
-      assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
+      assertEquals(27, writeCalls.size(), "All 27 single-mutation methods must be tested");
 
       for (Map.Entry<String, Map<String, Object>> call : writeCalls) {
         String method = call.getKey();
@@ -631,6 +633,7 @@ class AgentDispatcherConcurrencyTest {
 
     // Reads and read-only batches succeed during analysis
     assertEquals("test-program", ((Map<?, ?>) dispatcher.dispatch("program.get", Map.of())).get("name"));
+    assertEquals(Boolean.FALSE, ((Map<?, ?>) dispatcher.dispatch("program.history", Map.of())).get("can_undo"));
     dispatcher.dispatch(
         "batch.execute",
         Map.of("items", List.of(Map.of("id", "1", "method", "analysis.get", "arguments", Map.of()))));
@@ -642,10 +645,12 @@ class AgentDispatcherConcurrencyTest {
     assertEquals("analysis_already_running", alreadyRunning.error().code());
 
     // Mutations and mutating batches return 409 analysis_in_progress
-    ApiException inProgress =
-        assertThrows(ApiException.class, () -> dispatcher.dispatch("program.save", Map.of()));
-    assertEquals(409, inProgress.status());
-    assertEquals("analysis_in_progress", inProgress.error().code());
+    for (String method : List.of("program.save", "program.undo", "program.redo")) {
+      ApiException inProgress =
+          assertThrows(ApiException.class, () -> dispatcher.dispatch(method, Map.of()));
+      assertEquals(409, inProgress.status());
+      assertEquals("analysis_in_progress", inProgress.error().code());
+    }
 
     ApiException batchInProgress =
         assertThrows(
@@ -705,6 +710,7 @@ class AgentDispatcherConcurrencyTest {
     calls.put("interface.get", Map.of());
     calls.put("session.get", Map.of());
     calls.put("program.get", Map.of());
+    calls.put("program.history", Map.of());
     calls.put("program_language.get", Map.of());
     calls.put("address_space.list", Map.of());
     calls.put("address.resolve", Map.of("selector", Map.of("address", "ram:00100000")));
@@ -744,6 +750,8 @@ class AgentDispatcherConcurrencyTest {
     Map<String, Object> intRef = Map.of("kind", "named", "name", "int");
     List<Map.Entry<String, Map<String, Object>>> calls = new ArrayList<>();
     calls.add(Map.entry("program.save", Map.of()));
+    calls.add(Map.entry("program.undo", Map.of()));
+    calls.add(Map.entry("program.redo", Map.of()));
     calls.add(
         Map.entry(
             "memory.write",
@@ -1048,6 +1056,28 @@ class AgentDispatcherConcurrencyTest {
         @Override
         public void saveProgram() {
           observe("program.save", true);
+        }
+
+        @Override
+        public ProgramHistoryResource getHistory() {
+          observe("program.history", false);
+          return new ProgramHistoryResource(false, false, null, null, List.of(), List.of());
+        }
+
+        @Override
+        public ProgramUndoRedoResult undo() {
+          observe("program.undo", true);
+          return new ProgramUndoRedoResult(
+              "undo", "comment.upsert", false, true, null, "comment.upsert", List.of(),
+              List.of("comment.upsert"));
+        }
+
+        @Override
+        public ProgramUndoRedoResult redo() {
+          observe("program.redo", true);
+          return new ProgramUndoRedoResult(
+              "redo", "comment.upsert", true, false, "comment.upsert", null,
+              List.of("comment.upsert"), List.of());
         }
       };
     }

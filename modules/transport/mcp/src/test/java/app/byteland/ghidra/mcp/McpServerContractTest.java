@@ -101,7 +101,7 @@ class McpServerContractTest {
         Map.of(
             "readOnlyHint", false,
             "destructiveHint", false,
-            "idempotentHint", true,
+            "idempotentHint", false,
             "openWorldHint", false),
         program.get("annotations"));
 

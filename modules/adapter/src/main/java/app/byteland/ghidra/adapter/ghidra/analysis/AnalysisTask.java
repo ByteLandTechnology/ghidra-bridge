@@ -107,6 +107,7 @@ final class AnalysisTask {
       }
       context.withProgramTransaction(
           program,
+          "analysis.mark_analyzed",
           () -> {
             GhidraProgramUtilities.markProgramAnalyzed(program);
             return null;

@@ -33,6 +33,7 @@ final class AnalysisOptionsSupport {
     }
     context.withProgramTransaction(
         program,
+        "analysis.options",
         () -> {
           Options options = program.getOptions(Program.ANALYSIS_PROPERTIES);
           for (Map.Entry<String, String> entry : updates.entrySet()) {
