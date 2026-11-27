@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.0](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.6.0...v1.7.0) (2026-11-27)
+
+
+### Features
+
+* **wire,mcp:** add declarative schema validation, defaults, and pointer rebasing ([#104](https://github.com/ByteLandTechnology/ghidra-bridge/issues/104)) ([d512780](https://github.com/ByteLandTechnology/ghidra-bridge/commit/d51278008b68bab6d511c27342aadc339242d158))
+
+
+### Bug Fixes
+
+* consolidate transport validation and bootstrap lifecycle ([#70](https://github.com/ByteLandTechnology/ghidra-bridge/issues/70)) ([5f835fd](https://github.com/ByteLandTechnology/ghidra-bridge/commit/5f835fd64f15e1de20e67b638936dd7c35f92c9a))
+
+
+### Performance Improvements
+
+* **adapter:** cache sorted query snapshots across cursor pages ([#80](https://github.com/ByteLandTechnology/ghidra-bridge/issues/80)) ([513313b](https://github.com/ByteLandTechnology/ghidra-bridge/commit/513313b242673f29dc2f1c20d6043e62bad8a54c))
+
 ## [1.6.0](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.5.1...v1.6.0) (2026-11-26)
 
 
