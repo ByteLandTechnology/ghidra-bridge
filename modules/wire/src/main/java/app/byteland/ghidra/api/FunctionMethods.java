@@ -95,7 +95,7 @@ final class FunctionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
                 ApiVocabulary.RESOURCE, functionResource,
-                "disassemble", WireSchema.bool()),
+                "disassemble", WireSchema.withDefault(WireSchema.bool(), false)),
             ApiVocabulary.RESOURCE),
         ApiSchemaCatalog.functionFields(),
         List.of(ApiVocabulary.ENTRY),
@@ -144,8 +144,11 @@ final class FunctionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.requiredListInput(
             WireSchema.object(
                 ApiSchemaCatalog.props(
-                    ApiVocabulary.ENTRY, WireSchema.nonBlankString(),
-                    ApiVocabulary.DIRECTION, WireSchema.stringEnum("callers", "callees")),
+                    ApiVocabulary.ENTRY,
+                    WireSchema.nonBlankString(),
+                    ApiVocabulary.DIRECTION,
+                    WireSchema.withDefault(
+                        WireSchema.stringEnum("callers", "callees"), "callees")),
                 ApiVocabulary.ENTRY)),
         Set.of(ApiVocabulary.ENTRY, ApiVocabulary.NAME, "call_site", ApiVocabulary.DIRECTION,
             ApiVocabulary.NAMESPACE, "demangled_name"),

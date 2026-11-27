@@ -211,6 +211,39 @@ class ListingAndMemoryMutationTest {
                     "selector",
                     Map.of("kind", "address", "address", "0x401000", "start", "0x401000"))));
 
+    assertEquals(
+        Map.of("propertyName", "kind"),
+        ApiSchemaCatalog.addressOrRangeSelector().get("discriminator"));
+    ApiException invalidSelectorKind =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "instruction.disassemble",
+                    Map.of("selector", Map.of("kind", "function", "entry", "0x401000"))));
+    assertEquals("invalid_enum", invalidSelectorKind.error().code());
+    assertEquals("/selector/kind", invalidSelectorKind.error().target());
+
+    assertEquals(
+        false,
+        registry
+            .method("instruction.assemble")
+            .decodeRequest(
+                Map.of("selector", Map.of("address", "0x401000"), "instructions", List.of("NOP")))
+            .get("pad_nop"));
+    assertEquals(
+        true,
+        registry
+            .method("instruction.disassemble")
+            .decodeRequest(Map.of("selector", Map.of("kind", "address", "address", "0x401000")))
+            .get("follow_flow"));
+    assertEquals(
+        false,
+        registry
+            .method("code_unit.clear")
+            .decodeRequest(Map.of("selector", Map.of("kind", "address", "address", "0x401000")))
+            .get("clear_context"));
+
     Object cleared =
         registry.dispatch(
             "code_unit.clear",

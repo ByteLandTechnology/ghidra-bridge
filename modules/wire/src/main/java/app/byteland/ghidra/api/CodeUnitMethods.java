@@ -25,7 +25,8 @@ final class CodeUnitMethods implements ApiMethodProvider {
         WireSchema.object(
             ApiSchemaCatalog.props(
                 ApiVocabulary.KIND,
-                WireSchema.stringEnum("all", "instruction", ApiVocabulary.DATA)));
+                WireSchema.withDefault(
+                    WireSchema.stringEnum("all", "instruction", ApiVocabulary.DATA), "all")));
     registry.scanList(
         "code_unit.list",
         ApiSchemaCatalog.scanListInput(listingFilter),
@@ -57,7 +58,7 @@ final class CodeUnitMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 ApiSchemaCatalog.addressOrRangeSelector(),
                 "clear_context",
-                WireSchema.bool()),
+                WireSchema.withDefault(WireSchema.bool(), false)),
             ApiVocabulary.SELECTOR),
         ApiSchemaCatalog.CODE_UNIT_CLEAR_RECEIPT_SCHEMA,
         request ->

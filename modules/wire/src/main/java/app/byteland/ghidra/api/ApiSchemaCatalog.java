@@ -184,11 +184,12 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> addressOrRangeSelector() {
-    return WireSchema.oneOf(addressSelectorBranch(), rangeSelectorBranch());
+    return WireSchema.taggedOneOf(KIND, addressSelectorBranch(), rangeSelectorBranch());
   }
 
   static Map<String, Object> flowSelector() {
-    return WireSchema.oneOf(
+    return WireSchema.taggedOneOf(
+        KIND,
         addressSelectorBranch(),
         WireSchema.object(
             props(KIND, WireSchema.stringEnum(FUNCTION), ENTRY, WireSchema.nonBlankString()),
@@ -246,7 +247,8 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> storageSchema() {
-    return WireSchema.oneOf(
+    return WireSchema.taggedOneOf(
+        KIND,
         WireSchema.object(
             props(
                 KIND,
@@ -262,20 +264,21 @@ final class ApiSchemaCatalog {
   }
 
   static Map<String, Object> dataTypeResourceSchema() {
+    Map<String, Object> categoryPath = WireSchema.withDefault(WireSchema.string(), "/");
     Map<String, Object> struct =
         WireSchema.object(
             props(
                 KIND, WireSchema.stringEnum("struct"),
-                CATEGORY_PATH, WireSchema.string(),
+                CATEGORY_PATH, categoryPath,
                 NAME, WireSchema.nonBlankString(),
-                SIZE, WireSchema.integer(0, Integer.MAX_VALUE)),
+                SIZE, integerWithDefault(0, Integer.MAX_VALUE, 0)),
             KIND,
             NAME);
     Map<String, Object> union =
         WireSchema.object(
             props(
                 KIND, WireSchema.stringEnum("union"),
-                CATEGORY_PATH, WireSchema.string(),
+                CATEGORY_PATH, categoryPath,
                 NAME, WireSchema.nonBlankString()),
             KIND,
             NAME);
@@ -283,29 +286,30 @@ final class ApiSchemaCatalog {
         WireSchema.object(
             props(
                 KIND, WireSchema.stringEnum("enum"),
-                CATEGORY_PATH, WireSchema.string(),
+                CATEGORY_PATH, categoryPath,
                 NAME, WireSchema.nonBlankString(),
-                SIZE, WireSchema.integer(1, 8)),
+                SIZE, integerWithDefault(1, 8, 4)),
             KIND,
             NAME);
     Map<String, Object> typedef =
         WireSchema.object(
             props(
                 KIND, WireSchema.stringEnum("typedef"),
-                CATEGORY_PATH, WireSchema.string(),
+                CATEGORY_PATH, categoryPath,
                 NAME, WireSchema.nonBlankString(),
                 BASE_TYPE, WireSchema.dataTypeReference()),
             KIND,
             NAME,
             BASE_TYPE);
-    return WireSchema.oneOf(struct, union, enumType, typedef, functionDataTypeResourceSchema());
+    return WireSchema.taggedOneOf(
+        KIND, struct, union, enumType, typedef, functionDataTypeResourceSchema());
   }
 
   static Map<String, Object> functionDataTypeResourceSchema() {
     return WireSchema.object(
         props(
             KIND, WireSchema.stringEnum(FUNCTION),
-            CATEGORY_PATH, WireSchema.string(),
+            CATEGORY_PATH, WireSchema.withDefault(WireSchema.string(), "/"),
             NAME, WireSchema.nonBlankString(),
             SIGNATURE, functionSignatureSchema()),
         KIND,
@@ -365,7 +369,8 @@ final class ApiSchemaCatalog {
                 WireSchema.string(),
                 "value",
                 WireSchema.integer(Long.MIN_VALUE, Long.MAX_VALUE)));
-    return WireSchema.oneOf(
+    return WireSchema.taggedOneOf(
+        KIND,
         compositePatch("struct", field),
         compositePatch("union", field),
         WireSchema.object(
