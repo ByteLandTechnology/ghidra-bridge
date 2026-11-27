@@ -4,6 +4,7 @@ import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableResource;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
+import java.util.Set;
 
 public final class GlobalVariableServiceImpl implements GlobalVariableService {
   private final GhidraSession context;
@@ -18,12 +19,32 @@ public final class GlobalVariableServiceImpl implements GlobalVariableService {
 
   @Override
   public GlobalVariableResource getGlobalVariable(String address) {
-    return queries.getGlobalVariable(address);
+    return getGlobalVariable(address, null);
+  }
+
+  @Override
+  public GlobalVariableResource getGlobalVariable(String address, Set<String> fields) {
+    return queries.getGlobalVariable(address, fields);
   }
 
   @Override
   public Page<GlobalVariableResource> listGlobalVariables(Query query) {
     return queries.listGlobalVariables(query);
+  }
+
+  @Override
+  public Page<GlobalVariableResource> listGlobalVariables(Query query, Set<String> fields) {
+    return queries.listGlobalVariables(
+        fields == null
+            ? query
+            : new Query(
+                query.scan(),
+                query.name(),
+                query.namespace(),
+                query.caseSensitive(),
+                query.limit(),
+                query.cursor(),
+                fields));
   }
 
   @Override

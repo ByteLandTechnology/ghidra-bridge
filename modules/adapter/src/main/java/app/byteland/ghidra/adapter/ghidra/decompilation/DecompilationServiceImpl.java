@@ -1,6 +1,7 @@
 package app.byteland.ghidra.adapter.ghidra.decompilation;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
+import app.byteland.ghidra.adapter.ghidra.FieldProjections;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.decompilation.DecompilationService;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Set;
 import java.util.WeakHashMap;
 
 public final class DecompilationServiceImpl implements DecompilationService {
@@ -46,6 +48,16 @@ public final class DecompilationServiceImpl implements DecompilationService {
   public DecompilationResource decompileFunction(
       String rawAddress, DecompilationResource.Format format, Integer timeoutMs,
       boolean includeComments) {
+    return decompileFunction(rawAddress, format, timeoutMs, includeComments, null);
+  }
+
+  @Override
+  public DecompilationResource decompileFunction(
+      String rawAddress,
+      DecompilationResource.Format format,
+      Integer timeoutMs,
+      boolean includeComments,
+      Set<String> fields) {
     int timeout = timeoutMs == null ? DEFAULT_TIMEOUT_MS : timeoutMs;
     if (timeout < MIN_TIMEOUT_MS || timeout > MAX_TIMEOUT_MS) {
       throw new IllegalArgumentException(
@@ -60,7 +72,7 @@ public final class DecompilationServiceImpl implements DecompilationService {
     if (function == null) {
       throw new NoSuchElementException("function not found");
     }
-    return decompile(function, timeout, format, includeComments);
+    return decompile(function, timeout, format, includeComments, fields);
   }
 
   /** Closes and removes the decompiler pool for a closed program. */
@@ -112,8 +124,11 @@ public final class DecompilationServiceImpl implements DecompilationService {
   }
 
   private DecompilationResource decompile(
-      Function function, int timeoutMs, DecompilationResource.Format format,
-      boolean includeComments) {
+      Function function,
+      int timeoutMs,
+      DecompilationResource.Format format,
+      boolean includeComments,
+      Set<String> fields) {
     LeasePool<DecompInterface> decompilerPool = poolFor(function.getProgram());
     try (LeasePool.Lease<DecompInterface> lease = decompilerPool.acquire()) {
       long startedAt = System.nanoTime();
@@ -124,34 +139,58 @@ public final class DecompilationServiceImpl implements DecompilationService {
       flushCacheIfNeeded(decompiler, function.getProgram());
       DecompileResults results = decompiler.decompileFunction(function, timeoutSeconds, null);
       boolean completed = results.decompileCompleted();
+      boolean needName = FieldProjections.allows(fields, "name");
+      boolean needC = FieldProjections.allows(fields, "c");
+      boolean needTokens = FieldProjections.allows(fields, "tokens");
+      boolean needLines = FieldProjections.allows(fields, "lines");
+      boolean needComments = FieldProjections.allows(fields, "comments");
+      boolean needCommentsComplete = FieldProjections.allows(fields, "comments_complete");
+      boolean needWarnings = FieldProjections.allows(fields, "warnings");
       List<String> warnings = new ArrayList<>();
-      if (!completed && results.getErrorMessage() != null && !results.getErrorMessage().isBlank()) {
+      if (needWarnings
+          && !completed
+          && results.getErrorMessage() != null
+          && !results.getErrorMessage().isBlank()) {
         warnings.add(results.getErrorMessage());
       }
       DecompilationResource.Format effectiveFormat =
           format == null ? DecompilationResource.Format.TEXT : format;
-      ClangTokenGroup markup = results.getCCodeMarkup();
-      String code = effectiveFormat == DecompilationResource.Format.TEXT
-          ? GuiDocument.renderText(function, results)
-          : null;
-      List<DecompilationResource.Token> tokens =
-          effectiveFormat == DecompilationResource.Format.TOKENS ? renderTokens(markup) : null;
+      String code = null;
+      List<DecompilationResource.Token> tokens = null;
       List<DecompilationResource.Line> lines = null;
-      if (effectiveFormat == DecompilationResource.Format.DOCUMENT) {
-        GuiDocument document = GuiDocument.render(function, markup);
-        code = document.code();
-        lines = document.lines();
+      if (effectiveFormat == DecompilationResource.Format.TEXT) {
+        code = needC ? GuiDocument.renderText(function, results) : "";
+      } else if (effectiveFormat == DecompilationResource.Format.TOKENS) {
+        tokens = needTokens ? renderTokens(results.getCCodeMarkup()) : List.of();
+      } else if (effectiveFormat == DecompilationResource.Format.DOCUMENT) {
+        if (needC || needLines) {
+          GuiDocument document =
+              GuiDocument.render(function, results.getCCodeMarkup(), needC, needLines);
+          code = needC ? document.code() : "";
+          lines = needLines ? document.lines() : List.of();
+        } else {
+          code = "";
+          lines = List.of();
+        }
       }
-      FunctionComments comments = includeComments
-          ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
-          : null;
+      FunctionComments comments =
+          includeComments && (needComments || needCommentsComplete || needWarnings)
+              ? FunctionComments.read(function, startedAt, timeoutMs, completed, warnings)
+              : null;
       return new DecompilationResource(
           AddressUtil.canonicalAddress(function.getEntryPoint()),
-          function.getName(), effectiveFormat, completed,
-          Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L),
-          code, tokens, lines,
-          comments == null ? null : comments.items(),
-          comments == null ? null : comments.complete(), warnings);
+          needName ? function.getName() : "",
+          effectiveFormat,
+          completed,
+          FieldProjections.allows(fields, "elapsed_ms")
+              ? Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L)
+              : 0L,
+          code,
+          tokens,
+          lines,
+          comments == null || !needComments ? null : comments.items(),
+          comments == null || !needCommentsComplete ? null : comments.complete(),
+          needWarnings ? warnings : List.of());
     }
   }
 

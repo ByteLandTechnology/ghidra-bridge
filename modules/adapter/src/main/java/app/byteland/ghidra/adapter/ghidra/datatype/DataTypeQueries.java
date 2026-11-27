@@ -1,5 +1,6 @@
 package app.byteland.ghidra.adapter.ghidra.datatype;
 
+import app.byteland.ghidra.adapter.ghidra.FieldProjections;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.service.Page;
@@ -17,6 +18,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 final class DataTypeQueries {
   private static final String CATEGORY_RESOURCE = "data_type_category";
@@ -26,7 +28,16 @@ final class DataTypeQueries {
 
   static Page<DataTypeCategoryResource> listCategories(
       DataTypeManager manager, String categoryPath, int limit, String cursor) {
-    return listCategories(null, manager, categoryPath, limit, cursor);
+    return listCategories(null, manager, categoryPath, limit, cursor, null);
+  }
+
+  static Page<DataTypeCategoryResource> listCategories(
+      DataTypeManager manager,
+      String categoryPath,
+      int limit,
+      String cursor,
+      Set<String> fields) {
+    return listCategories(null, manager, categoryPath, limit, cursor, fields);
   }
 
   static Page<DataTypeCategoryResource> listCategories(
@@ -35,12 +46,22 @@ final class DataTypeQueries {
       String categoryPath,
       int limit,
       String cursor) {
+    return listCategories(context, manager, categoryPath, limit, cursor, null);
+  }
+
+  static Page<DataTypeCategoryResource> listCategories(
+      GhidraSession context,
+      DataTypeManager manager,
+      String categoryPath,
+      int limit,
+      String cursor,
+      Set<String> fields) {
     String normalizedPath = categoryPath == null || categoryPath.isBlank() ? "/" : categoryPath;
     Category category = manager.getCategory(new CategoryPath(normalizedPath));
     if (category == null) throw new NoSuchElementException("category not found: " + normalizedPath);
     boolean hasCursor = cursor != null && !cursor.isBlank();
     if (!hasCursor || context == null || !context.canCacheSnapshots()) {
-      return selectCategoriesBounded(category, limit, cursor);
+      return selectCategoriesBounded(category, limit, cursor, fields);
     }
 
     Program snapshotProgram = context.currentProgramOrNull();
@@ -63,19 +84,23 @@ final class DataTypeQueries {
         Arrays.sort(sortedKeys);
       }
       if (!context.canCacheSnapshots()) {
-        return selectCategoriesBounded(category, limit, cursor);
+        return selectCategoriesBounded(category, limit, cursor, fields);
       }
       if (context.currentProgramOrNull() == snapshotProgram
           && context.modificationNumber() == modNumber) {
         snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }
+    boolean needName = FieldProjections.allows(fields, "name");
+    boolean needCategoryCount = FieldProjections.allows(fields, "category_count");
+    boolean needDataTypeCount = FieldProjections.allows(fields, "data_type_count");
     return QuerySnapshotCache.slice(
         sortedKeys,
         limit,
         cursor,
         path -> manager.getCategory(new CategoryPath(path)),
-        DataTypeQueries::describeCategory);
+        (child, path) ->
+            describeCategory(child, path, needName, needCategoryCount, needDataTypeCount));
   }
 
   static Page<DataTypeResource> searchDataTypes(
@@ -85,7 +110,18 @@ final class DataTypeQueries {
       String kind,
       int limit,
       String cursor) {
-    return searchDataTypes(null, manager, query, categoryPath, kind, limit, cursor);
+    return searchDataTypes(null, manager, query, categoryPath, kind, limit, cursor, null);
+  }
+
+  static Page<DataTypeResource> searchDataTypes(
+      DataTypeManager manager,
+      String query,
+      String categoryPath,
+      String kind,
+      int limit,
+      String cursor,
+      Set<String> fields) {
+    return searchDataTypes(null, manager, query, categoryPath, kind, limit, cursor, fields);
   }
 
   static Page<DataTypeResource> searchDataTypes(
@@ -96,6 +132,18 @@ final class DataTypeQueries {
       String kind,
       int limit,
       String cursor) {
+    return searchDataTypes(context, manager, query, categoryPath, kind, limit, cursor, null);
+  }
+
+  static Page<DataTypeResource> searchDataTypes(
+      GhidraSession context,
+      DataTypeManager manager,
+      String query,
+      String categoryPath,
+      String kind,
+      int limit,
+      String cursor,
+      Set<String> fields) {
     int clamped = Page.clampLimit(limit);
     DataTypeResource.Kind expectedKind = parseKindOrNull(kind);
     if (kind != null && expectedKind == null) {
@@ -119,7 +167,8 @@ final class DataTypeQueries {
           categoryPath,
           expectedKind,
           clamped,
-          cursor);
+          cursor,
+          fields);
     }
 
     Program snapshotProgram = context.currentProgramOrNull();
@@ -148,7 +197,8 @@ final class DataTypeQueries {
             categoryPath,
             expectedKind,
             clamped,
-            cursor);
+            cursor,
+            fields);
       }
       if (context.currentProgramOrNull() == snapshotProgram
           && context.modificationNumber() == modNumber) {
@@ -156,7 +206,11 @@ final class DataTypeQueries {
       }
     }
     return QuerySnapshotCache.slice(
-        sortedKeys, clamped, cursor, manager::getDataType, DataTypeDescriptions::summarize);
+        sortedKeys,
+        clamped,
+        cursor,
+        manager::getDataType,
+        dataType -> DataTypeDescriptions.summarize(dataType, fields));
   }
 
   private static Iterator<DataType> candidateIterator(
@@ -171,7 +225,7 @@ final class DataTypeQueries {
   }
 
   private static Page<DataTypeCategoryResource> selectCategoriesBounded(
-      Category category, int limit, String cursor) {
+      Category category, int limit, String cursor, Set<String> fields) {
     Page.Selector<Category> selector = Page.selector(limit, cursor);
     Category[] children = category.getCategories();
     if (children != null) {
@@ -179,15 +233,25 @@ final class DataTypeQueries {
         selector.offer(child.getCategoryPath().getPath(), child);
       }
     }
-    return selector.finish(DataTypeQueries::describeCategory);
+    boolean needName = FieldProjections.allows(fields, "name");
+    boolean needCategoryCount = FieldProjections.allows(fields, "category_count");
+    boolean needDataTypeCount = FieldProjections.allows(fields, "data_type_count");
+    return selector.finish(
+        (child, path) ->
+            describeCategory(child, path, needName, needCategoryCount, needDataTypeCount));
   }
 
-  private static DataTypeCategoryResource describeCategory(Category child, String path) {
+  private static DataTypeCategoryResource describeCategory(
+      Category child,
+      String path,
+      boolean needName,
+      boolean needCategoryCount,
+      boolean needDataTypeCount) {
     return new DataTypeCategoryResource(
         path,
-        child.getName(),
-        child.getCategories().length,
-        child.getDataTypes().length);
+        needName ? child.getName() : null,
+        needCategoryCount ? child.getCategories().length : 0,
+        needDataTypeCount ? child.getDataTypes().length : 0);
   }
 
   private static Page<DataTypeResource> selectDataTypesBounded(
@@ -196,7 +260,8 @@ final class DataTypeQueries {
       String categoryPath,
       DataTypeResource.Kind expectedKind,
       int clampedLimit,
-      String cursor) {
+      String cursor,
+      Set<String> fields) {
     Page.Selector<DataType> selector = Page.selector(clampedLimit, cursor);
     while (iterator.hasNext()) {
       DataType dataType = iterator.next();
@@ -205,7 +270,7 @@ final class DataTypeQueries {
         selector.offer(path, dataType);
       }
     }
-    return selector.finish(DataTypeDescriptions::summarize);
+    return selector.finish(dataType -> DataTypeDescriptions.summarize(dataType, fields));
   }
 
   private static String matchingDataTypePath(

@@ -10,6 +10,7 @@ import app.byteland.ghidra.service.listing.DataUnitResource;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Data;
 import ghidra.program.model.listing.DataIterator;
+import java.util.Set;
 
 final class ListingDataQueries {
   private final GhidraSession context;
@@ -20,6 +21,11 @@ final class ListingDataQueries {
 
   Page<DataUnitResource> listDataUnits(
       AddressScanOptions options, int limit, String cursorRaw) {
+    return listDataUnits(options, limit, cursorRaw, null);
+  }
+
+  Page<DataUnitResource> listDataUnits(
+      AddressScanOptions options, int limit, String cursorRaw, Set<String> fields) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
@@ -39,7 +45,7 @@ final class ListingDataQueries {
       if (ListingInstructionQueries.atOrBeforeCursor(address, cursor)) continue;
       if (range.afterEnd(address)) break;
       String canonical = AddressUtil.canonicalAddress(address);
-      scan.visit(canonical, canonical, ListingDescriptions.toDataItem(data, context));
+      scan.visit(canonical, canonical, ListingDescriptions.toDataItem(data, context, fields));
       if (scan.stopped()) break;
     }
 

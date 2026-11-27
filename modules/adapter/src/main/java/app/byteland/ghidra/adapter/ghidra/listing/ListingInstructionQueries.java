@@ -11,6 +11,7 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Instruction;
 import ghidra.program.model.listing.InstructionIterator;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 final class ListingInstructionQueries {
   private final GhidraSession context;
@@ -21,6 +22,11 @@ final class ListingInstructionQueries {
 
   Page<InstructionResource> listInstructions(
       AddressScanOptions options, int limit, String cursorRaw) {
+    return listInstructions(options, limit, cursorRaw, null);
+  }
+
+  Page<InstructionResource> listInstructions(
+      AddressScanOptions options, int limit, String cursorRaw, Set<String> fields) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
@@ -40,7 +46,10 @@ final class ListingInstructionQueries {
       if (atOrBeforeCursor(address, cursor)) continue;
       if (range.afterEnd(address)) break;
       String canonical = AddressUtil.canonicalAddress(address);
-      scan.visit(canonical, canonical, ListingDescriptions.toInstructionItem(instruction, context));
+      scan.visit(
+          canonical,
+          canonical,
+          ListingDescriptions.toInstructionItem(instruction, context, fields));
       if (scan.stopped()) break;
     }
 
@@ -48,12 +57,16 @@ final class ListingInstructionQueries {
   }
 
   InstructionResource getInstruction(String rawAddress) {
+    return getInstruction(rawAddress, null);
+  }
+
+  InstructionResource getInstruction(String rawAddress, Set<String> fields) {
     Address address = parseAddress(rawAddress);
     Instruction instruction = context.currentProgram().getListing().getInstructionAt(address);
     if (instruction == null) {
       throw new NoSuchElementException("no instruction at address");
     }
-    return ListingDescriptions.toInstructionItem(instruction, context);
+    return ListingDescriptions.toInstructionItem(instruction, context, fields);
   }
 
   private Address parseAddress(String rawAddress) {

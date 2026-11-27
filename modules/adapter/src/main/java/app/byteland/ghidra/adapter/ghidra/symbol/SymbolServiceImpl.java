@@ -4,6 +4,7 @@ import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.symbol.SymbolResource;
 import app.byteland.ghidra.service.symbol.SymbolService;
+import java.util.Set;
 
 public final class SymbolServiceImpl implements SymbolService {
   private final GhidraSession context;
@@ -18,8 +19,32 @@ public final class SymbolServiceImpl implements SymbolService {
   }
 
   @Override
+  public Page<SymbolResource> listSymbols(SymbolQuery query, Set<String> fields) {
+    return SymbolQueries.listSymbols(
+        context,
+        fields == null
+            ? query
+            : new SymbolQuery(
+                query.scan(),
+                query.name(),
+                query.address(),
+                query.type(),
+                query.namespace(),
+                query.sourceType(),
+                query.caseSensitive(),
+                query.limit(),
+                query.cursor(),
+                fields));
+  }
+
+  @Override
   public SymbolResource getSymbol(long symbolId) {
-    return SymbolDescriptions.describe(SymbolQueries.getSymbolById(context, symbolId));
+    return getSymbol(symbolId, null);
+  }
+
+  @Override
+  public SymbolResource getSymbol(long symbolId, Set<String> fields) {
+    return SymbolDescriptions.describe(SymbolQueries.getSymbolById(context, symbolId), fields);
   }
 
 

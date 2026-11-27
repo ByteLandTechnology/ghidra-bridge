@@ -12,6 +12,7 @@ import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.CodeUnitIterator;
 import ghidra.program.model.listing.Listing;
 import java.util.Iterator;
+import java.util.Set;
 
 final class ListingCodeUnitQueries {
   private final GhidraSession context;
@@ -22,6 +23,11 @@ final class ListingCodeUnitQueries {
 
   Page<CodeUnitResource> listCodeUnits(
       AddressScanOptions options, int limit, String kind, String cursorRaw) {
+    return listCodeUnits(options, limit, kind, cursorRaw, null);
+  }
+
+  Page<CodeUnitResource> listCodeUnits(
+      AddressScanOptions options, int limit, String kind, String cursorRaw, Set<String> fields) {
     int normalizedLimit = Page.clampLimit(limit);
     AddressScanRanges.Resolved range = AddressScanRanges.resolve(context, options, true);
     Address cursor = cursorRaw == null ? null : parseAddress(cursorRaw);
@@ -33,11 +39,11 @@ final class ListingCodeUnitQueries {
 
     if ("instruction".equalsIgnoreCase(kind)) {
       return listFiltered(
-          listing, range, cursor, scan, CodeUnitResource.Kind.INSTRUCTION, true);
+          listing, range, cursor, scan, CodeUnitResource.Kind.INSTRUCTION, true, fields);
     }
     if ("data".equalsIgnoreCase(kind)) {
       return listFiltered(
-          listing, range, cursor, scan, CodeUnitResource.Kind.DATA, false);
+          listing, range, cursor, scan, CodeUnitResource.Kind.DATA, false, fields);
     }
 
     Address iterationStart = ListingInstructionQueries.iterationStart(range, cursor);
@@ -53,7 +59,7 @@ final class ListingCodeUnitQueries {
       CodeUnitResource.Kind kindValue = ListingDescriptions.classify(codeUnit);
       CodeUnitResource match =
           matchesKind(kind, kindValue)
-              ? ListingDescriptions.toCodeUnitItem(codeUnit, kindValue, context)
+              ? ListingDescriptions.toCodeUnitItem(codeUnit, kindValue, context, fields)
               : null;
       String canonical = AddressUtil.canonicalAddress(address);
       scan.visit(canonical, canonical, match);
@@ -69,7 +75,8 @@ final class ListingCodeUnitQueries {
       Address cursor,
       BoundedAddressScan<CodeUnitResource> scan,
       CodeUnitResource.Kind targetKind,
-      boolean instructionsOnly) {
+      boolean instructionsOnly,
+      Set<String> fields) {
     CodeUnit firstCodeUnit = firstCodeUnitInWindow(listing, range, cursor);
     if (firstCodeUnit == null) {
       return scan.finish();
@@ -89,7 +96,9 @@ final class ListingCodeUnitQueries {
       if (range.afterEnd(address)) break;
       String canonical = AddressUtil.canonicalAddress(address);
       scan.visit(
-          canonical, canonical, ListingDescriptions.toCodeUnitItem(codeUnit, targetKind, context));
+          canonical,
+          canonical,
+          ListingDescriptions.toCodeUnitItem(codeUnit, targetKind, context, fields));
       lastVisited = codeUnit;
       if (scan.stopped()) break;
     }

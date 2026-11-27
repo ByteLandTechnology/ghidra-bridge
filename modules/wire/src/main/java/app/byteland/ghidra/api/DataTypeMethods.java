@@ -42,24 +42,29 @@ final class DataTypeMethods implements ApiMethodProvider {
                     ApiVocabulary.PATH, WireSchema.withDefault(WireSchema.string(), "/")))),
         Set.of(ApiVocabulary.PATH, ApiVocabulary.NAME, "category_count", "data_type_count"),
         List.of(ApiVocabulary.PATH),
-        (request, page) ->
-            registry
-                .services()
-                .dataTypeService()
-                .listCategories(
-                    optionalText(filter(request), ApiVocabulary.PATH, "/"),
-                    page.limit(),
-                    page.cursor()));
+        (request, page, projectedFields) -> {
+          String path = optionalText(filter(request), ApiVocabulary.PATH, "/");
+          return projectedFields == null
+              ? registry
+                  .services()
+                  .dataTypeService()
+                  .listCategories(path, page.limit(), page.cursor())
+              : registry
+                  .services()
+                  .dataTypeService()
+                  .listCategories(path, page.limit(), page.cursor(), projectedFields);
+        });
     registry.read(
         "data_type.get",
         ApiSchemaCatalog.selectorInput(pathSelector),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
-        request ->
-            registry
-                .services()
-                .dataTypeService()
-                .getDataType(text(selector(request), ApiVocabulary.PATH)));
+        (request, projectedFields) -> {
+          String path = text(selector(request), ApiVocabulary.PATH);
+          return projectedFields == null
+              ? registry.services().dataTypeService().getDataType(path)
+              : registry.services().dataTypeService().getDataType(path, projectedFields);
+        });
     registry.list(
         "data_type.list",
         ApiSchemaCatalog.listInput(
@@ -73,17 +78,21 @@ final class DataTypeMethods implements ApiMethodProvider {
                     WireSchema.string()))),
         ApiSchemaCatalog.dataTypeFields(),
         List.of(ApiVocabulary.PATH),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
-          return registry
-              .services()
-              .dataTypeService()
-              .searchDataTypes(
-                  optionalText(filter, "query", ""),
-                  optionalText(filter, ApiVocabulary.CATEGORY_PATH),
-                  optionalText(filter, ApiVocabulary.KIND),
-                  page.limit(),
-                  page.cursor());
+          String query = optionalText(filter, "query", "");
+          String categoryPath = optionalText(filter, ApiVocabulary.CATEGORY_PATH);
+          String kind = optionalText(filter, ApiVocabulary.KIND);
+          return projectedFields == null
+              ? registry
+                  .services()
+                  .dataTypeService()
+                  .searchDataTypes(query, categoryPath, kind, page.limit(), page.cursor())
+              : registry
+                  .services()
+                  .dataTypeService()
+                  .searchDataTypes(
+                      query, categoryPath, kind, page.limit(), page.cursor(), projectedFields);
         });
     registry.writeResource(
         "data_type.create",

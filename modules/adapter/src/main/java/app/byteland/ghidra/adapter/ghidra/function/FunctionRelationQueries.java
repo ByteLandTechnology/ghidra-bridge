@@ -2,6 +2,7 @@ package app.byteland.ghidra.adapter.ghidra.function;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
+import app.byteland.ghidra.adapter.ghidra.FieldProjections;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.service.Page;
@@ -14,6 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Set;
 
 final class FunctionRelationQueries {
   private static final String FUNCTION_CALL_RESOURCE = "function_call";
@@ -31,19 +33,29 @@ final class FunctionRelationQueries {
   }
 
   Page<FunctionCallResource> getCallers(String rawAddress, int limit, String cursor) {
-    return getFunctionRelations(rawAddress, true, limit, cursor);
+    return getCallers(rawAddress, limit, cursor, null);
+  }
+
+  Page<FunctionCallResource> getCallers(
+      String rawAddress, int limit, String cursor, Set<String> fields) {
+    return getFunctionRelations(rawAddress, true, limit, cursor, fields);
   }
 
   Page<FunctionCallResource> getCallees(String rawAddress, int limit, String cursor) {
-    return getFunctionRelations(rawAddress, false, limit, cursor);
+    return getCallees(rawAddress, limit, cursor, null);
+  }
+
+  Page<FunctionCallResource> getCallees(
+      String rawAddress, int limit, String cursor, Set<String> fields) {
+    return getFunctionRelations(rawAddress, false, limit, cursor, fields);
   }
 
   private Page<FunctionCallResource> getFunctionRelations(
-      String rawAddress, boolean callers, int limit, String cursor) {
+      String rawAddress, boolean callers, int limit, String cursor, Set<String> fields) {
     Function function = resolver.resolveFunction(rawAddress);
     boolean hasCursor = cursor != null && !cursor.isBlank();
     if (!hasCursor || context == null || !context.canCacheSnapshots()) {
-      return selectRelationsBounded(function, callers, limit, cursor);
+      return selectRelationsBounded(function, callers, limit, cursor, fields);
     }
 
     Program snapshotProgram = context.currentProgramOrNull();
@@ -64,34 +76,52 @@ final class FunctionRelationQueries {
       sortedKeys = keys.toArray(String[]::new);
       Arrays.sort(sortedKeys);
       if (!context.canCacheSnapshots()) {
-        return selectRelationsBounded(function, callers, limit, cursor);
+        return selectRelationsBounded(function, callers, limit, cursor, fields);
       }
       if (context.currentProgramOrNull() == snapshotProgram
           && context.modificationNumber() == modNumber) {
         snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
       }
     }
-    FunctionCallResource.Direction direction =
-        callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;
+    boolean needName = FieldProjections.allows(fields, "name");
+    boolean needNamespace = FieldProjections.allows(fields, "namespace");
+    boolean needDemangled = FieldProjections.allows(fields, "demangled_name");
+    FunctionCallResource.Direction direction = projectedDirection(callers, fields);
     return QuerySnapshotCache.slice(
         sortedKeys,
         limit,
         cursor,
         this::resolveOrNull,
-        (relatedFunction, entry) -> describeRelation(relatedFunction, entry, direction));
+        (relatedFunction, entry) ->
+            describeRelation(
+                relatedFunction, entry, direction, needName, needNamespace, needDemangled));
   }
 
   private static Page<FunctionCallResource> selectRelationsBounded(
-      Function function, boolean callers, int limit, String cursor) {
+      Function function, boolean callers, int limit, String cursor, Set<String> fields) {
     Page.Selector<Function> selector = Page.selector(limit, cursor);
     for (Function relatedFunction : relatedFunctions(function, callers)) {
       selector.offer(
           AddressUtil.canonicalAddress(relatedFunction.getEntryPoint()), relatedFunction);
     }
-    FunctionCallResource.Direction direction =
-        callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;
+    boolean needName = FieldProjections.allows(fields, "name");
+    boolean needNamespace = FieldProjections.allows(fields, "namespace");
+    boolean needDemangled = FieldProjections.allows(fields, "demangled_name");
+    FunctionCallResource.Direction direction = projectedDirection(callers, fields);
     return selector.finish(
-        (relatedFunction, entry) -> describeRelation(relatedFunction, entry, direction));
+        (relatedFunction, entry) ->
+            describeRelation(
+                relatedFunction, entry, direction, needName, needNamespace, needDemangled));
+  }
+
+  private static FunctionCallResource.Direction projectedDirection(
+      boolean callers, Set<String> fields) {
+    if (!FieldProjections.allows(fields, "direction")) {
+      return null;
+    }
+    return callers
+        ? FunctionCallResource.Direction.CALLERS
+        : FunctionCallResource.Direction.CALLEES;
   }
 
   private static Iterable<Function> relatedFunctions(Function function, boolean callers) {
@@ -109,15 +139,22 @@ final class FunctionRelationQueries {
   }
 
   private static FunctionCallResource describeRelation(
-      Function relatedFunction, String entry, FunctionCallResource.Direction direction) {
-    String name = relatedFunction.getName();
+      Function relatedFunction,
+      String entry,
+      FunctionCallResource.Direction direction,
+      boolean needName,
+      boolean needNamespace,
+      boolean needDemangled) {
+    String name = needName || needDemangled ? relatedFunction.getName() : null;
     return new FunctionCallResource(
         entry,
-        name,
+        needName ? name : null,
         null,
         direction,
-        relatedFunction.getParentNamespace().getName(true),
-        CppSymbolNames.demangled(
-            relatedFunction.getProgram(), name, relatedFunction.getEntryPoint()));
+        needNamespace ? relatedFunction.getParentNamespace().getName(true) : null,
+        needDemangled
+            ? CppSymbolNames.demangled(
+                relatedFunction.getProgram(), name, relatedFunction.getEntryPoint())
+            : null);
   }
 }

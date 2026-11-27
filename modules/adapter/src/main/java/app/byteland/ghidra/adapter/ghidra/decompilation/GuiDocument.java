@@ -45,11 +45,30 @@ record GuiDocument(String code, List<Line> lines) {
   }
 
   static GuiDocument render(Function function, ClangTokenGroup markup) {
-    if (markup == null) return new GuiDocument("", List.of());
-    return renderLines(function, new PrettyPrinter(function, markup, null).getLines());
+    return render(function, markup, true, true);
+  }
+
+  static GuiDocument render(
+      Function function, ClangTokenGroup markup, boolean needCode, boolean needLines) {
+    if (markup == null || (!needCode && !needLines)) return new GuiDocument("", List.of());
+    return renderLines(
+        function, new PrettyPrinter(function, markup, null).getLines(), needCode, needLines);
   }
 
   static GuiDocument renderLines(Function function, List<ClangLine> nativeLines) {
+    return renderLines(function, nativeLines, true, true);
+  }
+
+  static GuiDocument renderLines(
+      Function function, List<ClangLine> nativeLines, boolean needCode, boolean needLines) {
+    if (!needCode && !needLines) return new GuiDocument("", List.of());
+    if (!needLines) {
+      StringBuilder code = new StringBuilder();
+      for (ClangLine line : nativeLines) {
+        code.append(PrettyPrinter.getText(line)).append('\n');
+      }
+      return new GuiDocument(code.toString(), List.of());
+    }
     Program program = function.getProgram();
     Listing listing = program.getListing();
     Address entryPoint = function.getEntryPoint();
@@ -57,14 +76,16 @@ record GuiDocument(String code, List<Line> lines) {
     Map<Address, String> codeUnitAddresses = new HashMap<>();
     Map<Function, SymbolResource> functionSymbols = new HashMap<>();
     List<Line> lines = new ArrayList<>(nativeLines.size());
-    StringBuilder code = new StringBuilder();
+    StringBuilder code = needCode ? new StringBuilder() : null;
     Address previous = null;
     boolean hasLastClosest = false;
     Address lastClosest = null;
     String lastLocationAddress = null;
     String lastCodeUnitAddress = null;
     for (ClangLine line : nativeLines) {
-      code.append(PrettyPrinter.getText(line)).append('\n');
+      if (needCode) {
+        code.append(PrettyPrinter.getText(line)).append('\n');
+      }
       List<ClangToken> lineTokens = line.getAllTokens();
       List<LocatedToken> tokens = new ArrayList<>(lineTokens.size());
       int indent = line.getIndentString().length();
@@ -141,7 +162,7 @@ record GuiDocument(String code, List<Line> lines) {
         previous = firstLineAddress;
       }
     }
-    return new GuiDocument(code.toString(), List.copyOf(lines));
+    return new GuiDocument(needCode ? code.toString() : "", List.copyOf(lines));
   }
 
   private static String canonical(Address address, Map<Address, String> canonicalAddresses) {

@@ -45,11 +45,15 @@ final class GlobalVariableMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(addressSelector),
         globalVariableFields,
         List.of(ApiVocabulary.ADDRESS),
-        request ->
-            registry
-                .services()
-                .globalVariableService()
-                .getGlobalVariable(text(selector(request), ApiVocabulary.ADDRESS)));
+        (request, projectedFields) -> {
+          String address = text(selector(request), ApiVocabulary.ADDRESS);
+          return projectedFields == null
+              ? registry.services().globalVariableService().getGlobalVariable(address)
+              : registry
+                  .services()
+                  .globalVariableService()
+                  .getGlobalVariable(address, projectedFields);
+        });
     Map<String, Object> globalVariableFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
@@ -63,19 +67,23 @@ final class GlobalVariableMethods implements ApiMethodProvider {
         ApiSchemaCatalog.scanListInput(globalVariableFilter),
         globalVariableFields,
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
-          return registry
-              .services()
-              .globalVariableService()
-              .listGlobalVariables(
-                  new Query(
-                      addressScan(request),
-                      optionalText(filter, ApiVocabulary.NAME),
-                      optionalText(filter, ApiVocabulary.NAMESPACE),
-                      Boolean.TRUE.equals(bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(null)),
-                      page.limit(),
-                      page.cursor()));
+          Query query =
+              new Query(
+                  addressScan(request),
+                  optionalText(filter, ApiVocabulary.NAME),
+                  optionalText(filter, ApiVocabulary.NAMESPACE),
+                  Boolean.TRUE.equals(bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(null)),
+                  page.limit(),
+                  page.cursor(),
+                  projectedFields);
+          return projectedFields == null
+              ? registry.services().globalVariableService().listGlobalVariables(query)
+              : registry
+                  .services()
+                  .globalVariableService()
+                  .listGlobalVariables(query, projectedFields);
         });
     Map<String, Object> globalVariableDefinition =
         WireSchema.object(

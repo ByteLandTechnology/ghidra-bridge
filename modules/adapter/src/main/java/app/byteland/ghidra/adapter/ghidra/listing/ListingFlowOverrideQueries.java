@@ -30,6 +30,16 @@ final class ListingFlowOverrideQueries {
       AddressScanOptions options,
       int limit,
       String cursorRaw) {
+    return getFlowOverrides(selected, flowOverrides, options, limit, cursorRaw, null);
+  }
+
+  Page<InstructionResource> getFlowOverrides(
+      FlowOverrideScope selected,
+      List<FlowOverrideValue> flowOverrides,
+      AddressScanOptions options,
+      int limit,
+      String cursorRaw,
+      Set<String> fields) {
     ListingFlowOverrideScopes.ResolvedScope scope = scopes.resolve(selected);
     Address cursor = resolveCursor(cursorRaw, scope);
     AddressScanRanges.Resolved range =
@@ -45,7 +55,7 @@ final class ListingFlowOverrideQueries {
       String address = AddressUtil.canonicalAddress(instruction.getAddress());
       InstructionResource match =
           filters.contains(valueOf(instruction))
-              ? ListingDescriptions.toInstructionItem(instruction, null)
+              ? ListingDescriptions.toInstructionItem(instruction, null, fields)
               : null;
       scan.visit(address, address, match);
       if (scan.stopped()) break;

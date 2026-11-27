@@ -41,7 +41,12 @@ final class SymbolMethods implements ApiMethodProvider {
         ApiSchemaCatalog.selectorInput(idSelector),
         ApiSchemaCatalog.symbolFields(),
         List.of("id"),
-        request -> registry.services().symbolService().getSymbol(longId(selector(request), "id")));
+        (request, projectedFields) -> {
+          long id = longId(selector(request), "id");
+          return projectedFields == null
+              ? registry.services().symbolService().getSymbol(id)
+              : registry.services().symbolService().getSymbol(id, projectedFields);
+        });
     Map<String, Object> symbolFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(
@@ -56,22 +61,23 @@ final class SymbolMethods implements ApiMethodProvider {
         ApiSchemaCatalog.scanListInput(symbolFilter),
         ApiSchemaCatalog.symbolFields(),
         List.of(ApiVocabulary.ADDRESS, "id"),
-        (request, page) -> {
+        (request, page, projectedFields) -> {
           Map<String, Object> filter = filter(request);
-          return registry
-              .services()
-              .symbolService()
-              .listSymbols(
-                  new SymbolService.SymbolQuery(
-                      addressScan(request),
-                      optionalText(filter, ApiVocabulary.NAME),
-                      optionalText(filter, ApiVocabulary.ADDRESS),
-                      optionalText(filter, ApiVocabulary.TYPE),
-                      optionalText(filter, ApiVocabulary.NAMESPACE),
-                      optionalText(filter, ApiVocabulary.SOURCE_TYPE),
-                      Boolean.TRUE.equals(bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(null)),
-                      page.limit(),
-                      page.cursor()));
+          SymbolService.SymbolQuery query =
+              new SymbolService.SymbolQuery(
+                  addressScan(request),
+                  optionalText(filter, ApiVocabulary.NAME),
+                  optionalText(filter, ApiVocabulary.ADDRESS),
+                  optionalText(filter, ApiVocabulary.TYPE),
+                  optionalText(filter, ApiVocabulary.NAMESPACE),
+                  optionalText(filter, ApiVocabulary.SOURCE_TYPE),
+                  Boolean.TRUE.equals(bool(filter, ApiVocabulary.CASE_SENSITIVE).orElse(null)),
+                  page.limit(),
+                  page.cursor(),
+                  projectedFields);
+          return projectedFields == null
+              ? registry.services().symbolService().listSymbols(query)
+              : registry.services().symbolService().listSymbols(query, projectedFields);
         });
     registry.writeResource(
         "symbol.patch",

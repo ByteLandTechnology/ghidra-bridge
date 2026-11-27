@@ -21,7 +21,10 @@ final class ProgramMethods implements ApiMethodProvider {
         ApiSchemaCatalog.input(ApiSchemaCatalog.props(ApiVocabulary.FIELDS, fields)),
         ApiSchemaCatalog.programFields(),
         List.of(ApiVocabulary.NAME),
-        request -> registry.services().programService().getProgram());
+        (request, projectedFields) ->
+            projectedFields == null
+                ? registry.services().programService().getProgram()
+                : registry.services().programService().getProgram(projectedFields));
     registry.writeResult(
         "program.save",
         MethodEffects.mutationWithoutTransaction(false, true),
@@ -36,7 +39,10 @@ final class ProgramMethods implements ApiMethodProvider {
         ApiSchemaCatalog.input(ApiSchemaCatalog.props(ApiVocabulary.FIELDS, fields)),
         Set.of("language_id", "compiler_spec_id", "processor", "endian", "address_size"),
         List.of("language_id"),
-        request -> registry.services().programService().getLanguageInfo());
+        (request, projectedFields) ->
+            projectedFields == null
+                ? registry.services().programService().getLanguageInfo()
+                : registry.services().programService().getLanguageInfo(projectedFields));
     registry.list(
         "address_space.list",
         ApiSchemaCatalog.listInput(WireSchema.object(Map.of())),
@@ -48,7 +54,12 @@ final class ProgramMethods implements ApiMethodProvider {
             "max_address",
             "default"),
         List.of(ApiVocabulary.NAME),
-        (request, page) ->
-            registry.services().programService().getAddressSpaces(page.limit(), page.cursor()));
+        (request, page, projectedFields) ->
+            projectedFields == null
+                ? registry.services().programService().getAddressSpaces(page.limit(), page.cursor())
+                : registry
+                    .services()
+                    .programService()
+                    .getAddressSpaces(page.limit(), page.cursor(), projectedFields));
   }
 }

@@ -35,11 +35,26 @@ public interface FunctionService {
       String contains,
       Boolean external,
       Boolean thunk,
-      Set<String> includes) {
+      Set<String> includes,
+      Set<String> fields) {
     public FunctionQuery {
       if (scan == null) throw new IllegalArgumentException("scan is required");
       if (limit < 1 || limit > 1000) throw new IllegalArgumentException("limit must be in 1..1000");
       includes = includes == null ? Set.of() : Set.copyOf(includes);
+      fields = fields == null ? null : Set.copyOf(fields);
+    }
+
+    public FunctionQuery(
+        AddressScanOptions scan,
+        int limit,
+        String cursor,
+        String name,
+        String entry,
+        String contains,
+        Boolean external,
+        Boolean thunk,
+        Set<String> includes) {
+      this(scan, limit, cursor, name, entry, contains, external, thunk, includes, null);
     }
   }
 
@@ -52,6 +67,27 @@ public interface FunctionService {
   Page<FunctionResource> listFunctions(FunctionQuery query);
 
   /**
+   * Returns one page of functions that match the query with an optional field projection.
+   */
+  default Page<FunctionResource> listFunctions(FunctionQuery query, Set<String> fields) {
+    if (fields == null && query.fields() == null) {
+      return listFunctions(query);
+    }
+    return listFunctions(
+        new FunctionQuery(
+            query.scan(),
+            query.limit(),
+            query.cursor(),
+            query.name(),
+            query.entry(),
+            query.contains(),
+            query.external(),
+            query.thunk(),
+            query.includes(),
+            fields));
+  }
+
+  /**
    * Returns function details by address.
    *
    * @param rawAddress function entry point address
@@ -59,6 +95,14 @@ public interface FunctionService {
    * @return function resource details
    */
   FunctionResource getFunction(String rawAddress, Set<String> includes);
+
+  /**
+   * Returns function details by address with an optional field projection.
+   */
+  default FunctionResource getFunction(
+      String rawAddress, Set<String> includes, Set<String> fields) {
+    return getFunction(rawAddress, includes);
+  }
 
   /** Creates a function at an entry address. */
   FunctionResource createFunction(String rawAddress, String name, boolean disassemble);
@@ -85,9 +129,25 @@ public interface FunctionService {
   Page<FunctionCallResource> getCallers(String rawAddress, int limit, String cursor);
 
   /**
+   * Returns one page of functions that call the target function with an optional projection.
+   */
+  default Page<FunctionCallResource> getCallers(
+      String rawAddress, int limit, String cursor, Set<String> fields) {
+    return getCallers(rawAddress, limit, cursor);
+  }
+
+  /**
    * Returns one page of functions called by the target function.
    */
   Page<FunctionCallResource> getCallees(String rawAddress, int limit, String cursor);
+
+  /**
+   * Returns one page of functions called by the target function with an optional projection.
+   */
+  default Page<FunctionCallResource> getCallees(
+      String rawAddress, int limit, String cursor, Set<String> fields) {
+    return getCallees(rawAddress, limit, cursor);
+  }
 
   /**
    * Updates a function parameter that exists.
