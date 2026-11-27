@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
 import app.byteland.ghidra.api.ApiRegistry;
@@ -108,6 +107,7 @@ class McpCompositeToolsTest {
 
     HttpRequest request =
         HttpRequest.newBuilder(URI.create(endpoint))
+            .timeout(Duration.ofSeconds(10))
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2026-07-28")
             .header("Mcp-Method", "tools/call")
@@ -209,8 +209,7 @@ class McpCompositeToolsTest {
             unused(DataTypeService.class),
             tx,
             "test");
-    return new AgentDispatcher(
-        services, new AgentConfig(null, "127.0.0.1", 8765, "/ws/agent", null, "test", null));
+    return new AgentDispatcher(services, "test");
   }
 
   private interface Handler {
