@@ -21,6 +21,35 @@ env:
   GHIDRA_ZIP_SHA256: "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db"
 
 jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check workflows with actionlint
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          curl -sL --fail -o "$RUNNER_TEMP/actionlint/${archive}" "$url"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint/${archive}" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint/${archive}" -C "$RUNNER_TEMP/actionlint" actionlint
+          "$RUNNER_TEMP/actionlint/actionlint"
+
+      - name: Check shell scripts with ShellCheck
+        run: shellcheck .github/scripts/*.sh
+
+      - name: Verify repository hygiene
+        run: bash .github/scripts/verify-repository-hygiene.sh
+
   verify-matrix:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -72,7 +101,7 @@ jobs:
 
       - name: Upload test diagnostics
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verify-test-diagnostics-${{ matrix.os }}
           if-no-files-found: ignore
@@ -99,7 +128,7 @@ jobs:
 
   release:
     # Update the release PR or create a release after main passes verification.
-    needs: verify
+    needs: [lint, verify]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -197,7 +226,7 @@ jobs:
 
       - name: Upload test diagnostics
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: publish-test-diagnostics
           if-no-files-found: ignore

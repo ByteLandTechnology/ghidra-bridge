@@ -306,13 +306,74 @@ project(':launcher').tasks.named('test', Test) {
     classpath += files(tasks.named('compileGeneratedScripts'))
 }
 
+def stripJavaComments = { String source ->
+    def result = new StringBuilder(source.length())
+    int index = 0
+    int length = source.length()
+    while (index < length) {
+        char current = source.charAt(index)
+        char next = index + 1 < length ? source.charAt(index + 1) : (char) 0
+        if (current == (char) '/' && next == (char) '/') {
+            index += 2
+            while (index < length && source.charAt(index) != (char) '\n') {
+                index++
+            }
+            continue
+        }
+        if (current == (char) '/' && next == (char) '*') {
+            boolean multiline = false
+            index += 2
+            while (index + 1 < length
+                && !(source.charAt(index) == (char) '*' && source.charAt(index + 1) == (char) '/')) {
+                if (source.charAt(index) == (char) '\n') {
+                    multiline = true
+                }
+                index++
+            }
+            index = Math.min(length, index + 2)
+            result.append(multiline ? '\n' : ' ')
+            continue
+        }
+        if (current == (char) '"' && index + 2 < length
+            && source.charAt(index + 1) == (char) '"' && source.charAt(index + 2) == (char) '"') {
+            index += 3
+            while (index + 2 < length
+                && !(source.charAt(index) == (char) '"'
+                    && source.charAt(index + 1) == (char) '"'
+                    && source.charAt(index + 2) == (char) '"')) {
+                index += source.charAt(index) == (char) '\\' ? 2 : 1
+            }
+            index = Math.min(length, index + 3)
+            result.append('""')
+            continue
+        }
+        if (current == (char) '"' || current == (char) '\'') {
+            char quote = current
+            index++
+            while (index < length && source.charAt(index) != quote && source.charAt(index) != (char) '\n') {
+                index += source.charAt(index) == (char) '\\' ? 2 : 1
+            }
+            if (index < length && source.charAt(index) == quote) {
+                index++
+            }
+            result.append(quote).append(quote)
+            continue
+        }
+        result.append(current)
+        index++
+    }
+    return result.toString()
+}
+
 tasks.register('verifyArchitecture') {
     group = 'verification'
     doLast {
+        def forbiddenImport = ~/(?m)^\s*import\s+(?:static\s+)?ghidra\..*/
         ['domain', 'wire', 'contracts', 'runtime', 'transport/websocket', 'transport/mcp']
             .each { module ->
-            fileTree("modules/${module}/src/main/java") { include '**/*.java' }.each { source ->
-                if (source.readLines().any { it ==~ /^import ghidra\..*/ }) {
+            fileTree("modules/${module}/src") { include '**/*.java' }.each { source ->
+                def stripped = stripJavaComments(source.getText('UTF-8'))
+                if (forbiddenImport.matcher(stripped).find()) {
                     throw new GradleException("Ghidra API import outside adapter/launcher: ${source}")
                 }
             }

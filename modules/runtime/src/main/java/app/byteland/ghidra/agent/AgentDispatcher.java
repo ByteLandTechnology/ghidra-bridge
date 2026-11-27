@@ -2,6 +2,7 @@ package app.byteland.ghidra.agent;
 
 import app.byteland.ghidra.api.ApiCatalog;
 import app.byteland.ghidra.api.ApiRegistry;
+import app.byteland.ghidra.network.NetworkBinding;
 import app.byteland.ghidra.service.BridgeServices;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,19 +19,9 @@ public final class AgentDispatcher implements AutoCloseable {
   private final DispatchBarrier dispatchBarrier = new DispatchBarrier();
   private volatile boolean shuttingDown;
 
-  public AgentDispatcher(BridgeServices services, AgentConfig config) {
-    this(
-        Objects.requireNonNull(services, "services"),
-        Objects.requireNonNull(config, "config").sessionId());
-  }
-
   public AgentDispatcher(BridgeServices services, String sessionId) {
     this.services = Objects.requireNonNull(services, "services");
-    String normalizedSessionId = AgentConfig.optionalText(sessionId);
-    if (normalizedSessionId == null) {
-      throw new IllegalArgumentException("sessionId is required");
-    }
-    this.sessionId = normalizedSessionId;
+    this.sessionId = NetworkBinding.requiredText(sessionId, "session_id");
     this.apiRegistry =
         new ApiRegistry(services, this.sessionId, this::sessionInfo, this::markShuttingDown);
   }
