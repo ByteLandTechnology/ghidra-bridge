@@ -49,9 +49,21 @@ class CDeclarationsAndPrototypesWireTest {
                 .inputSchema()
                 .get("$defs");
     Map<?, ?> dataTypeRef = (Map<?, ?>) defs.get("data_type_reference");
+    assertEquals(Map.of("propertyName", "kind"), dataTypeRef.get("discriminator"));
     List<?> oneOf = (List<?>) dataTypeRef.get("oneOf");
     assertEquals(5, oneOf.size());
     assertTrue(oneOf.contains(WireSchema.nonBlankString()));
+
+    Map<?, ?> parseCProps =
+        (Map<?, ?>)
+            ApiRegistry.catalog().methods().stream()
+                .filter(method -> method.name().equals("data_type.parse_c"))
+                .findFirst()
+                .orElseThrow()
+                .inputSchema()
+                .get("properties");
+    assertEquals("/", ((Map<?, ?>) parseCProps.get("category_path")).get("default"));
+    assertEquals("replace", ((Map<?, ?>) parseCProps.get("conflict_mode")).get("default"));
   }
 
   @Test
