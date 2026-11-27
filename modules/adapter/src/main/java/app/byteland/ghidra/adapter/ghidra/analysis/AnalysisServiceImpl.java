@@ -17,6 +17,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 public final class AnalysisServiceImpl implements AnalysisService {
+  private final GhidraSession context;
   private final Supplier<Object> currentTarget;
   private final Function<Object, Backend> backendFactory;
   private final Function<Object, ExecutorService> executorFactory;
@@ -25,7 +26,7 @@ public final class AnalysisServiceImpl implements AnalysisService {
   private boolean closed;
 
   public AnalysisServiceImpl(GhidraSession context) {
-    Objects.requireNonNull(context, "context");
+    this.context = Objects.requireNonNull(context, "context");
     this.currentTarget = context::currentProgram;
     this.backendFactory =
         target -> {
@@ -44,6 +45,7 @@ public final class AnalysisServiceImpl implements AnalysisService {
     Objects.requireNonNull(backend, "backend");
     Objects.requireNonNull(executor, "executor");
     Object singleTarget = new Object();
+    this.context = null;
     this.currentTarget = () -> singleTarget;
     this.backendFactory = ignored -> backend;
     this.executorFactory = ignored -> executor;
@@ -54,6 +56,7 @@ public final class AnalysisServiceImpl implements AnalysisService {
       Supplier<Object> currentTarget,
       Function<Object, Backend> backendFactory,
       Function<Object, ExecutorService> executorFactory) {
+    this.context = null;
     this.currentTarget = Objects.requireNonNull(currentTarget, "currentTarget");
     this.backendFactory = Objects.requireNonNull(backendFactory, "backendFactory");
     this.executorFactory = Objects.requireNonNull(executorFactory, "executorFactory");
@@ -148,6 +151,9 @@ public final class AnalysisServiceImpl implements AnalysisService {
     }
     for (ProgramAnalysisState state : activeStates) {
       stopState(state);
+    }
+    if (context != null) {
+      context.close();
     }
   }
 

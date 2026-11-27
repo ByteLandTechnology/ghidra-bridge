@@ -920,9 +920,7 @@ class AgentDispatcherConcurrencyTest {
               dataTypeService(),
               transactionRunner(),
               "test-program");
-      AgentConfig config =
-          new AgentConfig("ws://127.0.0.1:9999/ws/agent", null, null, null, null, "sess-1", null);
-      this.dispatcher = new AgentDispatcher(services, config);
+      this.dispatcher = new AgentDispatcher(services, "sess-1");
     }
 
     private LockObservation observe(String methodName, boolean writeExpected) {

@@ -173,6 +173,45 @@ public final class WireSchema {
     return oneOf(List.of(first, second, third, fourth, fifth));
   }
 
+  public static Map<String, Object> taggedOneOf(
+      String propertyName, List<Map<String, Object>> schemas) {
+    if (propertyName == null || propertyName.isBlank()) {
+      throw new IllegalArgumentException("discriminator propertyName must not be blank");
+    }
+    if (schemas == null || schemas.isEmpty()) {
+      throw new IllegalArgumentException("taggedOneOf requires at least one branch schema");
+    }
+    List<Map<String, Object>> copied = List.copyOf(schemas);
+    java.util.Set<String> seenTags = new java.util.LinkedHashSet<>();
+    for (Map<String, Object> branch : copied) {
+      String tag = branchTag(branch, propertyName);
+      if (tag == null || tag.isBlank()) {
+        throw new IllegalArgumentException(
+            "taggedOneOf branch is missing single-value string tag for " + propertyName);
+      }
+      if (!seenTags.add(tag)) {
+        throw new IllegalArgumentException(
+            "duplicate taggedOneOf discriminator value for " + propertyName + ": " + tag);
+      }
+    }
+    Map<String, Object> union = new LinkedHashMap<>();
+    union.put(ApiVocabulary.ONE_OF, copied);
+    union.put(ApiVocabulary.DISCRIMINATOR, Map.of("propertyName", propertyName));
+    return java.util.Collections.unmodifiableMap(union);
+  }
+
+  @SafeVarargs
+  public static Map<String, Object> taggedOneOf(
+      String propertyName, Map<String, Object>... schemas) {
+    return taggedOneOf(propertyName, List.of(schemas));
+  }
+
+  public static Map<String, Object> withDefault(Map<String, Object> schema, Object defaultValue) {
+    Map<String, Object> copy = new LinkedHashMap<>(schema);
+    copy.put(ApiVocabulary.DEFAULT, defaultValue);
+    return java.util.Collections.unmodifiableMap(copy);
+  }
+
   public static Map<String, Object> dataTypeReference() {
     return Map.of(ApiVocabulary.REFERENCE, "#/$defs/data_type_reference");
   }
@@ -211,7 +250,7 @@ public final class WireSchema {
     array.put(ApiVocabulary.PROPERTIES, arrayProperties);
     Map<String, Object> untyped =
         object(Map.of(ApiVocabulary.KIND, stringEnum("untyped_pointer")), ApiVocabulary.KIND);
-    return oneOf(named, pointer, array, untyped);
+    return taggedOneOf(ApiVocabulary.KIND, named, pointer, array, untyped);
   }
 
   private static final Integer MAX_INT = Integer.MAX_VALUE;
@@ -328,6 +367,10 @@ public final class WireSchema {
         }
         Map<String, Object> projected = new LinkedHashMap<>(schema);
         projected.put(ApiVocabulary.ONE_OF, List.copyOf(projectedAlternatives));
+        String discriminator = discriminatorProperty(schema);
+        if (discriminator != null && !selection.containsKey(discriminator)) {
+          projected.remove(ApiVocabulary.DISCRIMINATOR);
+        }
         return Collections.unmodifiableMap(projected);
       }
       java.util.LinkedHashSet<Map<String, Object>> uniqueAlternatives =
@@ -350,6 +393,11 @@ public final class WireSchema {
       projected.remove(ANY_OF);
       String unionKey =
           schema.containsKey(ANY_OF) || objectBranchCount > 1 ? ANY_OF : ApiVocabulary.ONE_OF;
+      String discriminator = discriminatorProperty(schema);
+      if (ANY_OF.equals(unionKey)
+          || (discriminator != null && !selection.containsKey(discriminator))) {
+        projected.remove(ApiVocabulary.DISCRIMINATOR);
+      }
       projected.put(unionKey, List.copyOf(uniqueAlternatives));
       return Collections.unmodifiableMap(projected);
     }
@@ -422,6 +470,14 @@ public final class WireSchema {
     if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
       return evaluate(value, resolveReference(reference, definitions), cursor, definitions);
     }
+    Object type = schema.get(ApiVocabulary.TYPE);
+    if (type != null) {
+      ValidationFailure typeFailure =
+          evaluateType(value, String.valueOf(type), schema, cursor, definitions);
+      if (typeFailure != null) {
+        return typeFailure;
+      }
+    }
     if (schema.get(ANY_OF) instanceof List<?> anyAlternatives) {
       ValidationFailure firstFailure = null;
       for (Object rawAlternative : anyAlternatives) {
@@ -445,6 +501,10 @@ public final class WireSchema {
       return failure("invalid_union", cursor, " must match at least one schema");
     }
     if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
+      String discriminator = discriminatorProperty(schema);
+      if (discriminator != null) {
+        return evaluateDiscriminated(value, alternatives, discriminator, cursor, definitions);
+      }
       ValidationFailure firstFailure = null;
       int matchCount = 0;
       for (Object rawAlternative : alternatives) {
@@ -469,11 +529,16 @@ public final class WireSchema {
       }
       return failure("invalid_union", cursor, " must match exactly one schema");
     }
-    Object type = schema.get(ApiVocabulary.TYPE);
-    if (type == null) {
-      return null;
-    }
-    return switch (String.valueOf(type)) {
+    return null;
+  }
+
+  private static ValidationFailure evaluateType(
+      Object value,
+      String type,
+      Map<String, Object> schema,
+      PointerCursor cursor,
+      Map<String, Map<String, Object>> definitions) {
+    return switch (type) {
       case ApiVocabulary.NULL ->
           value == null ? null : failure(ApiVocabulary.INVALID_TYPE, cursor, " must be null");
       case ApiVocabulary.OBJECT -> evaluateObject(value, schema, cursor, definitions);
@@ -487,6 +552,50 @@ public final class WireSchema {
               : failure(ApiVocabulary.INVALID_TYPE, cursor, " must be a boolean");
       default -> throw new IllegalStateException("unsupported schema type: " + type);
     };
+  }
+
+  private static ValidationFailure evaluateDiscriminated(
+      Object value,
+      List<?> alternatives,
+      String propertyName,
+      PointerCursor cursor,
+      Map<String, Map<String, Object>> definitions) {
+    if (!(value instanceof Map<?, ?> object)) {
+      return failure(ApiVocabulary.INVALID_TYPE, cursor, " must be an object");
+    }
+    for (Map.Entry<?, ?> entry : object.entrySet()) {
+      if (!(entry.getKey() instanceof String)) {
+        return failure("invalid_field", cursor, " field names must be strings");
+      }
+    }
+    if (!object.containsKey(propertyName)) {
+      return fieldFailure(ApiVocabulary.MISSING_FIELD, cursor, propertyName, " is required");
+    }
+    Object rawTag = object.get(propertyName);
+    Map<String, Object> matchedBranch;
+    if (cursor != null) {
+      cursor.pushKey(propertyName);
+    }
+    try {
+      if (!(rawTag instanceof String tag)) {
+        return failure(ApiVocabulary.INVALID_TYPE, cursor, " must be a string");
+      }
+      matchedBranch = findTaggedBranch(alternatives, propertyName, tag);
+      if (matchedBranch == null) {
+        if (cursor == null) {
+          return ValidationFailure.PROBE_FAILURE;
+        }
+        return failure(
+            "invalid_enum",
+            cursor,
+            " must be one of: " + String.join(", ", allowedTags(alternatives, propertyName)));
+      }
+    } finally {
+      if (cursor != null) {
+        cursor.pop();
+      }
+    }
+    return evaluate(value, matchedBranch, cursor, definitions);
   }
 
   @SuppressWarnings(ApiVocabulary.UNCHECKED)
@@ -591,10 +700,162 @@ public final class WireSchema {
     if (text.length() < minimum) {
       return failure(ApiVocabulary.INVALID_VALUE, cursor, " must not be empty");
     }
+    if (schema.get(ApiVocabulary.CONST) instanceof String expected && !expected.equals(text)) {
+      return cursor == null
+          ? ValidationFailure.PROBE_FAILURE
+          : failure("invalid_enum", cursor, " must equal " + expected);
+    }
     if (schema.get(ApiVocabulary.ENUM) instanceof List<?> values && !values.contains(text)) {
-      return failure("invalid_enum", cursor, " has an unsupported value");
+      if (cursor == null) {
+        return ValidationFailure.PROBE_FAILURE;
+      }
+      String allowed =
+          values.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(", "));
+      return failure("invalid_enum", cursor, " must be one of: " + allowed);
     }
     return null;
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static String branchTag(Map<String, Object> branch, String propertyName) {
+    if (!ApiVocabulary.OBJECT.equals(branch.get(ApiVocabulary.TYPE))) {
+      return null;
+    }
+    if (!(branch.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties)) {
+      return null;
+    }
+    if (!(properties.get(propertyName) instanceof Map<?, ?> tagSchema)) {
+      return null;
+    }
+    if (tagSchema.get(ApiVocabulary.CONST) instanceof String constant && !constant.isBlank()) {
+      return constant;
+    }
+    if (tagSchema.get(ApiVocabulary.ENUM) instanceof List<?> values
+        && values.size() == 1
+        && values.getFirst() instanceof String single
+        && !single.isBlank()) {
+      return single;
+    }
+    return null;
+  }
+
+  private static String discriminatorProperty(Map<String, Object> schema) {
+    if (schema.get(ApiVocabulary.DISCRIMINATOR) instanceof Map<?, ?> discriminator
+        && discriminator.get("propertyName") instanceof String propertyName
+        && !propertyName.isBlank()) {
+      return propertyName;
+    }
+    return null;
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static Map<String, Object> findTaggedBranch(
+      List<?> alternatives, String propertyName, String tag) {
+    for (Object rawAlternative : alternatives) {
+      Map<String, Object> branch = (Map<String, Object>) rawAlternative;
+      if (tag.equals(branchTag(branch, propertyName))) {
+        return branch;
+      }
+    }
+    return null;
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static List<String> allowedTags(List<?> alternatives, String propertyName) {
+    List<String> tags = new ArrayList<>(alternatives.size());
+    for (Object rawAlternative : alternatives) {
+      String tag = branchTag((Map<String, Object>) rawAlternative, propertyName);
+      if (tag != null) {
+        tags.add(tag);
+      }
+    }
+    return tags;
+  }
+
+  static Map<String, Map<String, Object>> definitionsOf(Map<String, Object> schema) {
+    return schemaDefinitions(schema);
+  }
+
+  static Map<String, Object> dereference(
+      Map<String, Object> schema, Map<String, Map<String, Object>> definitions) {
+    Object ref = schema.get(ApiVocabulary.REFERENCE);
+    if (ref instanceof String reference && reference.startsWith("#/$defs/")) {
+      return dereference(resolveReference(reference, definitions), definitions);
+    }
+    return schema;
+  }
+
+  static Map<String, Object> selectTaggedBranch(
+      Map<String, Object> schema, Map<String, Object> object) {
+    String discriminator = discriminatorProperty(schema);
+    if (discriminator == null
+        || !(schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives)
+        || !(object.get(discriminator) instanceof String tag)) {
+      return null;
+    }
+    return findTaggedBranch(alternatives, discriminator, tag);
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  static String rebasePointer(String pointer, Map<String, Object> requestSchema) {
+    if (pointer == null || pointer.isBlank() || requestSchema == null) {
+      return pointer;
+    }
+    String normalized = pointer.startsWith("/") ? pointer : "/" + pointer;
+    int nextSlash = normalized.indexOf('/', 1);
+    String firstSegment =
+        unescapePointer(
+            nextSlash < 0 ? normalized.substring(1) : normalized.substring(1, nextSlash));
+    if (firstSegment.isEmpty()) {
+      return normalized;
+    }
+    Map<String, Map<String, Object>> definitions = schemaDefinitions(requestSchema);
+    Map<String, Object> topProperties = collectObjectProperties(requestSchema, definitions);
+    if (topProperties.containsKey(firstSegment)) {
+      return normalized;
+    }
+    String matchedContainer = null;
+    for (Map.Entry<String, Object> entry : topProperties.entrySet()) {
+      if (!(entry.getValue() instanceof Map<?, ?> childRaw)) {
+        continue;
+      }
+      Map<String, Object> childProperties =
+          collectObjectProperties((Map<String, Object>) childRaw, definitions);
+      if (childProperties.containsKey(firstSegment)) {
+        if (matchedContainer != null && !matchedContainer.equals(entry.getKey())) {
+          return normalized;
+        }
+        matchedContainer = entry.getKey();
+      }
+    }
+    return matchedContainer == null
+        ? normalized
+        : "/" + escapePointer(matchedContainer) + normalized;
+  }
+
+  @SuppressWarnings(ApiVocabulary.UNCHECKED)
+  private static Map<String, Object> collectObjectProperties(
+      Map<String, Object> rawSchema, Map<String, Map<String, Object>> definitions) {
+    Map<String, Object> schema = dereference(rawSchema, definitions);
+    Map<String, Object> collected = new LinkedHashMap<>();
+    if (schema.get(ApiVocabulary.PROPERTIES) instanceof Map<?, ?> properties) {
+      for (Map.Entry<?, ?> entry : properties.entrySet()) {
+        collected.put(String.valueOf(entry.getKey()), entry.getValue());
+      }
+    }
+    if (schema.get(ApiVocabulary.ONE_OF) instanceof List<?> alternatives) {
+      for (Object rawAlternative : alternatives) {
+        if (rawAlternative instanceof Map<?, ?> branch) {
+          collectObjectProperties((Map<String, Object>) branch, definitions)
+              .forEach(collected::putIfAbsent);
+        }
+      }
+    }
+    return collected;
+  }
+
+  private static String unescapePointer(String value) {
+    return value.replace("~1", "/").replace("~0", "~");
   }
 
   private static ValidationFailure evaluateInteger(
