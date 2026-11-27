@@ -324,8 +324,9 @@ class WireSchemaPaginationAndFilterTest {
     ApiRegistry registry = registryWith(unused(MemoryService.class), unused(FunctionService.class),
         unused(DataTypeService.class), unused(SymbolService.class), unused(ReferenceService.class));
 
-    for (String method : List.of("instruction.get", "instruction.list", "flow_override.list",
-        "flow_override.patch", "code_unit.list", "data_unit.list")) {
+    for (String method : List.of("instruction.get", "instruction.list", "instruction.assemble",
+        "instruction.disassemble", "flow_override.list", "flow_override.patch", "code_unit.list",
+        "data_unit.list")) {
       Map<?, ?> itemSchema = itemOrResourceSchema(registry.method(method).responseCodec().schema());
       Map<?, ?> bytesSchema = (Map<?, ?>) ((Map<?, ?>) itemSchema.get("properties")).get("bytes");
       assertEquals(List.of("encoding", "data", "length"), bytesSchema.get("required"), method);

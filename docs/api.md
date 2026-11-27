@@ -15,8 +15,9 @@
 | `memory_block.get` | `read-only` | Get memory block data from the active program. |
 | `memory_block.list` | `read-only` | List memory block data in the active program. |
 | `memory.read` | `read-only` | Read up to 65536 bytes at an address as hex or base64. The default length is 256 and the default encoding is hex. |
-| `memory.write` | `destructive mutation` | Write hex or base64 bytes at an address. |
+| `memory.write` | `destructive mutation` | Write hex or base64 bytes at an address. Set `clear_existing` to clear code or data first. Set `disassemble` to decode the new bytes. |
 | `code_unit.list` | `read-only` | List each code unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
+| `code_unit.clear` | `destructive mutation` | Clear defined instructions and data at an address or in a range. Keep labels and bytes. |
 | `data_unit.list` | `read-only` | List each data unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `global_variable.get` | `read-only` | Get the global variable at one address. |
 | `global_variable.list` | `read-only` | List global variables in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
@@ -26,6 +27,8 @@
 | `global_variable.delete` | `destructive mutation` | Delete a global variable definition. Set delete_symbol to delete its primary label. |
 | `instruction.get` | `read-only` | Get instruction data from the active program. |
 | `instruction.list` | `read-only` | List each instruction in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
+| `instruction.assemble` | `destructive mutation` | Assemble Sleigh instructions at an address. Set `pad_nop` to fill leftover instruction bytes with NOP instructions. |
+| `instruction.disassemble` | `mutation` | Disassemble undefined bytes at an address or in a range. Set `follow_flow` to control flow disassembly. |
 | `flow_override.list` | `read-only` | List stored flow overrides. Select an address, function, or range. Use next_cursor to get the next page. |
 | `flow_override.patch` | `destructive mutation` | Set or clear flow overrides. Select an address, function, or range. |
 | `function.get` | `read-only` | Get function data from the active program. |

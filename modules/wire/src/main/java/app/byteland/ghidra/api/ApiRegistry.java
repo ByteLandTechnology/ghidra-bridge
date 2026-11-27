@@ -492,34 +492,30 @@ public final class ApiRegistry {
                     : WireValues.resourceRestrictingRoots(handler.handle(request), allowedRoots));
   }
 
-  void writeListResult(
+  void writeItemsResult(
       String name,
       MethodEffects effects,
       String description,
       Map<String, Object> input,
       Set<String> fields,
       List<String> identityFields,
-      ApiMethod.Handler<Map<String, Object>, Page<?>> handler) {
+      ApiMethod.Handler<Map<String, Object>, List<?>> handler) {
     Set<String> allowedRoots = WireValues.rootFields(fields);
     register(
         name,
         effects,
         description,
         input,
-        WireSchema.withDefinitions(
-            WireSchema.object(
-                Map.of(
-                    ApiVocabulary.ITEMS,
-                    WireSchema.array(
-                        ApiSchemaCatalog.resourceSchema(fields, identityFields, false),
-                        0,
-                        Integer.MAX_VALUE)),
-                ApiVocabulary.ITEMS)),
+        ApiSchemaCatalog.itemsSchema(fields, identityFields),
         fields,
         identityFields,
         (ProjectedHandler<Map<String, Object>, Object>)
             (request, selected) -> {
-              Page<?> rawPage = handler.handle(request);
+              List<?> items = handler.handle(request);
+              if (items == null) {
+                throw new IllegalArgumentException("items result must be a List: null");
+              }
+              Page<?> rawPage = Page.of(items, 1, null);
               Map<String, Object> normalizedList =
                   selected != null
                       ? WireValues.list(rawPage, selected)
@@ -528,6 +524,30 @@ public final class ApiRegistry {
                   ApiVocabulary.ITEMS,
                   Collections.unmodifiableList((List<?>) normalizedList.get(ApiVocabulary.ITEMS)));
             });
+  }
+
+  void writeListResult(
+      String name,
+      MethodEffects effects,
+      String description,
+      Map<String, Object> input,
+      Set<String> fields,
+      List<String> identityFields,
+      ApiMethod.Handler<Map<String, Object>, Page<?>> handler) {
+    writeItemsResult(
+        name,
+        effects,
+        description,
+        input,
+        fields,
+        identityFields,
+        request -> {
+          Page<?> page = handler.handle(request);
+          if (page == null) {
+            throw new IllegalArgumentException("list results must be a Page: null");
+          }
+          return page.items();
+        });
   }
 
   private void registerBatch() {
@@ -683,7 +703,9 @@ public final class ApiRegistry {
             + " The default length is 256 and the default encoding is hex.";
       }
       case "memory.write" -> {
-        return "Write hex or base64 bytes at an address.";
+        return "Write hex or base64 bytes at an address."
+            + " Set `clear_existing` to clear code or data first."
+            + " Set `disassemble` to decode the new bytes.";
       }
       case "address.resolve" -> {
         return "Resolve an address and report its memory block, the function that contains it,"
@@ -892,6 +914,31 @@ public final class ApiRegistry {
       translated.initCause(error);
       throw translated;
     }
+  }
+
+  static app.byteland.ghidra.service.listing.AddressOrRangeScope addressOrRangeScope(
+      Map<String, Object> selector) {
+    return addressOrRangeScope(selector, "/selector");
+  }
+
+  static app.byteland.ghidra.service.listing.AddressOrRangeScope addressOrRangeScope(
+      Map<String, Object> selector, String target) {
+    String kind = selector == null ? null : optionalText(selector, ApiVocabulary.KIND);
+    if (kind == null) {
+      throw ApiException.badRequest(
+          ApiVocabulary.MISSING_FIELD, target + "/kind is required", target + "/kind");
+    }
+    return switch (kind) {
+      case ApiVocabulary.ADDRESS ->
+          new app.byteland.ghidra.service.listing.AddressOrRangeScope.AddressScope(
+              text(selector, ApiVocabulary.ADDRESS));
+      case "range" ->
+          new app.byteland.ghidra.service.listing.AddressOrRangeScope.RangeScope(
+              text(selector, ApiVocabulary.START), text(selector, ApiVocabulary.END));
+      default ->
+          throw ApiException.badRequest(
+              "invalid_enum", target + "/kind has an unsupported value", target + "/kind");
+    };
   }
 
   static app.byteland.ghidra.service.listing.FlowOverrideScope flowScope(

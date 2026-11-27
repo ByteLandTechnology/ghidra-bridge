@@ -1,13 +1,16 @@
 package app.byteland.ghidra.api;
 
 import static app.byteland.ghidra.api.ApiRegistry.MAX_LIMIT;
+import static app.byteland.ghidra.api.ApiRegistry.addressOrRangeScope;
 import static app.byteland.ghidra.api.ApiRegistry.addressScan;
+import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.flowOverrides;
 import static app.byteland.ghidra.api.ApiRegistry.flowScope;
 import static app.byteland.ghidra.api.ApiRegistry.object;
 import static app.byteland.ghidra.api.ApiRegistry.patch;
 import static app.byteland.ghidra.api.ApiRegistry.selector;
+import static app.byteland.ghidra.api.ApiRegistry.stringList;
 import static app.byteland.ghidra.api.ApiRegistry.text;
 
 import app.byteland.ghidra.api.ApiMethod.MethodEffects;
@@ -50,6 +53,53 @@ final class InstructionMethods implements ApiMethodProvider {
                     addressScan(request),
                     page.limit(),
                     page.cursor()));
+    registry.writeItemsResult(
+        "instruction.assemble",
+        MethodEffects.mutation(true, true),
+        "Assemble Sleigh instructions at an address."
+            + " Set `pad_nop` to fill leftover instruction bytes with NOP instructions.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.SELECTOR,
+                addressSelector,
+                "instructions",
+                WireSchema.array(
+                    WireSchema.nonBlankString(), 1, ApiSchemaCatalog.MAX_NESTED_ITEMS),
+                "pad_nop",
+                WireSchema.withDefault(WireSchema.bool(), false)),
+            ApiVocabulary.SELECTOR,
+            "instructions"),
+        ApiSchemaCatalog.instructionFields(),
+        List.of(ApiVocabulary.ADDRESS),
+        request ->
+            registry
+                .services()
+                .listingService()
+                .assembleInstructions(
+                    text(selector(request), ApiVocabulary.ADDRESS),
+                    stringList(request.get("instructions")),
+                    bool(request, "pad_nop").orElse(false)));
+    registry.writeItemsResult(
+        "instruction.disassemble",
+        MethodEffects.mutation(false, true),
+        "Disassemble undefined bytes at an address or in a range."
+            + " Set `follow_flow` to control flow disassembly.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.SELECTOR,
+                ApiSchemaCatalog.addressOrRangeSelector(),
+                "follow_flow",
+                WireSchema.withDefault(WireSchema.bool(), true)),
+            ApiVocabulary.SELECTOR),
+        ApiSchemaCatalog.instructionFields(),
+        List.of(ApiVocabulary.ADDRESS),
+        request ->
+            registry
+                .services()
+                .listingService()
+                .disassembleInstructions(
+                    addressOrRangeScope(selector(request)),
+                    bool(request, "follow_flow").orElse(true)));
     Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
     Map<String, Object> flowFilter =
         WireSchema.object(

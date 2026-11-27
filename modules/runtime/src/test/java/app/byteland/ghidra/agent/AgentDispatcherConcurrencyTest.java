@@ -33,6 +33,8 @@ import app.byteland.ghidra.service.function.FunctionService;
 import app.byteland.ghidra.service.function.VariableStorageReference;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableResource;
 import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
+import app.byteland.ghidra.service.listing.AddressOrRangeScope;
+import app.byteland.ghidra.service.listing.CodeUnitClearReceipt;
 import app.byteland.ghidra.service.listing.CodeUnitResource;
 import app.byteland.ghidra.service.listing.DataUnitResource;
 import app.byteland.ghidra.service.listing.FlowOverrideScope;
@@ -188,10 +190,10 @@ class AgentDispatcherConcurrencyTest {
   void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(59, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
-      assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
+      assertEquals(28, writeCalls.size(), "All 28 single-mutation methods must be tested");
 
       for (Map.Entry<String, Map<String, Object>> call : writeCalls) {
         String method = call.getKey();
@@ -754,6 +756,20 @@ class AgentDispatcherConcurrencyTest {
                         "bytes", Map.of("encoding", "hex", "data", "9090", "length", 2)))));
     calls.add(
         Map.entry(
+            "code_unit.clear",
+            Map.of("selector", Map.of("kind", "address", "address", "ram:00100000"))));
+    calls.add(
+        Map.entry(
+            "instruction.assemble",
+            Map.of(
+                "selector", Map.of("address", "ram:00100000"),
+                "instructions", List.of("NOP"))));
+    calls.add(
+        Map.entry(
+            "instruction.disassemble",
+            Map.of("selector", Map.of("kind", "address", "address", "ram:00100000"))));
+    calls.add(
+        Map.entry(
             "flow_override.patch",
             Map.of(
                 "selector", Map.of("kind", "address", "address", "ram:00100000"),
@@ -1146,7 +1162,8 @@ class AgentDispatcherConcurrencyTest {
         }
 
         @Override
-        public void patchMemory(String startRaw, ByteSequence bytes) {
+        public void patchMemory(
+            String startRaw, ByteSequence bytes, boolean clearExisting, boolean disassemble) {
           observe("memory.write", true);
         }
 
@@ -1212,6 +1229,27 @@ class AgentDispatcherConcurrencyTest {
         public InstructionResource getInstruction(String rawAddress) {
           observe("instruction.get", false);
           return insn;
+        }
+
+        @Override
+        public List<InstructionResource> assembleInstructions(
+            String rawAddress, List<String> instructions, boolean padNop) {
+          observe("instruction.assemble", true);
+          return List.of(insn);
+        }
+
+        @Override
+        public List<InstructionResource> disassembleInstructions(
+            AddressOrRangeScope scope, boolean followFlow) {
+          observe("instruction.disassemble", true);
+          return List.of(insn);
+        }
+
+        @Override
+        public CodeUnitClearReceipt clearCodeUnits(
+            AddressOrRangeScope scope, boolean clearContext) {
+          observe("code_unit.clear", true);
+          return new CodeUnitClearReceipt("ram:00100000", "ram:00100000", true);
         }
 
         @Override

@@ -97,6 +97,10 @@ class ApiMethodBuildersTest {
 
     Set<String> fields = Set.of("address", "name");
     List<String> identity = List.of("address");
+    Map<String, Object> itemsSchema = ApiSchemaCatalog.itemsSchema(fields, identity);
+    assertEquals(List.of("items"), propertyKeys(itemsSchema));
+    assertEquals(List.of("items"), itemsSchema.get("required"));
+
     Map<String, Object> listSchema = ApiSchemaCatalog.listSchema(fields, identity);
     assertEquals(List.of("items", "next_cursor"), propertyKeys(listSchema));
     assertEquals(List.of("items"), listSchema.get("required"));

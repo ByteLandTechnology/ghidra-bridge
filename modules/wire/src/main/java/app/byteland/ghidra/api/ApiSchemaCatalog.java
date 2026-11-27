@@ -59,6 +59,15 @@ final class ApiSchemaCatalog {
       WireSchema.object(Map.of("shutdown", WireSchema.bool()), "shutdown");
   static final Map<String, Object> DELETED_RECEIPT_SCHEMA =
       WireSchema.object(Map.of("deleted", WireSchema.bool()), "deleted");
+  static final Map<String, Object> CODE_UNIT_CLEAR_RECEIPT_SCHEMA =
+      WireSchema.object(
+          props(
+              START, WireSchema.nonBlankString(),
+              END, WireSchema.nonBlankString(),
+              "cleared", WireSchema.bool()),
+          START,
+          END,
+          "cleared");
   static final Map<String, Object> MEMORY_WRITE_RECEIPT_SCHEMA =
       WireSchema.object(
           Map.of(
@@ -174,25 +183,37 @@ final class ApiSchemaCatalog {
     return properties;
   }
 
+  static Map<String, Object> addressOrRangeSelector() {
+    return WireSchema.taggedOneOf(KIND, addressSelectorBranch(), rangeSelectorBranch());
+  }
+
   static Map<String, Object> flowSelector() {
     return WireSchema.taggedOneOf(
         KIND,
-        WireSchema.object(
-            props(KIND, WireSchema.stringEnum(ADDRESS), ADDRESS, WireSchema.nonBlankString()),
-            KIND,
-            ADDRESS),
+        addressSelectorBranch(),
         WireSchema.object(
             props(KIND, WireSchema.stringEnum(FUNCTION), ENTRY, WireSchema.nonBlankString()),
             KIND,
             ENTRY),
-        WireSchema.object(
-            props(
-                KIND, WireSchema.stringEnum("range"),
-                START, WireSchema.nonBlankString(),
-                END, WireSchema.nonBlankString()),
-            KIND,
-            START,
-            END));
+        rangeSelectorBranch());
+  }
+
+  private static Map<String, Object> addressSelectorBranch() {
+    return WireSchema.object(
+        props(KIND, WireSchema.stringEnum(ADDRESS), ADDRESS, WireSchema.nonBlankString()),
+        KIND,
+        ADDRESS);
+  }
+
+  private static Map<String, Object> rangeSelectorBranch() {
+    return WireSchema.object(
+        props(
+            KIND, WireSchema.stringEnum("range"),
+            START, WireSchema.nonBlankString(),
+            END, WireSchema.nonBlankString()),
+        KIND,
+        START,
+        END);
   }
 
   static Map<String, Object> flowOverride() {
@@ -433,20 +454,32 @@ final class ApiSchemaCatalog {
     return false;
   }
 
+  static Map<String, Object> itemsSchema(Set<String> fields, List<String> identityFields) {
+    return listEnvelopeSchema(fields, identityFields, false, false, false);
+  }
+
   static Map<String, Object> listSchema(Set<String> fields, List<String> identityFields) {
-    return pagedListSchema(fields, identityFields, false);
+    return listEnvelopeSchema(fields, identityFields, true, true, false);
   }
 
   static Map<String, Object> scanListSchema(Set<String> fields, List<String> identityFields) {
-    return pagedListSchema(fields, identityFields, true);
+    return listEnvelopeSchema(fields, identityFields, true, true, true);
   }
 
-  private static Map<String, Object> pagedListSchema(
-      Set<String> fields, List<String> identityFields, boolean includeScan) {
+  private static Map<String, Object> listEnvelopeSchema(
+      Set<String> fields,
+      List<String> identityFields,
+      boolean projectable,
+      boolean includeCursor,
+      boolean includeScan) {
     Map<String, Map<String, Object>> properties = new LinkedHashMap<>();
     properties.put(
-        ITEMS, WireSchema.array(resourceSchema(fields, identityFields), 0, Integer.MAX_VALUE));
-    properties.put(ApiVocabulary.NEXT_CURSOR, WireSchema.nonBlankString());
+        ITEMS,
+        WireSchema.array(
+            resourceSchema(fields, identityFields, projectable), 0, Integer.MAX_VALUE));
+    if (includeCursor) {
+      properties.put(ApiVocabulary.NEXT_CURSOR, WireSchema.nonBlankString());
+    }
     if (includeScan) {
       properties.put(ApiVocabulary.SCAN, SCAN_PROGRESS_SCHEMA);
     }

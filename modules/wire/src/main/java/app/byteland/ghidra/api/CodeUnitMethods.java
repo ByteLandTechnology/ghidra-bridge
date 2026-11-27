@@ -1,9 +1,13 @@
 package app.byteland.ghidra.api;
 
+import static app.byteland.ghidra.api.ApiRegistry.addressOrRangeScope;
 import static app.byteland.ghidra.api.ApiRegistry.addressScan;
+import static app.byteland.ghidra.api.ApiRegistry.bool;
 import static app.byteland.ghidra.api.ApiRegistry.filter;
 import static app.byteland.ghidra.api.ApiRegistry.optionalText;
+import static app.byteland.ghidra.api.ApiRegistry.selector;
 
+import app.byteland.ghidra.api.ApiMethod.MethodEffects;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,6 +49,25 @@ final class CodeUnitMethods implements ApiMethodProvider {
                     page.limit(),
                     optionalText(filter(request), ApiVocabulary.KIND, "all"),
                     page.cursor()));
+    registry.writeResult(
+        "code_unit.clear",
+        MethodEffects.mutation(true, true),
+        "Clear defined instructions and data at an address or in a range. Keep labels and bytes.",
+        ApiSchemaCatalog.input(
+            ApiSchemaCatalog.props(
+                ApiVocabulary.SELECTOR,
+                ApiSchemaCatalog.addressOrRangeSelector(),
+                "clear_context",
+                WireSchema.withDefault(WireSchema.bool(), false)),
+            ApiVocabulary.SELECTOR),
+        ApiSchemaCatalog.CODE_UNIT_CLEAR_RECEIPT_SCHEMA,
+        request ->
+            registry
+                .services()
+                .listingService()
+                .clearCodeUnits(
+                    addressOrRangeScope(selector(request)),
+                    bool(request, "clear_context").orElse(false)));
     registry.scanList(
         "data_unit.list",
         ApiSchemaCatalog.scanListInput(WireSchema.object(Map.of())),
