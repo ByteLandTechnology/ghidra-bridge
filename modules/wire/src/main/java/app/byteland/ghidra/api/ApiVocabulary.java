@@ -14,6 +14,7 @@ final class ApiVocabulary {
   static final String CASE_SENSITIVE = "case_sensitive";
   static final String CATEGORY_PATH = "category_path";
   static final String COMMENT = "comment";
+  static final String CONST = "const";
   static final String CURSOR = "cursor";
   static final String DATA = "data";
   static final String DATA_TYPE = "data_type";
@@ -21,6 +22,7 @@ final class ApiVocabulary {
   static final String DELETED = "deleted";
   static final String DEFINITIONS = "$defs";
   static final String DIRECTION = "direction";
+  static final String DISCRIMINATOR = "discriminator";
   static final String ENCODING = "encoding";
   static final String END = "end";
   static final String ENTRY = "entry";

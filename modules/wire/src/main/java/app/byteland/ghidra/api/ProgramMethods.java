@@ -66,7 +66,7 @@ final class ProgramMethods implements ApiMethodProvider {
             ApiSchemaCatalog.props(
                 ApiVocabulary.NAME, WireSchema.string(),
                 "library", WireSchema.string(),
-                "regex", WireSchema.bool(),
+                "regex", WireSchema.withDefault(WireSchema.bool(), false),
                 "name_regex", WireSchema.string(),
                 "library_regex", WireSchema.string()));
     registry.list(
@@ -86,7 +86,7 @@ final class ProgramMethods implements ApiMethodProvider {
             ApiSchemaCatalog.props(
                 ApiVocabulary.NAME, WireSchema.string(),
                 ApiVocabulary.NAMESPACE, WireSchema.string(),
-                "regex", WireSchema.bool(),
+                "regex", WireSchema.withDefault(WireSchema.bool(), false),
                 "name_regex", WireSchema.string(),
                 "is_function", WireSchema.bool()));
     registry.list(

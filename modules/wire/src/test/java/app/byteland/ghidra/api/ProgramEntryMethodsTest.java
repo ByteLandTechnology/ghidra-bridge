@@ -135,7 +135,10 @@ class ProgramEntryMethodsTest {
     Map<?, ?> page2 =
         (Map<?, ?>)
             registry.dispatch(
-                "import.list", Map.of("page", Map.of("limit", 1, "cursor", cursor)));
+                "import.list",
+                Map.of(
+                    "filter", Map.of("regex", false),
+                    "page", Map.of("limit", 1, "cursor", cursor)));
     List<?> items2 = (List<?>) page2.get("items");
     assertEquals(1, items2.size());
     assertEquals("_ZN3foo3barEv", ((Map<?, ?>) items2.get(0)).get("name"));

@@ -1,5 +1,6 @@
 package app.byteland.ghidra.api;
 
+import app.byteland.ghidra.service.DomainException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -59,10 +60,14 @@ public record ApiMethod<Request, Response>(
   }
 
   Response invokeHandler(Request request, Set<String> selected) throws Exception {
-    if (handler instanceof ProjectedHandler<Request, Response> projectedHandler) {
-      return projectedHandler.handleProjected(request, selected);
+    try {
+      if (handler instanceof ProjectedHandler<Request, Response> projectedHandler) {
+        return projectedHandler.handleProjected(request, selected);
+      }
+      return handler.handle(request);
+    } catch (Exception error) {
+      throw rebaseExecutionFailure(error, requestCodec.schema());
     }
-    return handler.handle(request);
   }
 
   public Object encodeResponse(Request request, Response response) {
@@ -89,6 +94,44 @@ public record ApiMethod<Request, Response>(
     Set<String> selected = selectProjection(request);
     Response response = invokeHandler(request, selected);
     return encodeResponse(response, selected);
+  }
+
+  private static Exception rebaseExecutionFailure(
+      Exception error, Map<String, Object> requestSchema) {
+    if (!(error instanceof DomainException domain)) {
+      return error;
+    }
+    ApiFailures.Failure normalized = ApiFailures.normalize(error);
+    BridgeError bridgeError = normalized.error();
+    String currentTarget = bridgeError.target();
+    String rebasedTarget = WireSchema.rebasePointer(currentTarget, requestSchema);
+    if (Objects.equals(currentTarget, rebasedTarget)) {
+      return error;
+    }
+    String message = bridgeError.message();
+    String rawTarget = domain.target();
+    if (currentTarget != null
+        && !currentTarget.isBlank()
+        && message != null
+        && message.startsWith(currentTarget + " ")) {
+      message = rebasedTarget + message.substring(currentTarget.length());
+    } else if (rawTarget != null
+        && !rawTarget.isBlank()
+        && message != null
+        && message.startsWith(rawTarget + " ")) {
+      message = rebasedTarget + message.substring(rawTarget.length());
+    }
+    ApiException rebased =
+        new ApiException(
+            normalized.status(),
+            new BridgeError(
+                bridgeError.status(),
+                bridgeError.code(),
+                message,
+                rebasedTarget,
+                bridgeError.details()));
+    rebased.initCause(error);
+    return rebased;
   }
 
   @FunctionalInterface
