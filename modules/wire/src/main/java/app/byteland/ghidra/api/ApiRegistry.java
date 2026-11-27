@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -33,6 +34,7 @@ public final class ApiRegistry {
   private final String sessionId;
   private final Supplier<Map<String, Object>> sessionSupplier;
   private final Runnable shutdownAction;
+  private final LongSupplier nanoTime;
   private final Map<String, ApiMethod<Map<String, Object>, Object>> methodsByName =
       new LinkedHashMap<>();
   private final ApiCatalog catalogSnapshot;
@@ -43,10 +45,20 @@ public final class ApiRegistry {
       String sessionId,
       Supplier<Map<String, Object>> sessionSupplier,
       Runnable shutdownAction) {
+    this(services, sessionId, sessionSupplier, shutdownAction, System::nanoTime);
+  }
+
+  public ApiRegistry(
+      BridgeServices services,
+      String sessionId,
+      Supplier<Map<String, Object>> sessionSupplier,
+      Runnable shutdownAction,
+      LongSupplier nanoTime) {
     this.bridgeServices = java.util.Objects.requireNonNull(services, "services");
     this.sessionId = sessionId;
     this.sessionSupplier = sessionSupplier;
     this.shutdownAction = shutdownAction;
+    this.nanoTime = java.util.Objects.requireNonNull(nanoTime, "nanoTime");
     registerAll();
     registerInterface();
     catalogSnapshot = ApiCatalog.from(INTERFACE_VERSION, methodsByName.values());
@@ -551,7 +563,8 @@ public final class ApiRegistry {
                   app.byteland.ghidra.service.TransactionRunner.Operation<T> operation) {
                 return ApiRegistry.this.inTransaction(operation);
               }
-            });
+            },
+            nanoTime);
     BatchMethod.Registration registration = batchMethod.registration();
     registerWithCodecs(
         BatchMethod.NAME,
@@ -778,7 +791,8 @@ public final class ApiRegistry {
     return new AddressScanOptions(
         rangeStart == null ? filterStart : rangeStart,
         rangeEnd,
-        integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS));
+        BatchMethod.clampTimeoutMs(
+            integer(request, "timeout_ms", AddressScanOptions.DEFAULT_TIMEOUT_MS)));
   }
 
   static void validateByteLength(Map<String, Object> bytes, String target) {

@@ -288,6 +288,38 @@ class DecompilationServiceImplTest {
     }
   }
 
+  @Test
+  void acceptsBatchClampedSubHundredMillisecondTimeoutsAndRejectsInvalidBounds() {
+    AtomicLong modificationNumber = new AtomicLong(7L);
+    Fixture fixture = createFixture(modificationNumber);
+    FakeDecompiler decompiler = new FakeDecompiler(fixture.markup, true, null, () -> 0);
+
+    try (DecompilationServiceImpl service = new DecompilationServiceImpl(
+        fixture.session, new LeasePool<>(1, () -> decompiler))) {
+      DecompilationResource oneMs =
+          service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 1, false);
+      assertTrue(oneMs.completed());
+      assertEquals(1, decompiler.lastTimeoutSecs.get());
+
+      DecompilationResource fortyMs =
+          service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 40, false);
+      assertTrue(fortyMs.completed());
+      assertEquals(1, decompiler.lastTimeoutSecs.get());
+
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> service.decompileFunction("0x101000", DecompilationResource.Format.TEXT, 0, false));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> service.decompileFunction(
+              "0x101000", DecompilationResource.Format.TEXT, -5, false));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> service.decompileFunction(
+              "0x101000", DecompilationResource.Format.TEXT, 300_001, false));
+    }
+  }
+
   private static Fixture createFixture(AtomicLong modificationNumber) {
     Address entry = RAM_SPACE.getAddress(0x101000L);
     CodeUnit unit = (CodeUnit) Proxy.newProxyInstance(
@@ -399,6 +431,7 @@ class DecompilationServiceImplTest {
     private final String errorMessage;
     private final IntSupplier flushAction;
     private final AtomicInteger flushCalls = new AtomicInteger();
+    private final AtomicInteger lastTimeoutSecs = new AtomicInteger();
     private final AtomicInteger decompileCalls = new AtomicInteger();
     private final AtomicInteger setOptionsCalls = new AtomicInteger();
     private int flushCallsBeforeLastDecompile = -1;
@@ -433,6 +466,7 @@ class DecompilationServiceImplTest {
     @Override
     public synchronized DecompileResults decompileFunction(
         Function func, int timeoutSecs, TaskMonitor monitor) {
+      lastTimeoutSecs.set(timeoutSecs);
       decompileCalls.incrementAndGet();
       flushCallsBeforeLastDecompile = flushCalls.get();
       return new DecompileResults(func, null, null, null, errorMessage, null, null) {

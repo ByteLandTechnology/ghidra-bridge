@@ -75,14 +75,18 @@ public record ApiMethod<Request, Response>(
   }
 
   Object encodeResponse(Response response, Set<String> selected) {
-    if (selected == null) {
-      return responseCodec.encode(response);
+    return encodeProjectedResponse(projectResponse(response, selected), selected);
+  }
+
+  Object projectResponse(Response response, Set<String> selected) {
+    if (selected == null || handler instanceof ProjectedHandler<?, ?>) {
+      return response;
     }
-    Object projectedResponse =
-        handler instanceof ProjectedHandler<?, ?>
-            ? response
-            : FieldProjection.projectFallback(response, selected);
-    if (responseCodec instanceof JsonValueCodec valueCodec) {
+    return FieldProjection.projectFallback(response, selected);
+  }
+
+  Object encodeProjectedResponse(Object projectedResponse, Set<String> selected) {
+    if (selected != null && responseCodec instanceof JsonValueCodec valueCodec) {
       return valueCodec.encode(projectedResponse, selected);
     }
     @SuppressWarnings("unchecked")

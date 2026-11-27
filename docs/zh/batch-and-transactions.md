@@ -82,6 +82,12 @@
 - 单个条目失败后，后续条目仍会继续执行。
 - 响应中同时包含 `{id, result}` 成功结果与 `{id, error}` 错误信息。
 
+## 执行限制
+
+每次 `batch.execute` 调用都会强制执行响应大小与运行时间上限：
+- **响应大小上限（`8 MiB`）**：序列化后的批处理结果不能超过 `8,388,608` UTF-8 字节。超出上限时，`per_item` 模式会立即中止剩余条目并返回 HTTP 状态码 `413`（`code=response_too_large`）；`all_or_none` 模式会回滚事务并返回 HTTP 状态码 `409`（`code=batch_rolled_back`）。
+- **执行时限（`60,000 ms`）**：批处理总运行时间上限为 60 秒，扫描操作与 `decompilation.get` 条目的 `timeout_ms` 会自动裁剪至剩余批处理时间。当无剩余时间或线程中断时，批处理停止并返回 HTTP 状态码 `408`（`code=operation_timed_out`），在 `all_or_none` 模式下会回滚已执行的变更。
+
 ## 分析并发冲突控制
 
 批处理请求会检查当前程序的后台分析状态：

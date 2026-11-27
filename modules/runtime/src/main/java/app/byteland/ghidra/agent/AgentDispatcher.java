@@ -7,6 +7,7 @@ import app.byteland.ghidra.service.BridgeServices;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.LongSupplier;
 
 /**
  * Dispatches API requests with concurrent shared reads, fair exclusive writes, and graceful
@@ -20,10 +21,16 @@ public final class AgentDispatcher implements AutoCloseable {
   private volatile boolean shuttingDown;
 
   public AgentDispatcher(BridgeServices services, String sessionId) {
+    this(services, sessionId, System::nanoTime);
+  }
+
+  public AgentDispatcher(BridgeServices services, String sessionId, LongSupplier nanoTime) {
     this.services = Objects.requireNonNull(services, "services");
     this.sessionId = NetworkBinding.requiredText(sessionId, "session_id");
+    Objects.requireNonNull(nanoTime, "nanoTime");
     this.apiRegistry =
-        new ApiRegistry(services, this.sessionId, this::sessionInfo, this::markShuttingDown);
+        new ApiRegistry(
+            services, this.sessionId, this::sessionInfo, this::markShuttingDown, nanoTime);
   }
 
   @Override

@@ -140,7 +140,7 @@ final class CommentMethods implements ApiMethodProvider {
                     new AddressScanOptions(
                         text(selected, ApiVocabulary.ADDRESS),
                         text(selected, ApiVocabulary.ADDRESS),
-                        AddressScanOptions.DEFAULT_TIMEOUT_MS),
+                        BatchMethod.clampTimeoutMs(AddressScanOptions.DEFAULT_TIMEOUT_MS)),
                     commentType(text(selected, ApiVocabulary.TYPE)),
                     null,
                     2,

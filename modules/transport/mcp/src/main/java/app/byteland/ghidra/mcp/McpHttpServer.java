@@ -4,7 +4,9 @@ import app.byteland.ghidra.ExecutorShutdown;
 import app.byteland.ghidra.JsonRpc;
 import app.byteland.ghidra.JsonUtil;
 import app.byteland.ghidra.agent.AgentDispatcher;
+import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.api.ApiFailures;
+import app.byteland.ghidra.api.BridgeError;
 import app.byteland.ghidra.network.NetworkBinding;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
@@ -55,6 +57,8 @@ public final class McpHttpServer implements AutoCloseable {
   static final int MAX_CONCURRENT_REQUESTS = 32;
   static final int MAX_SSE_SESSIONS = 16;
   static final int MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
+  static final int MAX_TOOL_RESULT_BYTES = 8 * 1024 * 1024 + 65_536;
+  static final int MAX_HTTP_RESPONSE_BYTES = 3 * MAX_TOOL_RESULT_BYTES + 4096;
   static final Duration DEFAULT_BODY_READ_TIMEOUT = Duration.ofSeconds(10);
   static final Duration DEFAULT_SSE_KEEPALIVE_INTERVAL = Duration.ofSeconds(15);
   private static final int LISTEN_BACKLOG = 256;
@@ -310,6 +314,7 @@ public final class McpHttpServer implements AutoCloseable {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
       RequestLog log = new RequestLog(requestLogSink);
+      Object requestId = null;
       boolean requestPermitAcquired = false;
       boolean bodyRead = false;
       boolean closeExchange = true;
@@ -421,10 +426,11 @@ public final class McpHttpServer implements AutoCloseable {
           validateInitializeProtocol(exchange, request);
         }
         Object id = request.get("id");
+        requestId = id;
         Object response = handleRequest(request, id, log, statelessProtocol);
         if (sseSession != null) {
           if (response != null) {
-            sseSession.sendEvent("message", JsonUtil.toJson(response));
+            sseSession.sendEvent("message", JsonUtil.toJson(response, MAX_HTTP_RESPONSE_BYTES));
           }
           log.id(id).ok().status(202);
           exchange.sendResponseHeaders(202, -1);
@@ -439,6 +445,38 @@ public final class McpHttpServer implements AutoCloseable {
       } catch (UnreadRequestAbortedException abortedUnread) {
         closeExchange = false;
         throw abortedUnread;
+      } catch (ApiException error) {
+        log.error()
+            .status(error.status())
+            .id(requestId)
+            .cause(error.status() >= 500 ? rootMessage(error) : null);
+        if (error.status() == HTTP_PAYLOAD_TOO_LARGE) {
+          exchange.getResponseHeaders().set("Connection", "close");
+        }
+        Map<String, Object> errResponse =
+            mcpErrorResponse(
+                exchange,
+                requestId,
+                JSONRPC_INTERNAL_ERROR,
+                error.getMessage(),
+                error.error().toMap());
+        String querySessionId = getQueryParameter(exchange.getRequestURI(), SESSION_ID_PARAM);
+        SseSession activeSse = querySessionId == null ? null : sseSessions.get(querySessionId);
+        if (activeSse != null && activeSse.isActive()) {
+          try {
+            activeSse.sendEvent(
+                "message", JsonUtil.toJson(errResponse, MAX_HTTP_RESPONSE_BYTES));
+          } catch (IOException ignored) {
+          }
+          exchange.sendResponseHeaders(202, -1);
+        } else {
+          try {
+            writeJsonResponse(exchange, error.status(), errResponse, bodyRead);
+          } catch (UnreadRequestAbortedException abortedUnread) {
+            closeExchange = false;
+            throw abortedUnread;
+          }
+        }
       } catch (JsonRpcError error) {
         log.error()
             .status(error.httpStatus())
@@ -464,7 +502,8 @@ public final class McpHttpServer implements AutoCloseable {
         SseSession activeSse = querySessionId == null ? null : sseSessions.get(querySessionId);
         if (activeSse != null && activeSse.isActive()) {
           try {
-            activeSse.sendEvent("message", JsonUtil.toJson(errResponse));
+            activeSse.sendEvent(
+                "message", JsonUtil.toJson(errResponse, MAX_HTTP_RESPONSE_BYTES));
           } catch (IOException ignored) {
           }
           if (error.httpStatus() == HTTP_PAYLOAD_TOO_LARGE) {
@@ -713,22 +752,38 @@ public final class McpHttpServer implements AutoCloseable {
       Object rawArguments = params.get("arguments");
       if (toolRegistry.isHelpTool(name)) {
         Map<String, Object> helpResult = toolRegistry.help(rawArguments);
+        Map<String, Object> response = toolResult(helpResult, false, statelessProtocol);
         log.ok().status(200);
-        return toolResult(helpResult, false, statelessProtocol);
+        return response;
       }
       McpToolRegistry.ResolvedToolCall call = toolRegistry.resolveDomainCall(name, rawArguments);
       Object result = dispatcher.dispatch(call.descriptor().name(), call.operationParams());
       if (dispatcher.isShuttingDown()) {
         closeSoon();
       }
+      Map<String, Object> response =
+          toolResult(
+              Map.of("operation", call.operation(), "result", result), false, statelessProtocol);
       log.ok().status(200);
-      return toolResult(
-          Map.of("operation", call.operation(), "result", result), false, statelessProtocol);
+      return response;
     } catch (JsonRpcError error) {
       throw error;
     } catch (Exception error) {
       log.error().status(200);
-      return toolResult(errorPayload(error), true, statelessProtocol);
+      try {
+        return toolResult(errorPayload(error), true, statelessProtocol);
+      } catch (ApiException oversizedError) {
+        return toolResult(
+            new BridgeError(
+                    413,
+                    "response_too_large",
+                    "Tool error response exceeds maximum size",
+                    null,
+                    Map.of())
+                .toMap(),
+            true,
+            statelessProtocol);
+      }
     }
   }
 
@@ -738,10 +793,11 @@ public final class McpHttpServer implements AutoCloseable {
     content.put("type", "text");
     Object structured;
     if (result instanceof String string) {
+      JsonUtil.utf8ByteLength(string, MAX_TOOL_RESULT_BYTES);
       content.put("text", string);
       structured = structuredContent(result, string);
     } else {
-      String json = JsonUtil.toJson(result);
+      String json = JsonUtil.toJson(result, MAX_TOOL_RESULT_BYTES);
       content.put("text", json);
       structured = structuredContent(result, JsonUtil.rawJson(json));
     }
@@ -1209,7 +1265,7 @@ public final class McpHttpServer implements AutoCloseable {
       writeJson(exchange, statusCode, payload);
       return;
     }
-    byte[] bytes = JsonUtil.toJson(payload).getBytes(StandardCharsets.UTF_8);
+    byte[] bytes = JsonUtil.toJson(payload, MAX_HTTP_RESPONSE_BYTES).getBytes(StandardCharsets.UTF_8);
     exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
     exchange.getResponseHeaders().set("Connection", "close");
     writeAndAbortUnread(exchange, statusCode, bytes);
@@ -1267,11 +1323,11 @@ public final class McpHttpServer implements AutoCloseable {
 
   private static void writeJson(HttpExchange exchange, int statusCode, Object payload)
       throws IOException {
-    byte[] bytes = JsonUtil.toJson(payload).getBytes(StandardCharsets.UTF_8);
+    int contentLength = JsonUtil.utf8ByteLength(payload, MAX_HTTP_RESPONSE_BYTES);
     exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-    exchange.sendResponseHeaders(statusCode, bytes.length);
+    exchange.sendResponseHeaders(statusCode, contentLength);
     try (OutputStream output = exchange.getResponseBody()) {
-      output.write(bytes);
+      JsonUtil.writeUtf8(payload, output, contentLength);
     }
   }
 

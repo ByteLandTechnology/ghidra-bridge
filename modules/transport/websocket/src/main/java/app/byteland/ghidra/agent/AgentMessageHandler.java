@@ -6,6 +6,8 @@ import app.byteland.ghidra.api.BridgeError;
 import java.util.Map;
 
 final class AgentMessageHandler {
+  static final int MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
+
   private final AgentConfig config;
   private final AgentDispatcher dispatcher;
   private final Runnable disconnectAction;
@@ -68,15 +70,15 @@ final class AgentMessageHandler {
 
   private void handleRequest(
       AgentClientChannels.MessageChannel channel, MessageEnvelope.Request request) {
-    String payload;
+    String serialized;
     try {
       Object result = dispatcher.dispatch(request.method(), request.params());
       MessageEnvelope.Response response = new MessageEnvelope.Response(request.id(), result, null);
-      payload = JsonUtil.toJson(response.toMap());
+      serialized = JsonUtil.toJson(response.toMap(), MAX_MESSAGE_BYTES);
     } catch (Exception error) {
-      payload = serializeErrorResponse(request.id(), error);
+      serialized = serializeErrorResponse(request.id(), error);
     }
-    channel.sendText(payload);
+    channel.sendText(serialized);
     if (dispatcher.isShuttingDown()) {
       disconnectOnShutdown();
     }
@@ -84,12 +86,41 @@ final class AgentMessageHandler {
 
   private static String serializeErrorResponse(Object requestId, Exception error) {
     try {
-      return JsonUtil.toJson(AgentErrorMapper.errorResponse(requestId, error).toMap());
-    } catch (RuntimeException serializationFailure) {
       return JsonUtil.toJson(
-          AgentErrorMapper.errorResponse(
-                  requestId, new IllegalStateException("Internal error", serializationFailure))
-              .toMap());
+          AgentErrorMapper.errorResponse(requestId, error).toMap(), MAX_MESSAGE_BYTES);
+    } catch (ApiException oversizedError) {
+      return serializeOversizedFallback(requestId);
+    } catch (RuntimeException serializationFailure) {
+      try {
+        return JsonUtil.toJson(
+            AgentErrorMapper.errorResponse(
+                    requestId, new IllegalStateException("Internal error", serializationFailure))
+                .toMap(),
+            MAX_MESSAGE_BYTES);
+      } catch (ApiException oversizedError) {
+        return serializeOversizedFallback(null);
+      }
+    }
+  }
+
+  private static String serializeOversizedFallback(Object requestId) {
+    BridgeError fallback =
+        new BridgeError(
+            413, "response_too_large", "Response exceeds maximum size", null, Map.of());
+    MessageEnvelope.Response response =
+        new MessageEnvelope.Response(
+            requestId,
+            null,
+            new MessageEnvelope.RpcError(-32000, fallback.message(), fallback.toMap()));
+    try {
+      return JsonUtil.toJson(response.toMap(), MAX_MESSAGE_BYTES);
+    } catch (ApiException oversizedId) {
+      MessageEnvelope.Response nullIdResponse =
+          new MessageEnvelope.Response(
+              null,
+              null,
+              new MessageEnvelope.RpcError(-32000, fallback.message(), fallback.toMap()));
+      return JsonUtil.toJson(nullIdResponse.toMap(), MAX_MESSAGE_BYTES);
     }
   }
 
