@@ -26,10 +26,12 @@ Install the Git hooks once in your local clone:
 pre-commit install --install-hooks
 ```
 
-Run the repository checks before you open a pull request:
+Run all local checks before you open a pull request:
 
 ```bash
 pre-commit run --all-files
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```

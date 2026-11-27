@@ -79,19 +79,28 @@ Gradle 按以下优先级解析 Ghidra 安装路径：
 pre-commit install --install-hooks
 ```
 
-在提交代码更改之前，必须运行全量验证套件：
+在提交代码更改之前，必须运行本地检查与全量验证套件：
 
 ```bash
 pre-commit run --all-files
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 python3 tests/release_archive_reproducibility.py
 ```
 
-请遵守 [AGENTS.md](../../AGENTS.md) 中的仓库规则与[提交消息规则](../../AGENTS.md#commit-messages)。在 Linux x86-64 上，CI 还会在 `verify` 之后运行 `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`。
+在 Linux x86-64 上，CI 还会在 `verify` 之后运行 `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`。请遵守 [AGENTS.md](../../AGENTS.md) 中的仓库规则与[提交消息规则](../../AGENTS.md#commit-messages)。
+
+如需在不安装 Ghidra 的环境中单独检查模块导入边界，请运行：
+
+```bash
+./gradlew --no-daemon verifyArchitecture
+```
 
 验证套件执行以下检查：
-- **仓库卫生**：`pre-commit` 与 `verify-repository-hygiene.sh` 拒绝空文件、重复文件和生成产物，校验 `docs/api.md` 的方法数量，并检查 GitHub Actions 是否固定为提交 SHA。
+- **工作流与脚本检查**：`actionlint` 与 `shellcheck` 校验 GitHub Actions 工作流、复合操作和 Shell 脚本。
+- **仓库卫生**：`pre-commit` 与 `verify-repository-hygiene.sh` 检查跟踪文件、空文件、重复文件、生成产物、`docs/api.md` 方法数量、GitHub Actions 提交 SHA 固定、仓库链接与 MCP 工具名。
 - **提交消息**：`commit-msg` 钩子与拉取请求检查校验 Conventional Commit 标题、作用域、72 字符行宽以及 `- ` 列表正文。
 - **单元测试**：`check` 运行所有 Java 模块的 JUnit 测试。
 - **架构隔离**：`verifyArchitecture` 确保仅 adapter 和 launcher 允许导入 Ghidra 类。
