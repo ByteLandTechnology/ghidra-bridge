@@ -14,6 +14,7 @@ CI checks compliance with these rules.
 - **Ghidra**: Use Ghidra 12.1 or newer (CI uses Ghidra `12.1.2`).
 - **`GHIDRA_INSTALL_DIR`**: Set `GHIDRA_INSTALL_DIR` to the local Ghidra installation directory, or pass `-PghidraInstallDir=/path/to/ghidra`. Gradle needs Ghidra to compile `:adapter`, `:launcher`, and generated scripts, and to run `:adapter` and headless tests.
 - **Gradle Wrapper**: Always run `./gradlew` from the repository root instead of a system Gradle binary.
+- **Git Hooks**: Run `pre-commit install --install-hooks` once per clone to install the local `pre-commit` and `commit-msg` hooks.
 
 ## Module Layout and Guardrails
 
@@ -31,6 +32,7 @@ Follow these repository rules when you change code:
 - **Ghidra API boundary**: Only `modules/adapter` and `modules/launcher` can import `ghidra.*` packages (`verifyArchitecture` enforces this rule).
 - **Generated contracts**: Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand. Run `./gradlew generateApiContracts` after public interface changes.
 - **Repository hygiene**: Do not commit build directories, IDE files, generated scripts (`Bridge.java`, `GhidraMcp.java`), zero-byte files, or duplicate tracked files.
+- **Translations**: When you change an English document that has translations in `docs/zh/` or `docs/ja/`, update the translations too.
 
 ## GitHub Actions
 
@@ -43,11 +45,29 @@ Follow these repository rules when you change code:
 
 ## Commit Messages
 
-- Obey Conventional Commits, such as `fix(wire): reject unknown fields`.
+- Obey Conventional Commits in commit messages and pull request titles, such as `fix(wire): reject unknown fields`.
 - Use no more than 72 characters on each line, with spaces and list markers counted.
 - Use lowercase letters for the type and the scope.
+- Permitted types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`.
+- `release-please` reads Conventional Commit messages on `main` to select the next version:
+  - `fix`: increases the patch version, such as `1.5.1`.
+  - `feat`: increases the minor version, such as `1.6.0`.
+  - `!` after the type or scope, or a `BREAKING CHANGE:` footer: increases the major version.
+  - Other types, such as `docs`, `ci`, and `test`: do not start a release on their own.
+- Optional scopes: `domain`, `wire`, `contracts`, `runtime`, `adapter`, `transport`, `websocket` (or `transport:websocket`), `mcp` (or `transport:mcp`), `launcher`, `docs`, `build`, `ci`, and `deps`. If a commit changes more than one scope, do not write a scope.
 - Start the summary with an imperative verb in lowercase letters, with no period at the end.
-- Do not add attribution lines to commit messages or pull request text.
+- The body is optional for a small change that needs no explanation.
+- If you write a body, obey these rules:
+  - Put one blank line between the header and the body.
+  - Write the body as a list with `- ` before each item.
+  - Start each item with a capital letter.
+  - Put each item on one line. Do not put blank lines in the body.
+  - Do not use nested lists.
+  - If an item is too long, write a shorter sentence or divide it.
+- The body rules do not apply to footers.
+- Git `Merge` commits, `chore(main): release` commits from `release-please`, and Dependabot `build(deps): bump` commits are exempt from `commit-msg` rules.
+- Do not add attribution lines such as `Co-Authored-By` to commit messages or pull request text.
+- Each commit must compile and pass verification checks.
 
 ## Verification Commands
 
@@ -122,6 +142,15 @@ Test runs write failure reports to:
 - JUnit XML reports: `modules/**/build/test-results/test/TEST-*.xml`
 - JUnit HTML reports: `modules/**/build/reports/tests/test/index.html`
 - Headless regression failure log: `build/reports/headless-regression/headless.log` (printed to `stderr` and saved on failure; uploaded in CI as `verify-test-diagnostics` and `publish-test-diagnostics`)
+
+### Pre-Commit Hooks
+
+Install the `pre-commit` and `commit-msg` Git hooks once per clone. Run all hooks before you open a pull request:
+
+```bash
+pre-commit install --install-hooks
+pre-commit run --all-files
+```
 
 ### Headless Regression Tests
 

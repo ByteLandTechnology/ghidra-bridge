@@ -82,9 +82,16 @@ The test requires `gcc` and `nm`.
 
 ## Quality Checks
 
+Install the `pre-commit` and `commit-msg` Git hooks once per clone:
+
+```bash
+pre-commit install --install-hooks
+```
+
 Before you submit a change, run the local lint, hygiene, and verification checks:
 
 ```bash
+pre-commit run --all-files
 actionlint
 shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
@@ -92,7 +99,7 @@ bash .github/scripts/verify-repository-hygiene.sh
 python3 tests/release_archive_reproducibility.py
 ```
 
-On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
+On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `verify`. Obey the repository rules in [AGENTS.md](../AGENTS.md) and the [commit message rules](../AGENTS.md#commit-messages).
 
 To check module import boundaries without a Ghidra installation, run:
 
@@ -102,7 +109,8 @@ To check module import boundaries without a Ghidra installation, run:
 
 The verification checks enforce these rules:
 - **Workflows and Shell Scripts**: `actionlint` and `shellcheck` validate GitHub Actions workflows, composite actions, and shell scripts.
-- **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, SHA-pinned GitHub Actions, URLs, and MCP tool names.
+- **Repository Hygiene**: `pre-commit` and `verify-repository-hygiene.sh` check tracked files, empty and duplicate files, generated files, `docs/api.md` method counts, SHA-pinned GitHub Actions, URLs, and MCP tool names.
+- **Commit Messages**: `commit-msg` hooks and pull request checks validate Conventional Commit headers, scopes, 72-character lines, and `- ` list bodies.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.

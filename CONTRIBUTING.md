@@ -20,17 +20,30 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 ## Submit a change
 
+Install the Git hooks once in your local clone:
+
+```bash
+pre-commit install --install-hooks
+```
+
 Run all local checks before you open a pull request:
 
 ```bash
+pre-commit run --all-files
 actionlint
 shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 ./gradlew --no-daemon clean verify
 ```
 
-`verify` runs JUnit tests across all Java modules (`check`), contract drift checks, script compilation, distribution checks, and architecture boundary checks. It also runs `verifyMcpDocumentation` to check `docs/mcp-tools.json`, the nine guides, and MCP Javadocs. On Linux x86-64, also run `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify` when you change function or runtime behavior. State the behavior change and its effect on users in the pull request.
+`verify` runs JUnit tests across all Java modules (`check`), contract drift checks, script compilation, distribution checks, and architecture boundary checks. It also runs `verifyMcpDocumentation` to check `docs/mcp-tools.json`, the nine guides, and MCP Javadocs. On Linux x86-64, also run `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify` when you change function or runtime behavior.
 
-Use a Conventional Commit message. For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
+State the behavior change and its effect on users in the pull request. Obey the repository rules in [AGENTS.md](AGENTS.md).
+
+## Commit messages
+
+Use the [commit message rules](AGENTS.md#commit-messages). For example: `fix(wire): reject unknown fields`. The commit type sets the next release version. See [the development guide](docs/development.md#releases).
+
+## Report a security problem
 
 Report a security problem as described in [SECURITY.md](SECURITY.md). Do not put a security report in a public issue.
