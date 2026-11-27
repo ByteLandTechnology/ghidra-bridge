@@ -24,7 +24,8 @@ final class CodeUnitMethods implements ApiMethodProvider {
         WireSchema.object(
             ApiSchemaCatalog.props(
                 ApiVocabulary.KIND,
-                WireSchema.stringEnum("all", "instruction", ApiVocabulary.DATA)));
+                WireSchema.withDefault(
+                    WireSchema.stringEnum("all", "instruction", ApiVocabulary.DATA), "all")));
     registry.scanList(
         "code_unit.list",
         ApiSchemaCatalog.scanListInput(listingFilter),
@@ -74,13 +75,13 @@ final class CodeUnitMethods implements ApiMethodProvider {
                 "regex",
                 WireSchema.nonBlankString(),
                 ApiVocabulary.CASE_SENSITIVE,
-                WireSchema.bool(),
+                WireSchema.withDefault(WireSchema.bool(), false),
                 "min_length",
                 WireSchema.integer(1, Integer.MAX_VALUE),
                 ApiVocabulary.ENCODING,
                 WireSchema.nonBlankString(),
                 "include_candidates",
-                WireSchema.bool()));
+                WireSchema.withDefault(WireSchema.bool(), false)));
     registry.scanList(
         "string.list",
         "List strings in address order. Filter by text, regex, length, encoding, or candidate"

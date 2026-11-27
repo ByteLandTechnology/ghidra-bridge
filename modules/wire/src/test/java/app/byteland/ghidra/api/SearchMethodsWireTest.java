@@ -191,6 +191,18 @@ class SearchMethodsWireTest {
     assertFalse(firstString.containsKey("bytes"));
     assertNotNull(stringResult.get("next_cursor"));
 
+    Map<String, Object> defaultStringPage =
+        (Map<String, Object>) registry.dispatch("string.list", Map.of());
+    String defaultStringCursor = (String) defaultStringPage.get("next_cursor");
+    assertNotNull(defaultStringCursor);
+    registry.dispatch(
+        "string.list",
+        Map.of(
+            "filter", Map.of("case_sensitive", false, "include_candidates", false),
+            "page", Map.of("limit", 100, "cursor", defaultStringCursor),
+            "scan", Map.of("range", Map.of(), "timeout_ms", 1000)));
+    assertEquals("ram:00100015", capturedStringQuery.get().cursor());
+
     Map<String, Object> findResult =
         (Map<String, Object>)
             registry.dispatch(

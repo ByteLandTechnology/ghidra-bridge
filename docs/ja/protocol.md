@@ -76,7 +76,7 @@ WebSocket メッセージは JSON-RPC 2.0 仕様に準拠します。
       "status": 404,
       "code": "not_found",
       "message": "address not found",
-      "target": "/params/selector/address",
+      "target": "/selector/address",
       "details": {}
     }
   }
