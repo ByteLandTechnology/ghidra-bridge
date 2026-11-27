@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
@@ -540,9 +539,7 @@ class McpHttpServerOriginTest {
             unused(DataTypeService.class),
             transactions,
             "sample.bin");
-    AgentConfig agentConfig =
-        new AgentConfig("ws://127.0.0.1:19999/ws/agent", null, null, null, null, "test-session", null);
-    return new AgentDispatcher(services, agentConfig);
+    return new AgentDispatcher(services, "test-session");
   }
 
   private interface Invocation {

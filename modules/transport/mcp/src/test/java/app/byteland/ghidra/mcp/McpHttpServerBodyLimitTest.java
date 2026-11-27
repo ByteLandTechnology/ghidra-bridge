@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
@@ -817,9 +816,7 @@ class McpHttpServerBodyLimitTest {
             unusedService(DataTypeService.class),
             transactionRunner,
             "test-program");
-    AgentConfig agentConfig =
-        new AgentConfig(null, LOOPBACK, 8765, "/ws/agent", null, "test-session", null);
-    return new AgentDispatcher(services, agentConfig);
+    return new AgentDispatcher(services, "test-session");
   }
 
   private static <T> T unusedService(Class<T> type) {

@@ -107,7 +107,7 @@ class AgentMessageHandlerLimitTest {
     AtomicBoolean disconnected = new AtomicBoolean();
     List<String> sentMessages = new ArrayList<>();
 
-    try (AgentDispatcher dispatcher = new AgentDispatcher(services, config)) {
+    try (AgentDispatcher dispatcher = new AgentDispatcher(services, config.sessionId())) {
       AgentMessageHandler handler =
           new AgentMessageHandler(config, dispatcher, () -> disconnected.set(true));
       AgentClientChannels.MessageChannel channel =
@@ -215,7 +215,8 @@ class AgentMessageHandlerLimitTest {
               unused(DataTypeService.class),
               transactions,
               "ws-test-program");
-      try (AgentDispatcher errorDispatcher = new AgentDispatcher(errorServices, config)) {
+      try (AgentDispatcher errorDispatcher =
+          new AgentDispatcher(errorServices, config.sessionId())) {
         AgentMessageHandler errorHandler =
             new AgentMessageHandler(config, errorDispatcher, () -> disconnected.set(true));
         String readReq1 =

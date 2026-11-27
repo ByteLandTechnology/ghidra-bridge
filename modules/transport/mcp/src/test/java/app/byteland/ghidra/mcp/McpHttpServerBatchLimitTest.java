@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.BridgeServices;
@@ -39,6 +38,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -395,9 +395,7 @@ class McpHttpServerBatchLimitTest {
 
     for (int attempt = 0; attempt < 10; attempt++) {
       int port = freeLoopbackPort();
-      AgentConfig agentConfig =
-          new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "mcp-test-session", null);
-      AgentDispatcher dispatcher = new AgentDispatcher(services, agentConfig, nanoTime);
+      AgentDispatcher dispatcher = new AgentDispatcher(services, "mcp-test-session", nanoTime);
       McpConfig mcpConfig =
           new McpConfig("127.0.0.1", port, "/mcp", null, "mcp-test-session", "ghidra");
       try {
@@ -420,11 +418,13 @@ class McpHttpServerBatchLimitTest {
 
   private record TestMcpServer(McpHttpServer server, AgentDispatcher dispatcher, URI endpoint)
       implements AutoCloseable {
-    private static final HttpClient CLIENT = HttpClient.newHttpClient();
+    private static final HttpClient CLIENT =
+        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     HttpResponse<byte[]> postRaw(String jsonBody) throws IOException, InterruptedException {
       HttpRequest request =
           HttpRequest.newBuilder(endpoint)
+              .timeout(Duration.ofSeconds(15))
               .header("Content-Type", "application/json")
               .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
               .build();

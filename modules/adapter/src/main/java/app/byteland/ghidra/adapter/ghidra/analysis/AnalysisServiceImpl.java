@@ -106,6 +106,7 @@ public final class AnalysisServiceImpl implements AnalysisService {
     for (ProgramAnalysisState state : activeStates) {
       stopState(state);
     }
+    context.close();
   }
 
   private ProgramAnalysisState stateFor(Program program) {

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.5.1...v1.6.0) (2026-11-26)
+
+
+### Features
+
+* publish compact MCP schemas and enriched domain help ([#45](https://github.com/ByteLandTechnology/ghidra-bridge/issues/45)) ([f22b50a](https://github.com/ByteLandTechnology/ghidra-bridge/commit/f22b50aec25be525c74e8a13aa52f6248ff4771a))
+
+
+### Performance Improvements
+
+* **wire:** project and validate response fields in one pass ([#102](https://github.com/ByteLandTechnology/ghidra-bridge/issues/102)) ([01ce7d5](https://github.com/ByteLandTechnology/ghidra-bridge/commit/01ce7d5f93e08c485f05b7d2dd09dfb0f9c1aeba))
+
 ## [1.5.1](https://github.com/ByteLandTechnology/ghidra-bridge/compare/v1.5.0...v1.5.1) (2026-11-26)
 
 
