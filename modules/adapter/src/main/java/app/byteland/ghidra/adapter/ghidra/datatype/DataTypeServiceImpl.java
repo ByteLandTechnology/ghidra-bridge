@@ -20,22 +20,24 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 public final class DataTypeServiceImpl implements DataTypeService {
+  private final GhidraSession context;
   private final Supplier<DataTypeManager> dataTypeManagerSupplier;
 
   public DataTypeServiceImpl(GhidraSession context) {
-    Objects.requireNonNull(context, "context");
+    this.context = Objects.requireNonNull(context, "context");
     this.dataTypeManagerSupplier = () -> context.currentProgram().getDataTypeManager();
   }
 
   DataTypeServiceImpl(DataTypeManager dataTypeManager) {
     Objects.requireNonNull(dataTypeManager, "dataTypeManager");
+    this.context = null;
     this.dataTypeManagerSupplier = () -> dataTypeManager;
   }
 
   @Override
   public Page<DataTypeCategoryResource> listCategories(
       String categoryPath, int limit, String cursor) {
-    return DataTypeQueries.listCategories(dataTypeManager(), categoryPath, limit, cursor);
+    return DataTypeQueries.listCategories(context, dataTypeManager(), categoryPath, limit, cursor);
   }
 
   @Override
@@ -47,7 +49,7 @@ public final class DataTypeServiceImpl implements DataTypeService {
   public Page<DataTypeResource> searchDataTypes(
       String query, String categoryPath, String kind, int limit, String cursor) {
     return DataTypeQueries.searchDataTypes(
-        dataTypeManager(), query, categoryPath, kind, limit, cursor);
+        context, dataTypeManager(), query, categoryPath, kind, limit, cursor);
   }
 
   @Override

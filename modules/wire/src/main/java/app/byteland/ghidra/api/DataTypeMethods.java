@@ -38,7 +38,9 @@ final class DataTypeMethods implements ApiMethodProvider {
     registry.list(
         "data_type_category.list",
         ApiSchemaCatalog.listInput(
-            WireSchema.object(ApiSchemaCatalog.props(ApiVocabulary.PATH, WireSchema.string()))),
+            WireSchema.object(
+                ApiSchemaCatalog.props(
+                    ApiVocabulary.PATH, WireSchema.withDefault(WireSchema.string(), "/")))),
         Set.of(ApiVocabulary.PATH, ApiVocabulary.NAME, "category_count", "data_type_count"),
         List.of(ApiVocabulary.PATH),
         (request, page) ->
@@ -65,7 +67,7 @@ final class DataTypeMethods implements ApiMethodProvider {
             WireSchema.object(
                 ApiSchemaCatalog.props(
                     "query",
-                    WireSchema.string(),
+                    WireSchema.withDefault(WireSchema.string(), ""),
                     ApiVocabulary.CATEGORY_PATH,
                     WireSchema.string(),
                     ApiVocabulary.KIND,
