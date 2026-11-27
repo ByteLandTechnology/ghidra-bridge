@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 class CodeUnitResourceTest {
 
   @Test
-  void recordDeclaresEightComponentsWithoutValueOrRepresentation() {
+  void recordDeclaresTenComponentsIncludingValueAndRepresentation() {
     List<String> names =
         Arrays.stream(CodeUnitResource.class.getRecordComponents())
             .map(RecordComponent::getName)
@@ -30,7 +30,9 @@ class CodeUnitResourceTest {
             "text",
             "mnemonic",
             "operands",
-            "dataType"),
+            "dataType",
+            "value",
+            "representation"),
         names);
   }
 
@@ -59,11 +61,13 @@ class CodeUnitResourceTest {
     assertEquals("MOV", resource.mnemonic());
     assertEquals(List.of("EAX", "0x1"), resource.operands());
     assertNull(resource.dataType());
+    assertNull(resource.value());
+    assertNull(resource.representation());
     assertThrows(UnsupportedOperationException.class, () -> resource.operands().add("ECX"));
   }
 
   @Test
-  void dataResourceKeepsDataTypeAndNullInstructionFields() {
+  void dataResourceKeepsDataTypeValueRepresentationAndNullInstructionFields() {
     DataTypeReference dataType = DataTypeReference.named("/dword");
     ByteSequence bytes = new ByteSequence(ByteSequence.Encoding.HEX, "2a000000", 4);
 
@@ -76,7 +80,9 @@ class CodeUnitResourceTest {
             "dd 2Ah",
             null,
             null,
-            dataType);
+            dataType,
+            "42",
+            "2Ah");
 
     assertEquals("ram:00402000", resource.address());
     assertEquals(CodeUnitResource.Kind.DATA, resource.kind());
@@ -86,5 +92,7 @@ class CodeUnitResourceTest {
     assertNull(resource.mnemonic());
     assertNull(resource.operands());
     assertEquals(dataType, resource.dataType());
+    assertEquals("42", resource.value());
+    assertEquals("2Ah", resource.representation());
   }
 }

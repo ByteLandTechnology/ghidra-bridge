@@ -32,8 +32,23 @@ import org.junit.jupiter.api.Test;
 class CodeUnitMethodsTest {
 
   @Test
-  void wireNormalizationOfCodeUnitResourceOmitsValueAndRepresentation() {
-    CodeUnitResource item =
+  void wireNormalizationOfCodeUnitResourceIncludesValueAndRepresentationOnlyWhenNonNull() {
+    CodeUnitResource withoutValues =
+        new CodeUnitResource(
+            "ram:00402004",
+            CodeUnitResource.Kind.UNDEFINED,
+            1,
+            new ByteSequence(ByteSequence.Encoding.HEX, "00", 1),
+            "?? 00h",
+            null,
+            null,
+            DataTypeReference.named("/undefined"));
+
+    Map<String, Object> normalizedUndefined = WireValues.resource(withoutValues);
+    assertFalse(normalizedUndefined.containsKey("value"));
+    assertFalse(normalizedUndefined.containsKey("representation"));
+
+    CodeUnitResource definedData =
         new CodeUnitResource(
             "ram:00402000",
             CodeUnitResource.Kind.DATA,
@@ -42,24 +57,25 @@ class CodeUnitMethodsTest {
             "dd 2Ah",
             null,
             null,
-            DataTypeReference.named("/dword"));
+            DataTypeReference.named("/dword"),
+            "42",
+            "2Ah");
 
-    Map<String, Object> normalized = WireValues.resource(item);
+    Map<String, Object> normalizedData = WireValues.resource(definedData);
 
-    assertEquals("ram:00402000", normalized.get("address"));
-    assertEquals("data", normalized.get("kind"));
-    assertEquals(4, normalized.get("length"));
+    assertEquals("ram:00402000", normalizedData.get("address"));
+    assertEquals("data", normalizedData.get("kind"));
+    assertEquals(4, normalizedData.get("length"));
     assertEquals(
-        Map.of("encoding", "hex", "data", "2a000000", "length", 4), normalized.get("bytes"));
-    assertEquals("dd 2Ah", normalized.get("text"));
-    assertEquals(Map.of("kind", "named", "name", "/dword"), normalized.get("data_type"));
-    assertFalse(normalized.containsKey("value"));
-    assertFalse(normalized.containsKey("representation"));
+        Map.of("encoding", "hex", "data", "2a000000", "length", 4), normalizedData.get("bytes"));
+    assertEquals("dd 2Ah", normalizedData.get("text"));
+    assertEquals(Map.of("kind", "named", "name", "/dword"), normalizedData.get("data_type"));
+    assertEquals("42", normalizedData.get("value"));
+    assertEquals("2Ah", normalizedData.get("representation"));
   }
 
   @Test
-  void codeUnitListReturnsEightFieldSchemaAndRejectsValueOrRepresentationProjections()
-      throws Exception {
+  void codeUnitListEmitsValueAndRepresentationOnDataItemsAndSupportsProjection() throws Exception {
     CodeUnitResource instruction =
         new CodeUnitResource(
             "ram:00401000",
@@ -79,7 +95,9 @@ class CodeUnitMethodsTest {
             "dd 2Ah",
             null,
             null,
-            DataTypeReference.named("/dword"));
+            DataTypeReference.named("/dword"),
+            "42",
+            "2Ah");
     CodeUnitResource undefined =
         new CodeUnitResource(
             "ram:00402004",
@@ -122,7 +140,9 @@ class CodeUnitMethodsTest {
             "length", 4,
             "bytes", Map.of("encoding", "hex", "data", "2a000000", "length", 4),
             "text", "dd 2Ah",
-            "data_type", Map.of("kind", "named", "name", "/dword")),
+            "data_type", Map.of("kind", "named", "name", "/dword"),
+            "value", "42",
+            "representation", "2Ah"),
         items.get(1));
     assertEquals(
         Map.of(
@@ -134,17 +154,35 @@ class CodeUnitMethodsTest {
             "data_type", Map.of("kind", "named", "name", "/undefined")),
         items.get(2));
 
-    for (String disallowedField : List.of("value", "representation")) {
-      ApiException error =
-          assertThrows(
-              ApiException.class,
-              () ->
-                  registry.dispatch(
-                      "code_unit.list",
-                      Map.of("projection", Map.of("fields", List.of(disallowedField)))));
-      assertEquals(400, error.status());
-      assertEquals("invalid_enum", error.error().code());
-    }
+    @SuppressWarnings("unchecked")
+    Map<String, Object> projected =
+        (Map<String, Object>)
+            registry.dispatch(
+                "code_unit.list",
+                Map.of(
+                    "projection",
+                    Map.of("fields", List.of("address", "kind", "value", "representation"))));
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> projectedItems = (List<Map<String, Object>>) projected.get("items");
+    assertEquals(Map.of("address", "ram:00401000", "kind", "instruction"), projectedItems.get(0));
+    assertEquals(
+        Map.of(
+            "address", "ram:00402000",
+            "kind", "data",
+            "value", "42",
+            "representation", "2Ah"),
+        projectedItems.get(1));
+    assertEquals(Map.of("address", "ram:00402004", "kind", "undefined"), projectedItems.get(2));
+
+    ApiException error =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "code_unit.list",
+                    Map.of("projection", Map.of("fields", List.of("unknown_field")))));
+    assertEquals(400, error.status());
+    assertEquals("invalid_enum", error.error().code());
   }
 
   @Test

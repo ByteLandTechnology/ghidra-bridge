@@ -6,10 +6,13 @@ import app.byteland.ghidra.JsonUtil;
 import app.byteland.ghidra.adapter.ghidra.datatype.DataTypeServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.function.FunctionServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.reference.ReferenceServiceImpl;
+import app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor;
 import app.byteland.ghidra.api.ApiRegistry;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.Page;
+import app.byteland.ghidra.service.ScanProgress;
 import app.byteland.ghidra.service.TransactionRunner;
+import app.byteland.ghidra.service.address.AddressResource;
 import app.byteland.ghidra.service.address.AddressService;
 import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
@@ -34,6 +37,8 @@ import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressFactory;
+import ghidra.program.model.address.AddressIteratorAdapter;
+import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.DefaultAddressFactory;
 import ghidra.program.model.address.GenericAddressSpace;
@@ -154,13 +159,25 @@ class ListPaginationParityTest {
           page.put("cursor", cursor);
         }
         request.put("page", page);
-        Map<String, Object> expectedPage = (Map<String, Object>) baseline.dispatch(method, request);
-        Map<String, Object> actualPage = (Map<String, Object>) actual.dispatch(method, request);
+        Map<String, Object> expectedPage =
+            normalizeElapsedMs((Map<String, Object>) baseline.dispatch(method, request));
+        Map<String, Object> actualPage =
+            normalizeElapsedMs((Map<String, Object>) actual.dispatch(method, request));
         assertEquals(expectedPage, actualPage, () -> method + " mismatch for " + request);
         cursor = (String) actualPage.get("next_cursor");
         if (cursor == null) break;
       }
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> normalizeElapsedMs(Map<String, Object> page) {
+    if (!(page.get("scan") instanceof Map<?, ?> rawScan)) return page;
+    Map<String, Object> copy = new LinkedHashMap<>(page);
+    Map<String, Object> scan = new LinkedHashMap<>((Map<String, Object>) rawScan);
+    scan.put("elapsed_ms", 0L);
+    copy.put("scan", scan);
+    return copy;
   }
 
   private record Fixture(BridgeServices actualServices, BridgeServices baselineServices) {}
@@ -221,18 +238,7 @@ class ListPaginationParityTest {
     Set<Function> callers = new LinkedHashSet<>(List.of(f3, f1, f2));
     Set<Function> callees = new LinkedHashSet<>(List.of(f2, f3));
     Address rootEntry = RAM.getAddress(0x00400000L);
-    Function rootFn =
-        (Function)
-            Proxy.newProxyInstance(
-                Function.class.getClassLoader(),
-                new Class<?>[] {Function.class},
-                (proxy, method, args) ->
-                    switch (method.getName()) {
-                      case "getEntryPoint" -> rootEntry;
-                      case "getCallingFunctions" -> callers;
-                      case "getCalledFunctions" -> callees;
-                      default -> throw new AssertionError(method.getName());
-                    });
+    AddressSet rootBody = new AddressSet(rootEntry, rootEntry);
 
     List<Reference> incomingRefs =
         List.of(
@@ -247,17 +253,39 @@ class ListPaginationParityTest {
     };
 
     AddressFactory factory = new DefaultAddressFactory(new AddressSpace[] {RAM});
+    Program[] programHolder = new Program[1];
+    Function rootFn =
+        (Function)
+            Proxy.newProxyInstance(
+                Function.class.getClassLoader(),
+                new Class<?>[] {Function.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getEntryPoint" -> rootEntry;
+                      case "getName" -> "fn_root";
+                      case "getBody" -> rootBody;
+                      case "getProgram" -> programHolder[0];
+                      case "getCallingFunctions" -> callers;
+                      case "getCalledFunctions" -> callees;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    Map<Address, Function> functionsByEntry =
+        Map.of(
+            rootEntry, rootFn,
+            RAM.getAddress(0x00401000L), f1,
+            RAM.getAddress(0x00402000L), f2,
+            RAM.getAddress(0x00403000L), f3);
     FunctionManager fnManager =
         (FunctionManager)
             Proxy.newProxyInstance(
                 FunctionManager.class.getClassLoader(),
                 new Class<?>[] {FunctionManager.class},
-                (proxy, method, args) -> {
-                  if ("getFunctionAt".equals(method.getName())) {
-                    return rootEntry.equals(args[0]) ? rootFn : null;
-                  }
-                  throw new AssertionError(method.getName());
-                });
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getFunctionAt", "getFunctionContaining" ->
+                          functionsByEntry.get((Address) args[0]);
+                      default -> throw new AssertionError(method.getName());
+                    });
     Listing listing =
         (Listing)
             Proxy.newProxyInstance(
@@ -265,7 +293,7 @@ class ListPaginationParityTest {
                 new Class<?>[] {Listing.class},
                 (proxy, method, args) -> {
                   if ("getFunctionAt".equals(method.getName())) {
-                    return rootEntry.equals(args[0]) ? rootFn : null;
+                    return functionsByEntry.get((Address) args[0]);
                   }
                   throw new AssertionError(method.getName());
                 });
@@ -277,7 +305,10 @@ class ListPaginationParityTest {
                 (proxy, method, args) ->
                     switch (method.getName()) {
                       case "getReferencesTo" -> iteratorProxy(incomingRefs.iterator());
-                      case "getReferencesFrom" -> outgoingRefs;
+                      case "getReferencesFrom" ->
+                          rootEntry.equals(args[0]) ? outgoingRefs : new Reference[0];
+                      case "getReferenceSourceIterator" ->
+                          new AddressIteratorAdapter(List.of(rootEntry).iterator());
                       default -> throw new AssertionError(method.getName());
                     });
     AnalysisService analysis = unused(AnalysisService.class);
@@ -295,6 +326,7 @@ class ListPaginationParityTest {
                       case "getReferenceManager" -> refManager;
                       default -> throw new AssertionError(method.getName());
                     });
+    programHolder[0] = program;
 
     GhidraSession session = new GhidraSession(new FixtureScript(program));
     BridgeServices actualServices =
@@ -306,8 +338,8 @@ class ListPaginationParityTest {
     BridgeServices baselineServices =
         services(
             baselineDataTypeService(rootCategories, allTypes),
-            baselineFunctionService(callers, callees),
-            baselineReferenceService(incomingRefs, List.of(outgoingRefs)),
+            baselineFunctionService(callers, callees, functionsByEntry, incomingRefs),
+            baselineReferenceService(incomingRefs, List.of(outgoingRefs), functionsByEntry),
             analysis);
     return new Fixture(actualServices, baselineServices);
   }
@@ -409,33 +441,71 @@ class ListPaginationParityTest {
   }
 
   private static FunctionService baselineFunctionService(
-      Set<Function> callers, Set<Function> callees) {
+      Set<Function> callers,
+      Set<Function> callees,
+      Map<Address, Function> functionsByEntry,
+      List<Reference> incomingRefs) {
     return new FunctionService() {
       @Override
       public Page<FunctionCallResource> getCallers(String rawAddress, int limit, String cursor) {
-        return baselineRelations(callers, FunctionCallResource.Direction.CALLERS, limit, cursor);
+        return baselineRelations(
+            callers, FunctionCallResource.Direction.CALLERS, true, limit, cursor);
       }
 
       @Override
       public Page<FunctionCallResource> getCallees(String rawAddress, int limit, String cursor) {
-        return baselineRelations(callees, FunctionCallResource.Direction.CALLEES, limit, cursor);
+        return baselineRelations(
+            callees, FunctionCallResource.Direction.CALLEES, false, limit, cursor);
       }
 
       private Page<FunctionCallResource> baselineRelations(
-          Set<Function> fns, FunctionCallResource.Direction dir, int limit, String cursor) {
+          Set<Function> fns,
+          FunctionCallResource.Direction dir,
+          boolean isCallers,
+          int limit,
+          String cursor) {
+        Map<String, Set<String>> sitesByEntry = new HashMap<>();
+        if (isCallers) {
+          for (Reference ref : incomingRefs) {
+            if (!ref.getReferenceType().isCall()) continue;
+            Function caller = functionsByEntry.get(ref.getFromAddress());
+            if (caller == null) continue;
+            String callerEntry = AddressUtil.canonicalAddress(caller.getEntryPoint());
+            sitesByEntry
+                .computeIfAbsent(callerEntry, ignored -> new java.util.TreeSet<>())
+                .add(AddressUtil.canonicalAddress(ref.getFromAddress()));
+          }
+        }
         List<FunctionCallResource> rows = new ArrayList<>();
         for (Function fn : fns) {
-          rows.add(
-              new FunctionCallResource(
-                  AddressUtil.canonicalAddress(fn.getEntryPoint()),
-                  fn.getName(),
-                  null,
-                  dir,
-                  fn.getParentNamespace().getName(true),
-                  null));
+          String entry = AddressUtil.canonicalAddress(fn.getEntryPoint());
+          Set<String> sites = sitesByEntry.getOrDefault(entry, Set.of());
+          if (sites.isEmpty()) {
+            rows.add(
+                new FunctionCallResource(
+                    entry, fn.getName(), null, dir, fn.getParentNamespace().getName(true), null));
+          } else {
+            for (String site : sites) {
+              rows.add(
+                  new FunctionCallResource(
+                      entry, fn.getName(), site, dir, fn.getParentNamespace().getName(true), null));
+            }
+          }
         }
-        rows.sort(Comparator.comparing(FunctionCallResource::entry));
-        return Page.paginate(rows, limit, cursor, FunctionCallResource::entry);
+        rows.sort(
+            Comparator.comparing(
+                row ->
+                    row.callSite() == null
+                        ? row.entry()
+                        : CompositeCursor.key(row.entry(), row.callSite())));
+        return Page.paginate(
+            rows,
+            limit,
+            cursor,
+            row ->
+                row.callSite() == null
+                    ? row.entry()
+                    : CompositeCursor.key(row.entry(), row.callSite()));
       }
 
       @Override
@@ -506,21 +576,27 @@ class ListPaginationParityTest {
   }
 
   private static ReferenceService baselineReferenceService(
-      List<Reference> incoming, List<Reference> outgoing) {
-    return (fromRaw, toRaw, type, direction, limit, cursor) -> {
-      List<Reference> source = "to".equals(direction) ? incoming : outgoing;
+      List<Reference> incoming,
+      List<Reference> outgoing,
+      Map<Address, Function> functionsByAddress) {
+    return (fromRaw, toRaw, type, direction, scope, scan, limit, cursor) -> {
+      boolean inbound = "to".equals(direction);
+      String canonicalAnchor = inbound ? toRaw : fromRaw;
+      List<Reference> source = inbound ? incoming : outgoing;
       record Keyed(Reference ref, String key) {}
       List<Keyed> matched = new ArrayList<>();
       for (Reference ref : source) {
-        if (type != null && !type.equalsIgnoreCase(ref.getReferenceType().getName())) continue;
-        String key =
+        if (type != null && !type.equalsIgnoreCase(ref.getReferenceType().getName())) {
+          continue;
+        }
+        String encoded =
             JsonUtil.toJson(
                 List.of(
                     AddressUtil.canonicalAddress(ref.getFromAddress()),
                     AddressUtil.canonicalAddress(ref.getToAddress()),
                     ref.getReferenceType().getName(),
                     ref.getOperandIndex()));
-        matched.add(new Keyed(ref, key));
+        matched.add(new Keyed(ref, encoded));
       }
       matched.sort(Comparator.comparing(Keyed::key));
       Page<Keyed> page = Page.paginate(matched, limit, cursor, Keyed::key);
@@ -534,10 +610,31 @@ class ListPaginationParityTest {
                           k.ref().getReferenceType().getName(),
                           k.ref().getOperandIndex(),
                           k.ref().isPrimary(),
-                          String.valueOf(k.ref().getSource())))
+                          String.valueOf(k.ref().getSource()),
+                          summaryFor(functionsByAddress.get(k.ref().getFromAddress())),
+                          summaryFor(functionsByAddress.get(k.ref().getToAddress()))))
               .toList();
-      return Page.of(items, page.limit(), page.nextCursor());
+      boolean complete = page.nextCursor() == null;
+      String scanned = source.isEmpty() ? null : canonicalAnchor;
+      ScanProgress progress =
+          new ScanProgress(
+              ScanProgress.Kind.ADDRESS,
+              canonicalAnchor,
+              canonicalAnchor,
+              scanned,
+              scanned,
+              complete,
+              complete ? ScanProgress.StopReason.COMPLETED : ScanProgress.StopReason.LIMIT,
+              0L);
+      return Page.scanned(items, page.limit(), page.nextCursor(), progress);
     };
+  }
+
+  private static AddressResource.FunctionSummary summaryFor(Function fn) {
+    return fn == null
+        ? null
+        : new AddressResource.FunctionSummary(
+            AddressUtil.canonicalAddress(fn.getEntryPoint()), fn.getName());
   }
 
   @SuppressWarnings("unchecked")

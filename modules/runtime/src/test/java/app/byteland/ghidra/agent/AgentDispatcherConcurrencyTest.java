@@ -1112,14 +1112,15 @@ class AgentDispatcherConcurrencyTest {
     }
 
     private ReferenceService referenceService() {
-      return (fromRaw, toRaw, type, direction, limit, cursor) -> {
+      return (fromRaw, toRaw, type, direction, scope, scan, limit, cursor) -> {
         observe("reference.list", false);
-        return Page.of(
+        return Page.scanned(
             List.of(
                 new ReferenceResource(
                     "ram:00100010", "ram:00100000", "UNCONDITIONAL_CALL", 0, true, "DEFAULT")),
             limit,
-            null);
+            null,
+            completedScan());
       };
     }
 
@@ -1203,7 +1204,7 @@ class AgentDispatcherConcurrencyTest {
 
         @Override
         public Page<InstructionResource> listInstructions(
-            AddressScanOptions scan, int limit, String cursor) {
+            FlowOverrideScope scope, AddressScanOptions scan, int limit, String cursor) {
           observe("instruction.list", false);
           return Page.scanned(List.of(insn), limit, null, completedScan());
         }

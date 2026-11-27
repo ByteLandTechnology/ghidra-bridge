@@ -632,7 +632,9 @@ final class ApiSchemaCatalog {
     }
     if (PROGRESS.equals(field)) return WireSchema.number(0.0, 100.0);
     if (MEMORY_BLOCK.equals(field)) return memoryBlockSummarySchema();
-    if (FUNCTION.equals(field)) return functionSummarySchema();
+    if (Set.of(FUNCTION, "from_function", "to_function").contains(field)) {
+      return functionSummarySchema();
+    }
     if (SYMBOL.equals(field)) return symbolSummarySchema();
     return WireSchema.string();
   }
@@ -684,7 +686,11 @@ final class ApiSchemaCatalog {
             OPERAND_INDEX,
             WireSchema.integer(-1, Integer.MAX_VALUE),
             "primary",
-            WireSchema.bool()),
+            WireSchema.bool(),
+            "from_function",
+            functionSummarySchema(),
+            "to_function",
+            functionSummarySchema()),
         "from",
         "to",
         TYPE,

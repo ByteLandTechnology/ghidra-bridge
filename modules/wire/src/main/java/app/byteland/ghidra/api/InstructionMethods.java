@@ -37,20 +37,32 @@ final class InstructionMethods implements ApiMethodProvider {
                 .services()
                 .listingService()
                 .getInstruction(text(selector(request), ApiVocabulary.ADDRESS)));
+    Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
     registry.scanList(
         "instruction.list",
-        ApiSchemaCatalog.scanListInput(WireSchema.object(Map.of())),
+        ApiSchemaCatalog.scanListInput(
+            WireSchema.object(ApiSchemaCatalog.props(ApiVocabulary.SELECTOR, flowSelector))),
         ApiSchemaCatalog.instructionFields(),
         List.of(ApiVocabulary.ADDRESS),
-        (request, page) ->
-            registry
+        (request, page) -> {
+          Map<String, Object> filter = filter(request);
+          Object rawSelector = filter.get(ApiVocabulary.SELECTOR);
+          AddressScanOptions scan = addressScan(request);
+          if (rawSelector instanceof Map<?, ?>) {
+            return registry
                 .services()
                 .listingService()
                 .listInstructions(
-                    addressScan(request),
+                    flowScope(object(filter, ApiVocabulary.SELECTOR), "/filter/selector"),
+                    scan,
                     page.limit(),
-                    page.cursor()));
-    Map<String, Object> flowSelector = ApiSchemaCatalog.flowSelector();
+                    page.cursor());
+          }
+          return registry
+              .services()
+              .listingService()
+              .listInstructions(scan, page.limit(), page.cursor());
+        });
     Map<String, Object> flowFilter =
         WireSchema.object(
             ApiSchemaCatalog.props(

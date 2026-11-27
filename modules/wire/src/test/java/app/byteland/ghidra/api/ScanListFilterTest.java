@@ -39,6 +39,7 @@ class ScanListFilterTest {
           "code_unit.list",
           "data_unit.list",
           "instruction.list",
+          "reference.list",
           "global_variable.list",
           "comment.list",
           "function.list",
@@ -61,8 +62,11 @@ class ScanListFilterTest {
 
     ApiCatalog catalog = ApiRegistry.catalog();
     assertEquals(Map.of(), filterProperties(catalog, "data_unit.list"));
-    assertEquals(Map.of(), filterProperties(catalog, "instruction.list"));
+    assertEquals(Set.of("selector"), filterProperties(catalog, "instruction.list").keySet());
     assertEquals(Set.of("kind"), filterProperties(catalog, "code_unit.list").keySet());
+    assertEquals(
+        List.of("from", "to", "type", "direction", "selector"),
+        List.copyOf(filterProperties(catalog, "reference.list").keySet()));
     assertEquals(
         List.of("name", "namespace", "case_sensitive"),
         List.copyOf(filterProperties(catalog, "global_variable.list").keySet()));
@@ -134,6 +138,9 @@ class ScanListFilterTest {
     harness.registry.dispatch("instruction.list", scanParams);
     assertEquals(expected, harness.lastScan.get());
 
+    harness.registry.dispatch("reference.list", scanParams);
+    assertEquals(expected, harness.lastScan.get());
+
     harness.registry.dispatch("global_variable.list", scanParams);
     assertEquals(expected, harness.lastScan.get());
 
@@ -150,6 +157,13 @@ class ScanListFilterTest {
                     "timeout_ms", 2500)));
     assertEquals(expected, harness.lastSymbolQuery.get().scan());
     assertEquals("0x1500", harness.lastSymbolQuery.get().address());
+
+    harness.registry.dispatch(
+        "instruction.list",
+        Map.of(
+            "filter", Map.of("selector", Map.of("kind", "address", "address", "0x1000")),
+            "scan", Map.of("timeout_ms", 1700)));
+    assertEquals(new AddressScanOptions(null, null, 1700), harness.lastScan.get());
 
     harness.registry.dispatch(
         "flow_override.list",
@@ -308,20 +322,30 @@ class ScanListFilterTest {
               (method, args) -> {
                 AddressScanOptions scan =
                     switch (method) {
-                      case "listCodeUnits", "listInstructions", "listDataUnits" ->
-                          (AddressScanOptions) args[0];
+                      case "listCodeUnits", "listDataUnits" -> (AddressScanOptions) args[0];
+                      case "listInstructions" ->
+                          args.length == 4
+                              ? (AddressScanOptions) args[1]
+                              : (AddressScanOptions) args[0];
                       case "getFlowOverrides" -> (AddressScanOptions) args[2];
                       default -> throw new AssertionError(method);
                     };
                 lastScan.set(scan);
                 int limit =
                     switch (method) {
-                      case "listCodeUnits", "listInstructions", "listDataUnits" -> (Integer) args[1];
+                      case "listCodeUnits", "listDataUnits" -> (Integer) args[1];
+                      case "listInstructions" ->
+                          args.length == 4 ? (Integer) args[2] : (Integer) args[1];
                       case "getFlowOverrides" -> (Integer) args[3];
                       default -> 100;
                     };
                 return emptyScannedPage(scan, limit);
               });
+      ReferenceService references =
+          (fromRaw, toRaw, type, direction, scope, scan, limit, cursor) -> {
+            lastScan.set(scan);
+            return emptyScannedPage(scan, limit);
+          };
       GlobalVariableService globalVariables =
           proxy(
               GlobalVariableService.class,
@@ -378,7 +402,7 @@ class ScanListFilterTest {
               unused(ProgramService.class),
               unused(AddressService.class),
               comments,
-              unused(ReferenceService.class),
+              references,
               unused(MemoryService.class),
               listing,
               functions,

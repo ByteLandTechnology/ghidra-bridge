@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -90,7 +91,10 @@ class McpServerContractTest {
     assertTrue(((Map<?, ?>) decompParams.get("properties")).containsKey("format"));
 
     Map<String, Object> reference = toolByName(tools, "ghidra_reference");
-    assertEquals(List.of("filter"), paramsSchema(reference).get("required"));
+    Map<String, Object> referenceParams = paramsSchema(reference);
+    assertNull(referenceParams.get("required"));
+    assertTrue(((Map<?, ?>) referenceParams.get("properties")).containsKey("filter"));
+    assertTrue(((Map<?, ?>) referenceParams.get("properties")).containsKey("scan"));
     assertEquals(Boolean.TRUE, ((Map<?, ?>) reference.get("annotations")).get("readOnlyHint"));
 
     Map<String, Object> batch = toolByName(tools, "ghidra_batch");

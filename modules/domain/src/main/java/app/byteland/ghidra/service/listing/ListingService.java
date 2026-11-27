@@ -17,7 +17,16 @@ public interface ListingService {
   /**
    * Returns one page of instructions.
    */
-  Page<InstructionResource> listInstructions(AddressScanOptions scan, int limit, String cursor);
+  default Page<InstructionResource> listInstructions(
+      AddressScanOptions scan, int limit, String cursor) {
+    return listInstructions(null, scan, limit, cursor);
+  }
+
+  /**
+   * Returns one page of instructions within an optional selector scope.
+   */
+  Page<InstructionResource> listInstructions(
+      FlowOverrideScope scope, AddressScanOptions scan, int limit, String cursor);
 
   /**
    * Returns the metadata for one instruction by address.

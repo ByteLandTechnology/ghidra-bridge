@@ -8,17 +8,22 @@ import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.adapter.ghidra.GhidraTestSupport;
 import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
+import app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressIterator;
 import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.GenericAddressSpace;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.symbol.Namespace;
 import ghidra.program.model.symbol.RefType;
+import ghidra.program.model.symbol.Reference;
+import ghidra.program.model.symbol.ReferenceManager;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.util.classfinder.ClassSearcher;
 import ghidra.util.task.TaskMonitor;
@@ -26,6 +31,7 @@ import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -170,6 +176,159 @@ class FunctionRelationQueriesTest {
   }
 
   @Test
+  void extractsMultiSiteCallReferencesOrderedByEntryAndCallSiteAndMaterializesOnlyWinners() {
+    AtomicInteger namespaceLookups = new AtomicInteger();
+    AtomicInteger programLookups = new AtomicInteger();
+
+    Function helperA =
+        relatedFunction(0x00401000L, "helper_a", "Ns::A", namespaceLookups, programLookups);
+    Function helperB =
+        relatedFunction(0x00402000L, "helper_b", "Ns::B", namespaceLookups, programLookups);
+    Function indirectHelper =
+        relatedFunction(0x00403000L, "helper_indirect", "Ns::C", namespaceLookups, programLookups);
+
+    Address siteLate = RAM.getAddress(0x00400020L);
+    Address siteEarly = RAM.getAddress(0x00400008L);
+    Address siteB = RAM.getAddress(0x00400010L);
+
+    AddressSet body = new AddressSet(RAM.getAddress(0x00400000L), RAM.getAddress(0x00400030L));
+    List<Address> sourceAddrs = List.of(siteLate, siteEarly, siteB);
+
+    Reference refA2 = callReference(siteLate, helperA.getEntryPoint(), RefType.UNCONDITIONAL_CALL);
+    Reference refA1 = callReference(siteEarly, helperA.getEntryPoint(), RefType.UNCONDITIONAL_CALL);
+    Reference refDataIgnored = callReference(siteEarly, helperB.getEntryPoint(), RefType.DATA);
+    Reference refB = callReference(siteB, helperB.getEntryPoint(), RefType.COMPUTED_CALL);
+
+    ReferenceManager refManager =
+        (ReferenceManager)
+            Proxy.newProxyInstance(
+                ReferenceManager.class.getClassLoader(),
+                new Class<?>[] {ReferenceManager.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getReferenceSourceIterator" -> addressIterator(sourceAddrs.iterator());
+                      case "getReferencesFrom" -> {
+                        Address from = (Address) args[0];
+                        if (siteLate.equals(from)) yield new Reference[] {refA2};
+                        if (siteEarly.equals(from)) yield new Reference[] {refA1, refDataIgnored};
+                        if (siteB.equals(from)) yield new Reference[] {refB};
+                        yield new Reference[0];
+                      }
+                      default -> throw new AssertionError(method.getName());
+                    });
+    FunctionManager fnManager =
+        (FunctionManager)
+            Proxy.newProxyInstance(
+                FunctionManager.class.getClassLoader(),
+                new Class<?>[] {FunctionManager.class},
+                (proxy, method, args) -> {
+                  if ("getFunctionAt".equals(method.getName())) {
+                    Address addr = (Address) args[0];
+                    if (helperA.getEntryPoint().equals(addr)) return helperA;
+                    if (helperB.getEntryPoint().equals(addr)) return helperB;
+                    return null;
+                  }
+                  throw new AssertionError(method.getName());
+                });
+    Program program =
+        (Program)
+            Proxy.newProxyInstance(
+                Program.class.getClassLoader(),
+                new Class<?>[] {Program.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getReferenceManager" -> refManager;
+                      case "getFunctionManager" -> fnManager;
+                      default -> throw new AssertionError(method.getName());
+                    });
+    Set<Function> calledSet = new LinkedHashSet<>(List.of(helperA, helperB, indirectHelper));
+    Function callerFn =
+        (Function)
+            Proxy.newProxyInstance(
+                Function.class.getClassLoader(),
+                new Class<?>[] {Function.class},
+                (proxy, method, args) ->
+                    switch (method.getName()) {
+                      case "getProgram" -> program;
+                      case "getBody" -> body;
+                      case "getCalledFunctions" -> calledSet;
+                      default -> throw new AssertionError(method.getName());
+                    });
+
+    FunctionRelationQueries queries = new FunctionRelationQueries(raw -> callerFn);
+    Page<FunctionCallResource> page1 = queries.getCallees("ram:00400000", 2, null);
+    assertEquals(
+        List.of(
+            new FunctionCallResource(
+                "ram:00401000",
+                "helper_a",
+                "ram:00400008",
+                FunctionCallResource.Direction.CALLEES,
+                "Ns::A",
+                null),
+            new FunctionCallResource(
+                "ram:00401000",
+                "helper_a",
+                "ram:00400020",
+                FunctionCallResource.Direction.CALLEES,
+                "Ns::A",
+                null)),
+        page1.items());
+    assertEquals(CompositeCursor.key("ram:00401000", "ram:00400020"), page1.nextCursor());
+    assertEquals(1, namespaceLookups.get());
+
+    Page<FunctionCallResource> page2 =
+        queries.getCallees("ram:00400000", 2, page1.nextCursor());
+    assertEquals(
+        List.of(
+            new FunctionCallResource(
+                "ram:00402000",
+                "helper_b",
+                "ram:00400010",
+                FunctionCallResource.Direction.CALLEES,
+                "Ns::B",
+                null),
+            new FunctionCallResource(
+                "ram:00403000",
+                "helper_indirect",
+                null,
+                FunctionCallResource.Direction.CALLEES,
+                "Ns::C",
+                null)),
+        page2.items());
+    assertNull(page2.nextCursor());
+    assertEquals(3, namespaceLookups.get());
+  }
+
+  private static AddressIterator addressIterator(Iterator<Address> iterator) {
+    return (AddressIterator)
+        Proxy.newProxyInstance(
+            AddressIterator.class.getClassLoader(),
+            new Class<?>[] {AddressIterator.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "hasNext" -> iterator.hasNext();
+                  case "next" -> iterator.next();
+                  case "iterator" -> (AddressIterator) proxy;
+                  default -> throw new AssertionError(method.getName());
+                });
+  }
+
+  private static Reference callReference(Address from, Address to, RefType refType) {
+    return (Reference)
+        Proxy.newProxyInstance(
+            Reference.class.getClassLoader(),
+            new Class<?>[] {Reference.class},
+            (proxy, method, args) ->
+                switch (method.getName()) {
+                  case "getFromAddress" -> from;
+                  case "getToAddress" -> to;
+                  case "getReferenceType" -> refType;
+                  default -> throw new AssertionError(method.getName());
+                });
+  }
+
+  @Test
   void concurrentProgramDbReadsResolveCallersDemangleCppNamesAndInvalidateOnProgramSwitch()
       throws Exception {
     GhidraTestSupport.x64Language();
@@ -287,6 +446,7 @@ class FunctionRelationQueriesTest {
                 switch (method.getName()) {
                   case "getCallingFunctions" -> callers;
                   case "getCalledFunctions" -> callees;
+                  case "getProgram" -> null;
                   default -> throw new AssertionError(method.getName());
                 });
   }

@@ -34,7 +34,7 @@ class ListingDescriptionsTest {
   }
 
   @Test
-  void toCodeUnitItemOnDefinedDataPopulatesDataTypeWithoutReadingValueOrRepresentation() {
+  void toCodeUnitItemOnDefinedDataPopulatesDataTypeValueAndRepresentation() {
     byte[] rawBytes = new byte[] {0x2a, 0x00, 0x00, 0x00};
     Program program = initializedProgram(rawBytes);
     GhidraSession session = new GhidraSession(new StubScript(program));
@@ -52,8 +52,8 @@ class ListingDescriptionsTest {
                   case "getDataType" -> dwordType;
                   case "isDefined" -> true;
                   case "toString" -> "dd 2Ah";
-                  case "getValue", "getDefaultValueRepresentation" ->
-                      throw new AssertionError("unexpected Data call: " + method.getName());
+                  case "getValue" -> 42L;
+                  case "getDefaultValueRepresentation" -> "2Ah";
                   default -> throw new AssertionError(method.getName());
                 });
 
@@ -70,7 +70,9 @@ class ListingDescriptionsTest {
             "dd 2Ah",
             null,
             null,
-            DataTypeReference.named("/dword")),
+            DataTypeReference.named("/dword"),
+            "42",
+            "2Ah"),
         resource);
   }
 
@@ -105,6 +107,8 @@ class ListingDescriptionsTest {
     assertEquals(DataTypeReference.named("/undefined"), resource.dataType());
     assertNull(resource.mnemonic());
     assertNull(resource.operands());
+    assertNull(resource.value());
+    assertNull(resource.representation());
   }
 
   @Test

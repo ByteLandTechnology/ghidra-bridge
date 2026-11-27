@@ -24,6 +24,7 @@ final class ListingDescriptions {
       CodeUnit codeUnit, CodeUnitResource.Kind kind, GhidraSession context) {
     Instruction instruction = codeUnit instanceof Instruction value ? value : null;
     Data data = codeUnit instanceof Data value ? value : null;
+    Data definedData = kind == CodeUnitResource.Kind.DATA ? data : null;
     return new CodeUnitResource(
         AddressUtil.canonicalAddress(codeUnit.getAddress()),
         kind,
@@ -32,7 +33,9 @@ final class ListingDescriptions {
         codeUnit.toString(),
         instruction == null ? null : instruction.getMnemonicString(),
         instruction == null ? null : operandsOf(instruction),
-        data == null ? null : GhidraDataTypeReferences.toReference(data.getDataType()));
+        data == null ? null : GhidraDataTypeReferences.toReference(data.getDataType()),
+        definedData == null ? null : String.valueOf(definedData.getValue()),
+        definedData == null ? null : formatScalar(definedData));
   }
 
   static InstructionResource toInstructionItem(Instruction instruction, GhidraSession context) {
