@@ -2,20 +2,18 @@ package app.byteland.ghidra.agent;
 
 import app.byteland.ghidra.network.NetworkBinding;
 import java.io.ByteArrayOutputStream;
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * Configuration values for a bridge runtime session.
+ * Configuration values for a WebSocket bridge session.
  */
 public record AgentConfig(
     String wsUrl,
@@ -25,18 +23,16 @@ public record AgentConfig(
     String token,
     String sessionId,
     Integer exitDeadlineSeconds) {
-  private static final String DEFAULT_LOOPBACK_HOST =
-      InetAddress.getLoopbackAddress().getHostAddress();
   private static final Set<String> ALLOWED =
       Set.of("ws_url", "host", "port", "path", "session_id", "token", "jar", "exit_deadline_sec");
 
   public AgentConfig {
-    boolean pathWasProvided = optionalText(path) != null;
-    wsUrl = optionalText(wsUrl);
-    host = optionalText(host);
-    path = normalizePath(path, "/ws/agent");
-    token = optionalText(token);
-    sessionId = required(sessionId, "session_id");
+    boolean pathWasProvided = NetworkBinding.optionalText(path) != null;
+    wsUrl = NetworkBinding.optionalText(wsUrl);
+    host = NetworkBinding.optionalText(host);
+    path = NetworkBinding.normalizePath(path, AgentWebSocketServer.DEFAULT_PATH);
+    token = NetworkBinding.optionalText(token);
+    sessionId = NetworkBinding.requiredText(sessionId, "session_id");
     if (wsUrl == null && port == null) {
       throw new IllegalArgumentException("either ws_url or port is required");
     }
@@ -47,8 +43,8 @@ public record AgentConfig(
       URI uri = parseWsUri(wsUrl);
       NetworkBinding.requireTokenForNonLoopback(uri.getHost(), token);
     }
-    if (port != null) requireValidPort(port);
-    if (port != null && host == null) host = DEFAULT_LOOPBACK_HOST;
+    if (port != null) NetworkBinding.requireValidPort(port);
+    if (port != null && host == null) host = NetworkBinding.DEFAULT_LOOPBACK_HOST;
     if (port != null) NetworkBinding.requireTokenForNonLoopback(host, token);
     if (exitDeadlineSeconds != null && wsUrl == null) {
       throw new IllegalArgumentException("exit_deadline_sec requires ws_url");
@@ -59,38 +55,20 @@ public record AgentConfig(
   }
 
   public static AgentConfig fromArgs(String... args) {
-    return fromMap(parseArgs(args));
+    return fromMap(NetworkBinding.parseArgs(args));
   }
 
   public static AgentConfig fromMap(Map<String, String> args) {
     Objects.requireNonNull(args, "args");
-    rejectUnknown(args, ALLOWED);
+    NetworkBinding.rejectUnknown(args, ALLOWED);
     return new AgentConfig(
         args.get("ws_url"),
         args.get("host"),
-        optionalInteger(args.get("port"), "port"),
+        NetworkBinding.optionalInteger(args.get("port"), "port"),
         args.get("path"),
         args.get("token"),
         args.get("session_id"),
-        optionalInteger(args.get("exit_deadline_sec"), "exit_deadline_sec"));
-  }
-
-  public static Map<String, String> parseArgs(String... args) {
-    Map<String, String> parsed = new LinkedHashMap<>();
-    if (args == null) return parsed;
-    for (String raw : args) {
-      if (raw == null || raw.isBlank()) continue;
-      String argument = raw.trim();
-      int separator = argument.indexOf('=');
-      if (separator <= 0) {
-        throw new IllegalArgumentException("expected key=value argument but got: " + argument);
-      }
-      String key = argument.substring(0, separator);
-      if (parsed.putIfAbsent(key, argument.substring(separator + 1)) != null) {
-        throw new IllegalArgumentException("duplicate startup argument: " + key);
-      }
-    }
-    return parsed;
+        NetworkBinding.optionalInteger(args.get("exit_deadline_sec"), "exit_deadline_sec"));
   }
 
   public boolean isOutboundMode() {
@@ -115,7 +93,7 @@ public record AgentConfig(
   }
 
   public static String redactWsUrl(String wsUrl) {
-    String normalized = optionalText(wsUrl);
+    String normalized = NetworkBinding.optionalText(wsUrl);
     if (normalized == null) return null;
     int query = normalized.indexOf('?');
     int fragment = normalized.indexOf('#');
@@ -128,9 +106,8 @@ public record AgentConfig(
     return separator < 0 ? stripped : stripped + "?<redacted>";
   }
 
-  @SuppressWarnings("PMD.PreserveStackTrace")
   public static URI parseWsUri(String wsUrl) {
-    String normalized = optionalText(wsUrl);
+    String normalized = NetworkBinding.optionalText(wsUrl);
     if (normalized == null) {
       throw new IllegalArgumentException("ws_url is invalid");
     }
@@ -155,7 +132,7 @@ public record AgentConfig(
       throw new IllegalArgumentException("ws_url must include a host");
     }
     if (uri.getPort() != -1) {
-      requireValidPort(uri.getPort());
+      NetworkBinding.requireValidPort(uri.getPort());
     }
     rejectQueryToken(uri.getRawQuery());
     return uri;
@@ -249,7 +226,6 @@ public record AgentConfig(
     return decoded.toString();
   }
 
-  @SuppressWarnings("PMD.PreserveStackTrace")
   private static void appendUtf8Bytes(StringBuilder target, byte[] bytes) {
     try {
       target.append(
@@ -268,46 +244,5 @@ public record AgentConfig(
     if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
     if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
     return -1;
-  }
-
-  public static void rejectUnknown(Map<String, String> args, Set<String> allowed) {
-    for (String key : args.keySet()) {
-      if (!allowed.contains(key))
-        throw new IllegalArgumentException("unknown startup argument: " + key);
-    }
-  }
-
-  public static void requireValidPort(int port) {
-    if (port < 1 || port > 65535) {
-      throw new IllegalArgumentException("port must be in 1..65535");
-    }
-  }
-
-  public static Integer optionalInteger(String value, String field) {
-    String normalized = optionalText(value);
-    if (normalized == null) return null;
-    try {
-      return Integer.valueOf(normalized);
-    } catch (NumberFormatException error) {
-      throw new IllegalArgumentException(field + " must be an integer", error);
-    }
-  }
-
-  private static String required(String value, String field) {
-    String normalized = optionalText(value);
-    if (normalized == null) throw new IllegalArgumentException(field + " is required");
-    return normalized;
-  }
-
-  public static String optionalText(String value) {
-    if (value == null) return null;
-    String normalized = value.trim();
-    return normalized.isEmpty() ? null : normalized;
-  }
-
-  public static String normalizePath(String value, String fallback) {
-    String normalized = optionalText(value);
-    if (normalized == null) normalized = fallback;
-    return normalized.startsWith("/") ? normalized : "/" + normalized;
   }
 }

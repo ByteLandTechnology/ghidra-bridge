@@ -59,7 +59,9 @@ final class InstructionMethods implements ApiMethodProvider {
                 ApiVocabulary.SELECTOR,
                 flowSelector,
                 "flow_overrides",
-                WireSchema.array(ApiSchemaCatalog.flowOverride(), 1, 5)),
+                WireSchema.withDefault(
+                    WireSchema.array(ApiSchemaCatalog.flowOverride(), 1, 5),
+                    List.of("branch", "call", "call_return", "return"))),
             ApiVocabulary.SELECTOR);
     registry.scanList(
         "flow_override.list",
@@ -96,7 +98,9 @@ final class InstructionMethods implements ApiMethodProvider {
                         ApiVocabulary.FLOW_OVERRIDE,
                         ApiSchemaCatalog.flowOverride(),
                         "expected_flow_overrides",
-                        WireSchema.array(ApiSchemaCatalog.flowOverride(), 1, 5)),
+                        WireSchema.withDefault(
+                            WireSchema.array(ApiSchemaCatalog.flowOverride(), 1, 5),
+                            List.of("none", "branch", "call", "call_return", "return"))),
                     ApiVocabulary.FLOW_OVERRIDE)),
             ApiVocabulary.SELECTOR,
             ApiVocabulary.PATCH),

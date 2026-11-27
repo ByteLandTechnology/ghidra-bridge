@@ -2,11 +2,15 @@ package app.byteland.ghidra.adapter.ghidra.function;
 
 import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.CppSymbolNames;
+import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.adapter.ghidra.scan.CompositeCursor;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.function.FunctionCallResource;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressFormatException;
 import ghidra.program.model.address.AddressIterator;
+import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
@@ -19,22 +23,33 @@ import ghidra.program.model.symbol.ReferenceManager;
 import ghidra.util.task.TaskMonitor;
 import ghidra.util.task.TaskMonitorAdapter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
 final class FunctionRelationQueries {
+  private static final String FUNCTION_CALL_RESOURCE = "function_call";
+
   record PeerCalls(String entry, Function function, List<String> callSites) {}
 
   record CollectedPeers(List<PeerCalls> peers, boolean timedOut) {}
 
+  private final GhidraSession context;
   private final FunctionResolver resolver;
 
   FunctionRelationQueries(FunctionResolver resolver) {
-    this.resolver = resolver;
+    this(null, resolver);
+  }
+
+  FunctionRelationQueries(GhidraSession context, FunctionResolver resolver) {
+    this.context = context;
+    this.resolver = Objects.requireNonNull(resolver, "resolver");
   }
 
   Page<FunctionCallResource> getCallers(String rawAddress, int limit, String cursor) {
@@ -48,10 +63,61 @@ final class FunctionRelationQueries {
   private Page<FunctionCallResource> getFunctionRelations(
       String rawAddress, boolean callers, int limit, String cursor) {
     if (cursor != null && cursor.indexOf('\0') >= 0) {
-      CompositeCursor.parse(cursor, "function_call");
+      CompositeCursor.parse(cursor, FUNCTION_CALL_RESOURCE);
     }
     Function function = resolver.resolveFunction(rawAddress);
-    CollectedPeers collected = collectPeers(function, callers, Long.MAX_VALUE);
+    boolean hasCursor = cursor != null && !cursor.isBlank();
+    if (!hasCursor || context == null || !context.canCacheSnapshots()) {
+      return selectRelationsBounded(
+          collectPeers(function, callers, Long.MAX_VALUE), callers, limit, cursor);
+    }
+
+    Program snapshotProgram = context.currentProgramOrNull();
+    QuerySnapshotCache snapshots = context.querySnapshots();
+    long clearEpoch = snapshots.clearEpoch();
+    long modNumber = context.modificationNumber();
+    String canonicalTarget = AddressUtil.canonicalAddress(function.getEntryPoint());
+    String directionKey = callers ? "callers" : "callees";
+    QuerySnapshotCache.Key cacheKey =
+        QuerySnapshotCache.Key.of(
+            FUNCTION_CALL_RESOURCE, modNumber, canonicalTarget, directionKey);
+    String[] sortedKeys = snapshots.get(cacheKey);
+    if (sortedKeys == null) {
+      CollectedPeers collected = collectPeers(function, callers, Long.MAX_VALUE);
+      List<String> keys = new ArrayList<>();
+      for (PeerCalls peer : collected.peers()) {
+        if (peer.callSites().isEmpty()) {
+          keys.add(cursorKey(peer.entry(), null));
+        } else {
+          for (String site : peer.callSites()) {
+            keys.add(cursorKey(peer.entry(), site));
+          }
+        }
+      }
+      sortedKeys = keys.toArray(String[]::new);
+      Arrays.sort(sortedKeys);
+      if (!context.canCacheSnapshots()) {
+        return selectRelationsBounded(collected, callers, limit, cursor);
+      }
+      if (context.currentProgramOrNull() == snapshotProgram
+          && context.modificationNumber() == modNumber) {
+        snapshots.putIfUnchanged(clearEpoch, cacheKey, sortedKeys);
+      }
+    }
+    FunctionCallResource.Direction direction =
+        callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;
+    Map<String, Function> resolvedByEntry = new HashMap<>();
+    Map<Function, PeerMetadata> metadataByFunction = new HashMap<>();
+    return QuerySnapshotCache.slice(
+        sortedKeys,
+        limit,
+        cursor,
+        candidateKey -> resolveCandidate(candidateKey, resolvedByEntry),
+        (candidate, ignoredKey) -> describeCandidate(candidate, direction, metadataByFunction));
+  }
+
+  private static Page<FunctionCallResource> selectRelationsBounded(
+      CollectedPeers collected, boolean callers, int limit, String cursor) {
     Page.Selector<CandidateCall> selector = Page.selector(limit, cursor);
     for (PeerCalls peer : collected.peers()) {
       if (peer.callSites().isEmpty()) {
@@ -69,17 +135,59 @@ final class FunctionRelationQueries {
         callers ? FunctionCallResource.Direction.CALLERS : FunctionCallResource.Direction.CALLEES;
     Map<Function, PeerMetadata> metadataByFunction = new HashMap<>();
     return selector.finish(
-        candidate -> {
-          PeerMetadata metadata =
-              metadataByFunction.computeIfAbsent(candidate.function(), PeerMetadata::from);
-          return new FunctionCallResource(
-              candidate.entry(),
-              metadata.name(),
-              candidate.callSite(),
-              direction,
-              metadata.namespace(),
-              metadata.demangled());
-        });
+        candidate -> describeCandidate(candidate, direction, metadataByFunction));
+  }
+
+  private static FunctionCallResource describeCandidate(
+      CandidateCall candidate,
+      FunctionCallResource.Direction direction,
+      Map<Function, PeerMetadata> metadataByFunction) {
+    PeerMetadata metadata =
+        metadataByFunction.computeIfAbsent(candidate.function(), PeerMetadata::from);
+    return new FunctionCallResource(
+        candidate.entry(),
+        metadata.name(),
+        candidate.callSite(),
+        direction,
+        metadata.namespace(),
+        metadata.demangled());
+  }
+
+  private CandidateCall resolveCandidate(
+      String candidateKey, Map<String, Function> resolvedByEntry) {
+    int separator = candidateKey.indexOf('\0');
+    String canonicalEntry = separator < 0 ? candidateKey : candidateKey.substring(0, separator);
+    String callSite = separator < 0 ? null : candidateKey.substring(separator + 1);
+    Function function;
+    if (resolvedByEntry.containsKey(canonicalEntry)) {
+      function = resolvedByEntry.get(canonicalEntry);
+    } else {
+      function = resolveOrNull(canonicalEntry);
+      resolvedByEntry.put(canonicalEntry, function);
+    }
+    return function == null ? null : new CandidateCall(canonicalEntry, function, callSite);
+  }
+
+  private Function resolveOrNull(String canonicalEntry) {
+    try {
+      return resolver.resolveFunction(canonicalEntry);
+    } catch (NoSuchElementException | IllegalArgumentException ignored) {
+      if (context != null && canonicalEntry.startsWith("EXTERNAL:")) {
+        Program program = context.currentProgramOrNull();
+        FunctionManager fnManager = program == null ? null : program.getFunctionManager();
+        if (fnManager != null) {
+          try {
+            Address extAddress =
+                AddressSpace.EXTERNAL_SPACE.getAddress(
+                    canonicalEntry.substring("EXTERNAL:".length()));
+            return fnManager.getFunctionAt(extAddress);
+          } catch (AddressFormatException ignoredFormat) {
+            return null;
+          }
+        }
+      }
+      return null;
+    }
   }
 
   CollectedPeers collectPeers(Function function, boolean callers, long deadlineNanos) {

@@ -25,7 +25,7 @@ public final class DataTypeServiceImpl implements DataTypeService {
   @Override
   public Page<DataTypeCategoryResource> listCategories(
       String categoryPath, int limit, String cursor) {
-    return DataTypeQueries.listCategories(dataTypeManager(), categoryPath, limit, cursor);
+    return DataTypeQueries.listCategories(context, dataTypeManager(), categoryPath, limit, cursor);
   }
 
   @Override
@@ -37,7 +37,7 @@ public final class DataTypeServiceImpl implements DataTypeService {
   public Page<DataTypeResource> searchDataTypes(
       String query, String categoryPath, String kind, int limit, String cursor) {
     return DataTypeQueries.searchDataTypes(
-        dataTypeManager(), query, categoryPath, kind, limit, cursor);
+        context, dataTypeManager(), query, categoryPath, kind, limit, cursor);
   }
 
   @Override

@@ -313,7 +313,8 @@ class AgentClientWebSocketListenerTest {
               + "/ws/agent";
       AgentConfig config =
           new AgentConfig(wsUrl, null, null, null, null, "loopback-oversized", null);
-      try (AgentDispatcher dispatcher = new AgentDispatcher(stubServices(demangleCalls), config)) {
+      try (AgentDispatcher dispatcher =
+          new AgentDispatcher(stubServices(demangleCalls), config.sessionId())) {
         AgentClient client =
             new AgentClient(
                 config, dispatcher, new AgentClient.LifecycleListener() {}, Duration.ofSeconds(5));
@@ -392,7 +393,8 @@ class AgentClientWebSocketListenerTest {
               + "/ws/agent";
       AgentConfig config =
           new AgentConfig(wsUrl, null, null, null, null, "loopback-valid", null);
-      try (AgentDispatcher dispatcher = new AgentDispatcher(stubServices(demangleCalls), config)) {
+      try (AgentDispatcher dispatcher =
+          new AgentDispatcher(stubServices(demangleCalls), config.sessionId())) {
         AgentClient client =
             new AgentClient(
                 config, dispatcher, new AgentClient.LifecycleListener() {}, Duration.ofSeconds(5));
@@ -557,7 +559,8 @@ class AgentClientWebSocketListenerTest {
 
   private static TestHarness newHarness(AtomicInteger demangleCalls) {
     AgentConfig config = new AgentConfig("ws://127.0.0.1:9/ws/agent", null, null, null, null, "test", null);
-    AgentDispatcher dispatcher = new AgentDispatcher(stubServices(demangleCalls), config);
+    AgentDispatcher dispatcher =
+        new AgentDispatcher(stubServices(demangleCalls), config.sessionId());
     List<String> sentMessages = Collections.synchronizedList(new ArrayList<>());
     AgentClientChannels.MessageChannel recordingChannel =
         new AgentClientChannels.MessageChannel() {
