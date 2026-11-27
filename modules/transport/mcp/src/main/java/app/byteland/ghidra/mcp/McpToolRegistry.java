@@ -2,6 +2,8 @@ package app.byteland.ghidra.mcp;
 
 import app.byteland.ghidra.api.ApiCatalog;
 import app.byteland.ghidra.api.ApiCatalog.MethodDescriptor;
+import app.byteland.ghidra.api.ApiException;
+import app.byteland.ghidra.api.WireSchema;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,8 +14,26 @@ import java.util.Map;
  * <prefix>_help}.
  */
 final class McpToolRegistry {
+  private static final String OPERATION_FIELD = "operation";
+  private static final String PARAMS_FIELD = "params";
+  private static final String DOMAIN_FIELD = "domain";
+  private static final Map<String, Object> HELP_ENVELOPE_SCHEMA =
+      WireSchema.object(
+          Map.of(
+              DOMAIN_FIELD,
+                  Map.of(
+                      "type", "string",
+                      "minLength", 1,
+                      "description", "Domain name or tool name to inspect"),
+              OPERATION_FIELD,
+                  Map.of(
+                      "type", "string",
+                      "minLength", 1,
+                      "description", "Operation name within the selected domain")));
+
   private final String prefix;
   private final Map<String, Map<String, MethodDescriptor>> domains = new LinkedHashMap<>();
+  private final Map<String, Map<String, Object>> domainEnvelopeSchemas = new LinkedHashMap<>();
   private final List<Map<String, Object>> listedTools;
 
   McpToolRegistry(ApiCatalog catalog) {
@@ -35,24 +55,25 @@ final class McpToolRegistry {
             "description",
             "Get domains, operations, schemas, and effects.",
             "inputSchema",
-            Map.of(
-                "type",
-                "object",
-                "properties",
-                Map.of("domain", Map.of("type", "string"), "operation", Map.of("type", "string")),
-                "additionalProperties",
-                false),
+            HELP_ENVELOPE_SCHEMA,
             "annotations",
             Map.of(
-                "readOnlyHint",
-                true,
-                "destructiveHint",
-                false,
-                "idempotentHint",
-                true,
-                "openWorldHint",
-                false)));
-    domains.forEach((domain, operations) -> tools.add(groupTool(domain, operations)));
+                "readOnlyHint", true,
+                "destructiveHint", false,
+                "idempotentHint", true,
+                "openWorldHint", false)));
+    domains.forEach((domain, operations) -> {
+      domainEnvelopeSchemas.put(
+          domain,
+          WireSchema.object(
+              Map.of(
+                  OPERATION_FIELD,
+                  WireSchema.stringEnum(operations.keySet().toArray(String[]::new)),
+                  PARAMS_FIELD,
+                  WireSchema.openObject()),
+              OPERATION_FIELD));
+      tools.add(groupTool(domain, operations));
+    });
     listedTools = List.copyOf(tools);
   }
 
@@ -78,17 +99,17 @@ final class McpToolRegistry {
   private Map<String, Object> groupTool(String domain, Map<String, MethodDescriptor> operations) {
     Map<String, Object> properties = new LinkedHashMap<>();
     properties.put(
-        "operation",
+        OPERATION_FIELD,
         Map.of(
             "type", "string",
             "description", "The operation to perform",
             "enum", List.copyOf(operations.keySet())));
-    properties.put("params", McpParamsSchema.build(domain, operations.values()));
+    properties.put(PARAMS_FIELD, McpParamsSchema.build(domain, operations.values()));
 
     Map<String, Object> inputSchema = new LinkedHashMap<>();
     inputSchema.put("type", "object");
     inputSchema.put("properties", Map.copyOf(properties));
-    inputSchema.put("required", List.of("operation"));
+    inputSchema.put("required", List.of(OPERATION_FIELD));
     inputSchema.put("additionalProperties", false);
 
     String purpose =
@@ -139,21 +160,104 @@ final class McpToolRegistry {
     return domain != null && domains.containsKey(domain);
   }
 
-  Map<String, Object> help(Map<String, Object> arguments) {
-    if (!List.of("domain", "operation").containsAll(arguments.keySet())) {
-      throw new IllegalArgumentException("Unknown help argument");
+  String unknownToolMessage(String name) {
+    List<String> validTools = new ArrayList<>(domains.size() + 1);
+    validTools.add(helpToolName());
+    domains.keySet().forEach(domain -> validTools.add(toolName(domain)));
+    String validToolsList = String.join(", ", validTools);
+    String candidate = stripPrefixIfPresent(name);
+    if (candidate != null
+        && candidate.indexOf('.') > 0
+        && candidate.indexOf('.') < candidate.length() - 1) {
+      String[] resolved = target(candidate);
+      Map<String, MethodDescriptor> ops = domains.get(resolved[0]);
+      if (ops != null && ops.containsKey(resolved[1])) {
+        return "Unknown tool \""
+            + name
+            + "\". Call tool \""
+            + toolName(resolved[0])
+            + "\" with bare operation \""
+            + resolved[1]
+            + "\" instead. Valid tools: "
+            + validToolsList
+            + ".";
+      }
+      String beforeDot = candidate.substring(0, candidate.indexOf('.'));
+      if (domains.containsKey(beforeDot)) {
+        return "Unknown tool \""
+            + name
+            + "\". Use tool \""
+            + toolName(beforeDot)
+            + "\" instead of a dotted tool name. Valid tools: "
+            + validToolsList
+            + ".";
+      }
     }
-    Object domainValue = arguments.get("domain");
+    return "Unknown tool \"" + name + "\". Valid tools: " + validToolsList + ".";
+  }
+
+  ResolvedToolCall resolveDomainCall(String name, Object rawArguments) {
+    String domain = domainOf(name);
+    Map<String, MethodDescriptor> operations = domain == null ? null : domains.get(domain);
+    Map<String, Object> envelopeSchema = domain == null ? null : domainEnvelopeSchemas.get(domain);
+    if (operations == null || envelopeSchema == null) {
+      throw ApiException.badRequest("invalid_value", unknownToolMessage(name), "/name");
+    }
+    String canonicalTool = toolName(domain);
+    Map<String, Object> rawMap = validateArgumentsObject(rawArguments, envelopeSchema);
+    Map<String, Object> arguments = new LinkedHashMap<>(rawMap);
+    if (arguments.containsKey(PARAMS_FIELD) && arguments.get(PARAMS_FIELD) == null) {
+      arguments.remove(PARAMS_FIELD);
+    }
+    try {
+      WireSchema.validate(arguments, envelopeSchema, "");
+    } catch (ApiException error) {
+      throw formatDomainEnvelopeError(canonicalTool, domain, operations, arguments, error);
+    }
+    String operation = (String) arguments.get(OPERATION_FIELD);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> operationParams =
+        arguments.containsKey(PARAMS_FIELD)
+            ? (Map<String, Object>) arguments.get(PARAMS_FIELD)
+            : Map.of();
+    return new ResolvedToolCall(operation, operations.get(operation), operationParams);
+  }
+
+  Map<String, Object> help(Object rawArguments) {
+    Map<String, Object> rawMap = validateArgumentsObject(rawArguments, HELP_ENVELOPE_SCHEMA);
+    Map<String, Object> arguments = new LinkedHashMap<>(rawMap);
+    if (arguments.containsKey(DOMAIN_FIELD) && arguments.get(DOMAIN_FIELD) == null) {
+      arguments.remove(DOMAIN_FIELD);
+    }
+    if (arguments.containsKey(OPERATION_FIELD) && arguments.get(OPERATION_FIELD) == null) {
+      arguments.remove(OPERATION_FIELD);
+    }
+    try {
+      WireSchema.validate(arguments, HELP_ENVELOPE_SCHEMA, "");
+    } catch (ApiException error) {
+      throw formatHelpEnvelopeError(error);
+    }
+    Object domainValue = arguments.get(DOMAIN_FIELD);
     if (domainValue == null) {
-      if (arguments.containsKey("operation")) {
-        throw new IllegalArgumentException("operation requires domain");
+      if (arguments.containsKey(OPERATION_FIELD)) {
+        throw ApiException.badRequest(
+            "missing_field",
+            "Argument \"domain\" is required when \"operation\" is provided for "
+                + helpToolName()
+                + ". Valid domains: "
+                + validDomainsText()
+                + ".",
+            "/domain");
       }
       return Map.of("domains", domains.keySet().stream().map(this::toolName).toList());
     }
-    String domain = helpDomain(domainValue.toString());
+    String rawDomain = domainValue.toString();
+    String domain = helpDomain(rawDomain);
     Map<String, MethodDescriptor> operations = domains.get(domain);
-    if (operations == null) throw new IllegalArgumentException("Unknown domain: " + domainValue);
-    Object operationValue = arguments.get("operation");
+    if (operations == null) {
+      throw ApiException.badRequest("invalid_enum", unknownHelpDomainMessage(rawDomain), "/domain");
+    }
+    Object operationValue = arguments.get(OPERATION_FIELD);
     if (operationValue == null) {
       List<Map<String, Object>> operationEntries =
           operations.entrySet().stream()
@@ -161,14 +265,19 @@ final class McpToolRegistry {
               .toList();
       return Map.of("domain", toolName(domain), "operations", operationEntries);
     }
-    MethodDescriptor descriptor = operations.get(operationValue.toString());
-    if (descriptor == null)
-      throw new IllegalArgumentException("Unknown operation: " + operationValue);
+    String rawOperation = operationValue.toString();
+    MethodDescriptor descriptor = operations.get(rawOperation);
+    if (descriptor == null) {
+      throw ApiException.badRequest(
+          "invalid_enum",
+          unknownOperationMessage(toolName(domain), domain, operations, rawOperation, true),
+          "/operation");
+    }
     return Map.of(
         "domain",
         toolName(domain),
         "operation",
-        operationValue,
+        rawOperation,
         "method",
         descriptor.name(),
         "description",
@@ -199,6 +308,259 @@ final class McpToolRegistry {
 
   private static boolean effectFlag(MethodDescriptor descriptor, String key) {
     return Boolean.TRUE.equals(effectsOf(descriptor).get(key));
+  }
+
+  private Map<String, Object> validateArgumentsObject(
+      Object rawArguments, Map<String, Object> schema) {
+    Object candidate = rawArguments == null ? Map.of() : rawArguments;
+    if (!(candidate instanceof Map<?, ?>)) {
+      try {
+        WireSchema.validate(candidate, schema, "/arguments");
+      } catch (ApiException error) {
+        throw ApiException.badRequest(
+            error.error().code(),
+            "Tool arguments at /arguments must be a JSON object.",
+            "/arguments");
+      }
+    }
+    @SuppressWarnings("unchecked")
+    Map<String, Object> cast = (Map<String, Object>) candidate;
+    return cast;
+  }
+
+  private ApiException formatHelpEnvelopeError(ApiException error) {
+    String code = error.error().code();
+    String target = error.error().target();
+    if ("unknown_field".equals(code)) {
+      String badKey = pointerLeaf(target);
+      return ApiException.badRequest(
+          code,
+          "Unknown argument \""
+              + badKey
+              + "\" for "
+              + helpToolName()
+              + ". Valid arguments: domain, operation.",
+          target);
+    }
+    if ("/domain".equals(target)) {
+      return ApiException.badRequest(
+          code,
+          "Argument \"domain\" for "
+              + helpToolName()
+              + " must be a non-empty string. Valid domains: "
+              + validDomainsText()
+              + ".",
+          target);
+    }
+    if ("/operation".equals(target)) {
+      return ApiException.badRequest(
+          code,
+          "Argument \"operation\" for " + helpToolName() + " must be a non-empty string.",
+          target);
+    }
+    return error;
+  }
+
+  private ApiException formatDomainEnvelopeError(
+      String canonicalTool,
+      String domain,
+      Map<String, MethodDescriptor> operations,
+      Map<String, Object> arguments,
+      ApiException error) {
+    String code = error.error().code();
+    String target = error.error().target();
+    String validOps = String.join(", ", operations.keySet());
+    if ("missing_field".equals(code) && "/operation".equals(target)) {
+      return ApiException.badRequest(
+          code,
+          "Missing required argument \"operation\" for "
+              + canonicalTool
+              + ". Valid operations: "
+              + validOps
+              + ".",
+          target);
+    }
+    if ("unknown_field".equals(code)) {
+      String badKey = pointerLeaf(target);
+      return ApiException.badRequest(
+          code,
+          "Unknown argument \""
+              + badKey
+              + "\" for "
+              + canonicalTool
+              + ". Valid arguments: operation, params.",
+          target);
+    }
+    if ("/operation".equals(target)) {
+      Object rawOp = arguments.get(OPERATION_FIELD);
+      if (rawOp instanceof String text) {
+        return ApiException.badRequest(
+            "invalid_enum",
+            unknownOperationMessage(canonicalTool, domain, operations, text, false),
+            target);
+      }
+      return ApiException.badRequest(
+          code,
+          "Argument \"operation\" for "
+              + canonicalTool
+              + " must be a non-empty string. Valid operations: "
+              + validOps
+              + ".",
+          target);
+    }
+    if ("/params".equals(target)) {
+      return ApiException.badRequest(
+          code, "Argument \"params\" for " + canonicalTool + " must be a JSON object.", target);
+    }
+    return error;
+  }
+
+  private String unknownHelpDomainMessage(String rawDomain) {
+    String stripped = stripPrefixIfPresent(rawDomain);
+    if (stripped != null
+        && stripped.indexOf('.') > 0
+        && stripped.indexOf('.') < stripped.length() - 1) {
+      String[] resolved = target(stripped);
+      Map<String, MethodDescriptor> ops = domains.get(resolved[0]);
+      if (ops != null && ops.containsKey(resolved[1])) {
+        return "Unknown domain \""
+            + rawDomain
+            + "\". Use bare domain \""
+            + resolved[0]
+            + "\" with operation \""
+            + resolved[1]
+            + "\" instead. Valid domains: "
+            + validDomainsText()
+            + ".";
+      }
+      String beforeDot = stripped.substring(0, stripped.indexOf('.'));
+      if (domains.containsKey(beforeDot)) {
+        return "Unknown domain \""
+            + rawDomain
+            + "\". Use bare domain \""
+            + beforeDot
+            + "\" instead of \""
+            + rawDomain
+            + "\". Valid domains: "
+            + validDomainsText()
+            + ".";
+      }
+    }
+    return "Unknown domain \"" + rawDomain + "\". Valid domains: " + validDomainsText() + ".";
+  }
+
+  private String unknownOperationMessage(
+      String canonicalTool,
+      String domain,
+      Map<String, MethodDescriptor> operations,
+      String rawOperation,
+      boolean helpCall) {
+    String validOps = String.join(", ", operations.keySet());
+    String stripped = stripPrefixIfPresent(rawOperation);
+    if (stripped != null && stripped.startsWith(domain + ".")) {
+      String bare = stripped.substring(domain.length() + 1);
+      if (operations.containsKey(bare)) {
+        return "Unknown operation \""
+            + rawOperation
+            + "\" for "
+            + canonicalTool
+            + ". Use bare operation \""
+            + bare
+            + "\" instead of \""
+            + rawOperation
+            + "\". Valid operations: "
+            + validOps
+            + ".";
+      }
+    }
+    if (stripped != null
+        && stripped.indexOf('.') > 0
+        && stripped.indexOf('.') < stripped.length() - 1) {
+      String[] resolved = target(stripped);
+      if (domain.equals(resolved[0]) && operations.containsKey(resolved[1])) {
+        return "Unknown operation \""
+            + rawOperation
+            + "\" for "
+            + canonicalTool
+            + ". Use bare operation \""
+            + resolved[1]
+            + "\" instead of \""
+            + rawOperation
+            + "\". Valid operations: "
+            + validOps
+            + ".";
+      }
+      Map<String, MethodDescriptor> otherDomainOps = domains.get(resolved[0]);
+      if (otherDomainOps != null && otherDomainOps.containsKey(resolved[1])) {
+        String redirect =
+            helpCall
+                ? "Use domain \""
+                    + resolved[0]
+                    + "\" with bare operation \""
+                    + resolved[1]
+                    + "\" instead"
+                : "Call tool \""
+                    + toolName(resolved[0])
+                    + "\" with bare operation \""
+                    + resolved[1]
+                    + "\" instead";
+        return "Unknown operation \""
+            + rawOperation
+            + "\" for "
+            + canonicalTool
+            + ". "
+            + redirect
+            + ". Valid operations for "
+            + canonicalTool
+            + ": "
+            + validOps
+            + ".";
+      }
+      String lastSegment = stripped.substring(stripped.lastIndexOf('.') + 1);
+      if (operations.containsKey(lastSegment)) {
+        return "Unknown operation \""
+            + rawOperation
+            + "\" for "
+            + canonicalTool
+            + ". Use bare operation \""
+            + lastSegment
+            + "\" instead of \""
+            + rawOperation
+            + "\". Valid operations: "
+            + validOps
+            + ".";
+      }
+    }
+    return "Unknown operation \""
+        + rawOperation
+        + "\" for "
+        + canonicalTool
+        + ". Valid operations: "
+        + validOps
+        + ".";
+  }
+
+  private String validDomainsText() {
+    return String.join(", ", domains.keySet());
+  }
+
+  private String stripPrefixIfPresent(String value) {
+    if (value == null) {
+      return null;
+    }
+    if (value.startsWith(prefix + "_") || value.startsWith(prefix + ".")) {
+      return value.substring(prefix.length() + 1);
+    }
+    return value;
+  }
+
+  private static String pointerLeaf(String pointer) {
+    if (pointer == null || pointer.isEmpty()) {
+      return "";
+    }
+    int slash = pointer.lastIndexOf('/');
+    String segment = slash >= 0 ? pointer.substring(slash + 1) : pointer;
+    return segment.replace("~1", "/").replace("~0", "~");
   }
 
   boolean isHelpTool(String name) {
@@ -232,4 +594,7 @@ final class McpToolRegistry {
     String domain = domainOf(value);
     return domain == null ? value : domain;
   }
+
+  record ResolvedToolCall(
+      String operation, MethodDescriptor descriptor, Map<String, Object> operationParams) {}
 }

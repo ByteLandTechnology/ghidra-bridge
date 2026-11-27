@@ -98,7 +98,7 @@ public final class ApiRegistry {
   }
 
   static Map<String, Object> limitSchema() {
-    return WireSchema.integer(1, MAX_LIMIT);
+    return ApiSchemaCatalog.integerWithDefault(1, MAX_LIMIT, DEFAULT_LIMIT);
   }
 
   static Map<String, Object> cursorSchema() {
@@ -987,12 +987,20 @@ public final class ApiRegistry {
                   parameter.get(ApiVocabulary.DATA_TYPE),
                   target + "/parameters/" + index + "/data_type")));
     }
-    return new FunctionSignature(
-        dataType(value.get("return_type"), target + "/return_type"),
-        typedParameters,
-        text(value, "calling_convention"),
-        Boolean.TRUE.equals(bool(value, "has_var_args").orElse(null)),
-        Boolean.TRUE.equals(bool(value, "has_no_return").orElse(null)));
+    DataTypeReference returnType = dataType(value.get("return_type"), target + "/return_type");
+    String callingConvention = text(value, "calling_convention");
+    boolean hasVarArgs = Boolean.TRUE.equals(bool(value, "has_var_args").orElse(null));
+    boolean hasNoReturn = Boolean.TRUE.equals(bool(value, "has_no_return").orElse(null));
+    try {
+      return new FunctionSignature(
+          returnType, typedParameters, callingConvention, hasVarArgs, hasNoReturn);
+    } catch (IllegalArgumentException invalid) {
+      ApiException translated =
+          ApiException.badRequest(
+              "invalid_value", invalid.getMessage(), target + "/calling_convention");
+      translated.initCause(invalid);
+      throw translated;
+    }
   }
 
   static String dataTypePath(Map<String, Object> resource) {

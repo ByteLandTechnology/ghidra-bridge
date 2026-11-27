@@ -88,9 +88,11 @@ To format Java and Python files in place before verification, run:
 bash .github/scripts/verify-formatting.sh --fix
 ```
 
-Before you submit a change, run the verification suite that matches CI:
+Before you submit a change, run the local lint, hygiene, formatting, and verification checks:
 
 ```bash
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 bash .github/scripts/verify-formatting.sh
 ./gradlew --no-daemon clean verify
@@ -99,9 +101,16 @@ python3 tests/release_archive_reproducibility.py
 
 On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
 
-The verification tasks check:
-- **Formatting**: `verify-formatting.sh` verifies `google-java-format` style, the 100-character
-  Java line limit, and `ruff` checks on `tests/`.
+To check module import boundaries without a Ghidra installation, run:
+
+```bash
+./gradlew --no-daemon verifyArchitecture
+```
+
+The verification checks enforce these rules:
+- **Workflows and Shell Scripts**: `actionlint` and `shellcheck` validate GitHub Actions workflows, composite actions, and shell scripts.
+- **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, SHA-pinned GitHub Actions, URLs, and MCP tool names.
+- **Formatting**: `verify-formatting.sh` verifies `google-java-format` style, the 100-character Java line limit, and `ruff` checks on `tests/`.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.
@@ -123,7 +132,7 @@ Every Gradle `Test` task sets:
 ## Releases
 
 The CI workflow uses release-please to manage versions and release notes.
-After a push to `main` passes the `verify` job, release-please creates or updates a release pull request.
+After a push to `main` passes the `lint` and `verify` jobs, release-please creates or updates a release pull request.
 The pull request updates `version.txt`, `.release-please-manifest.json`, and `CHANGELOG.md`.
 Review the proposed version and notes in the pull request.
 Merge the pull request into `main` to start the release.

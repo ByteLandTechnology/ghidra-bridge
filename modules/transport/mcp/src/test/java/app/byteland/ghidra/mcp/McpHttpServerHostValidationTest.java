@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
@@ -383,7 +382,7 @@ class McpHttpServerHostValidationTest {
       String host, String token, AtomicInteger programGetCalls) throws IOException {
     for (int attempt = 0; attempt < 10; attempt++) {
       int port = findFreePort();
-      AgentDispatcher dispatcher = createStubDispatcher(host, port, token, programGetCalls);
+      AgentDispatcher dispatcher = createStubDispatcher(programGetCalls);
       McpConfig mcpConfig = new McpConfig(host, port, "/mcp", token, "test-session", "ghidra");
       try {
         McpHttpServer server = new McpHttpServer(mcpConfig, dispatcher);
@@ -403,8 +402,7 @@ class McpHttpServerHostValidationTest {
     }
   }
 
-  private static AgentDispatcher createStubDispatcher(
-      String host, int port, String token, AtomicInteger programGetCalls) {
+  private static AgentDispatcher createStubDispatcher(AtomicInteger programGetCalls) {
     ProgramService programService =
         (ProgramService)
             Proxy.newProxyInstance(
@@ -456,9 +454,7 @@ class McpHttpServerHostValidationTest {
               }
             },
             "test.bin");
-    AgentConfig agentConfig =
-        new AgentConfig(null, host, port, "/ws/agent", token, "test-session", null);
-    return new AgentDispatcher(services, agentConfig);
+    return new AgentDispatcher(services, "test-session");
   }
 
   @SuppressWarnings("unchecked")

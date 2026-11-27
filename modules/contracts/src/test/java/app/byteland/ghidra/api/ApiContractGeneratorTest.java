@@ -55,4 +55,48 @@ class ApiContractGeneratorTest {
     ApiContractGenerator.main(new String[] {directory.toString()});
     assertEquals(first, Files.readString(contractPath, StandardCharsets.UTF_8));
   }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void asyncApiPublishesDiscriminatorsAndDefaultMetadata() {
+    Map<String, Object> document = ApiContractGenerator.asyncApi(ApiRegistry.catalog());
+    Map<String, Object> channels = (Map<String, Object>) document.get("channels");
+    Map<String, Object> agentChannel = (Map<String, Object>) channels.get("/ws/agent");
+    Map<String, Object> subscribe = (Map<String, Object>) agentChannel.get("subscribe");
+    Map<String, Object> message = (Map<String, Object>) subscribe.get("message");
+    Map<String, Object> payload = (Map<String, Object>) message.get("payload");
+    assertEquals(Map.of("propertyName", "method"), payload.get("discriminator"));
+
+    Map<String, Object> methods = (Map<String, Object>) document.get("x-ghidra-bridge-methods");
+    Map<String, Object> dataTypeCreate = (Map<String, Object>) methods.get("data_type.create");
+    Map<String, Object> dtCreateSchema = (Map<String, Object>) dataTypeCreate.get("input_schema");
+    Map<String, Object> dtCreateProps = (Map<String, Object>) dtCreateSchema.get("properties");
+    Map<String, Object> resourceSchema = (Map<String, Object>) dtCreateProps.get("resource");
+    assertEquals(Map.of("propertyName", "kind"), resourceSchema.get("discriminator"));
+
+    Map<String, Object> defs = (Map<String, Object>) dtCreateSchema.get("$defs");
+    Map<String, Object> dtRef = (Map<String, Object>) defs.get("data_type_reference");
+    assertEquals(Map.of("propertyName", "kind"), dtRef.get("discriminator"));
+
+    Map<String, Object> codeUnitList = (Map<String, Object>) methods.get("code_unit.list");
+    Map<String, Object> cuProps =
+        (Map<String, Object>)
+            ((Map<String, Object>) codeUnitList.get("input_schema")).get("properties");
+    Map<String, Object> filterProps =
+        (Map<String, Object>) ((Map<String, Object>) cuProps.get("filter")).get("properties");
+    assertEquals("all", ((Map<String, Object>) filterProps.get("kind")).get("default"));
+    Map<String, Object> pageProps =
+        (Map<String, Object>) ((Map<String, Object>) cuProps.get("page")).get("properties");
+    assertEquals(100, ((Map<String, Object>) pageProps.get("limit")).get("default"));
+
+    Map<String, Object> batchExecute = (Map<String, Object>) methods.get("batch.execute");
+    Map<String, Object> batchProps =
+        (Map<String, Object>)
+            ((Map<String, Object>) batchExecute.get("input_schema")).get("properties");
+    assertEquals(
+        "per_item", ((Map<String, Object>) batchProps.get("transaction_mode")).get("default"));
+    Map<String, Object> batchItems = (Map<String, Object>) batchProps.get("items");
+    Map<String, Object> batchItemSchema = (Map<String, Object>) batchItems.get("items");
+    assertEquals(Map.of("propertyName", "method"), batchItemSchema.get("discriminator"));
+  }
 }

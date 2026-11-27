@@ -20,9 +20,11 @@ Do not edit generated contracts by hand. Do not commit files from a build direct
 
 ## Submit a change
 
-Run the local checks that match CI verification:
+Run all local checks before you open a pull request:
 
 ```bash
+actionlint
+shellcheck .github/scripts/*.sh
 bash .github/scripts/verify-repository-hygiene.sh
 bash .github/scripts/verify-formatting.sh
 ./gradlew --no-daemon clean verify

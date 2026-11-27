@@ -2,8 +2,28 @@ package app.byteland.ghidra.api;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.service.BridgeServices;
+import app.byteland.ghidra.service.TransactionRunner;
+import app.byteland.ghidra.service.address.AddressService;
+import app.byteland.ghidra.service.analysis.AnalysisResource;
+import app.byteland.ghidra.service.analysis.AnalysisService;
+import app.byteland.ghidra.service.comment.CommentService;
+import app.byteland.ghidra.service.datatype.DataTypeMutationValidationException;
+import app.byteland.ghidra.service.datatype.DataTypeService;
+import app.byteland.ghidra.service.decompilation.DecompilationService;
+import app.byteland.ghidra.service.function.FunctionService;
+import app.byteland.ghidra.service.globalvariable.GlobalVariableService;
+import app.byteland.ghidra.service.listing.ListingService;
+import app.byteland.ghidra.service.memory.MemoryService;
+import app.byteland.ghidra.service.program.ProgramService;
+import app.byteland.ghidra.service.reference.ReferenceService;
+import app.byteland.ghidra.service.symbol.SymbolService;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -33,11 +53,27 @@ class WireSchemaValidationTest {
             selectorSchema,
             "/selector"));
 
-    // Zero branches match: reports invalid_union with message and target from the first branch.
-    ApiException zeroMatch =
+    // Tagged oneOf routes directly to the selected branch instead of the first branch.
+    ApiException taggedBranchFailure =
         assertThrows(
             ApiException.class,
             () -> WireSchema.validate(Map.of("kind", "function"), selectorSchema, "/selector"));
+    assertEquals(400, taggedBranchFailure.status());
+    assertEquals("missing_field", taggedBranchFailure.error().code());
+    assertEquals("/selector/entry is required", taggedBranchFailure.error().message());
+    assertEquals("/selector/entry", taggedBranchFailure.error().target());
+
+    // Untagged oneOf where zero branches match still reports invalid_union from the first branch.
+    Map<String, Object> untaggedSelector =
+        WireSchema.oneOf(
+            WireSchema.object(Map.of("address", WireSchema.nonBlankString()), "address"),
+            WireSchema.object(Map.of("entry", WireSchema.nonBlankString()), "entry"));
+    ApiException zeroMatch =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("other", "ram:00100000"), untaggedSelector, "/selector"));
     assertEquals(400, zeroMatch.status());
     assertEquals("invalid_union", zeroMatch.error().code());
     assertEquals("/selector/address is required", zeroMatch.error().message());
@@ -135,8 +171,7 @@ class WireSchemaValidationTest {
         WireSchema.validate(
             Map.of("data_type", Map.of("kind", "untyped_pointer")), schema, "/resource"));
 
-    // Invalid leaf in recursive data_type_reference reports invalid_union with first branch
-    // failure.
+    // Invalid leaf in recursive tagged data_type_reference routes directly to the exact leaf.
     Map<String, Object> invalidLeaf =
         Map.of(
             "data_type",
@@ -155,9 +190,9 @@ class WireSchemaValidationTest {
         assertThrows(
             ApiException.class, () -> WireSchema.validate(invalidLeaf, schema, "/resource"));
     assertEquals(400, ex.status());
-    assertEquals("invalid_union", ex.error().code());
-    assertEquals("/resource/data_type/name is required", ex.error().message());
-    assertEquals("/resource/data_type/name", ex.error().target());
+    assertEquals("invalid_value", ex.error().code());
+    assertEquals("/resource/data_type/target/count must be in 1..2147483647", ex.error().message());
+    assertEquals("/resource/data_type/target/count", ex.error().target());
 
     // Direct recursive schema where pointer is the first union branch reports deep leaf pointer.
     Map<String, Object> pointerFirstDef = new LinkedHashMap<>();
@@ -551,7 +586,7 @@ class WireSchemaValidationTest {
             ApiException.class,
             () -> WireSchema.validate("z", WireSchema.stringEnum("a", "b"), ""));
     assertEquals("invalid_enum", emptyRootEnum.error().code());
-    assertEquals(" has an unsupported value", emptyRootEnum.error().message());
+    assertEquals(" must be one of: a, b", emptyRootEnum.error().message());
     assertEquals("", emptyRootEnum.error().target());
 
     ApiException emptyArrayCount =
@@ -669,5 +704,402 @@ class WireSchemaValidationTest {
     assertThrows(
         IllegalStateException.class,
         () -> WireSchema.validate("valid", validFirstWithMalformedNested, "/value"));
+  }
+
+  @Test
+  void taggedOneOfPublishesDiscriminatorAndValidatesDiscriminatorTags() {
+    Map<String, Object> resourceSchema =
+        WireSchema.withDefinitions(ApiSchemaCatalog.dataTypeResourceSchema());
+    assertEquals(Map.of("propertyName", "kind"), resourceSchema.get("discriminator"));
+
+    ApiException missingDiscriminator =
+        assertThrows(
+            ApiException.class,
+            () -> WireSchema.validate(Map.of("name", "Foo"), resourceSchema, "/resource"));
+    assertEquals("missing_field", missingDiscriminator.error().code());
+    assertEquals("/resource/kind", missingDiscriminator.error().target());
+
+    ApiException wrongDiscriminatorType =
+        assertThrows(
+            ApiException.class,
+            () -> WireSchema.validate(Map.of("kind", 42), resourceSchema, "/resource"));
+    assertEquals("invalid_type", wrongDiscriminatorType.error().code());
+    assertEquals("/resource/kind", wrongDiscriminatorType.error().target());
+
+    ApiException unknownTag =
+        assertThrows(
+            ApiException.class,
+            () -> WireSchema.validate(Map.of("kind", "class"), resourceSchema, "/resource"));
+    assertEquals("invalid_enum", unknownTag.error().code());
+    assertEquals("/resource/kind", unknownTag.error().target());
+    assertTrue(unknownTag.error().message().contains("struct, union, enum, typedef, function"));
+
+    ApiException typedefMissingBaseType =
+        assertThrows(
+            ApiException.class,
+            () ->
+                WireSchema.validate(
+                    Map.of("kind", "typedef", "name", "u32"), resourceSchema, "/resource"));
+    assertEquals("missing_field", typedefMissingBaseType.error().code());
+    assertEquals("/resource/base_type", typedefMissingBaseType.error().target());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            WireSchema.taggedOneOf(
+                "kind",
+                WireSchema.object(Map.of("kind", WireSchema.stringEnum("a")), "kind"),
+                WireSchema.object(Map.of("kind", WireSchema.stringEnum("a")), "kind")));
+  }
+
+  @Test
+  void strictObjectCodecMaterializesDefaultsPrunesEmptyMapsAndPreservesProjections()
+      throws Exception {
+    ApiRegistry registry = testRegistry(null);
+
+    ApiMethod<Map<String, Object>, Object> codeUnitList = methodOf(registry, "code_unit.list");
+    Map<String, Object> omitted = codeUnitList.decodeRequest(Map.of());
+    Map<String, Object> emptyFilter = codeUnitList.decodeRequest(Map.of("filter", Map.of()));
+    Map<String, Object> explicitDefault =
+        codeUnitList.decodeRequest(
+            Map.of(
+                "filter", Map.of("kind", "all"),
+                "page", Map.of("limit", 100),
+                "scan", Map.of("range", Map.of(), "timeout_ms", 1000)));
+    assertEquals(omitted, emptyFilter);
+    assertEquals(omitted, explicitDefault);
+    assertFalse(omitted.containsKey("range"));
+    assertEquals(
+        CursorTokens.queryFingerprint(omitted), CursorTokens.queryFingerprint(emptyFilter));
+    assertEquals(
+        CursorTokens.queryFingerprint(omitted), CursorTokens.queryFingerprint(explicitDefault));
+
+    ApiMethod<Map<String, Object>, Object> categoryList =
+        methodOf(registry, "data_type_category.list");
+    Map<String, Object> catOmitted = categoryList.decodeRequest(Map.of());
+    Map<String, Object> catExplicit =
+        categoryList.decodeRequest(Map.of("filter", Map.of("path", "/")));
+    assertEquals(catOmitted, catExplicit);
+    assertEquals(
+        CursorTokens.queryFingerprint(catOmitted), CursorTokens.queryFingerprint(catExplicit));
+
+    ApiMethod<Map<String, Object>, Object> functionList = methodOf(registry, "function.list");
+    Map<String, Object> fnOmitted = functionList.decodeRequest(Map.of());
+    Map<String, Object> fnEmptyContainers =
+        functionList.decodeRequest(Map.of("filter", Map.of(), "scan", Map.of("range", Map.of())));
+    assertEquals(fnOmitted, fnEmptyContainers);
+    assertFalse(fnEmptyContainers.containsKey("filter"));
+    assertFalse(fnEmptyContainers.containsKey("range"));
+    assertEquals(
+        CursorTokens.queryFingerprint(fnOmitted), CursorTokens.queryFingerprint(fnEmptyContainers));
+
+    ApiMethod<Map<String, Object>, Object> createDataType = methodOf(registry, "data_type.create");
+    Map<String, Object> enumDecoded =
+        createDataType.decodeRequest(Map.of("resource", Map.of("kind", "enum", "name", "Status")));
+    assertEquals(
+        Map.of("kind", "enum", "name", "Status", "category_path", "/", "size", 4),
+        enumDecoded.get("resource"));
+
+    // Verify response encoding and projection never inject defaults into projected responses.
+    Map<String, Object> responseSchema =
+        WireSchema.object(
+            Map.of(
+                "address", WireSchema.nonBlankString(),
+                "format", WireSchema.withDefault(WireSchema.string(), "text"),
+                "length", WireSchema.withDefault(WireSchema.integer(1, 1024), 256)),
+            "address");
+    StrictObjectCodec responseCodec = new StrictObjectCodec(responseSchema, responseSchema);
+    Map<String, Object> projected = Map.of("address", "ram:00100000");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> encoded = (Map<String, Object>) responseCodec.encode(projected);
+    assertEquals(Map.of("address", "ram:00100000"), encoded);
+    assertFalse(encoded.containsKey("format"));
+    assertFalse(encoded.containsKey("length"));
+  }
+
+  @Test
+  void cursorTokensDecodeReportsStructuredReasonsAndPlainMessages() {
+    String valid = CursorTokens.encode("code_unit", "session-1", "fp-1", "ram:00100000");
+    assertEquals(
+        "ram:00100000",
+        CursorTokens.decode(valid, "code_unit", "session-1", "fp-1", "/page/cursor"));
+
+    ApiException blank =
+        assertThrows(
+            ApiException.class,
+            () -> CursorTokens.decode("   ", "code_unit", "session-1", "fp-1", "/page/cursor"));
+    assertEquals("invalid_cursor", blank.error().code());
+    assertEquals("/page/cursor", blank.error().target());
+    assertEquals(Map.of("reason", "malformed_token"), blank.error().details());
+
+    ApiException badBase64 =
+        assertThrows(
+            ApiException.class,
+            () ->
+                CursorTokens.decode(
+                    "%%%not-base64%%%", "code_unit", "session-1", "fp-1", "/page/cursor"));
+    assertEquals(Map.of("reason", "malformed_token"), badBase64.error().details());
+
+    String tamperedSigToken =
+        java.util.Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(
+                "code_unit\nsession-1\nfp-1\nram:00100000\nbadsig"
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    ApiException badSig =
+        assertThrows(
+            ApiException.class,
+            () ->
+                CursorTokens.decode(
+                    tamperedSigToken, "code_unit", "session-1", "fp-1", "/page/cursor"));
+    assertEquals(Map.of("reason", "invalid_signature"), badSig.error().details());
+    assertNotEquals(blank.error().message(), badSig.error().message());
+
+    ApiException wrongSession =
+        assertThrows(
+            ApiException.class,
+            () -> CursorTokens.decode(valid, "code_unit", "session-2", "fp-1", "/page/cursor"));
+    assertEquals(Map.of("reason", "session_mismatch"), wrongSession.error().details());
+    assertTrue(wrongSession.error().message().contains("different session"));
+
+    ApiException wrongResource =
+        assertThrows(
+            ApiException.class,
+            () -> CursorTokens.decode(valid, "function", "session-1", "fp-1", "/page/cursor"));
+    assertEquals(Map.of("reason", "resource_mismatch"), wrongResource.error().details());
+
+    ApiException wrongFilter =
+        assertThrows(
+            ApiException.class,
+            () -> CursorTokens.decode(valid, "code_unit", "session-1", "fp-2", "/page/cursor"));
+    assertEquals(Map.of("reason", "filter_mismatch"), wrongFilter.error().details());
+    assertTrue(wrongFilter.error().message().contains("filter"));
+  }
+
+  @Test
+  void rebasesDomainValidationPointersAndEnumPatchPointersAtWireBoundaries() {
+    DataTypeService failingDataTypes =
+        proxy(
+            DataTypeService.class,
+            (method, args) -> {
+              if ("getDataType".equals(method)) {
+                throw new java.util.NoSuchElementException("missing");
+              }
+              if ("createDataType".equals(method)) {
+                String name = (String) args[2];
+                if ("bad_cc".equals(name)) {
+                  throw new DataTypeMutationValidationException(
+                      "signature.callingConvention",
+                      "function callingConvention must not be unknown");
+                }
+                if ("bad_ret".equals(name)) {
+                  throw new DataTypeMutationValidationException(
+                      "signature.returnType", "signature.returnType was not found");
+                }
+                throw new DataTypeMutationValidationException(
+                    "signature.parameters[0].dataType",
+                    "signature.parameters[0].dataType was not found");
+              }
+              if ("patchDataType".equals(method)) {
+                throw new DataTypeMutationValidationException(
+                    "addFields[0].dataType", "addFields[0].dataType was not found");
+              }
+              throw new AssertionError("Unexpected method: " + method);
+            });
+    ApiRegistry registry = testRegistry(failingDataTypes);
+
+    Map<String, Object> unknownCcResource =
+        Map.of(
+            "kind",
+            "function",
+            "name",
+            "unknown_cc",
+            "signature",
+            Map.of(
+                "return_type",
+                Map.of("kind", "named", "name", "/int"),
+                "parameters",
+                List.of(Map.of("data_type", Map.of("kind", "named", "name", "/int"))),
+                "calling_convention",
+                "unknown",
+                "has_var_args",
+                false,
+                "has_no_return",
+                false));
+    ApiException createUnknownCc =
+        assertThrows(
+            ApiException.class,
+            () -> registry.dispatch("data_type.create", Map.of("resource", unknownCcResource)));
+    assertEquals("/resource/signature/calling_convention", createUnknownCc.error().target());
+
+    Map<String, Object> fnResource =
+        Map.of(
+            "kind",
+            "function",
+            "name",
+            "bad_cc",
+            "signature",
+            Map.of(
+                "return_type",
+                Map.of("kind", "named", "name", "/int"),
+                "parameters",
+                List.of(Map.of("data_type", Map.of("kind", "named", "name", "/int"))),
+                "calling_convention",
+                "__bogus_cc",
+                "has_var_args",
+                false,
+                "has_no_return",
+                false));
+    ApiException createCc =
+        assertThrows(
+            ApiException.class,
+            () -> registry.dispatch("data_type.create", Map.of("resource", fnResource)));
+    assertEquals("/resource/signature/calling_convention", createCc.error().target());
+
+    Map<String, Object> upsertRetResource = new LinkedHashMap<>(fnResource);
+    upsertRetResource.put("name", "bad_ret");
+    ApiException upsertRet =
+        assertThrows(
+            ApiException.class,
+            () -> registry.dispatch("data_type.upsert", Map.of("resource", upsertRetResource)));
+    assertEquals("/resource/signature/return_type", upsertRet.error().target());
+    assertEquals("/resource/signature/return_type was not found", upsertRet.error().message());
+
+    Map<String, Object> paramResource = new LinkedHashMap<>(fnResource);
+    paramResource.put("name", "bad_param");
+    ApiException createParam =
+        assertThrows(
+            ApiException.class,
+            () -> registry.dispatch("data_type.create", Map.of("resource", paramResource)));
+    assertEquals("/resource/signature/parameters/0/data_type", createParam.error().target());
+
+    ApiException patchField =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "data_type.patch",
+                    Map.of(
+                        "selector", Map.of("path", "/MyStruct"),
+                        "patch",
+                            Map.of(
+                                "kind",
+                                "struct",
+                                "add_fields",
+                                List.of(
+                                    Map.of(
+                                        "name",
+                                        "f0",
+                                        "data_type",
+                                        Map.of("kind", "named", "name", "/nope")))))));
+    assertEquals("/patch/add_fields/0/data_type", patchField.error().target());
+
+    // Batch validation rebases parameter-relative errors onto /items/<i>/arguments/...
+    ApiException batchEnumError =
+        assertThrows(
+            ApiException.class,
+            () ->
+                registry.dispatch(
+                    "batch.execute",
+                    Map.of(
+                        "items",
+                        List.of(
+                            Map.of(
+                                "id",
+                                "e1",
+                                "method",
+                                "data_type.patch",
+                                "arguments",
+                                Map.of(
+                                    "selector", Map.of("path", "/MyEnum"),
+                                    "patch",
+                                        Map.of(
+                                            "kind",
+                                            "enum",
+                                            "rename_values",
+                                            List.of("not-an-object"))))))));
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> violations =
+        (List<Map<String, Object>>) batchEnumError.error().details().get("violations");
+    assertEquals("/items/0/arguments/patch/rename_values/0", violations.getFirst().get("target"));
+  }
+
+  @SuppressWarnings("unchecked")
+  private static ApiMethod<Map<String, Object>, Object> methodOf(ApiRegistry registry, String name)
+      throws Exception {
+    java.lang.reflect.Field field = ApiRegistry.class.getDeclaredField("methodsByName");
+    field.setAccessible(true);
+    Map<String, ApiMethod<Map<String, Object>, Object>> methods =
+        (Map<String, ApiMethod<Map<String, Object>, Object>>) field.get(registry);
+    return methods.get(name);
+  }
+
+  private static ApiRegistry testRegistry(DataTypeService dataTypes) {
+    TransactionRunner tx =
+        new TransactionRunner() {
+          @Override
+          public <T> T run(Operation<T> operation) {
+            try {
+              return operation.execute();
+            } catch (RuntimeException error) {
+              throw error;
+            } catch (Exception error) {
+              throw new RuntimeException(error);
+            }
+          }
+        };
+    AnalysisService analysis =
+        proxy(
+            AnalysisService.class,
+            (method, args) -> {
+              if ("getStatus".equals(method)) {
+                return new AnalysisResource(
+                    AnalysisResource.Kind.GHIDRA,
+                    AnalysisResource.Status.IDLE,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null);
+              }
+              throw new AssertionError("Unexpected call: " + method);
+            });
+    BridgeServices services =
+        new BridgeServices(
+            unused(ProgramService.class),
+            unused(AddressService.class),
+            unused(CommentService.class),
+            unused(ReferenceService.class),
+            unused(MemoryService.class),
+            unused(ListingService.class),
+            unused(FunctionService.class),
+            unused(GlobalVariableService.class),
+            analysis,
+            unused(DecompilationService.class),
+            unused(SymbolService.class),
+            dataTypes != null ? dataTypes : unused(DataTypeService.class),
+            tx,
+            "fixture");
+    return new ApiRegistry(services, "session-1", Map::of, () -> {});
+  }
+
+  private interface ProxyHandler {
+    Object invoke(String method, Object[] args);
+  }
+
+  private static <T> T unused(Class<T> type) {
+    return proxy(
+        type,
+        (method, args) -> {
+          throw new AssertionError("Unexpected call: " + method);
+        });
+  }
+
+  private static <T> T proxy(Class<T> type, ProxyHandler handler) {
+    return type.cast(
+        Proxy.newProxyInstance(
+            type.getClassLoader(),
+            new Class<?>[] {type},
+            (proxyInstance, method, args) -> handler.invoke(method.getName(), args)));
   }
 }

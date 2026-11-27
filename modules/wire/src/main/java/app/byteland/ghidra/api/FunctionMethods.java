@@ -94,7 +94,10 @@ final class FunctionMethods implements ApiMethodProvider {
         "Create a function at its entry. Set disassemble to decode code.",
         ApiSchemaCatalog.input(
             ApiSchemaCatalog.props(
-                ApiVocabulary.RESOURCE, functionResource, "disassemble", WireSchema.bool()),
+                ApiVocabulary.RESOURCE,
+                functionResource,
+                "disassemble",
+                WireSchema.withDefault(WireSchema.bool(), false)),
             ApiVocabulary.RESOURCE),
         ApiSchemaCatalog.functionFields(),
         List.of(ApiVocabulary.ENTRY),
@@ -148,8 +151,10 @@ final class FunctionMethods implements ApiMethodProvider {
         ApiSchemaCatalog.requiredListInput(
             WireSchema.object(
                 ApiSchemaCatalog.props(
-                    ApiVocabulary.ENTRY, WireSchema.nonBlankString(),
-                    ApiVocabulary.DIRECTION, WireSchema.stringEnum("callers", "callees")),
+                    ApiVocabulary.ENTRY,
+                    WireSchema.nonBlankString(),
+                    ApiVocabulary.DIRECTION,
+                    WireSchema.withDefault(WireSchema.stringEnum("callers", "callees"), "callees")),
                 ApiVocabulary.ENTRY)),
         Set.of(
             ApiVocabulary.ENTRY,

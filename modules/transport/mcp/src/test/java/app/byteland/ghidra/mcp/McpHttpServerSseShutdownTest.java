@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.JsonUtil;
-import app.byteland.ghidra.agent.AgentConfig;
 import app.byteland.ghidra.agent.AgentDispatcher;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
@@ -395,9 +394,7 @@ class McpHttpServerSseShutdownTest {
         }
         McpConfig mcpConfig =
             new McpConfig("127.0.0.1", candidatePort, "/mcp", null, "test-session", "ghidra");
-        AgentConfig agentConfig =
-            new AgentConfig(null, "127.0.0.1", candidatePort, "/mcp", null, "test-session", null);
-        AgentDispatcher dispatcher = new AgentDispatcher(services, agentConfig);
+        AgentDispatcher dispatcher = new AgentDispatcher(services, "test-session");
         try {
           McpHttpServer server =
               keepaliveMillis == null

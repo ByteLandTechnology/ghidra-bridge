@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import app.byteland.ghidra.JsonUtil;
 import app.byteland.ghidra.agent.AgentDispatcher;
+import app.byteland.ghidra.network.NetworkBinding;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
@@ -24,7 +25,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Proxy;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -40,17 +40,18 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class McpConfigTest {
-
   @Test
   @DisplayName("Applies MCP defaults and normalizes path, sessionId, and toolPrefix")
   void appliesDefaultsAndNormalizesFields() {
     McpConfig defaults = McpConfig.fromMap(Map.of());
-    assertEquals(InetAddress.getLoopbackAddress().getHostAddress(), defaults.host());
+    assertEquals(NetworkBinding.DEFAULT_LOOPBACK_HOST, defaults.host());
     assertEquals(McpConfig.DEFAULT_PORT, defaults.port());
     assertEquals("/mcp", defaults.path());
     assertNull(defaults.token());
     assertEquals("ghidra-bridge", defaults.sessionId());
     assertEquals(McpConfig.DEFAULT_TOOL_PREFIX, defaults.toolPrefix());
+    assertEquals(
+        "http://" + NetworkBinding.DEFAULT_LOOPBACK_HOST + ":8766/mcp", defaults.endpoint());
 
     McpConfig custom =
         McpConfig.fromMap(
@@ -72,19 +73,66 @@ class McpConfigTest {
   }
 
   @Test
+  void parsesCustomArgumentsAndAllowsJarOverride() {
+    McpConfig custom =
+        McpConfig.fromArgs(
+            "host=0.0.0.0",
+            "port=9100",
+            "path=api/mcp",
+            "token=s3cr3t",
+            "session_id=firmware.bin",
+            "tool_prefix=ghidra_2",
+            "jar=/opt/ghidra-bridge.jar");
+    assertEquals("0.0.0.0", custom.host());
+    assertEquals(9100, custom.port());
+    assertEquals("/api/mcp", custom.path());
+    assertEquals("s3cr3t", custom.token());
+    assertEquals("firmware.bin", custom.sessionId());
+    assertEquals("ghidra_2", custom.toolPrefix());
+    assertEquals("http://0.0.0.0:9100/api/mcp", custom.endpoint());
+  }
+
+  @Test
   @DisplayName("Validates port, tool_prefix, unknown keys, and non-loopback token requirement")
   void validatesArgumentsAndNonLoopbackTokenRequirement() {
-    assertThrows(IllegalArgumentException.class, () -> McpConfig.fromMap(Map.of("port", "0")));
-    assertThrows(IllegalArgumentException.class, () -> McpConfig.fromMap(Map.of("port", "65536")));
-    assertThrows(IllegalArgumentException.class, () -> McpConfig.fromMap(Map.of("port", "abc")));
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> McpConfig.fromMap(Map.of("ws_url", "ws://127.0.0.1:8765/ws/agent")));
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> McpConfig.fromMap(Map.of("tool_prefix", "ghidra.bad")));
-    assertThrows(
-        IllegalArgumentException.class, () -> McpConfig.fromMap(Map.of("tool_prefix", "1ghidra")));
+    assertEquals(
+        "token is required when binding outside loopback",
+        assertThrows(IllegalArgumentException.class, () -> McpConfig.fromArgs("host=0.0.0.0"))
+            .getMessage());
+
+    assertEquals(
+        "port must be in 1..65535",
+        assertThrows(IllegalArgumentException.class, () -> McpConfig.fromArgs("port=0"))
+            .getMessage());
+    assertEquals(
+        "port must be in 1..65535",
+        assertThrows(
+                IllegalArgumentException.class, () -> McpConfig.fromMap(Map.of("port", "65536")))
+            .getMessage());
+
+    assertEquals(
+        "port must be an integer",
+        assertThrows(IllegalArgumentException.class, () -> McpConfig.fromArgs("port=invalid"))
+            .getMessage());
+
+    assertEquals(
+        "tool_prefix must start with a letter and contain 1..64 letters, digits, '_', or '-'",
+        assertThrows(
+                IllegalArgumentException.class, () -> McpConfig.fromArgs("tool_prefix=ghidra.bad"))
+            .getMessage());
+
+    assertEquals(
+        "tool_prefix must start with a letter and contain 1..64 letters, digits, '_', or '-'",
+        assertThrows(
+                IllegalArgumentException.class, () -> McpConfig.fromArgs("tool_prefix=1invalid"))
+            .getMessage());
+
+    assertEquals(
+        "unknown startup argument: ws_url",
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> McpConfig.fromArgs("ws_url=ws://127.0.0.1:8765/ws/agent"))
+            .getMessage());
 
     String externalHost = "external.validation.mcp-test.internal";
     assertThrows(
@@ -133,6 +181,13 @@ class McpConfigTest {
 
     String longSessionId = McpConfig.deriveFallbackSessionId(veryLong, 8767);
     assertEquals(64, longSessionId.length());
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> McpConfig.deriveFallbackToolPrefix("firmware.bin", 0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> McpConfig.deriveFallbackSessionId("firmware.bin", 70000));
   }
 
   @Test

@@ -41,6 +41,8 @@ final class McpParamsSchema {
     params.put("properties", properties instanceof Map<?, ?> map ? map : Map.of());
     if (merged.get("required") instanceof List<?> required && !required.isEmpty()) {
       params.put("required", required);
+    } else {
+      params.put("default", Map.of());
     }
     return Collections.unmodifiableMap(params);
   }
@@ -142,6 +144,7 @@ final class McpParamsSchema {
     }
     copyIfPresent(schema, result, "minItems");
     copyIfPresent(schema, result, "maxItems");
+    copyIfPresent(schema, result, "default");
     return Collections.unmodifiableMap(result);
   }
 
@@ -243,6 +246,7 @@ final class McpParamsSchema {
     }
     putMergedBound(schemas, result, "minItems", true);
     putMergedBound(schemas, result, "maxItems", false);
+    putSharedScalar(schemas, result, "default");
     return Collections.unmodifiableMap(result);
   }
 

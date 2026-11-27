@@ -645,7 +645,7 @@ class WebSocketEnvelopeAndSendErrorTest {
             unused(DataTypeService.class),
             transactionRunner,
             "test.bin");
-    return new AgentDispatcher(services, config);
+    return new AgentDispatcher(services, config.sessionId());
   }
 
   private interface InvocationHandlerFn {

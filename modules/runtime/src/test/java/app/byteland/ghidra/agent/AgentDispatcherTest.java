@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.byteland.ghidra.api.ApiException;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.TransactionRunner;
 import app.byteland.ghidra.service.address.AddressService;
+import app.byteland.ghidra.service.analysis.AnalysisResource;
 import app.byteland.ghidra.service.analysis.AnalysisService;
 import app.byteland.ghidra.service.comment.CommentService;
 import app.byteland.ghidra.service.datatype.DataTypeService;
@@ -22,101 +24,72 @@ import app.byteland.ghidra.service.symbol.SymbolService;
 import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class AgentDispatcherTest {
-
   @Test
-  @DisplayName("Initializes session ID directly without AgentConfig and reports it in session.get")
-  void initializesSessionIdDirectly() throws Exception {
-    AtomicInteger closeCount = new AtomicInteger();
-    BridgeServices services = stubServices("sample.elf", closeCount);
-
-    try (AgentDispatcher dispatcher = new AgentDispatcher(services, "  mcp-session-42  ")) {
-      assertEquals("sample.elf", dispatcher.getProgramName());
-      assertFalse(dispatcher.isShuttingDown());
-
-      @SuppressWarnings("unchecked")
-      Map<String, Object> activeInfo =
-          (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
-      assertEquals("mcp-session-42", activeInfo.get("id"));
-      assertEquals("active", activeInfo.get("status"));
-      assertEquals("sample.elf", activeInfo.get("program_name"));
-
-      dispatcher.dispatch("session.shutdown", Map.of());
-      assertTrue(dispatcher.isShuttingDown());
-
-      @SuppressWarnings("unchecked")
-      Map<String, Object> shuttingDownInfo =
-          (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
-      assertEquals("mcp-session-42", shuttingDownInfo.get("id"));
-      assertEquals("shutting_down", shuttingDownInfo.get("status"));
-      assertEquals("sample.elf", shuttingDownInfo.get("program_name"));
-    }
-
-    assertEquals(2, closeCount.get());
+  void requiresServicesAndNonBlankSessionId() {
+    BridgeServices services =
+        createServices("sample.elf", new AtomicInteger(), new AtomicInteger());
+    assertThrows(NullPointerException.class, () -> new AgentDispatcher(null, "demo-session"));
+    assertEquals(
+        "session_id is required",
+        assertThrows(IllegalArgumentException.class, () -> new AgentDispatcher(services, null))
+            .getMessage());
+    assertEquals(
+        "session_id is required",
+        assertThrows(IllegalArgumentException.class, () -> new AgentDispatcher(services, ""))
+            .getMessage());
+    assertEquals(
+        "session_id is required",
+        assertThrows(
+                IllegalArgumentException.class, () -> new AgentDispatcher(services, "   \t\n "))
+            .getMessage());
   }
 
   @Test
-  @DisplayName("Delegates AgentConfig constructor to sessionId constructor")
-  void delegatesAgentConfigConstructor() throws Exception {
-    BridgeServices services = stubServices("ws-target.bin", new AtomicInteger());
-    AgentConfig serverConfig =
-        AgentConfig.fromMap(
-            Map.of("host", "127.0.0.1", "port", "8765", "session_id", "ws-server-session"));
+  void dispatchesSessionStateAndClosesServicesOnce() throws Exception {
+    AtomicInteger analysisClosed = new AtomicInteger();
+    AtomicInteger decompilerClosed = new AtomicInteger();
+    BridgeServices services = createServices("sample.elf", analysisClosed, decompilerClosed);
 
-    try (AgentDispatcher dispatcher = new AgentDispatcher(services, serverConfig)) {
-      @SuppressWarnings("unchecked")
-      Map<String, Object> info = (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
-      assertEquals("ws-server-session", info.get("id"));
-      assertEquals("active", info.get("status"));
-      assertEquals("ws-target.bin", info.get("program_name"));
-    }
+    AgentDispatcher dispatcher = new AgentDispatcher(services, "  session-42  ");
+    assertEquals("sample.elf", dispatcher.getProgramName());
+    assertEquals(56, dispatcher.methodCatalog().methods().size());
+    assertFalse(dispatcher.isShuttingDown());
 
-    AgentConfig outboundConfig =
-        AgentConfig.fromMap(
-            Map.of("ws_url", "ws://127.0.0.1:8765/ws/agent", "session_id", "ws-outbound-session"));
+    assertEquals(
+        Map.of("id", "session-42", "status", "active", "program_name", "sample.elf"),
+        dispatcher.dispatch("session.get", Map.of()));
 
-    try (AgentDispatcher dispatcher = new AgentDispatcher(services, outboundConfig)) {
-      @SuppressWarnings("unchecked")
-      Map<String, Object> info = (Map<String, Object>) dispatcher.dispatch("session.get", Map.of());
-      assertEquals("ws-outbound-session", info.get("id"));
-    }
-  }
+    ApiException missingMethod =
+        assertThrows(ApiException.class, () -> dispatcher.dispatch("  ", Map.of()));
+    assertEquals(400, missingMethod.status());
+    assertEquals("missing_method", missingMethod.error().code());
 
-  @Test
-  @DisplayName("Rejects null or blank sessionId and null constructor arguments")
-  void rejectsInvalidConstructorInputs() {
-    BridgeServices services = stubServices("sample.elf", new AtomicInteger());
-    AgentConfig validConfig =
-        AgentConfig.fromMap(Map.of("host", "127.0.0.1", "port", "8765", "session_id", "demo"));
+    assertEquals(Map.of("shutdown", true), dispatcher.dispatch("session.shutdown", Map.of()));
+    assertTrue(dispatcher.isShuttingDown());
+    assertEquals(
+        Map.of("id", "session-42", "status", "shutting_down", "program_name", "sample.elf"),
+        dispatcher.dispatch("session.get", Map.of()));
 
-    assertThrows(
-        IllegalArgumentException.class, () -> new AgentDispatcher(services, (String) null));
-    assertThrows(IllegalArgumentException.class, () -> new AgentDispatcher(services, ""));
-    assertThrows(IllegalArgumentException.class, () -> new AgentDispatcher(services, "   \t\n "));
-    assertThrows(NullPointerException.class, () -> new AgentDispatcher(null, "demo"));
-    assertThrows(
-        NullPointerException.class, () -> new AgentDispatcher(services, (AgentConfig) null));
-    assertThrows(NullPointerException.class, () -> new AgentDispatcher(null, validConfig));
-  }
-
-  @Test
-  @DisplayName("Rejects dispatch after close")
-  void rejectsDispatchAfterClose() {
-    BridgeServices services = stubServices("sample.elf", new AtomicInteger());
-    AgentDispatcher dispatcher = new AgentDispatcher(services, "closed-session");
     dispatcher.close();
+    dispatcher.close();
+    assertEquals(1, analysisClosed.get());
+    assertEquals(1, decompilerClosed.get());
 
-    assertThrows(IllegalStateException.class, () -> dispatcher.dispatch("session.get", Map.of()));
+    var closedError =
+        assertThrows(
+            IllegalStateException.class, () -> dispatcher.dispatch("session.get", Map.of()));
+    assertEquals("Agent dispatcher is shutting down", closedError.getMessage());
   }
 
   @Test
   @DisplayName("Resolves active program name dynamically from BridgeServices")
   void resolvesProgramNameDynamically() throws Exception {
-    java.util.concurrent.atomic.AtomicReference<String> activeName =
-        new java.util.concurrent.atomic.AtomicReference<>("alpha.elf");
+    AtomicReference<String> activeName = new AtomicReference<>("alpha.elf");
     BridgeServices services =
         new BridgeServices(
             unused(ProgramService.class),
@@ -159,14 +132,44 @@ class AgentDispatcherTest {
     }
   }
 
-  private static BridgeServices stubServices(String programName, AtomicInteger closeCount) {
-    AnalysisService analysis = closeableStub(AnalysisService.class, closeCount);
-    DecompilationService decompilation = closeableStub(DecompilationService.class, closeCount);
+  private static BridgeServices createServices(
+      String programName, AtomicInteger analysisClosed, AtomicInteger decompilerClosed) {
+    AnalysisService analysis =
+        proxy(
+            AnalysisService.class,
+            method -> {
+              if ("close".equals(method)) {
+                analysisClosed.incrementAndGet();
+                return null;
+              }
+              return new AnalysisResource(
+                  AnalysisResource.Kind.GHIDRA,
+                  AnalysisResource.Status.IDLE,
+                  false,
+                  null,
+                  null,
+                  null,
+                  null);
+            });
+    DecompilationService decompilation =
+        proxy(
+            DecompilationService.class,
+            method -> {
+              if ("close".equals(method)) {
+                decompilerClosed.incrementAndGet();
+                return null;
+              }
+              throw new AssertionError(method);
+            });
     TransactionRunner transactionRunner =
         new TransactionRunner() {
           @Override
           public <T> T run(Operation<T> operation) {
-            throw new AssertionError("Unexpected transaction");
+            try {
+              return operation.execute();
+            } catch (Exception failure) {
+              throw new RuntimeException(failure);
+            }
           }
         };
     return new BridgeServices(
@@ -186,27 +189,45 @@ class AgentDispatcherTest {
         programName);
   }
 
+  private interface MethodHandler {
+    Object invoke(String method);
+  }
+
   private static <T> T closeableStub(Class<T> type, AtomicInteger closeCount) {
-    return type.cast(
-        Proxy.newProxyInstance(
-            type.getClassLoader(),
-            new Class<?>[] {type},
-            (proxy, method, args) -> {
-              if ("close".equals(method.getName())) {
-                closeCount.incrementAndGet();
-                return null;
-              }
-              throw new AssertionError("Unexpected call: " + method.getName());
-            }));
+    return proxy(
+        type,
+        method -> {
+          if ("close".equals(method)) {
+            closeCount.incrementAndGet();
+            return null;
+          }
+          throw new AssertionError(method);
+        });
   }
 
   private static <T> T unused(Class<T> type) {
+    return proxy(
+        type,
+        method -> {
+          throw new AssertionError(method);
+        });
+  }
+
+  private static <T> T proxy(Class<T> type, MethodHandler handler) {
     return type.cast(
         Proxy.newProxyInstance(
             type.getClassLoader(),
             new Class<?>[] {type},
             (proxy, method, args) -> {
-              throw new AssertionError("Unexpected call: " + method.getName());
+              if (method.getDeclaringClass() == Object.class) {
+                return switch (method.getName()) {
+                  case "toString" -> type.getSimpleName();
+                  case "hashCode" -> System.identityHashCode(proxy);
+                  case "equals" -> proxy == args[0];
+                  default -> null;
+                };
+              }
+              return handler.invoke(method.getName());
             }));
   }
 }
