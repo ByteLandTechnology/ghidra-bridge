@@ -43,6 +43,8 @@ import app.byteland.ghidra.service.memory.MemoryBlockResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
+import app.byteland.ghidra.service.program.ExportResource;
+import app.byteland.ghidra.service.program.ImportResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
@@ -90,7 +92,7 @@ class AgentDispatcherConcurrencyTest {
               .filter(m -> Boolean.TRUE.equals(((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
               .map(MethodDescriptor::name)
               .toList();
-      assertEquals(29, catalogReadOnly.size(), "Catalog must expose all 29 read-only methods");
+      assertEquals(32, catalogReadOnly.size(), "Catalog must expose all 32 read-only methods");
 
       Map<String, Map<String, Object>> readCalls = validReadRequests();
       assertEquals(Set.copyOf(catalogReadOnly), readCalls.keySet());
@@ -188,7 +190,7 @@ class AgentDispatcherConcurrencyTest {
   void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(59, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
       assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
@@ -707,6 +709,9 @@ class AgentDispatcherConcurrencyTest {
     calls.put("program.get", Map.of());
     calls.put("program_language.get", Map.of());
     calls.put("address_space.list", Map.of());
+    calls.put("import.list", Map.of());
+    calls.put("export.list", Map.of());
+    calls.put("entry_point.list", Map.of());
     calls.put("address.resolve", Map.of("selector", Map.of("address", "ram:00100000")));
     calls.put("memory_block.get", Map.of("selector", Map.of("name", ".text")));
     calls.put("memory_block.list", Map.of());
@@ -1031,6 +1036,59 @@ class AgentDispatcherConcurrencyTest {
                       "ram:ffffffff",
                       true)),
               limit,
+              null);
+        }
+
+        @Override
+        public Page<ImportResource> listImports(ImportQuery query) {
+          observe("import.list", false);
+          return Page.of(
+              List.of(
+                  new ImportResource(
+                      "EXTERNAL:00000001",
+                      "libc.so.6",
+                      "puts",
+                      null,
+                      null,
+                      null,
+                      List.of("ram:00101030"),
+                      "int puts(char * s)",
+                      true)),
+              query.limit(),
+              null);
+        }
+
+        @Override
+        public Page<ExportResource> listExports(ExportQuery query) {
+          observe("export.list", false);
+          return Page.of(
+              List.of(
+                  new ExportResource(
+                      "ram:00100000",
+                      "main",
+                      null,
+                      "Global",
+                      true,
+                      new AddressResource.FunctionSummary("ram:00100000", "main"),
+                      null)),
+              query.limit(),
+              null);
+        }
+
+        @Override
+        public Page<ExportResource> listEntryPoints(ExportQuery query) {
+          observe("entry_point.list", false);
+          return Page.of(
+              List.of(
+                  new ExportResource(
+                      "ram:00100000",
+                      "main",
+                      null,
+                      "Global",
+                      true,
+                      new AddressResource.FunctionSummary("ram:00100000", "main"),
+                      null)),
+              query.limit(),
               null);
         }
 

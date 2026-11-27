@@ -4,25 +4,26 @@ import app.byteland.ghidra.adapter.ghidra.AddressUtil;
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
+import app.byteland.ghidra.service.program.ExportResource;
+import app.byteland.ghidra.service.program.ImportResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
-import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.lang.CompilerSpec;
 import ghidra.program.model.lang.Language;
-import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
-import ghidra.program.model.symbol.Symbol;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 public final class ProgramServiceImpl implements ProgramService {
   private final GhidraSession context;
+  private final ProgramEntryQueries entryQueries;
 
   public ProgramServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
+    this.entryQueries = new ProgramEntryQueries(this.context);
   }
 
   @Override
@@ -60,6 +61,21 @@ public final class ProgramServiceImpl implements ProgramService {
     }
     list.sort(java.util.Comparator.comparing(AddressSpaceResource::name));
     return Page.paginate(list, limit, cursor, AddressSpaceResource::name);
+  }
+
+  @Override
+  public Page<ImportResource> listImports(ImportQuery query) {
+    return entryQueries.listImports(query);
+  }
+
+  @Override
+  public Page<ExportResource> listExports(ExportQuery query) {
+    return entryQueries.listExports(query);
+  }
+
+  @Override
+  public Page<ExportResource> listEntryPoints(ExportQuery query) {
+    return entryQueries.listEntryPoints(query);
   }
 
   @Override

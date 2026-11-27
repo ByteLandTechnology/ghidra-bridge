@@ -40,6 +40,8 @@ import app.byteland.ghidra.service.memory.MemoryBlockResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
+import app.byteland.ghidra.service.program.ExportResource;
+import app.byteland.ghidra.service.program.ImportResource;
 import app.byteland.ghidra.service.program.ProgramLanguageResource;
 import app.byteland.ghidra.service.program.ProgramResource;
 import app.byteland.ghidra.service.program.ProgramService;
@@ -355,9 +357,9 @@ class FieldProjectionWireTest {
                 })
             .map(ApiCatalog.MethodDescriptor::name)
             .toList();
-    assertEquals(28, projectionMethods.size());
+    assertEquals(31, projectionMethods.size());
 
-    List<MethodCase> cases = fixture.allTwentyEightCases();
+    List<MethodCase> cases = fixture.allProjectionCases();
     assertEquals(
         Set.copyOf(projectionMethods),
         cases.stream().map(MethodCase::method).collect(java.util.stream.Collectors.toSet()));
@@ -657,6 +659,26 @@ class FieldProjectionWireTest {
       AddressSpaceResource space =
           new AddressSpaceResource(
               "ram", AddressSpaceResource.Kind.RAM, 64, "ram:00000000", "ram:ffffffff", true);
+      ImportResource importEntry =
+          new ImportResource(
+              "EXTERNAL:00000001",
+              "libc.so.6",
+              "puts",
+              "puts",
+              null,
+              null,
+              List.of("ram:00401030"),
+              "int puts(char * s)",
+              true);
+      ExportResource exportEntry =
+          new ExportResource(
+              "ram:00401000",
+              "main",
+              null,
+              "Global",
+              true,
+              new AddressResource.FunctionSummary("ram:00401000", "main"),
+              1);
 
       AddressResource address =
           new AddressResource(
@@ -850,6 +872,11 @@ class FieldProjectionWireTest {
                     case "getProgram" -> program;
                     case "getLanguageInfo" -> language;
                     case "getAddressSpaces" -> Page.of(List.of(space), 10, "ram");
+                    case "listImports" ->
+                        Page.of(
+                            List.of(importEntry), 10, "EXTERNAL:00000001\0libc.so.6\0puts");
+                    case "listExports", "listEntryPoints" ->
+                        Page.of(List.of(exportEntry), 10, "ram:00401000\0main");
                     default -> throw new AssertionError(name);
                   });
       AddressService addressService = proxy(AddressService.class, (name, args) -> address);
@@ -986,12 +1013,15 @@ class FieldProjectionWireTest {
               () -> {});
     }
 
-    List<MethodCase> allTwentyEightCases() {
+    List<MethodCase> allProjectionCases() {
       return List.of(
           new MethodCase("session.get", Map.of(), List.of("status")),
           new MethodCase("program.get", Map.of(), List.of("image_base", "function_count")),
           new MethodCase("program_language.get", Map.of(), List.of("endian", "address_size")),
           new MethodCase("address_space.list", Map.of(), List.of("default", "size")),
+          new MethodCase("import.list", Map.of(), List.of("thunk_addresses", "is_function")),
+          new MethodCase("export.list", Map.of(), List.of("is_function", "function")),
+          new MethodCase("entry_point.list", Map.of(), List.of("namespace", "is_function")),
           new MethodCase(
               "address.resolve",
               Map.of("selector", Map.of("address", "ram:00401000")),
