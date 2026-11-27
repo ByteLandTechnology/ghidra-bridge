@@ -19,6 +19,22 @@ import java.util.function.Supplier;
  * Holds domain services for an active Ghidra program session.
  *
  * <p>Close this container to release analysis and decompilation resources.
+ *
+ * @param programService program metadata service
+ * @param addressService address resolution service
+ * @param commentService comment query and mutation service
+ * @param referenceService cross-reference query service
+ * @param memoryService memory block and byte range service
+ * @param listingService instruction, data unit, and flow override service
+ * @param functionService function query and mutation service
+ * @param globalVariableService global variable query and mutation service
+ * @param analysisService auto-analysis lifecycle service
+ * @param decompilationService function decompilation service
+ * @param symbolService symbol query, rename, and demangle service
+ * @param dataTypeService data type query and mutation service
+ * @param transactionRunner transactional execution wrapper
+ * @param programName fallback Ghidra program name
+ * @param programNameSupplier supplier for the active Ghidra program name
  */
 public record BridgeServices(
     ProgramService programService,
@@ -38,6 +54,7 @@ public record BridgeServices(
     Supplier<String> programNameSupplier)
     implements AutoCloseable {
 
+  /** Validates that all domain service references and the program name are non-null. */
   public BridgeServices {
     Objects.requireNonNull(programService, "programService");
     Objects.requireNonNull(addressService, "addressService");
@@ -56,6 +73,24 @@ public record BridgeServices(
     Objects.requireNonNull(programNameSupplier, "programNameSupplier");
   }
 
+  /**
+   * Creates a fixed-program service bundle whose active program name never changes.
+   *
+   * @param programService program metadata service
+   * @param addressService address resolution service
+   * @param commentService comment query and mutation service
+   * @param referenceService cross-reference query service
+   * @param memoryService memory block and byte range service
+   * @param listingService instruction, data unit, and flow override service
+   * @param functionService function query and mutation service
+   * @param globalVariableService global variable query and mutation service
+   * @param analysisService auto-analysis lifecycle service
+   * @param decompilationService function decompilation service
+   * @param symbolService symbol query, rename, and demangle service
+   * @param dataTypeService data type query and mutation service
+   * @param transactionRunner transactional execution wrapper
+   * @param programName active Ghidra program name
+   */
   public BridgeServices(
       ProgramService programService,
       AddressService addressService,
@@ -89,6 +124,11 @@ public record BridgeServices(
         () -> programName);
   }
 
+  /**
+   * Returns the active Ghidra program name, or the fallback program name when none is open.
+   *
+   * @return active or fallback program name
+   */
   public String currentProgramName() {
     String current = programNameSupplier.get();
     return current == null || current.isBlank() ? programName : current;

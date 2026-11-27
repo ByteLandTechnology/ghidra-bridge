@@ -31,6 +31,9 @@ Follow these repository rules when you change code:
 - **Ghidra API boundary**: Only `modules/adapter` and `modules/launcher` can import `ghidra.*` packages (`verifyArchitecture` enforces this rule).
 - **Generated contracts**: Do not edit `docs/api.md`, `docs/asyncapi.yaml`, or `docs/mcp-tools.json` by hand. Run `./gradlew generateApiContracts` after public interface changes.
 - **Repository hygiene**: Do not commit build directories, IDE files, generated scripts (`Bridge.java`, `GhidraMcp.java`), zero-byte files, or duplicate tracked files.
+- **Compiler lints**: Java main, test, and script compile tasks target release 21 with `-Xlint:all` and `-Werror`. Change code to fix warnings instead of lint exclusions or SpotBugs, PMD, ErrorProne, or JSR-305 suppressions. Use `@SuppressWarnings` at the narrowest scope only when a JDK API forces a cast or close check.
+- **Javadoc checks**: `javadoc` checks all 8 Java subprojects with `-Xdoclint:all` and `-Werror`. Write complete Javadoc comments (`@param`, `@return`, `@throws`, and serialized exception fields) on all public and protected APIs.
+- **Zero runtime dependencies**: Keep zero third-party runtime dependencies in `ghidra-bridge.jar`. Keep `org.gradle.dependency.verification=strict` in `gradle.properties`, remove unused checksums from `gradle/verification-metadata.xml`, and do not add third-party static-analysis plugins.
 
 ## GitHub Actions
 
@@ -84,6 +87,15 @@ To run JUnit tests for one subproject during iteration:
 GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon :adapter:test
 ```
 
+### Compiler Lints and Javadoc Checks
+
+Compile main, test, and generated script classes with Java 21 lints, and check Javadoc comments across all 8 Java subprojects:
+
+```bash
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon classes testClasses compileGeneratedScripts
+GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon javadoc
+```
+
 ### Full Build and Verification (`clean verify`)
 
 Run the full local Gradle verification check. CI runs `./gradlew --no-daemon verify` on a new checkout for pull requests and release archives. Keep `clean verify` locally to delete previous build output:
@@ -94,6 +106,8 @@ GHIDRA_INSTALL_DIR=/path/to/ghidra ./gradlew --no-daemon clean verify
 
 `verify` runs:
 - `check`: JUnit tests and checks across all 8 Java subprojects.
+- `testClasses`: Test compilation with Java 21 `-Xlint:all` and `-Werror` across all 8 Java subprojects.
+- `javadoc`: Javadoc validation with `-Xdoclint:all` and `-Werror` across all 8 Java subprojects.
 - `verifyApiContracts`: Checks that tracked contracts match generated output.
 - `verifyMcpDocumentation`: Checks MCP tool contract rules and MCP documentation consistency.
 - `verifyDistribution`: Builds `build/ghidra-script/` (`Bridge.java`, `GhidraMcp.java`, `ghidra-bridge.jar`) and compiles generated scripts against Ghidra (`compileGeneratedScripts`).

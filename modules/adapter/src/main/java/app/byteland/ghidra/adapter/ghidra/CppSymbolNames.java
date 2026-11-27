@@ -30,10 +30,26 @@ public final class CppSymbolNames {
 
   private CppSymbolNames() {}
 
+  /**
+   * Demangles a C++ symbol name with a bounded per-program cache.
+   *
+   * @param program active Ghidra program
+   * @param name raw symbol name
+   * @param address symbol address
+   * @return demangled signature string, or {@code null} when not mangled or unrecognized
+   */
   public static String demangled(Program program, String name, Address address) {
     return decode(program, name, address).signature();
   }
 
+  /**
+   * Decodes a C++ symbol name with a bounded per-program cache.
+   *
+   * @param program active Ghidra program
+   * @param name raw symbol name
+   * @param address symbol address
+   * @return decoded symbol signature and name candidates, or an empty result
+   */
   public static DecodedSymbol decode(Program program, String name, Address address) {
     if (program == null || !isMangled(name)) return DecodedSymbol.EMPTY;
     ProgramCache cache = cacheFor(program);
@@ -46,6 +62,12 @@ public final class CppSymbolNames {
     return cache.putIfAbsent(name, decoded, refreshedCapacity);
   }
 
+  /**
+   * Checks whether a symbol name starts with a known C++ mangled prefix.
+   *
+   * @param name raw symbol name, or {@code null}
+   * @return {@code true} if the name has an Itanium or MSVC mangled prefix
+   */
   public static boolean isMangled(String name) {
     return name != null
         && (name.startsWith("_Z") || name.startsWith("__Z") || name.startsWith("?"));
@@ -132,16 +154,31 @@ public final class CppSymbolNames {
     return new DecodedSymbol(signature, candidates);
   }
 
+  /**
+   * Cached demangler result with an optional display signature and name candidates.
+   *
+   * @param signature demangled signature string, or {@code null} when absent
+   * @param candidates demangled name and namespace candidates
+   */
   public record DecodedSymbol(String signature, List<NameCandidate> candidates) {
     static final DecodedSymbol EMPTY = new DecodedSymbol(null, List.of());
 
+    /** Copies the candidate list into an unmodifiable list. */
     public DecodedSymbol {
       candidates =
           candidates == null || candidates.isEmpty() ? List.of() : List.copyOf(candidates);
     }
   }
 
+  /**
+   * Demangled symbol name candidate with a detached namespace chain.
+   *
+   * @param originalDemangled original demangled text
+   * @param name short demangled symbol name
+   * @param namespace detached demangled namespace chain, or {@code null}
+   */
   public record NameCandidate(String originalDemangled, String name, Demangled namespace) {
+    /** Detaches the namespace chain from mutable demangler context state. */
     public NameCandidate {
       namespace = detachNamespace(namespace);
     }

@@ -4,10 +4,20 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+/**
+ * Structured wire error payload returned by failed API calls.
+ *
+ * @param status HTTP-aligned status code in {@code 400..599}
+ * @param code snake_case machine-readable error code
+ * @param message human-readable error description
+ * @param target optional JSON pointer to the invalid request field
+ * @param details optional structured diagnostic fields
+ */
 public record BridgeError(
     int status, String code, String message, String target, Map<String, Object> details) {
   private static final Pattern CODE_PATTERN = Pattern.compile("[a-z][a-z0-9_]*");
 
+  /** Validates error fields and copies structured details into an immutable map. */
   public BridgeError {
     if (status < 400 || status > 599) {
       throw new IllegalArgumentException("bridge error status must be in 400..599");
@@ -21,6 +31,11 @@ public record BridgeError(
     details = details == null ? Map.of() : Map.copyOf(details);
   }
 
+  /**
+   * Converts this error to its wire-format JSON object map.
+   *
+   * @return ordered map of serialized error fields
+   */
   public Map<String, Object> toMap() {
     Map<String, Object> result = new LinkedHashMap<>();
     result.put("status", status);

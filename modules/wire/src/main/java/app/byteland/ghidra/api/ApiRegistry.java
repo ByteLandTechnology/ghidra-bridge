@@ -21,8 +21,12 @@ import java.util.function.Supplier;
  * Central registry that defines and dispatches all public API methods.
  */
 public final class ApiRegistry {
+  /** Public semantic version of the wire interface catalog. */
   public static final String INTERFACE_VERSION = "0.2.0";
+
+  /** Default page size for list operations when no limit is given. */
   public static final int DEFAULT_LIMIT = 100;
+  /** Maximum page size permitted for list operations. */
   public static final int MAX_LIMIT = Page.MAX_LIMIT;
 
   static final int NOT_FOUND_STATUS = 404;
@@ -38,6 +42,14 @@ public final class ApiRegistry {
   private final ApiCatalog catalogSnapshot;
   private BatchMethod batchMethod;
 
+  /**
+   * Creates a registry bound to active domain services and session callbacks.
+   *
+   * @param services active domain service container
+   * @param sessionId active bridge session identifier
+   * @param sessionSupplier supplier for session metadata fields
+   * @param shutdownAction callback that stops the active session
+   */
   public ApiRegistry(
       BridgeServices services,
       String sessionId,
@@ -52,7 +64,11 @@ public final class ApiRegistry {
     catalogSnapshot = ApiCatalog.from(INTERFACE_VERSION, methodsByName.values());
   }
 
-  /** Builds the method catalog without an open Ghidra program. */
+  /**
+   * Builds the method catalog without an open Ghidra program.
+   *
+   * @return static method catalog snapshot
+   */
   public static ApiCatalog catalog() {
     return new ApiRegistry(metadataServices(), "schema", Map::of, () -> {}).methodCatalog();
   }
@@ -119,10 +135,21 @@ public final class ApiRegistry {
     return bridgeServices;
   }
 
+  /**
+   * Returns the immutable public API catalog snapshot.
+   *
+   * @return public API catalog
+   */
   public ApiCatalog methodCatalog() {
     return catalogSnapshot;
   }
 
+  /**
+   * Looks up one registered API method by its dotted name.
+   *
+   * @param name dotted method name
+   * @return registered method definition, or null when absent
+   */
   public ApiMethod<Map<String, Object>, Object> method(String name) {
     return methodsByName.get(name);
   }
@@ -137,25 +164,62 @@ public final class ApiRegistry {
    */
   public record PreparedDispatch(
       String methodName, boolean readOnly, Execution execution, ResponseEncoder encoder) {
+    /**
+     * Runs the prepared method handler.
+     *
+     * @return raw handler response value
+     * @throws Exception if handler execution fails
+     */
     public Object execute() throws Exception {
       return execution.run();
     }
 
+    /**
+     * Encodes and projects a raw handler response value.
+     *
+     * @param rawResponse unencoded handler response value
+     * @return wire-encoded response payload
+     */
     public Object encodeResponse(Object rawResponse) {
       return encoder.encode(rawResponse);
     }
 
+    /**
+     * Runs a validated API method handler inside the dispatch lock.
+     */
     @FunctionalInterface
     public interface Execution {
+      /**
+       * Executes the prepared handler operation.
+       *
+       * @return raw handler response value
+       * @throws Exception if execution fails
+       */
       Object run() throws Exception;
     }
 
+    /**
+     * Encodes and projects a raw handler response outside the dispatch lock.
+     */
     @FunctionalInterface
     public interface ResponseEncoder {
+      /**
+       * Encodes a raw handler response into its wire representation.
+       *
+       * @param rawResponse unencoded handler response value
+       * @return wire-encoded response payload
+       */
       Object encode(Object rawResponse);
     }
   }
 
+  /**
+   * Validates parameters and prepares an API method call for locked execution.
+   *
+   * @param name dotted method name
+   * @param params untyped JSON parameter object
+   * @return prepared dispatch handle
+   */
   public PreparedDispatch prepareDispatch(String name, Map<String, Object> params) {
     if (name == null || name.isBlank()) {
       throw ApiException.badRequest("missing_method", "method is required", "/method");
@@ -174,6 +238,14 @@ public final class ApiRegistry {
         rawResponse -> method.encodeResponse(rawResponse, selected));
   }
 
+  /**
+   * Validates parameters and dispatches one public API method call.
+   *
+   * @param name dotted method name
+   * @param params untyped JSON parameter object
+   * @return wire-encoded method result
+   * @throws Exception if validation or service execution fails
+   */
   public Object dispatch(String name, Map<String, Object> params) throws Exception {
     ApiMethod<Map<String, Object>, Object> method = methodsByName.get(name);
     if (method == null) {

@@ -6,11 +6,20 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeoutException;
 
+/**
+ * Translates exceptions into normalized {@link BridgeError} failure payloads.
+ */
 public final class ApiFailures {
   private static final char ARRAY_INDEX_END = ']';
 
   private ApiFailures() {}
 
+  /**
+   * Converts an exception into a status-tagged {@link Failure}.
+   *
+   * @param failure thrown exception to normalize
+   * @return normalized API failure
+   */
   public static Failure normalize(Throwable failure) {
     if (failure instanceof ApiException error) {
       return new Failure(error.status(), error.error());
@@ -91,5 +100,11 @@ public final class ApiFailures {
     return result.toString();
   }
 
+  /**
+   * Normalized failure pair of HTTP-aligned status code and structured {@link BridgeError}.
+   *
+   * @param status HTTP-aligned status code
+   * @param error structured bridge error payload
+   */
   public record Failure(int status, BridgeError error) {}
 }

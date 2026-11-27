@@ -21,8 +21,13 @@ import java.util.function.LongSupplier;
  * {@code Program.getModificationNumber()}, and capped by both snapshot count and total key count.
  */
 public final class QuerySnapshotCache {
+  /** Default maximum number of cached query snapshots. */
   public static final int DEFAULT_MAX_ENTRIES = 32;
+
+  /** Default maximum total number of keys across all cached snapshots. */
   public static final int DEFAULT_MAX_TOTAL_KEYS = 262_144;
+
+  /** Default time-to-live duration for cached snapshots. */
   public static final Duration DEFAULT_TTL = Duration.ofSeconds(30);
 
   private final int maxEntries;
@@ -34,10 +39,19 @@ public final class QuerySnapshotCache {
   private Long lastModificationNumber;
   private long clearEpoch;
 
+  /** Creates a snapshot cache with default capacity and TTL limits. */
   public QuerySnapshotCache() {
     this(DEFAULT_MAX_ENTRIES, DEFAULT_MAX_TOTAL_KEYS, DEFAULT_TTL, System::nanoTime);
   }
 
+  /**
+   * Creates a snapshot cache with custom entry, key, TTL, and clock settings.
+   *
+   * @param maxEntries maximum number of cached snapshots
+   * @param maxTotalKeys maximum total number of keys across all snapshots
+   * @param ttl positive time-to-live duration for each snapshot
+   * @param nanoTime monotonic nanosecond clock supplier
+   */
   public QuerySnapshotCache(
       int maxEntries, int maxTotalKeys, Duration ttl, LongSupplier nanoTime) {
     if (maxEntries < 0) {
@@ -58,8 +72,10 @@ public final class QuerySnapshotCache {
   }
 
   /**
-   * Returns the current clear epoch so concurrent readers can detect an intervening {@link #clear()}
-   * before storing a newly scanned snapshot.
+   * Returns the current clear epoch so concurrent readers can detect a {@link #clear()} call
+   * before a scan result enters the cache.
+   *
+   * @return current clear epoch counter
    */
   public synchronized long clearEpoch() {
     return clearEpoch;
@@ -67,6 +83,9 @@ public final class QuerySnapshotCache {
 
   /**
    * Returns a cached sorted key snapshot on hit, or {@code null} on miss or expiration.
+   *
+   * @param key composite query snapshot key
+   * @return cached sorted key array, or {@code null}
    */
   public synchronized String[] get(Key key) {
     Objects.requireNonNull(key, "key");
@@ -80,16 +99,23 @@ public final class QuerySnapshotCache {
   }
 
   /**
-   * Stores an already-sorted key array if it fits within the cache entry and key caps.
+   * Stores a sorted key array if it fits within the cache entry and key caps.
+   *
+   * @param key composite query snapshot key
+   * @param sortedKeys sorted compact key array
    */
   public synchronized void put(Key key, String[] sortedKeys) {
     putInternal(this.clearEpoch, key, sortedKeys);
   }
 
   /**
-   * Stores an already-sorted key array only if no {@link #clear()} occurred since {@code
-   * expectedClearEpoch} and {@code key.modificationNumber()} is not older than the latest observed
-   * modification number.
+   * Stores a sorted key array if no {@link #clear()} occurred since {@code expectedClearEpoch}.
+   * Skips the write if {@code key.modificationNumber()} is older than the latest modification
+   * number.
+   *
+   * @param expectedClearEpoch clear epoch read before the scan
+   * @param key composite query snapshot key
+   * @param sortedKeys sorted compact key array
    */
   public synchronized void putIfUnchanged(
       long expectedClearEpoch, Key key, String[] sortedKeys) {
@@ -129,6 +155,7 @@ public final class QuerySnapshotCache {
     totalKeys += sortedKeys.length;
   }
 
+  /** Clears all cached snapshots and advances the clear epoch. */
   public synchronized void clear() {
     entries.clear();
     totalKeys = 0;
@@ -136,19 +163,38 @@ public final class QuerySnapshotCache {
     clearEpoch++;
   }
 
+  /**
+   * Returns the number of unexpired snapshots in the cache.
+   *
+   * @return cached snapshot count
+   */
   public synchronized int entryCount() {
     evictExpired(nanoTime.getAsLong());
     return entries.size();
   }
 
+  /**
+   * Returns the total number of keys across all unexpired snapshots in the cache.
+   *
+   * @return total cached key count
+   */
   public synchronized int totalKeyCount() {
     evictExpired(nanoTime.getAsLong());
     return totalKeys;
   }
 
   /**
-   * Binary-searches {@code sortedKeys} for the first key strictly after {@code cursor}, resolves at
-   * most {@code limit + 1} live objects, and materializes at most {@code limit} page items.
+   * Searches {@code sortedKeys} for the first key after {@code cursor}. Resolves at most {@code
+   * limit + 1} live objects and builds up to {@code limit} page items.
+   *
+   * @param <L> resolved live object type
+   * @param <R> mapped page item type
+   * @param sortedKeys sorted snapshot keys
+   * @param limit requested page size
+   * @param cursor resume key, or {@code null} for the first page
+   * @param resolver function that resolves a key to a live object or {@code null}
+   * @param mapper function that maps a live object to a page item
+   * @return page of mapped items and optional next resume key
    */
   public static <L, R> Page<R> slice(
       String[] sortedKeys,
@@ -161,9 +207,17 @@ public final class QuerySnapshotCache {
   }
 
   /**
-   * Binary-searches {@code sortedKeys} for the first key strictly after {@code cursor}, resolves at
-   * most {@code limit + 1} live objects, and materializes at most {@code limit} page items with
-   * their snapshot keys.
+   * Searches {@code sortedKeys} for the first key after {@code cursor}. Resolves at most {@code
+   * limit + 1} live objects and maps up to {@code limit} items with their snapshot keys.
+   *
+   * @param <L> resolved live object type
+   * @param <R> mapped page item type
+   * @param sortedKeys sorted snapshot keys
+   * @param limit requested page size
+   * @param cursor resume key, or {@code null} for the first page
+   * @param resolver function that resolves a key to a live object or {@code null}
+   * @param mapper function that maps a live object and its snapshot key to a page item
+   * @return page of mapped items and optional next resume key
    */
   public static <L, R> Page<R> slice(
       String[] sortedKeys,
@@ -207,6 +261,13 @@ public final class QuerySnapshotCache {
     return Page.of(items, clamped, nextCursor);
   }
 
+  /**
+   * Finds the index of the first key in {@code sortedKeys} that sorts after {@code cursor}.
+   *
+   * @param sortedKeys sorted key array
+   * @param cursor resume key to search past
+   * @return first index after {@code cursor}, or {@code sortedKeys.length} when none remains
+   */
   public static int firstIndexAfter(String[] sortedKeys, String cursor) {
     int index = Arrays.binarySearch(sortedKeys, cursor);
     if (index >= 0) {
@@ -259,14 +320,27 @@ public final class QuerySnapshotCache {
   /**
    * Composite cache key that records resource name, normalized filters, and program modification
    * number.
+   *
+   * @param resource query resource identifier
+   * @param filters normalized filter values
+   * @param modificationNumber program modification number when scanned
    */
   public record Key(String resource, List<String> filters, long modificationNumber) {
+    /** Validates non-null key fields and copies the filter list. */
     public Key {
       Objects.requireNonNull(resource, "resource");
       Objects.requireNonNull(filters, "filters");
       filters = Collections.unmodifiableList(new ArrayList<>(filters));
     }
 
+    /**
+     * Builds a composite snapshot key from a resource name, modification number, and filter values.
+     *
+     * @param resource query resource identifier
+     * @param modificationNumber program modification number
+     * @param normalizedFilters normalized filter components
+     * @return composite cache key
+     */
     public static Key of(String resource, long modificationNumber, String... normalizedFilters) {
       return new Key(resource, Arrays.asList(normalizedFilters), modificationNumber);
     }

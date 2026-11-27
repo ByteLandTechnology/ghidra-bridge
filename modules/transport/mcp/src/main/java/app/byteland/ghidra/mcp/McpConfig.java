@@ -17,6 +17,14 @@ import java.util.regex.Pattern;
  * <p>{@code toolPrefix} is the first part of every tool name. An example is {@code ghidra} in
  * {@code ghidra_program}. Give each server a different prefix. Then one client can connect to
  * several servers without tool name conflicts.
+ *
+ * @param host listen host address
+ * @param port listen TCP port
+ * @param path HTTP endpoint path
+ * @param token optional bearer authentication token
+ * @param sessionId session identifier reported by the server
+ * @param toolPrefix prefix prepended to published MCP tool names
+ * @param allowedOrigins explicit HTTP {@code Origin} allowlist, or {@code null} for loopback policy
  */
 public record McpConfig(
     String host,
@@ -26,9 +34,15 @@ public record McpConfig(
     String sessionId,
     String toolPrefix,
     Set<String> allowedOrigins) {
+  /** Default TCP port for the MCP HTTP server. */
   public static final int DEFAULT_PORT = 8766;
+  /** Default HTTP endpoint path for the MCP server. */
   public static final String DEFAULT_PATH = "/mcp";
+
+  /** Default prefix for MCP tool names. */
   public static final String DEFAULT_TOOL_PREFIX = "ghidra";
+
+  /** Environment variable that overrides the default HTTP {@code Origin} allowlist. */
   public static final String ALLOWED_ORIGINS_ENV = "GHIDRA_MCP_ALLOWED_ORIGINS";
   private static final String NONE_ORIGINS = "none";
   private static final Pattern TOOL_PREFIX = Pattern.compile("[A-Za-z][A-Za-z0-9_-]{0,63}");
@@ -43,11 +57,22 @@ public record McpConfig(
           "allowed_origins",
           "jar");
 
+  /**
+   * Creates an MCP server configuration with the default loopback {@code Origin} policy.
+   *
+   * @param host listen host address
+   * @param port listen TCP port
+   * @param path HTTP endpoint path
+   * @param token optional bearer authentication token
+   * @param sessionId session identifier reported by the server
+   * @param toolPrefix prefix prepended to published MCP tool names
+   */
   public McpConfig(
       String host, int port, String path, String token, String sessionId, String toolPrefix) {
     this(host, port, path, token, sessionId, toolPrefix, null);
   }
 
+  /** Validates and normalizes MCP server configuration fields. */
   public McpConfig {
     host = NetworkBinding.textOrDefault(host, NetworkBinding.DEFAULT_LOOPBACK_HOST);
     NetworkBinding.requireValidPort(port);
@@ -59,10 +84,22 @@ public record McpConfig(
     allowedOrigins = normalizeAllowedOrigins(allowedOrigins, token);
   }
 
+  /**
+   * Parses MCP server configuration from {@code key=value} startup arguments.
+   *
+   * @param args raw {@code key=value} argument strings
+   * @return validated MCP configuration
+   */
   public static McpConfig fromArgs(String... args) {
     return fromMap(NetworkBinding.parseArgs(args));
   }
 
+  /**
+   * Parses MCP server configuration from key-value startup arguments.
+   *
+   * @param args startup argument map
+   * @return validated MCP configuration
+   */
   public static McpConfig fromMap(Map<String, String> args) {
     return fromMap(args, System.getenv());
   }
@@ -81,6 +118,11 @@ public record McpConfig(
         parseAllowedOrigins(resolveRawAllowedOrigins(args, env)));
   }
 
+  /**
+   * Returns the full HTTP endpoint URL for this configuration.
+   *
+   * @return HTTP endpoint URL string
+   */
   public String endpoint() {
     return "http://" + host + ":" + port + path;
   }
@@ -93,7 +135,8 @@ public record McpConfig(
     }
   }
 
-  private static String resolveRawAllowedOrigins(Map<String, String> args, Map<String, String> env) {
+  private static String resolveRawAllowedOrigins(
+      Map<String, String> args, Map<String, String> env) {
     String fromArgs = NetworkBinding.optionalText(args.get("allowed_origins"));
     if (fromArgs != null) {
       return fromArgs;
@@ -221,6 +264,9 @@ public record McpConfig(
   /**
    * Checks a tool prefix. It starts with a letter. It has 1 to 64 letters, digits, underscores,
    * or hyphens. An underscore separates the prefix from the domain, and dots are not permitted.
+   *
+   * @param prefix candidate tool prefix
+   * @return validated tool prefix
    */
   public static String requireToolPrefix(String prefix) {
     if (prefix == null || !TOOL_PREFIX.matcher(prefix).matches()) {
@@ -232,6 +278,10 @@ public record McpConfig(
 
   /**
    * Derives a valid MCP tool prefix from a program name for a fallback port session.
+   *
+   * @param programName active program name, or {@code null}
+   * @param port bound fallback TCP port in {@code 1..65535}
+   * @return validated MCP tool prefix
    */
   public static String deriveFallbackToolPrefix(String programName, int port) {
     NetworkBinding.requireValidPort(port);
@@ -256,6 +306,10 @@ public record McpConfig(
 
   /**
    * Derives a sanitized session identifier from a program name and bound fallback port.
+   *
+   * @param programName active program name, or {@code null}
+   * @param port bound fallback TCP port in {@code 1..65535}
+   * @return fallback session identifier
    */
   public static String deriveFallbackSessionId(String programName, int port) {
     NetworkBinding.requireValidPort(port);
@@ -274,6 +328,12 @@ public record McpConfig(
     return sanitized + suffix;
   }
 
+  /**
+   * Normalizes a program name into lowercase ASCII letters, digits, hyphens, and underscores.
+   *
+   * @param rawName raw program name, or {@code null}
+   * @return sanitized identifier, or an empty string when no valid characters remain
+   */
   public static String sanitizeProgramIdentifier(String rawName) {
     if (rawName == null) {
       return "";

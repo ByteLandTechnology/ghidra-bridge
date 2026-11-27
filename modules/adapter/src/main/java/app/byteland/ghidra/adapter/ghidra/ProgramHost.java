@@ -13,28 +13,93 @@ import java.util.function.Supplier;
  * Provides active Ghidra program access and transaction control for script or GUI hosts.
  */
 public interface ProgramHost {
+  /**
+   * Returns the active Ghidra program, or {@code null} when no program is open.
+   *
+   * @return active Ghidra program, or {@code null}
+   */
   Program currentProgramOrNull();
 
+  /**
+   * Returns a flat program API bound to the pinned or active program.
+   *
+   * @param pinnedProgram pinned transaction program, or {@code null}
+   * @return flat program API instance
+   */
   FlatProgramAPI flatApi(Program pinnedProgram);
 
+  /**
+   * Resolves the target program for a new transaction.
+   *
+   * @param explicitProgram explicit target program, or {@code null} for the active program
+   * @return resolved target program
+   */
   Program resolveTransactionProgram(Program explicitProgram);
 
+  /**
+   * Starts a transaction on the target program.
+   *
+   * @param program target Ghidra program
+   * @return transaction identifier
+   */
   int beginTransaction(Program program);
 
+  /**
+   * Ends an active transaction on the target program.
+   *
+   * @param program target Ghidra program
+   * @param transactionId transaction identifier from {@link #beginTransaction(Program)}
+   * @param commit {@code true} to keep changes, or {@code false} to revert changes
+   */
   void finishTransaction(Program program, int transactionId, boolean commit);
 
+  /**
+   * Reports whether commands need an explicit outer transaction.
+   *
+   * @return {@code true} when commands need an explicit transaction
+   */
   boolean requiresCommandTransaction();
 
+  /**
+   * Runs a Ghidra command against the target program.
+   *
+   * @param program target Ghidra program, or {@code null}
+   * @param command Ghidra command to apply
+   * @return {@code true} if the command succeeded
+   */
   boolean runCommand(Program program, Command<Program> command);
 
+  /**
+   * Saves uncommitted changes for the target program.
+   *
+   * @param program target Ghidra program, or {@code null}
+   * @throws Exception if the save operation fails
+   */
   void saveProgram(Program program) throws Exception;
 
+  /**
+   * Releases cached host state when a program closes.
+   *
+   * @param program closed Ghidra program, or {@code null}
+   */
   default void releaseProgram(Program program) {}
 
+  /**
+   * Creates a host backed by an active Ghidra script.
+   *
+   * @param script active Ghidra script
+   * @return script-backed program host
+   */
   static ProgramHost forScript(GhidraScript script) {
     return new ScriptProgramHost(script);
   }
 
+  /**
+   * Creates a host backed by a dynamic program supplier.
+   *
+   * @param programSupplier supplier for the active Ghidra program
+   * @return supplier-backed program host
+   */
   static ProgramHost forProgramSupplier(Supplier<Program> programSupplier) {
     return new DynamicProgramHost(programSupplier);
   }

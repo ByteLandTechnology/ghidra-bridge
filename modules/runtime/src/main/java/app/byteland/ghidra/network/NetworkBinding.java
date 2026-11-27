@@ -16,8 +16,11 @@ import java.util.Set;
  * Checks network addresses and parses startup arguments for bridge transports.
  */
 public final class NetworkBinding {
+  /** Default loopback host literal used when no listen host is configured. */
   public static final String DEFAULT_LOOPBACK_HOST =
       InetAddress.getLoopbackAddress().getHostAddress();
+
+  /** Default session identifier used when no program name or session argument is set. */
   public static final String DEFAULT_SESSION_ID = "ghidra-bridge";
   private static final int IPV4_BYTE_LENGTH = 4;
   private static final int IPV6_BYTE_LENGTH = 16;
@@ -32,22 +35,43 @@ public final class NetworkBinding {
 
   private NetworkBinding() {}
 
+  /** Outcome classification for HTTP {@code Host} header validation. */
   public enum HostValidationStatus {
+    /** Header value is syntactically valid and permitted for the listener. */
     VALID,
+    /** Header value is absent, duplicate, blank, or malformed. */
     BAD_REQUEST,
+    /** Header authority is syntactically valid, yet rejected for a loopback listener. */
     FORBIDDEN
   }
 
+  /**
+   * Result of HTTP {@code Host} header validation.
+   *
+   * @param status validation outcome classification
+   * @param message diagnostic status message
+   */
   public record HostValidationResult(HostValidationStatus status, String message) {
+    /** Validates non-null result fields. */
     public HostValidationResult {
       Objects.requireNonNull(status, "status");
       Objects.requireNonNull(message, "message");
     }
 
+    /**
+     * Reports whether the {@code Host} header passed validation.
+     *
+     * @return {@code true} when {@code status} is {@link HostValidationStatus#VALID}
+     */
     public boolean isValid() {
       return status == HostValidationStatus.VALID;
     }
 
+    /**
+     * Maps the validation status to an HTTP response status code.
+     *
+     * @return {@code 200}, {@code 400}, or {@code 403}
+     */
     public int httpStatus() {
       return switch (status) {
         case VALID -> 200;
@@ -57,7 +81,14 @@ public final class NetworkBinding {
     }
   }
 
+  /**
+   * Parsed host and optional TCP port from an HTTP {@code Host} header.
+   *
+   * @param host host name, IPv4 literal, or bracketed IPv6 literal
+   * @param port explicit TCP port in {@code 1..65535}, or {@code null} when absent
+   */
   public record HostAuthority(String host, Integer port) {
+    /** Validates the host text and optional port range. */
     public HostAuthority {
       if (host == null || host.isBlank()) {
         throw new IllegalArgumentException("host is required");
@@ -68,6 +99,12 @@ public final class NetworkBinding {
     }
   }
 
+  /**
+   * Requires a non-blank bearer token when the listen host resolves outside loopback.
+   *
+   * @param host listen host name or IP address
+   * @param token configured bearer token, or {@code null}
+   */
   public static void requireTokenForNonLoopback(String host, String token) {
     requireTokenForNonLoopback(host, token, InetAddress::getAllByName);
   }
@@ -79,6 +116,12 @@ public final class NetworkBinding {
     }
   }
 
+  /**
+   * Requires a non-blank bearer token when a configured origin host resolves outside loopback.
+   *
+   * @param host origin host name or IP address
+   * @param token configured bearer token, or {@code null}
+   */
   public static void requireTokenForNonLoopbackOrigin(String host, String token) {
     requireTokenForNonLoopbackOrigin(host, token, InetAddress::getAllByName);
   }
@@ -101,6 +144,14 @@ public final class NetworkBinding {
     }
   }
 
+  /**
+   * Compares an HTTP {@code Authorization} header against the expected bearer token in constant
+   * time.
+   *
+   * @param authorizationHeader raw {@code Authorization} header value, or {@code null}
+   * @param expectedToken expected bearer token secret
+   * @return {@code true} if the header matches {@code Bearer <expectedToken>}
+   */
   public static boolean bearerTokenMatches(String authorizationHeader, String expectedToken) {
     if (authorizationHeader == null || expectedToken == null) {
       return false;
@@ -110,6 +161,12 @@ public final class NetworkBinding {
         ("Bearer " + expectedToken).getBytes(StandardCharsets.UTF_8));
   }
 
+  /**
+   * Reports whether all resolved addresses for a host are loopback addresses.
+   *
+   * @param host host name or IP literal
+   * @return {@code true} if every resolved address is on loopback
+   */
   public static boolean isLoopback(String host) {
     return isLoopback(host, InetAddress::getAllByName);
   }
@@ -135,6 +192,12 @@ public final class NetworkBinding {
     }
   }
 
+  /**
+   * Parses {@code key=value} argument strings into an ordered map.
+   *
+   * @param args raw argument strings
+   * @return map of parsed argument keys and values
+   */
   public static Map<String, String> parseArgs(String... args) {
     Map<String, String> parsed = new LinkedHashMap<>();
     if (args == null) return parsed;
@@ -153,22 +216,40 @@ public final class NetworkBinding {
     return parsed;
   }
 
-  public static void rejectUnknown(Map<String, String> args, Set<String> allowed) {
+  /**
+   * Rejects startup argument keys outside the permitted set.
+   *
+   * @param args startup argument map
+   * @param permitted permitted argument keys
+   */
+  public static void rejectUnknown(Map<String, String> args, Set<String> permitted) {
     Objects.requireNonNull(args, "args");
-    Objects.requireNonNull(allowed, "allowed");
+    Objects.requireNonNull(permitted, "allowed");
     for (String key : args.keySet()) {
-      if (!allowed.contains(key)) {
+      if (!permitted.contains(key)) {
         throw new IllegalArgumentException("unknown startup argument: " + key);
       }
     }
   }
 
+  /**
+   * Checks that a TCP port number is in {@code 1..65535}.
+   *
+   * @param port TCP port number to check
+   */
   public static void requireValidPort(int port) {
     if (port < 1 || port > 65535) {
       throw new IllegalArgumentException("port must be in 1..65535");
     }
   }
 
+  /**
+   * Parses an optional integer value from text.
+   *
+   * @param value raw text value, or {@code null}
+   * @param field argument name for error messages
+   * @return parsed integer, or {@code null} when blank
+   */
   public static Integer optionalInteger(String value, String field) {
     String normalized = optionalText(value);
     if (normalized == null) return null;
@@ -179,12 +260,25 @@ public final class NetworkBinding {
     }
   }
 
+  /**
+   * Trims optional text and converts blank values to {@code null}.
+   *
+   * @param value raw text value, or {@code null}
+   * @return trimmed non-empty text, or {@code null}
+   */
   public static String optionalText(String value) {
     if (value == null) return null;
     String normalized = value.trim();
     return normalized.isEmpty() ? null : normalized;
   }
 
+  /**
+   * Trims required text and fails when the value is {@code null} or blank.
+   *
+   * @param value raw text value
+   * @param field argument name for error messages
+   * @return trimmed non-empty text
+   */
   public static String requiredText(String value, String field) {
     String normalized = optionalText(value);
     if (normalized == null) {
@@ -193,15 +287,35 @@ public final class NetworkBinding {
     return normalized;
   }
 
+  /**
+   * Returns trimmed text when non-blank, or {@code fallback} when blank.
+   *
+   * @param value candidate text value, or {@code null}
+   * @param fallback default value when {@code value} is blank
+   * @return trimmed text or {@code fallback}
+   */
   public static String textOrDefault(String value, String fallback) {
     String normalized = optionalText(value);
     return normalized == null ? fallback : normalized;
   }
 
+  /**
+   * Returns {@code candidate} trimmed when non-blank, or {@link #DEFAULT_SESSION_ID} when blank.
+   *
+   * @param candidate candidate session identifier, or {@code null}
+   * @return non-blank session identifier
+   */
   public static String defaultSessionId(String candidate) {
     return textOrDefault(candidate, DEFAULT_SESSION_ID);
   }
 
+  /**
+   * Normalizes an HTTP or WebSocket path to start with {@code /}.
+   *
+   * @param value candidate path, or {@code null}
+   * @param fallback default path when {@code value} is blank
+   * @return normalized path that starts with {@code /}
+   */
   public static String normalizePath(String value, String fallback) {
     String normalized = textOrDefault(value, requiredText(fallback, "fallback"));
     return normalized.startsWith("/") ? normalized : "/" + normalized;
@@ -210,6 +324,11 @@ public final class NetworkBinding {
   /**
    * Validates the inbound HTTP {@code Host} header list for a listener without DNS lookups on the
    * inbound header value.
+   *
+   * @param hostHeaders inbound {@code Host} header values, or {@code null}
+   * @param configuredHost configured listener host name or IP literal
+   * @param listenerPort bound listener TCP port in {@code 1..65535}
+   * @return validation status and diagnostic message
    */
   public static HostValidationResult validateHostHeader(
       List<String> hostHeaders, String configuredHost, int listenerPort) {
@@ -224,6 +343,12 @@ public final class NetworkBinding {
   /**
    * Validates the inbound HTTP {@code Host} header list with a precomputed listener loopback flag
    * and zero DNS lookups per request.
+   *
+   * @param hostHeaders inbound {@code Host} header values, or {@code null}
+   * @param configuredHost configured listener host name or IP literal
+   * @param listenerPort bound listener TCP port in {@code 1..65535}
+   * @param loopbackListener {@code true} when the listener binds to a loopback address
+   * @return validation status and diagnostic message
    */
   public static HostValidationResult validateHostHeader(
       List<String> hostHeaders,
@@ -267,6 +392,9 @@ public final class NetworkBinding {
   /**
    * Parses {@code host} and optional {@code :port} from an HTTP {@code Host} header value without
    * {@link InetAddress} DNS resolution.
+   *
+   * @param rawHostHeader raw HTTP {@code Host} header value
+   * @return parsed host and optional port
    */
   public static HostAuthority parseHostAuthority(String rawHostHeader) {
     if (rawHostHeader == null) {
@@ -329,6 +457,9 @@ public final class NetworkBinding {
   /**
    * Normalizes a host string to lowercase in {@link Locale#ROOT}. Trims ASCII whitespace and
    * removes outer IPv6 brackets when a colon is present.
+   *
+   * @param host host name or IP literal
+   * @return normalized lowercase host string
    */
   public static String normalizeHost(String host) {
     Objects.requireNonNull(host, "host");
@@ -346,6 +477,9 @@ public final class NetworkBinding {
    * Returns {@code true} when {@code host} is {@code localhost} or a literal IPv4/IPv6 loopback
    * address ({@code 127.0.0.0/8}, {@code ::1}, or {@code ::ffff:127.0.0.0/104}). Does not run DNS
    * lookups.
+   *
+   * @param host candidate host string, or {@code null}
+   * @return {@code true} if {@code host} is {@code localhost} or a literal loopback IP address
    */
   public static boolean isLiteralLoopbackHost(String host) {
     if (host == null) {
@@ -362,6 +496,10 @@ public final class NetworkBinding {
   /**
    * Compares two host strings case-insensitively and across canonical IPv4/IPv6 literal forms.
    * Does not run DNS lookups.
+   *
+   * @param firstHost first host string, or {@code null}
+   * @param secondHost second host string, or {@code null}
+   * @return {@code true} if both non-empty hosts match syntactically or as IP literals
    */
   public static boolean hostsMatch(String firstHost, String secondHost) {
     if (firstHost == null || secondHost == null) {
@@ -386,6 +524,9 @@ public final class NetworkBinding {
   /**
    * Parses a strict IPv4 or IPv6 literal (with optional brackets) into an {@link InetAddress}
    * without DNS resolution. Returns {@code null} if {@code host} is not a valid IP literal.
+   *
+   * @param host candidate IP literal string, or {@code null}
+   * @return parsed {@link InetAddress}, or {@code null} if {@code host} is not a valid IP literal
    */
   public static InetAddress parseIpLiteral(String host) {
     if (host == null) {
@@ -451,6 +592,9 @@ public final class NetworkBinding {
   /**
    * Parses a strict dotted-quad decimal IPv4 literal into a 4-byte array, or returns {@code null}
    * if invalid. Rejects zero prefixes, short forms, and non-ASCII digits.
+   *
+   * @param literal candidate IPv4 literal string, or {@code null}
+   * @return 4-byte IPv4 address array, or {@code null} if {@code literal} is invalid
    */
   public static byte[] parseIpv4Literal(String literal) {
     if (literal == null || literal.isEmpty() || literal.length() > 15) {
@@ -493,6 +637,9 @@ public final class NetworkBinding {
    * Parses a strict unbracketed IPv6 literal into a 16-byte array, or returns {@code null} if
    * invalid. Accepts {@code ::} zero-compression and an embedded dotted-quad IPv4 suffix, and
    * rejects {@code %} zone IDs.
+   *
+   * @param literal candidate IPv6 literal string, or {@code null}
+   * @return 16-byte IPv6 address array, or {@code null} if {@code literal} is invalid
    */
   public static byte[] parseIpv6Literal(String literal) {
     if (literal == null

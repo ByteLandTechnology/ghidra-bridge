@@ -40,6 +40,14 @@ public final class Bootstrap {
 
   private Bootstrap() {}
 
+  /**
+   * Starts the WebSocket bridge transport for the active Ghidra script.
+   *
+   * @param script active Ghidra script instance
+   * @param args strict key=value launch arguments
+   * @param onShutdown optional callback invoked during JVM shutdown
+   * @throws Exception if configuration or transport execution fails
+   */
   public static void startFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
     startFromScript(script, args, onShutdown, GhidraServiceFactory::create, DEFAULT_WS_PORT);
@@ -89,6 +97,14 @@ public final class Bootstrap {
         defaultPort);
   }
 
+  /**
+   * Starts the MCP Streamable HTTP transport for the active Ghidra script.
+   *
+   * @param script active Ghidra script instance
+   * @param args strict key=value launch arguments
+   * @param onShutdown optional callback invoked during JVM shutdown
+   * @throws Exception if configuration or server execution fails
+   */
   public static void startMcpFromScript(GhidraScript script, String[] args, Runnable onShutdown)
       throws Exception {
     startMcpFromScript(

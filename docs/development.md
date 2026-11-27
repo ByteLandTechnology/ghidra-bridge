@@ -92,7 +92,9 @@ bash .github/scripts/verify-repository-hygiene.sh
 python3 tests/release_archive_reproducibility.py
 ```
 
-On Linux x86-64, CI also runs `python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"` after `clean verify`.
+On Linux x86-64, CI also runs
+`python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"`
+after `clean verify`.
 
 To check module import boundaries without a Ghidra installation, run:
 
@@ -100,9 +102,24 @@ To check module import boundaries without a Ghidra installation, run:
 ./gradlew --no-daemon verifyArchitecture
 ```
 
+To run compiler lint, Javadoc, or unit test checks separately during local work, run:
+
+```bash
+# Compile main, test, and generated script classes with Java 21 lints
+./gradlew --no-daemon classes testClasses compileGeneratedScripts
+
+# Check Javadoc comments and tags across all Java subprojects
+./gradlew --no-daemon javadoc
+
+# Run unit tests across all Java subprojects
+./gradlew --no-daemon test
+```
+
 The verification checks enforce these rules:
 - **Workflows and Shell Scripts**: `actionlint` and `shellcheck` validate GitHub Actions workflows, composite actions, and shell scripts.
 - **Repository Hygiene**: `verify-repository-hygiene.sh` checks tracked files, duplicates, SHA-pinned GitHub Actions, URLs, and MCP tool names.
+- **Compiler Lints**: Java and script compile tasks use `-Xlint:all` and `-Werror` on Java 21.
+- **Javadoc**: `javadoc` checks all Java subprojects with `-Xdoclint:all` and `-Werror`.
 - **Unit Tests**: `check` runs JUnit tests across all Java modules.
 - **Architecture**: `verifyArchitecture` verifies that only adapter and launcher import Ghidra classes.
 - **Contract Drift**: `verifyApiContracts` verifies that contracts match code.

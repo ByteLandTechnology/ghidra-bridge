@@ -18,9 +18,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Ghidra-backed implementation of {@link ProgramService}.
+ */
 public final class ProgramServiceImpl implements ProgramService {
   private final GhidraSession context;
 
+  /**
+   * Creates a program service bound to a Ghidra session.
+   *
+   * @param context active Ghidra session
+   */
   public ProgramServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
   }

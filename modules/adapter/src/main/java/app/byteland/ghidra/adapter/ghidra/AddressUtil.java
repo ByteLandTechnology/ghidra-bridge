@@ -17,6 +17,13 @@ import java.util.Locale;
 public final class AddressUtil {
   private AddressUtil() {}
 
+  /**
+   * Parses an address string against the given Ghidra program.
+   *
+   * @param program target Ghidra program
+   * @param rawAddress hex offset or space-qualified address text
+   * @return resolved Ghidra {@link Address}
+   */
   public static Address parseAddress(Program program, String rawAddress) {
     if (program == null) {
       throw new IllegalArgumentException("program is required");
@@ -42,6 +49,13 @@ public final class AddressUtil {
     return address;
   }
 
+  /**
+   * Parses an address string against the active Ghidra script program.
+   *
+   * @param script active Ghidra script handle
+   * @param rawAddress hex offset or space-qualified address text
+   * @return resolved Ghidra {@link Address}
+   */
   public static Address parseAddress(GhidraScript script, String rawAddress) {
     if (script == null) {
       throw new IllegalArgumentException("script is required");
@@ -49,6 +63,13 @@ public final class AddressUtil {
     return parseAddress((FlatProgramAPI) script, rawAddress);
   }
 
+  /**
+   * Parses an address string against a flat program API instance.
+   *
+   * @param api flat program API handle
+   * @param rawAddress hex offset or space-qualified address text
+   * @return resolved Ghidra {@link Address}
+   */
   public static Address parseAddress(FlatProgramAPI api, String rawAddress) {
     if (api == null) {
       throw new IllegalArgumentException("api is required");
@@ -117,6 +138,12 @@ public final class AddressUtil {
     return true;
   }
 
+  /**
+   * Formats a Ghidra {@link Address} as {@code <space>:<lowercase_hex>}.
+   *
+   * @param address Ghidra address, or {@code null}
+   * @return canonical address string, or {@code null}
+   */
   public static String canonicalAddress(Address address) {
     if (address == null) {
       return null;
@@ -125,6 +152,13 @@ public final class AddressUtil {
     return canonicalAddress(space, address.toString());
   }
 
+  /**
+   * Formats an address space name and hex offset as {@code <space>:<lowercase_hex>}.
+   *
+   * @param addressSpace address space name
+   * @param offsetHex hexadecimal offset string
+   * @return canonical address string
+   */
   public static String canonicalAddress(String addressSpace, String offsetHex) {
     return addressSpace + ":" + normalizeOffset(offsetHex);
   }

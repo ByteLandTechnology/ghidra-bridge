@@ -14,12 +14,20 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Ghidra-backed implementation of {@link AnalysisService}.
+ */
 public final class AnalysisServiceImpl implements AnalysisService {
   private final GhidraSession context;
   private final Object lock = new Object();
   private final Map<Program, ProgramAnalysisState> states = new IdentityHashMap<>();
   private boolean closed;
 
+  /**
+   * Creates an analysis service bound to a Ghidra session.
+   *
+   * @param context active Ghidra session
+   */
   public AnalysisServiceImpl(GhidraSession context) {
     this.context = Objects.requireNonNull(context, "context");
   }
@@ -74,7 +82,11 @@ public final class AnalysisServiceImpl implements AnalysisService {
     }
   }
 
-  /** Cancels and releases background analysis resources for a closed program. */
+  /**
+   * Cancels and releases background analysis resources for a closed program.
+   *
+   * @param program closed Ghidra program, or {@code null}
+   */
   public void releaseProgram(Program program) {
     if (program == null) {
       return;

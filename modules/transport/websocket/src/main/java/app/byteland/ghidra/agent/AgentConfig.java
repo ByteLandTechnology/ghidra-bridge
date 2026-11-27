@@ -14,6 +14,14 @@ import java.util.Set;
 
 /**
  * Configuration values for a WebSocket bridge session.
+ *
+ * @param wsUrl outbound WebSocket URL, or {@code null} in server mode
+ * @param host server listen host, or {@code null} in outbound mode
+ * @param port server listen TCP port, or {@code null} in outbound mode
+ * @param path WebSocket endpoint path
+ * @param token optional bearer authentication token
+ * @param sessionId unique session identifier
+ * @param exitDeadlineSeconds optional shutdown deadline in seconds for outbound mode
  */
 public record AgentConfig(
     String wsUrl,
@@ -26,6 +34,7 @@ public record AgentConfig(
   private static final Set<String> ALLOWED =
       Set.of("ws_url", "host", "port", "path", "session_id", "token", "jar", "exit_deadline_sec");
 
+  /** Validates and normalizes runtime configuration fields. */
   public AgentConfig {
     boolean pathWasProvided = NetworkBinding.optionalText(path) != null;
     wsUrl = NetworkBinding.optionalText(wsUrl);
@@ -54,10 +63,22 @@ public record AgentConfig(
     }
   }
 
+  /**
+   * Parses configuration from {@code key=value} startup arguments.
+   *
+   * @param args raw {@code key=value} argument strings
+   * @return validated runtime configuration
+   */
   public static AgentConfig fromArgs(String... args) {
     return fromMap(NetworkBinding.parseArgs(args));
   }
 
+  /**
+   * Builds configuration from a key-value startup argument map.
+   *
+   * @param args startup argument map
+   * @return validated runtime configuration
+   */
   public static AgentConfig fromMap(Map<String, String> args) {
     Objects.requireNonNull(args, "args");
     NetworkBinding.rejectUnknown(args, ALLOWED);
@@ -71,14 +92,29 @@ public record AgentConfig(
         NetworkBinding.optionalInteger(args.get("exit_deadline_sec"), "exit_deadline_sec"));
   }
 
+  /**
+   * Reports whether this configuration connects outbound to a remote WebSocket URL.
+   *
+   * @return {@code true} if {@code wsUrl} is configured
+   */
   public boolean isOutboundMode() {
     return wsUrl != null;
   }
 
+  /**
+   * Reports whether this configuration listens on a local TCP port.
+   *
+   * @return {@code true} if {@code port} is configured
+   */
   public boolean isServerMode() {
     return port != null;
   }
 
+  /**
+   * Returns the local WebSocket listener URL in server mode.
+   *
+   * @return WebSocket endpoint URL, or {@code null} in outbound mode
+   */
   public String serverEndpoint() {
     if (port == null) {
       return null;
@@ -88,10 +124,21 @@ public record AgentConfig(
     return "ws://" + formattedHost + ":" + port + path;
   }
 
+  /**
+   * Returns the outbound WebSocket URL with query and fragment components redacted.
+   *
+   * @return redacted WebSocket URL, or {@code null} if unset
+   */
   public String redactedWsUrl() {
     return redactWsUrl(wsUrl);
   }
 
+  /**
+   * Redacts userinfo, query, and fragment components from a WebSocket URL string.
+   *
+   * @param wsUrl candidate WebSocket URL, or {@code null}
+   * @return redacted WebSocket URL, or {@code null} when blank
+   */
   public static String redactWsUrl(String wsUrl) {
     String normalized = NetworkBinding.optionalText(wsUrl);
     if (normalized == null) return null;
@@ -106,6 +153,12 @@ public record AgentConfig(
     return separator < 0 ? stripped : stripped + "?<redacted>";
   }
 
+  /**
+   * Parses and validates an outbound {@code ws} or {@code wss} URI without credentials.
+   *
+   * @param wsUrl outbound WebSocket URL string
+   * @return validated WebSocket URI
+   */
   public static URI parseWsUri(String wsUrl) {
     String normalized = NetworkBinding.optionalText(wsUrl);
     if (normalized == null) {

@@ -30,9 +30,14 @@ public final class AgentClient {
   /** The maximum time for the send of one keepalive ping. */
   private static final Duration KEEPALIVE_TIMEOUT = Duration.ofSeconds(10);
 
+  /**
+   * Receives lifecycle events from the WebSocket transport.
+   */
   public interface LifecycleListener {
+    /** Invoked when the embedded WebSocket server opens its listener socket. */
     default void onListening() {}
 
+    /** Invoked when the outbound WebSocket client connects to the remote host. */
     default void onConnected() {}
   }
 
@@ -45,10 +50,23 @@ public final class AgentClient {
       new AtomicReference<>();
   private final AtomicReference<AgentWebSocketServer> serverRef = new AtomicReference<>();
 
+  /**
+   * Creates a WebSocket transport runner with no-op lifecycle callbacks.
+   *
+   * @param config transport configuration
+   * @param dispatcher bridge request dispatcher
+   */
   public AgentClient(AgentConfig config, AgentDispatcher dispatcher) {
     this(config, dispatcher, new LifecycleListener() {});
   }
 
+  /**
+   * Creates a WebSocket transport runner with custom lifecycle callbacks.
+   *
+   * @param config transport configuration
+   * @param dispatcher bridge request dispatcher
+   * @param lifecycleListener listener notified on listen or connect events
+   */
   public AgentClient(
       AgentConfig config, AgentDispatcher dispatcher, LifecycleListener lifecycleListener) {
     this(config, dispatcher, lifecycleListener, DEFAULT_CONNECT_TIMEOUT);
@@ -65,10 +83,21 @@ public final class AgentClient {
     this.connectTimeout = connectTimeout;
   }
 
+  /**
+   * Runs the WebSocket transport until the session disconnects.
+   *
+   * @throws Exception if startup or connection fails
+   */
   public void connect() throws Exception {
     connect(() -> false);
   }
 
+  /**
+   * Runs the WebSocket transport until the session disconnects or cancellation is requested.
+   *
+   * @param cancellationRequested supplier that reports external cancellation
+   * @throws Exception if startup or connection fails
+   */
   public void connect(BooleanSupplier cancellationRequested) throws Exception {
     try (ActiveSession session = openSession(cancellationRequested)) {
       if (session != null) {
@@ -80,6 +109,10 @@ public final class AgentClient {
   /**
    * Binds the embedded listener or completes the outbound handshake, then returns an active
    * session handle. Returns {@code null} if cancellation occurs during the outbound handshake.
+   *
+   * @param cancellationRequested supplier that reports external cancellation
+   * @return active session handle, or {@code null} when handshake cancellation occurs
+   * @throws Exception if listener bind or outbound connection fails
    */
   public ActiveSession openSession(BooleanSupplier cancellationRequested) throws Exception {
     if (config.isServerMode()) {
@@ -127,6 +160,9 @@ public final class AgentClient {
     }
   }
 
+  /**
+   * Handle for a bound embedded WebSocket server or connected outbound WebSocket session.
+   */
   public final class ActiveSession implements AutoCloseable {
     private final BooleanSupplier cancellationRequested;
     private final AgentClientChannels.OutboundMessageChannel outboundChannel;
@@ -141,10 +177,16 @@ public final class AgentClient {
       this.httpClient = httpClient;
     }
 
+    /**
+     * Waits until the WebSocket session disconnects or cancellation is requested.
+     *
+     * @throws InterruptedException if the caller thread is interrupted before disconnect
+     */
     public void awaitDisconnect() throws InterruptedException {
       AgentClient.this.awaitDisconnect(cancellationRequested, outboundChannel);
     }
 
+    /** Closes the WebSocket session and releases any outbound HTTP client resources. */
     @Override
     public void close() {
       try {
@@ -176,6 +218,9 @@ public final class AgentClient {
     LOGGER.log(System.Logger.Level.ERROR, message, error);
   }
 
+  /**
+   * Closes the active WebSocket channel or server and signals session completion.
+   */
   public void disconnect() {
     RuntimeException failure = null;
     try {

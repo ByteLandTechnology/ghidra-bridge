@@ -30,6 +30,7 @@ public record ApiMethod<Request, Response>(
     List<String> identityFields,
     Handler<Request, Response> handler) {
 
+  /** Validates method descriptor fields and copies field collections. */
   public ApiMethod {
     Objects.requireNonNull(name, "name");
     if (description == null || description.isBlank()) {
@@ -43,10 +44,21 @@ public record ApiMethod<Request, Response>(
     Objects.requireNonNull(handler, "handler");
   }
 
+  /**
+   * Decodes raw request parameters with this method's request codec.
+   *
+   * @param params raw JSON request parameters
+   * @return decoded request value
+   */
   public Request decodeRequest(Object params) {
     return requestCodec.decode(params, "");
   }
 
+  /**
+   * Validates the requested field projection paths for a decoded request.
+   *
+   * @param request decoded request value
+   */
   public void validateProjection(Request request) {
     FieldProjection.validate(request, fields, identityFields);
   }
@@ -55,6 +67,13 @@ public record ApiMethod<Request, Response>(
     return FieldProjection.validate(request, fields, identityFields);
   }
 
+  /**
+   * Runs the method handler on a decoded request.
+   *
+   * @param request decoded request value
+   * @return typed handler response
+   * @throws Exception if handler execution fails
+   */
   public Response invokeHandler(Request request) throws Exception {
     return invokeHandler(request, selectProjection(request));
   }
@@ -70,6 +89,13 @@ public record ApiMethod<Request, Response>(
     }
   }
 
+  /**
+   * Encodes a typed handler response, applies field projection, and validates projected output.
+   *
+   * @param request decoded request value
+   * @param response typed handler response
+   * @return encoded and projected wire response
+   */
   public Object encodeResponse(Request request, Response response) {
     return encodeResponse(response, selectProjection(request));
   }
@@ -90,6 +116,13 @@ public record ApiMethod<Request, Response>(
     return responseCodec.encode(typed);
   }
 
+  /**
+   * Validates field projection, runs the handler, and encodes the projected response.
+   *
+   * @param request decoded request value
+   * @return encoded and projected response value
+   * @throws Exception if field validation or handler execution fails
+   */
   public Object invokeDecoded(Request request) throws Exception {
     Set<String> selected = selectProjection(request);
     Response response = invokeHandler(request, selected);
@@ -134,8 +167,21 @@ public record ApiMethod<Request, Response>(
     return rebased;
   }
 
+  /**
+   * Executes a decoded API request and returns a typed response.
+   *
+   * @param <Request> decoded request type
+   * @param <Response> typed response type
+   */
   @FunctionalInterface
   public interface Handler<Request, Response> {
+    /**
+     * Processes a decoded API request.
+     *
+     * @param request decoded request value
+     * @return typed response value
+     * @throws Exception if execution fails
+     */
     Response handle(Request request) throws Exception;
   }
 
@@ -159,6 +205,7 @@ public record ApiMethod<Request, Response>(
       boolean idempotent,
       boolean batchable) {
 
+    /** Validates consistency across effect flags. */
     public MethodEffects {
       if (readOnly && (mutatesProgram || requiresTransaction || destructive)) {
         throw new IllegalArgumentException("read-only methods cannot mutate or be destructive");
@@ -168,23 +215,55 @@ public record ApiMethod<Request, Response>(
       }
     }
 
+    /**
+     * Returns effect metadata for a batchable read-only query method.
+     *
+     * @return read-only method effects
+     */
     public static MethodEffects readOnlyMethod() {
       return new MethodEffects(true, false, false, true, false, true, true);
     }
 
+    /**
+     * Returns effect metadata for a non-batchable metadata inspection method.
+     *
+     * @return metadata method effects
+     */
     public static MethodEffects metadata() {
       return new MethodEffects(true, false, false, true, false, true, false);
     }
 
+    /**
+     * Returns effect metadata for a transactional program mutation method.
+     *
+     * @param destructive {@code true} if the mutation deletes or overwrites data
+     * @param idempotent {@code true} if repeated calls produce the same program state
+     * @return transactional mutation method effects
+     */
     public static MethodEffects mutation(boolean destructive, boolean idempotent) {
       return new MethodEffects(false, true, true, false, destructive, idempotent, true);
     }
 
+    /**
+     * Returns effect metadata for a program mutation that manages its own concurrency outside a
+     * single transaction.
+     *
+     * @param destructive {@code true} if the mutation deletes or overwrites data
+     * @param idempotent {@code true} if repeated calls produce the same program state
+     * @return non-transactional mutation method effects
+     */
     public static MethodEffects mutationWithoutTransaction(
         boolean destructive, boolean idempotent) {
       return new MethodEffects(false, true, false, false, destructive, idempotent, false);
     }
 
+    /**
+     * Returns effect metadata for a session lifecycle control method.
+     *
+     * @param destructive {@code true} if the call terminates session state
+     * @param idempotent {@code true} if repeated calls have the same effect
+     * @return lifecycle method effects
+     */
     public static MethodEffects lifecycle(boolean destructive, boolean idempotent) {
       return new MethodEffects(false, false, false, true, destructive, idempotent, false);
     }

@@ -19,6 +19,12 @@ public final class AgentDispatcher implements AutoCloseable {
   private final DispatchBarrier dispatchBarrier = new DispatchBarrier();
   private volatile boolean shuttingDown;
 
+  /**
+   * Creates a dispatcher backed by the given bridge services and session identifier.
+   *
+   * @param services domain services for the active program
+   * @param sessionId non-blank runtime session identifier
+   */
   public AgentDispatcher(BridgeServices services, String sessionId) {
     this.services = Objects.requireNonNull(services, "services");
     this.sessionId = NetworkBinding.requiredText(sessionId, "session_id");
@@ -32,6 +38,14 @@ public final class AgentDispatcher implements AutoCloseable {
     services.close();
   }
 
+  /**
+   * Dispatches one API method call under the shared-read or exclusive-write lock.
+   *
+   * @param method dotted API method name
+   * @param params decoded request parameters
+   * @return serialized response payload
+   * @throws Exception if validation or method execution fails
+   */
   public Object dispatch(String method, Map<String, Object> params) throws Exception {
     return dispatchBarrier.run(
         () -> {
@@ -46,6 +60,8 @@ public final class AgentDispatcher implements AutoCloseable {
 
   /**
    * Runs a lifecycle action under the fair write lock while the dispatcher is open.
+   *
+   * @param action exclusive action to run
    */
   public void runExclusive(Runnable action) {
     Objects.requireNonNull(action, "action");
@@ -68,14 +84,29 @@ public final class AgentDispatcher implements AutoCloseable {
     return dispatchBarrier;
   }
 
+  /**
+   * Returns the registered API method catalog.
+   *
+   * @return API method catalog
+   */
   public ApiCatalog methodCatalog() {
     return apiRegistry.methodCatalog();
   }
 
+  /**
+   * Reports whether session shutdown has started.
+   *
+   * @return {@code true} if shutdown was requested
+   */
   public boolean isShuttingDown() {
     return shuttingDown;
   }
 
+  /**
+   * Returns the name of the active Ghidra program.
+   *
+   * @return program name
+   */
   public String getProgramName() {
     return services.currentProgramName();
   }

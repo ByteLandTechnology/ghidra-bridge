@@ -23,6 +23,9 @@ import ghidra.program.model.symbol.SymbolType;
 import ghidra.util.exception.InvalidInputException;
 import java.util.Set;
 
+/**
+ * Ghidra-backed implementation of {@link FunctionService}.
+ */
 public final class FunctionServiceImpl implements FunctionService {
   private final GhidraSession context;
   private final FunctionLookupQueries lookupQueries;
@@ -30,6 +33,11 @@ public final class FunctionServiceImpl implements FunctionService {
   private final FunctionRelationQueries relationQueries;
   private final FunctionMutations.ParameterDataTypeResolver dataTypeResolver;
 
+  /**
+   * Creates a function service bound to a Ghidra session.
+   *
+   * @param context active Ghidra session
+   */
   public FunctionServiceImpl(GhidraSession context) {
     this.context = context;
     this.lookupQueries = new FunctionLookupQueries(context);

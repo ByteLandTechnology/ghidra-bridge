@@ -13,6 +13,9 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+/**
+ * Generates the MCP tool catalog JSON file from {@link ApiRegistry}.
+ */
 public final class McpContractGenerator {
   private static final Set<String> FORBIDDEN_SCHEMA_KEYS =
       Set.of("oneOf", "anyOf", "allOf", "$ref", "$defs");
@@ -43,6 +46,12 @@ public final class McpContractGenerator {
 
   private McpContractGenerator() {}
 
+  /**
+   * Writes {@code docs/mcp-tools.json} under the target root directory.
+   *
+   * @param args optional single root directory path
+   * @throws IOException if the contract file write fails
+   */
   public static void main(String[] args) throws IOException {
     if (args.length >= 2 && "--verify".equals(args[0])) {
       verifyRepository(Path.of(args[1]).toAbsolutePath().normalize());

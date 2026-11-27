@@ -107,10 +107,25 @@ public final class McpHttpServer implements AutoCloseable {
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private final ConcurrentHashMap<String, SseSession> sseSessions = new ConcurrentHashMap<>();
 
+  /**
+   * Creates an MCP HTTP server that discards request logs.
+   *
+   * @param config MCP server configuration
+   * @param dispatcher bridge request dispatcher
+   * @throws IOException if the HTTP listener fails to bind
+   */
   public McpHttpServer(McpConfig config, AgentDispatcher dispatcher) throws IOException {
     this(config, dispatcher, McpHttpServer::discardRequestLog);
   }
 
+  /**
+   * Creates an MCP HTTP server with a custom request log sink.
+   *
+   * @param config MCP server configuration
+   * @param dispatcher bridge request dispatcher
+   * @param requestLogSink consumer that receives formatted request log lines
+   * @throws IOException if the HTTP listener fails to bind
+   */
   public McpHttpServer(
       McpConfig config, AgentDispatcher dispatcher, Consumer<String> requestLogSink)
       throws IOException {
@@ -248,14 +263,29 @@ public final class McpHttpServer implements AutoCloseable {
     }
   }
 
+  /**
+   * Starts HTTP connection dispatch on the configured endpoint.
+   */
   public void start() {
     server.start();
   }
 
+  /**
+   * Waits until the server closes or cancellation is requested.
+   *
+   * @param cancelRequested supplier that reports external cancellation
+   * @return true when the server closed on its own, false when cancellation stopped it
+   * @throws InterruptedException if the caller thread is interrupted before shutdown
+   */
   public boolean awaitShutdown(BooleanSupplier cancelRequested) throws InterruptedException {
     return awaitShutdown(shutdownLatch, cancelRequested, this::close, 250L);
   }
 
+  /**
+   * Returns the bound HTTP endpoint URL.
+   *
+   * @return HTTP endpoint URL string
+   */
   public String endpoint() {
     return config.endpoint();
   }
