@@ -11,7 +11,7 @@ repos:
         stages:
           - commit-msg
         args:
-          - --scopes=adapter,build,ci,contracts,deps,docs,domain,launcher,main,mcp,runtime,transport,websocket,wire
+          - --scopes=adapter,build,ci,contracts,deps,docs,domain,launcher,main,mcp,runtime,transport,transport:mcp,transport:websocket,websocket,wire
 
   - repo: local
     hooks:
