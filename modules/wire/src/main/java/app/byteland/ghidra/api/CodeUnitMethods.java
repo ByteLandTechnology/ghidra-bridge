@@ -6,7 +6,6 @@ import static app.byteland.ghidra.api.ApiRegistry.optionalText;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 final class CodeUnitMethods implements ApiMethodProvider {
   private final ApiRegistry registry;
@@ -26,15 +25,7 @@ final class CodeUnitMethods implements ApiMethodProvider {
     registry.scanList(
         "code_unit.list",
         ApiSchemaCatalog.scanListInput(listingFilter),
-        Set.of(
-            ApiVocabulary.ADDRESS,
-            ApiVocabulary.KIND,
-            ApiVocabulary.LENGTH,
-            ApiVocabulary.BYTES,
-            ApiVocabulary.TEXT,
-            "mnemonic",
-            "operands",
-            ApiVocabulary.DATA_TYPE),
+        ApiSchemaCatalog.codeUnitFields(),
         List.of(ApiVocabulary.ADDRESS),
         (request, page) ->
             registry
@@ -48,13 +39,7 @@ final class CodeUnitMethods implements ApiMethodProvider {
     registry.scanList(
         "data_unit.list",
         ApiSchemaCatalog.scanListInput(WireSchema.object(Map.of())),
-        Set.of(
-            ApiVocabulary.ADDRESS,
-            ApiVocabulary.LENGTH,
-            ApiVocabulary.DATA_TYPE,
-            "value",
-            "representation",
-            ApiVocabulary.BYTES),
+        ApiSchemaCatalog.dataUnitFields(),
         List.of(ApiVocabulary.ADDRESS),
         (request, page) ->
             registry
@@ -63,6 +48,21 @@ final class CodeUnitMethods implements ApiMethodProvider {
                 .listDataUnits(
                     addressScan(request),
                     page.limit(),
+                    page.cursor()));
+    registry.scanWindow(
+        "listing_window.get",
+        "Get code units, data units, symbols, functions, comments, and references for one address"
+            + " window. Use next_cursor to get the next window.",
+        ApiSchemaCatalog.scanWindowInput(listingFilter),
+        ApiSchemaCatalog.listingWindowOutputSchema(),
+        (request, page) ->
+            registry
+                .services()
+                .listingService()
+                .getListingWindow(
+                    addressScan(request),
+                    page.limit(),
+                    optionalText(filter(request), ApiVocabulary.KIND, "all"),
                     page.cursor()));
   }
 }

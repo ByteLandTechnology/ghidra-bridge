@@ -42,6 +42,7 @@ import static app.byteland.ghidra.api.ApiVocabulary.TYPE;
 import static app.byteland.ghidra.api.ApiVocabulary.VALUES;
 
 import app.byteland.ghidra.service.AddressScanOptions;
+import app.byteland.ghidra.service.listing.ListingWindowResource;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -113,6 +114,21 @@ final class ApiSchemaCatalog {
 
   static Map<String, Object> scanListInput(Map<String, Object> filter) {
     return pagedListInput(filter, true, true, false);
+  }
+
+  static Map<String, Object> scanWindowInput(Map<String, Object> filter) {
+    return input(
+        props(
+            FILTER,
+            filter,
+            "range",
+            ADDRESS_RANGE_SCHEMA,
+            "timeout_ms",
+            scanTimeoutSchema(),
+            LIMIT,
+            ApiRegistry.limitSchema(),
+            CURSOR,
+            ApiRegistry.cursorSchema()));
   }
 
   static Map<String, Object> requiredListInput(Map<String, Object> filter) {
@@ -409,6 +425,11 @@ final class ApiSchemaCatalog {
 
   static Map<String, Object> resourceSchema(
       Set<String> fields, List<String> identityFields, boolean projectable) {
+    return WireSchema.withDefinitions(objectSchema(fields, identityFields, projectable));
+  }
+
+  static Map<String, Object> objectSchema(
+      Set<String> fields, List<String> identityFields, boolean projectable) {
     FieldSelection selection = FieldSelection.from(fields);
     Map<String, Map<String, Object>> properties = new LinkedHashMap<>();
     for (Map.Entry<String, FieldSelection> entry : selection.children().entrySet()) {
@@ -419,8 +440,7 @@ final class ApiSchemaCatalog {
     }
     List<String> required =
         identityFields.stream().filter(selection::containsKey).toList();
-    return WireSchema.withDefinitions(
-        WireSchema.object(properties, required.toArray(String[]::new)));
+    return WireSchema.object(properties, required.toArray(String[]::new));
   }
 
   private static boolean hasDottedChildren(Set<String> fields, String root) {
@@ -802,5 +822,67 @@ final class ApiSchemaCatalog {
 
   static Map<String, Object> commentTypeSchema() {
     return WireSchema.stringEnum("plate", "pre", "eol", "repeatable", "post");
+  }
+
+  static Set<String> codeUnitFields() {
+    return Set.of(
+        ADDRESS, KIND, LENGTH, BYTES, ApiVocabulary.TEXT, "mnemonic", "operands", DATA_TYPE);
+  }
+
+  static Set<String> dataUnitFields() {
+    return Set.of(ADDRESS, LENGTH, DATA_TYPE, "value", "representation", BYTES);
+  }
+
+  static Map<String, Object> listingWindowOutputSchema() {
+    return WireSchema.withDefinitions(
+        WireSchema.object(
+            props(
+                ITEMS,
+                WireSchema.array(
+                    objectSchema(codeUnitFields(), List.of(ADDRESS), false),
+                    0,
+                    ApiRegistry.MAX_LIMIT),
+                "data_units",
+                WireSchema.array(
+                    objectSchema(dataUnitFields(), List.of(ADDRESS), false),
+                    0,
+                    ListingWindowResource.MAX_DATA_UNITS),
+                "symbols",
+                WireSchema.array(
+                    objectSchema(symbolFields(), List.of("id"), false),
+                    0,
+                    ListingWindowResource.MAX_SYMBOLS),
+                "functions",
+                WireSchema.array(
+                    objectSchema(functionFields(), List.of(ENTRY), false),
+                    0,
+                    ListingWindowResource.MAX_FUNCTIONS),
+                "comments",
+                WireSchema.array(
+                    objectSchema(commentFields(), List.of(ADDRESS, TYPE), false),
+                    0,
+                    ListingWindowResource.MAX_COMMENTS),
+                "incoming_references",
+                WireSchema.array(
+                    referenceResourceSchema(),
+                    0,
+                    ListingWindowResource.MAX_INCOMING_REFERENCES),
+                "outgoing_references",
+                WireSchema.array(
+                    referenceResourceSchema(),
+                    0,
+                    ListingWindowResource.MAX_OUTGOING_REFERENCES),
+                ApiVocabulary.NEXT_CURSOR,
+                WireSchema.nonBlankString(),
+                ApiVocabulary.SCAN,
+                SCAN_PROGRESS_SCHEMA),
+            ITEMS,
+            "data_units",
+            "symbols",
+            "functions",
+            "comments",
+            "incoming_references",
+            "outgoing_references",
+            ApiVocabulary.SCAN));
   }
 }

@@ -2,9 +2,9 @@
 
 Ghidra Bridge は、実行中の Ghidra プログラムへのネットワークアクセスを提供します。
 本ブリッジは WebSocket JSON-RPC 2.0 と MCP Streamable HTTP `2026-07-28` の 2 つのネットワークトランスポートをサポートします。
-レジストリは `interface.get` から `batch.execute` まで 56 個の公開ドット記法メソッドを定義します。
-WebSocket は 56 個すべてを提供します。
-MCP は 55 個を提供し、`interface.get` は提供しません。
+レジストリは `interface.get` から `batch.execute` まで 57 個の公開ドット記法メソッドを定義します。
+WebSocket は 57 個すべてを提供します。
+MCP は 56 個を提供し、`interface.get` は提供しません。
 ランタイム JAR はサードパーティ製ライブラリへの依存が一切ありません。
 
 ## 設計目標
@@ -50,6 +50,7 @@ Ghidra のバックグラウンド解析は独立したスレッドで実行さ�
 - `symbol.list`
 - `comment.list`
 - `flow_override.list`
+- `listing_window.get`
 
 スキャン操作は `scan` オブジェクトを受け取ります。
 `scan.range` オブジェクトで `start` と `end` アドレスを指定します。
@@ -121,4 +122,4 @@ format を `document` にした `decompilation.get` は、1 回の逆コンパ�
 - モジュール構造の詳細は[アーキテクチャガイド](architecture.md)を参照してください。
 - エンベロープ形式とエラー定義は[プロトコル仕様](protocol.md)を参照してください。
 - アトミック処理の詳細は[バッチとトランザクション](batch-and-transactions.md)を参照してください。
-- 全 56 メソッドの一覧は[メソッドリファレンス](../api.md)を参照してください。
+- 全 57 メソッドの一覧は[メソッドリファレンス](../api.md)を参照してください。

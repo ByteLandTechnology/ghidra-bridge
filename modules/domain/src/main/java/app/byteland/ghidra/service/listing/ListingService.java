@@ -40,6 +40,14 @@ public interface ListingService {
       String cursor);
 
   /**
+   * Returns code units and overlay resources for one address window.
+   */
+  default ListingWindowResource getListingWindow(
+      AddressScanOptions scan, int limit, String kind, String cursor) {
+    throw new UnsupportedOperationException("getListingWindow");
+  }
+
+  /**
    * Sets or clears instruction flow overrides.
    */
   void setFlowOverrides(

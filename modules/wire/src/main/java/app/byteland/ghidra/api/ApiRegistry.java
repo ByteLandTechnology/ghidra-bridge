@@ -260,6 +260,11 @@ public final class ApiRegistry {
     Page<?> handle(Map<String, Object> request, PageRequest page) throws Exception;
   }
 
+  @FunctionalInterface
+  interface WindowHandler {
+    Object handle(Map<String, Object> request, PageRequest page) throws Exception;
+  }
+
   void read(
       String name,
       Map<String, Object> input,
@@ -339,6 +344,40 @@ public final class ApiRegistry {
                 selected != null
                     ? WireValues.resource(handler.handle(request), selected)
                     : WireValues.resourceRestrictingRoots(handler.handle(request), allowedRoots));
+  }
+
+  void scanWindow(
+      String name,
+      String description,
+      Map<String, Object> input,
+      Map<String, Object> output,
+      WindowHandler handler) {
+    register(
+        name,
+        MethodEffects.readOnlyMethod(),
+        description,
+        input,
+        output,
+        Set.of(),
+        List.of(),
+        request -> {
+          String resource = name.substring(0, name.indexOf('.'));
+          PageRequest page = decodePage(request, resource);
+          Map<String, Object> result =
+              new LinkedHashMap<>(WireValues.resource(handler.handle(request, page)));
+          Optional<Object> next = Optional.ofNullable(result.remove(ApiVocabulary.NEXT_CURSOR));
+          if (next.isPresent()) {
+            String fingerprint =
+                page.queryFingerprint() != null
+                    ? page.queryFingerprint()
+                    : CursorTokens.queryFingerprint(request);
+            result.put(
+                ApiVocabulary.NEXT_CURSOR,
+                CursorTokens.encode(
+                    resource, sessionId, fingerprint, String.valueOf(next.orElseThrow())));
+          }
+          return result;
+        });
   }
 
   void list(

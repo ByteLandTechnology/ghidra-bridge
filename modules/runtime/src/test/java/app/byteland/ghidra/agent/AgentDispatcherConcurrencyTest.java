@@ -39,6 +39,7 @@ import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import app.byteland.ghidra.service.listing.InstructionResource;
 import app.byteland.ghidra.service.listing.ListingService;
+import app.byteland.ghidra.service.listing.ListingWindowResource;
 import app.byteland.ghidra.service.memory.MemoryBlockResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
@@ -90,7 +91,7 @@ class AgentDispatcherConcurrencyTest {
               .filter(m -> Boolean.TRUE.equals(((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
               .map(MethodDescriptor::name)
               .toList();
-      assertEquals(29, catalogReadOnly.size(), "Catalog must expose all 29 read-only methods");
+      assertEquals(30, catalogReadOnly.size(), "Catalog must expose all 30 read-only methods");
 
       Map<String, Map<String, Object>> readCalls = validReadRequests();
       assertEquals(Set.copyOf(catalogReadOnly), readCalls.keySet());
@@ -188,7 +189,7 @@ class AgentDispatcherConcurrencyTest {
   void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(57, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
       assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
@@ -713,6 +714,7 @@ class AgentDispatcherConcurrencyTest {
     calls.put("memory.read", Map.of("selector", Map.of("address", "ram:00100000"), "length", 4));
     calls.put("code_unit.list", Map.of());
     calls.put("data_unit.list", Map.of());
+    calls.put("listing_window.get", Map.of());
     calls.put("instruction.get", Map.of("selector", Map.of("address", "ram:00100000")));
     calls.put("instruction.list", Map.of());
     calls.put(
@@ -1249,6 +1251,22 @@ class AgentDispatcherConcurrencyTest {
             List<FlowOverrideValue> expectedFlowOverrides,
             FlowOverrideValue flowOverride) {
           observe("flow_override.patch", true);
+        }
+
+        @Override
+        public ListingWindowResource getListingWindow(
+            AddressScanOptions scan, int limit, String kind, String cursor) {
+          observe("listing_window.get", false);
+          return new ListingWindowResource(
+              List.of(),
+              List.of(),
+              List.of(),
+              List.of(),
+              List.of(),
+              List.of(),
+              List.of(),
+              null,
+              completedScan());
         }
       };
     }

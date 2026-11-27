@@ -18,6 +18,7 @@
 | `memory.write` | `destructive mutation` | Write hex or base64 bytes at an address. |
 | `code_unit.list` | `read-only` | List each code unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `data_unit.list` | `read-only` | List each data unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
+| `listing_window.get` | `read-only` | Get code units, data units, symbols, functions, comments, and references for one address window. Use next_cursor to get the next window. |
 | `global_variable.get` | `read-only` | Get the global variable at one address. |
 | `global_variable.list` | `read-only` | List global variables in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `global_variable.create` | `mutation` | Create typed data and a primary global variable label at an unused address. |
