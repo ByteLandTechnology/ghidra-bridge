@@ -94,6 +94,20 @@ class BatchQueryMethodTest {
     Map<String, Object> firstSchema = queryMethod.requestCodec().schema();
     assertSame(firstSchema, queryMethod.requestCodec().schema());
     assertThrows(UnsupportedOperationException.class, () -> firstSchema.put("extra", true));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> queryProps = (Map<String, Object>) firstSchema.get("properties");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> modeSchema = (Map<String, Object>) queryProps.get("transaction_mode");
+    assertEquals("per_item", modeSchema.get("default"));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> itemsSchema = (Map<String, Object>) queryProps.get("items");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> itemSchema = (Map<String, Object>) itemsSchema.get("items");
+    assertEquals(Map.of("propertyName", "method"), itemSchema.get("discriminator"));
+    Map<String, Object> decodedDefaultMode =
+        queryMethod.decodeRequest(
+            Map.of("items", List.of(Map.of("id", "q1", "method", "program.get", "arguments", Map.of()))));
+    assertEquals("per_item", decodedDefaultMode.get("transaction_mode"));
   }
 
   @Test

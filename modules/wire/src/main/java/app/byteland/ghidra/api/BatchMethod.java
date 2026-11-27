@@ -70,9 +70,10 @@ final class BatchMethod {
     return ApiSchemaCatalog.input(
         ApiSchemaCatalog.props(
             ApiVocabulary.ITEMS,
-            WireSchema.array(WireSchema.oneOf(itemAlternatives), 1, MAX_ITEMS),
+            WireSchema.array(
+                WireSchema.taggedOneOf(ApiVocabulary.METHOD, itemAlternatives), 1, MAX_ITEMS),
             ApiVocabulary.TRANSACTION_MODE,
-            WireSchema.stringEnum("per_item", "all_or_none")),
+            WireSchema.withDefault(WireSchema.stringEnum("per_item", "all_or_none"), "per_item")),
         ApiVocabulary.ITEMS);
   }
 
@@ -152,6 +153,7 @@ final class BatchMethod {
         }
         Map<String, Object> request = stringMap(raw);
         PreparedBatch prepared = prepareBatch(request, allowedMethods, invalidMethodMessage);
+        request.putIfAbsent(ApiVocabulary.TRANSACTION_MODE, "per_item");
         return new DecodedBatchRequest(request, prepared, allowedMethods);
       }
 
@@ -334,9 +336,17 @@ final class BatchMethod {
         Map<String, Object> violation = new LinkedHashMap<>();
         String targetPath = error.error().target();
         String suffix = targetPath == null ? "" : targetPath;
-        violation.put("target", ITEMS_TARGET + "/" + index + "/arguments" + suffix);
+        String rebasedTarget = ITEMS_TARGET + "/" + index + "/arguments" + suffix;
+        String message = error.error().message();
+        if (targetPath != null
+            && !targetPath.isBlank()
+            && message != null
+            && message.startsWith(targetPath + " ")) {
+          message = rebasedTarget + message.substring(targetPath.length());
+        }
+        violation.put("target", rebasedTarget);
         violation.put("code", error.error().code());
-        violation.put("message", error.error().message());
+        violation.put("message", message);
         violations.add(violation);
       }
     }
