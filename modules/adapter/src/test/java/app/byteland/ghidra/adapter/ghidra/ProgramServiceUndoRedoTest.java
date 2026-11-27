@@ -152,13 +152,29 @@ class ProgramServiceUndoRedoTest {
         assertNull(program.getCurrentTransactionInfo());
         assertEquals(List.of("comment.create"), services.programService().getHistory().undoList());
 
+        session
+            .querySnapshots()
+            .put(
+                QuerySnapshotCache.Key.of("symbol", session.modificationNumber(), ""),
+                new String[] {"1"});
+        assertEquals(1, session.querySnapshots().entryCount());
+
         ProgramUndoRedoResult undone = services.programService().undo();
         assertEquals("comment.create", undone.transactionName());
         assertNull(program.getListing().getComment(CommentType.PRE, base));
+        assertEquals(0, session.querySnapshots().entryCount());
+
+        session
+            .querySnapshots()
+            .put(
+                QuerySnapshotCache.Key.of("symbol", session.modificationNumber(), ""),
+                new String[] {"1"});
+        assertEquals(1, session.querySnapshots().entryCount());
 
         ProgramUndoRedoResult redone = services.programService().redo();
         assertEquals("comment.create", redone.transactionName());
         assertEquals("dynamic comment", program.getListing().getComment(CommentType.PRE, base));
+        assertEquals(0, session.querySnapshots().entryCount());
       }
     }
   }
