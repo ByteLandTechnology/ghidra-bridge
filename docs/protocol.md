@@ -76,7 +76,7 @@ Failed requests return an error envelope:
       "status": 404,
       "code": "not_found",
       "message": "address not found",
-      "target": "/params/selector/address",
+      "target": "/selector/address",
       "details": {}
     }
   }

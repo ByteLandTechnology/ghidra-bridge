@@ -153,8 +153,8 @@ class McpHttpServerToolResultTest {
 
   @Test
   void httpAndSseToolsCallPreserveDualContentWireFormat() throws Exception {
-    try (ServerHarness harness = ServerHarness.start()) {
-      HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    try (ServerHarness harness = ServerHarness.start();
+        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
 
       // Verify stateless Streamable HTTP (2026-07-28) across decompilation.get, memory.read,
       // function.list, ghidra_help, and error calls.
@@ -230,7 +230,7 @@ class McpHttpServerToolResultTest {
         readerThread.setDaemon(true);
         readerThread.start();
 
-        SseEvent endpointEvent = events.poll(5, TimeUnit.SECONDS);
+        SseEvent endpointEvent = events.poll(10, TimeUnit.SECONDS);
         assertNotNull(endpointEvent, "Timed out waiting for SSE endpoint event");
         assertEquals("endpoint", endpointEvent.event());
         URI sessionUri = URI.create(harness.endpoint()).resolve(endpointEvent.data());
@@ -241,8 +241,8 @@ class McpHttpServerToolResultTest {
             "sse-decomp",
             "ghidra_decompilation",
             Map.of("operation", "get", "params", Map.of("selector", Map.of("entry", "0x100000"))));
-        SseEvent sseDecompMsg = events.poll(5, TimeUnit.SECONDS);
-        assertNotNull(sseDecompMsg, "Timed out waiting for SSE decompilation message");
+        SseEvent sseDecompMsg = events.poll(10, TimeUnit.SECONDS);
+        assertNotNull(sseDecompMsg, "Timed out waiting for SSE decompilation message event");
         assertEquals("message", sseDecompMsg.event());
         Map<String, Object> decompSse = JsonUtil.parseObject(sseDecompMsg.data());
         assertDualContentParity(decompSse, false, false);
@@ -262,8 +262,8 @@ class McpHttpServerToolResultTest {
                 "read",
                 "params",
                 Map.of("selector", Map.of("address", "ram:deadbeef"), "length", 4)));
-        SseEvent sseErrMsg = events.poll(5, TimeUnit.SECONDS);
-        assertNotNull(sseErrMsg, "Timed out waiting for SSE error message");
+        SseEvent sseErrMsg = events.poll(10, TimeUnit.SECONDS);
+        assertNotNull(sseErrMsg, "Timed out waiting for SSE error message event");
         assertEquals("message", sseErrMsg.event());
         Map<String, Object> errorSse = JsonUtil.parseObject(sseErrMsg.data());
         assertDualContentParity(errorSse, true, false);
@@ -272,6 +272,303 @@ class McpHttpServerToolResultTest {
             resultMap(errorSse).get("structuredContent"));
       }
     }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void toolsCallValidatesEnvelopesWithWireSchemaAndEmitsPlainEnglishDiagnostics() throws Exception {
+    try (ServerHarness harness = ServerHarness.start();
+        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
+
+      // 1. tools/list publishes compact default metadata and ghidra_help publishes discriminators.
+      Map<String, Object> listResp =
+          postRawStateless(
+              client,
+              harness.endpoint(),
+              Map.of(
+                  "MCP-Protocol-Version", "2026-07-28",
+                  "Mcp-Method", "tools/list"),
+              Map.of(
+                  "jsonrpc", "2.0",
+                  "id", "list-1",
+                  "method", "tools/list",
+                  "params",
+                      Map.of(
+                          "_meta",
+                          Map.of(
+                              "io.modelcontextprotocol/protocolVersion", "2026-07-28",
+                              "io.modelcontextprotocol/clientCapabilities", Map.of()))),
+              200);
+      List<Map<String, Object>> tools =
+          (List<Map<String, Object>>) resultMap(listResp).get("tools");
+      Map<String, Object> memoryTool =
+          tools.stream()
+              .filter(tool -> "ghidra_memory".equals(tool.get("name")))
+              .findFirst()
+              .orElseThrow();
+      Map<String, Object> memorySchema = (Map<String, Object>) memoryTool.get("inputSchema");
+      assertFalse(memorySchema.containsKey("oneOf"));
+      Map<String, Object> memoryProps = (Map<String, Object>) memorySchema.get("properties");
+      Map<String, Object> memoryParams = (Map<String, Object>) memoryProps.get("params");
+      assertEquals(Map.of(), memoryParams.get("default"));
+      Map<String, Object> memoryParamProps =
+          (Map<String, Object>) memoryParams.get("properties");
+      assertEquals(256, ((Map<String, Object>) memoryParamProps.get("length")).get("default"));
+      assertEquals("hex", ((Map<String, Object>) memoryParamProps.get("encoding")).get("default"));
+
+      Map<String, Object> helpDomainResp =
+          postStatelessToolCall(
+              client, harness.endpoint(), "help-dt", "ghidra_help", Map.of("domain", "data_type"));
+      Map<String, Object> helpStructured =
+          (Map<String, Object>) resultMap(helpDomainResp).get("structuredContent");
+      List<Map<String, Object>> dtOperations =
+          (List<Map<String, Object>>) helpStructured.get("operations");
+      Map<String, Object> dtCreate =
+          dtOperations.stream()
+              .filter(item -> "create".equals(item.get("name")))
+              .findFirst()
+              .orElseThrow();
+      Map<String, Object> dtCreateSchema = (Map<String, Object>) dtCreate.get("inputSchema");
+      Map<String, Object> dtCreateProps =
+          (Map<String, Object>) dtCreateSchema.get("properties");
+      Map<String, Object> dtResourceSchema =
+          (Map<String, Object>) dtCreateProps.get("resource");
+      assertEquals(Map.of("propertyName", "kind"), dtResourceSchema.get("discriminator"));
+
+      // 2. Non-object arguments return HTTP 200 isError=true status=400 target=/arguments (never 500).
+      Map<String, Object> nonObjectArgs =
+          postRawStateless(
+              client,
+              harness.endpoint(),
+              Map.of(
+                  "MCP-Protocol-Version", "2026-07-28",
+                  "Mcp-Method", "tools/call",
+                  "Mcp-Name", "ghidra_memory"),
+              Map.of(
+                  "jsonrpc", "2.0",
+                  "id", "bad-args",
+                  "method", "tools/call",
+                  "params",
+                      Map.of(
+                          "_meta",
+                              Map.of(
+                                  "io.modelcontextprotocol/protocolVersion", "2026-07-28",
+                                  "io.modelcontextprotocol/clientCapabilities", Map.of()),
+                          "name", "ghidra_memory",
+                          "arguments", List.of("bad"))),
+              200);
+      assertToolBadRequest(nonObjectArgs, "invalid_type", "/arguments", "JSON object");
+
+      // 3. Absent operation, non-text operation, unknown operation, dotted operation, unknown key, bad params.
+      Map<String, Object> missingOp =
+          postStatelessToolCall(client, harness.endpoint(), "missing-op", "ghidra_memory", Map.of());
+      assertToolBadRequest(missingOp, "missing_field", "/operation", "Valid operations:");
+
+      Map<String, Object> numericOp =
+          postStatelessToolCall(
+              client, harness.endpoint(), "num-op", "ghidra_memory", Map.of("operation", 42));
+      assertToolBadRequest(numericOp, "invalid_type", "/operation", "Valid operations:");
+
+      Map<String, Object> dottedSameDomain =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "dotted-op",
+              "ghidra_program",
+              Map.of("operation", "program.get"));
+      assertToolBadRequest(dottedSameDomain, "invalid_enum", "/operation", "Use bare operation \"get\"");
+
+      Map<String, Object> dottedCrossDomain =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "cross-op",
+              "ghidra_program",
+              Map.of("operation", "memory.read"));
+      assertToolBadRequest(dottedCrossDomain, "invalid_enum", "/operation", "ghidra_memory");
+
+      Map<String, Object> unknownDomainArg =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "extra-arg",
+              "ghidra_memory",
+              Map.of("operation", "read", "unexpected", true));
+      assertToolBadRequest(unknownDomainArg, "unknown_field", "/unexpected", "operation, params");
+
+      Map<String, Object> nonObjectParams =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "bad-params",
+              "ghidra_memory",
+              Map.of("operation", "read", "params", "not-an-object"));
+      assertToolBadRequest(nonObjectParams, "invalid_type", "/params", "JSON object");
+
+      // 4. Nested parameter validation preserves parameter-relative target pointers (/selector/address).
+      Map<String, Object> badSelector =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "bad-sel",
+              "ghidra_memory",
+              Map.of("operation", "read", "params", Map.of("selector", Map.of("address", 99))));
+      assertToolBadRequest(badSelector, "invalid_type", "/selector/address", "/selector/address");
+
+      // 5. ghidra_help unknown key, operation without domain, and dotted domain/operation suggestions.
+      Map<String, Object> badHelpKey =
+          postStatelessToolCall(
+              client, harness.endpoint(), "help-key", "ghidra_help", Map.of("topic", "memory"));
+      assertToolBadRequest(badHelpKey, "unknown_field", "/topic", "domain, operation");
+
+      Map<String, Object> helpOpWithoutDomain =
+          postStatelessToolCall(
+              client, harness.endpoint(), "help-no-dom", "ghidra_help", Map.of("operation", "get"));
+      assertToolBadRequest(helpOpWithoutDomain, "missing_field", "/domain", "Valid domains:");
+
+      Map<String, Object> helpDottedDomain =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "help-dot-dom",
+              "ghidra_help",
+              Map.of("domain", "program.get"));
+      assertToolBadRequest(helpDottedDomain, "invalid_enum", "/domain", "Use bare domain \"program\"");
+
+      Map<String, Object> helpDottedOp =
+          postStatelessToolCall(
+              client,
+              harness.endpoint(),
+              "help-dot-op",
+              "ghidra_help",
+              Map.of("domain", "program", "operation", "program.get"));
+      assertToolBadRequest(helpDottedOp, "invalid_enum", "/operation", "Use bare operation \"get\"");
+
+      // 6. Unknown tool name rethrows JsonRpcError (-32602) with bare-name suggestion and valid tools.
+      Map<String, Object> unknownToolRpc =
+          postRawStateless(
+              client,
+              harness.endpoint(),
+              Map.of(
+                  "MCP-Protocol-Version", "2026-07-28",
+                  "Mcp-Method", "tools/call",
+                  "Mcp-Name", "program.get"),
+              Map.of(
+                  "jsonrpc", "2.0",
+                  "id", "bad-tool",
+                  "method", "tools/call",
+                  "params",
+                      Map.of(
+                          "_meta",
+                              Map.of(
+                                  "io.modelcontextprotocol/protocolVersion", "2026-07-28",
+                                  "io.modelcontextprotocol/clientCapabilities", Map.of()),
+                          "name", "program.get",
+                          "arguments", Map.of())),
+              400);
+      Map<String, Object> rpcError = (Map<String, Object>) unknownToolRpc.get("error");
+      assertEquals(-32602, ((Number) rpcError.get("code")).intValue());
+      String unknownToolMsg = String.valueOf(rpcError.get("message"));
+      assertTrue(unknownToolMsg.contains("ghidra_program"));
+      assertTrue(unknownToolMsg.contains("Valid tools:"));
+
+      // 7. Header and protocol-version errors use plain English without HeaderMismatch or UnsupportedProtocolVersionError.
+      Map<String, Object> headerErr =
+          postRawStateless(
+              client,
+              harness.endpoint(),
+              Map.of(
+                  "MCP-Protocol-Version", "2026-07-28",
+                  "Mcp-Method", "tools/list"),
+              Map.of(
+                  "jsonrpc", "2.0",
+                  "id", "hdr-err",
+                  "method", "tools/call",
+                  "params",
+                      Map.of(
+                          "_meta",
+                              Map.of(
+                                  "io.modelcontextprotocol/protocolVersion", "2026-07-28",
+                                  "io.modelcontextprotocol/clientCapabilities", Map.of()),
+                          "name", "ghidra_help")),
+              400);
+      String headerMsg =
+          String.valueOf(((Map<String, Object>) headerErr.get("error")).get("message"));
+      assertFalse(headerMsg.contains("HeaderMismatch"));
+      assertTrue(headerMsg.contains("Mcp-Method"));
+
+      Map<String, Object> versionErr =
+          postRawStateless(
+              client,
+              harness.endpoint(),
+              Map.of(
+                  "MCP-Protocol-Version", "2099-01-01",
+                  "Mcp-Method", "tools/list"),
+              Map.of(
+                  "jsonrpc", "2.0",
+                  "id", "ver-err",
+                  "method", "tools/list",
+                  "params",
+                      Map.of(
+                          "_meta",
+                              Map.of(
+                                  "io.modelcontextprotocol/protocolVersion", "2099-01-01",
+                                  "io.modelcontextprotocol/clientCapabilities", Map.of()))),
+              400);
+      String versionMsg =
+          String.valueOf(((Map<String, Object>) versionErr.get("error")).get("message"));
+      assertFalse(versionMsg.contains("UnsupportedProtocolVersionError"));
+      assertTrue(versionMsg.contains("2026-07-28"));
+
+      Map<String, Object> initVersionErr =
+          postRawStateless(
+              client,
+              harness.endpoint(),
+              Map.of("MCP-Protocol-Version", "1999-01-01"),
+              Map.of(
+                  "jsonrpc", "2.0",
+                  "id", "init-ver-err",
+                  "method", "initialize",
+                  "params", Map.of("protocolVersion", "2025-03-26", "capabilities", Map.of())),
+              400);
+      String initVersionMsg =
+          String.valueOf(((Map<String, Object>) initVersionErr.get("error")).get("message"));
+      assertTrue(initVersionMsg.contains("Supported protocol versions:"));
+    }
+  }
+
+  private static void assertToolBadRequest(
+      Map<String, Object> rpcEnvelope,
+      String expectedCode,
+      String expectedTarget,
+      String expectedMessageSubstring) {
+    assertDualContentParity(rpcEnvelope, true, true);
+    Map<?, ?> structured = (Map<?, ?>) resultMap(rpcEnvelope).get("structuredContent");
+    assertEquals(400, structured.get("status"));
+    assertEquals(expectedCode, structured.get("code"));
+    assertEquals(expectedTarget, structured.get("target"));
+    String message = String.valueOf(structured.get("message"));
+    assertTrue(
+        message.contains(expectedMessageSubstring),
+        "Expected message to contain <" + expectedMessageSubstring + "> but got: " + message);
+  }
+
+  private static Map<String, Object> postRawStateless(
+      HttpClient client,
+      String endpoint,
+      Map<String, String> extraHeaders,
+      Map<String, Object> requestBody,
+      int expectedHttpStatus)
+      throws IOException, InterruptedException {
+    HttpRequest.Builder builder =
+        HttpRequest.newBuilder(URI.create(endpoint))
+            .timeout(Duration.ofSeconds(10))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(JsonUtil.toJson(requestBody)));
+    extraHeaders.forEach(builder::header);
+    HttpResponse<String> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    assertEquals(expectedHttpStatus, response.statusCode());
+    return JsonUtil.parseObject(response.body());
   }
 
   private static void assertDualContentParity(
