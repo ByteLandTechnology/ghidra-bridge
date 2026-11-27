@@ -484,6 +484,38 @@ def run_test(headless, root):
             })["result"]
             assert "label_renamed(" in caller_after["c"]
             assert "label_only(" not in caller_after["c"]
+
+            queried = tool(48, "ghidra_batch", {
+                "operation": "query",
+                "params": {
+                    "items": [
+                        {"id": "prog", "method": "program.get", "arguments": {}},
+                        {"id": "fn", "method": "function.get", "arguments": selector("func_a")},
+                    ],
+                },
+            })["result"]
+            assert [row["id"] for row in queried["items"]] == ["prog", "fn"]
+            assert queried["items"][1]["result"]["name"] == "func_a_renamed"
+
+            rejected_batch = tool(49, "ghidra_batch", {
+                "operation": "query",
+                "params": {
+                    "items": [
+                        {
+                            "id": "mut",
+                            "method": "comment.create",
+                            "arguments": {
+                                "resource": {
+                                    "address": symbols["func_a"],
+                                    "type": "plate",
+                                    "text": "note",
+                                },
+                            },
+                        },
+                    ],
+                },
+            }, success=False)
+            assert rejected_batch["code"] == "validation_failed", rejected_batch
             print("Function mutation regression checks passed")
         except BaseException as exc:
             primary_error = exc

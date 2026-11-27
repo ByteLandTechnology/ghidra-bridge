@@ -90,7 +90,7 @@ class AgentDispatcherConcurrencyTest {
               .filter(m -> Boolean.TRUE.equals(((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
               .map(MethodDescriptor::name)
               .toList();
-      assertEquals(29, catalogReadOnly.size(), "Catalog must expose all 29 read-only methods");
+      assertEquals(30, catalogReadOnly.size(), "Catalog must expose all 30 read-only methods");
 
       Map<String, Map<String, Object>> readCalls = validReadRequests();
       assertEquals(Set.copyOf(catalogReadOnly), readCalls.keySet());
@@ -103,7 +103,9 @@ class AgentDispatcherConcurrencyTest {
         LockObservation obs =
             "interface.get".equals(method) || "session.get".equals(method)
                 ? new LockObservation(1, 1, false)
-                : harness.observationsByMethod.get(method);
+                : "batch.query".equals(method)
+                    ? harness.lastObservation.get()
+                    : harness.observationsByMethod.get(method);
         if (!"interface.get".equals(method) && !"session.get".equals(method)) {
           assertTrue(obs != null, "Handler must have executed for " + method);
         }
@@ -188,7 +190,7 @@ class AgentDispatcherConcurrencyTest {
   void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(57, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
       assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
@@ -737,6 +739,9 @@ class AgentDispatcherConcurrencyTest {
     calls.put("data_type_category.list", Map.of());
     calls.put("data_type.get", Map.of("selector", Map.of("path", "/DemoStruct")));
     calls.put("data_type.list", Map.of());
+    calls.put(
+        "batch.query",
+        Map.of("items", List.of(Map.of("id", "q1", "method", "program.get", "arguments", Map.of()))));
     return calls;
   }
 
