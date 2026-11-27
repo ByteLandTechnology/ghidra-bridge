@@ -507,7 +507,14 @@ class ProjectionWireTest {
 
     GlobalVariableResource sampleGlobal =
         new GlobalVariableResource(
-            "0x00200000", "g_count", "Global", DataTypeReference.named("int"), 4, "0x2a", "42", "user_defined");
+            "0x00200000",
+            "g_count",
+            "Global",
+            DataTypeReference.named("int"),
+            4,
+            "0x2a",
+            "42",
+            "user_defined");
 
     GlobalVariableService globalVariableService =
         proxy(
@@ -516,7 +523,9 @@ class ProjectionWireTest {
               int count = args == null ? 0 : args.length;
               Set<String> fields = trailingFields(method, args);
               Set<String> queryFields =
-                  args != null && args.length > 0 && args[0] instanceof GlobalVariableService.Query q
+                  args != null
+                          && args.length > 0
+                          && args[0] instanceof GlobalVariableService.Query q
                       ? q.fields()
                       : null;
               lastCall.set(
@@ -628,7 +637,8 @@ class ProjectionWireTest {
             });
 
     SymbolResource sampleSymbol =
-        new SymbolResource("1", "main", "0x00101000", "Global", "function", "user_defined", true, null);
+        new SymbolResource(
+            "1", "main", "0x00101000", "Global", "function", "user_defined", true, null);
 
     SymbolService symbolService =
         proxy(
@@ -661,7 +671,8 @@ class ProjectionWireTest {
             null,
             null,
             null,
-            new FunctionSignature(DataTypeReference.named("int"), List.of(), "default", false, false),
+            new FunctionSignature(
+                DataTypeReference.named("int"), List.of(), "default", false, false),
             null);
 
     DataTypeService dataTypeService =
@@ -685,7 +696,8 @@ class ProjectionWireTest {
 
     CommentService commentService =
         proxy(CommentService.class, ProjectionWireTest::invokeDefaultOrFail);
-    ReferenceService referenceService = (from, to, type, dir, limit, cursor) -> Page.of(List.of(), limit, null);
+    ReferenceService referenceService =
+        (from, to, type, dir, limit, cursor) -> Page.of(List.of(), limit, null);
     MemoryService memoryService =
         proxy(MemoryService.class, ProjectionWireTest::invokeDefaultOrFail);
     AnalysisService analysisService =

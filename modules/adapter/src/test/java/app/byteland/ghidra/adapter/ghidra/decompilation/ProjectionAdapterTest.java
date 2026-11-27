@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.byteland.ghidra.adapter.ghidra.GhidraSession;
+import app.byteland.ghidra.adapter.ghidra.QuerySnapshotCache;
 import app.byteland.ghidra.adapter.ghidra.address.AddressServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.datatype.DataTypeServiceImpl;
 import app.byteland.ghidra.adapter.ghidra.function.FunctionServiceImpl;
@@ -15,6 +16,7 @@ import app.byteland.ghidra.adapter.ghidra.symbol.SymbolServiceImpl;
 import app.byteland.ghidra.service.AddressScanOptions;
 import app.byteland.ghidra.service.Page;
 import app.byteland.ghidra.service.address.AddressResource;
+import app.byteland.ghidra.service.datatype.DataTypeCategoryResource;
 import app.byteland.ghidra.service.datatype.DataTypeResource;
 import app.byteland.ghidra.service.decompilation.DecompilationResource;
 import app.byteland.ghidra.service.function.FunctionCallResource;
@@ -73,6 +75,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class ProjectionAdapterTest {
@@ -99,19 +102,11 @@ class ProjectionAdapterTest {
   void functionAdapterSkipsSignatureDemanglingVariablesAndEvaluatesFiltersBeforeProjection() {
     Address entry = addr(0x101000L);
     Address calleeEntry = addr(0x102000L);
+    Address callee2Entry = addr(0x103000L);
     AddressSet body = new AddressSet(entry, addr(0x10101fL));
 
-    Function callee =
-        proxy(
-            Function.class,
-            (p, m, a) ->
-                switch (m.getName()) {
-                  case "getEntryPoint" -> calleeEntry;
-                  case "getName" -> "_ZN3foo6calleeEv";
-                  case "getProgram", "getParentNamespace", "getSignature" ->
-                      throw new AssertionError(m.getName() + " must be skipped under projection");
-                  default -> defaultValue(m.getReturnType());
-                });
+    Function callee = guardedCallee(calleeEntry, "_ZN3foo6calleeEv");
+    Function callee2 = guardedCallee(callee2Entry, "_ZN3foo7callee2Ev");
 
     Function fn =
         proxy(
@@ -122,7 +117,7 @@ class ProjectionAdapterTest {
                   case "getName" -> "_ZN3foo3barEv";
                   case "getBody" -> body;
                   case "isExternal", "isThunk" -> false;
-                  case "getCalledFunctions" -> Set.of(callee);
+                  case "getCalledFunctions" -> Set.of(callee, callee2);
                   case "getSignature",
                           "getProgram",
                           "getParentNamespace",
@@ -143,8 +138,8 @@ class ProjectionAdapterTest {
             Listing.class,
             (p, m, a) ->
                 switch (m.getName()) {
-                  case "getFunctionAt" -> entry.equals(a[0]) ? fn : null;
-                  case "getFunctions" -> functionIterator(List.of(fn));
+                  case "getFunctionAt" -> fnAt(a[0], entry, fn, calleeEntry, callee, callee2);
+                  case "getFunctions" -> iteratorProxy(FunctionIterator.class, List.of(fn));
                   default -> defaultValue(m.getReturnType());
                 });
 
@@ -153,8 +148,8 @@ class ProjectionAdapterTest {
             FunctionManager.class,
             (p, m, a) ->
                 switch (m.getName()) {
-                  case "getFunctionAt" -> entry.equals(a[0]) ? fn : null;
-                  case "getFunctions" -> functionIterator(List.of(fn));
+                  case "getFunctionAt" -> fnAt(a[0], entry, fn, calleeEntry, callee, callee2);
+                  case "getFunctions" -> iteratorProxy(FunctionIterator.class, List.of(fn));
                   default -> defaultValue(m.getReturnType());
                 });
 
@@ -175,7 +170,8 @@ class ProjectionAdapterTest {
                 });
 
     FunctionServiceImpl service =
-        new FunctionServiceImpl(new GhidraSession(new StubScript(program)));
+        new FunctionServiceImpl(
+            new GhidraSession(new StubScript(program), new QuerySnapshotCache(), () -> false));
 
     FunctionResource projected =
         service.getFunction("0x00101000", Set.of(), Set.of("entry", "body.start"));
@@ -204,11 +200,17 @@ class ProjectionAdapterTest {
     assertEquals("ram:00101000", listed.items().getFirst().entry());
     assertNull(listed.items().getFirst().name());
 
-    Page<FunctionCallResource> callees =
-        service.getCallees("0x00101000", 10, null, Set.of("entry"));
-    assertEquals(1, callees.items().size());
-    assertEquals("ram:00102000", callees.items().getFirst().entry());
-    assertNull(callees.items().getFirst().demangledName());
+    Page<FunctionCallResource> calleesPage1 =
+        service.getCallees("0x00101000", 1, null, Set.of("entry"));
+    assertEquals(1, calleesPage1.items().size());
+    assertEquals("ram:00102000", calleesPage1.items().getFirst().entry());
+    assertNull(calleesPage1.items().getFirst().demangledName());
+
+    Page<FunctionCallResource> calleesPage2 =
+        service.getCallees("0x00101000", 1, calleesPage1.nextCursor(), Set.of("entry"));
+    assertEquals(1, calleesPage2.items().size());
+    assertEquals("ram:00103000", calleesPage2.items().getFirst().entry());
+    assertNull(calleesPage2.items().getFirst().demangledName());
   }
 
   @Test
@@ -231,7 +233,8 @@ class ProjectionAdapterTest {
             (p, m, a) ->
                 switch (m.getName()) {
                   case "getSymbol" -> ((Long) a[0]) == 10L ? matching : null;
-                  case "getSymbolIterator" -> symbolIterator(List.of(matching, nonMatching));
+                  case "getSymbolIterator" ->
+                      iteratorProxy(SymbolIterator.class, List.of(matching, nonMatching));
                   default -> defaultValue(m.getReturnType());
                 });
 
@@ -276,33 +279,25 @@ class ProjectionAdapterTest {
 
   @Test
   void dataTypeAdapterSkipsCompositeFieldsAndEvaluatesSearchFiltersBeforeProjection() {
+    CategoryPath rootPath = new CategoryPath("/");
     CategoryPath categoryPath = new CategoryPath("/structs");
-    Structure bigStruct =
-        proxy(
-            Structure.class,
-            (p, m, a) ->
-                switch (m.getName()) {
-                  case "getPathName" -> "/structs/BigPacket";
-                  case "getName" -> "BigPacket";
-                  case "getCategoryPath" -> categoryPath;
-                  case "getLength" -> 4096;
-                  case "isZeroLength" -> false;
-                  case "getNumComponents",
-                          "getComponents",
-                          "getComponent",
-                          "getDescription" ->
-                      throw new AssertionError(
-                          m.getName() + " must not be called when fields/description are omitted");
-                  default -> defaultValue(m.getReturnType());
-                });
+    CategoryPath extraCategoryPath = new CategoryPath("/unions");
+    Structure bigStruct = guardedStruct("/structs/BigPacket", "BigPacket", categoryPath);
+    Structure bigStruct2 = guardedStruct("/structs/BigPacket2", "BigPacket2", categoryPath);
 
+    AtomicBoolean allowCategoryDataTypes = new AtomicBoolean(false);
     Category structsCategory =
+        guardedChildCategory(
+            categoryPath, allowCategoryDataTypes, new DataType[] {bigStruct2, bigStruct});
+    Category unionsCategory =
+        guardedChildCategory(extraCategoryPath, allowCategoryDataTypes, new DataType[0]);
+    Category rootCategory =
         proxy(
             Category.class,
             (p, m, a) ->
                 switch (m.getName()) {
-                  case "getCategoryPath" -> categoryPath;
-                  case "getDataTypes" -> new DataType[] {bigStruct};
+                  case "getCategoryPath" -> rootPath;
+                  case "getCategories" -> new Category[] {unionsCategory, structsCategory};
                   default -> defaultValue(m.getReturnType());
                 });
 
@@ -311,9 +306,15 @@ class ProjectionAdapterTest {
             ProgramBasedDataTypeManager.class,
             (p, m, a) ->
                 switch (m.getName()) {
-                  case "getDataType" -> bigStruct;
-                  case "getCategory" -> categoryPath.equals(a[0]) ? structsCategory : null;
-                  case "getAllDataTypes" -> List.<DataType>of(bigStruct).iterator();
+                  case "getDataType" ->
+                      "/structs/BigPacket2".equals(a[0]) ? bigStruct2 : bigStruct;
+                  case "getCategory" -> {
+                    if (rootPath.equals(a[0])) yield rootCategory;
+                    if (categoryPath.equals(a[0])) yield structsCategory;
+                    if (extraCategoryPath.equals(a[0])) yield unionsCategory;
+                    yield null;
+                  }
+                  case "getAllDataTypes" -> List.<DataType>of(bigStruct2, bigStruct).iterator();
                   default -> defaultValue(m.getReturnType());
                 });
 
@@ -328,7 +329,8 @@ class ProjectionAdapterTest {
                 });
 
     DataTypeServiceImpl service =
-        new DataTypeServiceImpl(new GhidraSession(new StubScript(program)));
+        new DataTypeServiceImpl(
+            new GhidraSession(new StubScript(program), new QuerySnapshotCache(), () -> false));
 
     DataTypeResource detail = service.getDataType("/structs/BigPacket", Set.of("path", "size"));
     assertEquals("/structs/BigPacket", detail.path());
@@ -336,12 +338,24 @@ class ProjectionAdapterTest {
     assertNull(detail.fields());
     assertNull(detail.description());
 
-    Page<DataTypeResource> matches =
-        service.searchDataTypes("big", "/structs", "struct", 10, null, Set.of("path"));
-    assertEquals(1, matches.items().size());
-    assertEquals("/structs/BigPacket", matches.items().getFirst().path());
-    assertNull(matches.items().getFirst().name());
-    assertNull(matches.items().getFirst().kind());
+    Page<DataTypeCategoryResource> catPage1 =
+        service.listCategories("/", 1, null, Set.of("path"));
+    assertEquals("/structs", catPage1.items().getFirst().path());
+    Page<DataTypeCategoryResource> catPage2 =
+        service.listCategories("/", 1, catPage1.nextCursor(), Set.of("path"));
+    assertEquals("/unions", catPage2.items().getFirst().path());
+    assertNull(catPage2.items().getFirst().name());
+
+    allowCategoryDataTypes.set(true);
+    Page<DataTypeResource> matches1 =
+        service.searchDataTypes("big", "/structs", "struct", 1, null, Set.of("path"));
+    assertEquals("/structs/BigPacket", matches1.items().getFirst().path());
+    Page<DataTypeResource> matches2 =
+        service.searchDataTypes(
+            "big", "/structs", "struct", 1, matches1.nextCursor(), Set.of("path"));
+    assertEquals("/structs/BigPacket2", matches2.items().getFirst().path());
+    assertNull(matches2.items().getFirst().name());
+    assertNull(matches2.items().getFirst().kind());
   }
 
   @Test
@@ -397,7 +411,6 @@ class ProjectionAdapterTest {
                   }
                   default -> defaultValue(m.getReturnType());
                 });
-
     Memory forbidBytesMemory =
         proxy(
             Memory.class,
@@ -410,7 +423,6 @@ class ProjectionAdapterTest {
                       throw new AssertionError("Memory.getBytes must be skipped when unprojected");
                   default -> defaultValue(m.getReturnType());
                 });
-
     Namespace globalNs =
         proxy(
             Namespace.class,
@@ -428,7 +440,6 @@ class ProjectionAdapterTest {
                   case "isPrimary" -> true;
                   default -> defaultValue(m.getReturnType());
                 });
-
     SymbolTable symbolTable =
         proxy(
             SymbolTable.class,
@@ -438,20 +449,19 @@ class ProjectionAdapterTest {
                   case "getSymbols" -> new Symbol[] {globalSym};
                   default -> defaultValue(m.getReturnType());
                 });
-
     Listing listing =
         proxy(
             Listing.class,
             (p, m, a) ->
                 switch (m.getName()) {
                   case "getInstructionAt" -> addr(0x101000L).equals(a[0]) ? insn : null;
-                  case "getCodeUnits" -> codeUnitIterator(List.of(guardedData));
-                  case "getDefinedData" -> dataIterator(List.of(guardedData));
+                  case "getCodeUnits" ->
+                      iteratorProxy(CodeUnitIterator.class, List.of(guardedData));
+                  case "getDefinedData" -> iteratorProxy(DataIterator.class, List.of(guardedData));
                   case "getDefinedDataAt" -> addr(0x200000L).equals(a[0]) ? guardedData : null;
                   case "getFunctionContaining" -> null;
                   default -> defaultValue(m.getReturnType());
                 });
-
     Program program =
         proxy(
             Program.class,
@@ -463,7 +473,6 @@ class ProjectionAdapterTest {
                   case "getSymbolTable" -> symbolTable;
                   default -> defaultValue(m.getReturnType());
                 });
-
     GhidraSession session = new GhidraSession(new StubScript(program));
     ListingServiceImpl listingService = new ListingServiceImpl(session);
 
@@ -478,10 +487,7 @@ class ProjectionAdapterTest {
     Page<CodeUnitResource> projectedCu =
         listingService.listCodeUnits(
             new AddressScanOptions("0x00200000", "0x00200003", 1_000),
-            10,
-            "all",
-            null,
-            Set.of("address", "kind"));
+            10, "all", null, Set.of("address", "kind"));
     assertEquals(1, projectedCu.items().size());
     assertEquals("ram:00200000", projectedCu.items().getFirst().address());
     assertEquals(CodeUnitResource.Kind.DATA, projectedCu.items().getFirst().kind());
@@ -494,12 +500,7 @@ class ProjectionAdapterTest {
         gvService.listGlobalVariables(
             new GlobalVariableService.Query(
                 new AddressScanOptions(null, null, 1_000),
-                "g_val",
-                "vars",
-                true,
-                10,
-                null,
-                Set.of("address")),
+                "g_val", "vars", true, 10, null, Set.of("address")),
             Set.of("address"));
     assertEquals(1, gvPage.items().size());
     assertEquals("ram:00200000", gvPage.items().getFirst().address());
@@ -511,9 +512,7 @@ class ProjectionAdapterTest {
     Page<DataUnitResource> dataPage =
         listingService.listDataUnits(
             new AddressScanOptions("0x00200000", "0x00200003", 1_000),
-            10,
-            null,
-            Set.of("address", "value", "representation"));
+            10, null, Set.of("address", "value", "representation"));
     assertEquals("42", dataPage.items().getFirst().value());
     assertEquals("2ah", dataPage.items().getFirst().representation());
     assertNull(dataPage.items().getFirst().bytes());
@@ -539,34 +538,15 @@ class ProjectionAdapterTest {
     assertNull(resolved.codeUnit());
 
     // ProgramServiceImpl skips functionCount and symbolCount and follows active-program switches.
-    Program countGuardedProgram =
-        proxy(
-            Program.class,
-            (p, m, a) ->
-                switch (m.getName()) {
-                  case "getName" -> "fast.bin";
-                  case "getFunctionManager", "getSymbolTable" ->
-                      throw new AssertionError(m.getName() + " must be skipped under projection");
-                  default -> defaultValue(m.getReturnType());
-                });
-    Program switchedProgram =
-        proxy(
-            Program.class,
-            (p, m, a) ->
-                switch (m.getName()) {
-                  case "getName" -> "switched.bin";
-                  case "getFunctionManager", "getSymbolTable" ->
-                      throw new AssertionError(m.getName() + " must be skipped under projection");
-                  default -> defaultValue(m.getReturnType());
-                });
-    java.util.concurrent.atomic.AtomicReference<Program> activeProgram =
-        new java.util.concurrent.atomic.AtomicReference<>(countGuardedProgram);
-    ProgramServiceImpl programService = new ProgramServiceImpl(new GhidraSession(activeProgram::get));
+    AtomicReference<Program> activeProgram =
+        new AtomicReference<>(namedGuardedProgram("fast.bin"));
+    ProgramServiceImpl programService =
+        new ProgramServiceImpl(new GhidraSession(activeProgram::get));
     ProgramResource prog = programService.getProgram(Set.of("name"));
     assertEquals("fast.bin", prog.name());
     assertEquals(0L, prog.functionCount());
     assertEquals(0L, prog.symbolCount());
-    activeProgram.set(switchedProgram);
+    activeProgram.set(namedGuardedProgram("switched.bin"));
     assertEquals("switched.bin", programService.getProgram(Set.of("name")).name());
   }
 
@@ -592,49 +572,40 @@ class ProjectionAdapterTest {
                   case "getEntryPoint" -> entry;
                   case "getName" -> "main";
                   case "getProgram" ->
-                      throw new AssertionError(
-                          "GuiDocument must not access Function.getProgram when lines are omitted");
+                      throw new AssertionError("GuiDocument must skip getProgram without lines");
                   default -> defaultValue(m.getReturnType());
                 });
-
     DecompileResults guardedResults =
         new DecompileResults(fn, null, null, null, null, null, null) {
           @Override
           public boolean decompileCompleted() {
             return true;
           }
-
           @Override
           public DecompiledFunction getDecompiledFunction() {
             throw new AssertionError("getDecompiledFunction must be skipped when c is omitted");
           }
-
           @Override
           public ClangTokenGroup getCCodeMarkup() {
-            throw new AssertionError(
-                "getCCodeMarkup must be skipped when tokens/c/lines are omitted");
+            throw new AssertionError("getCCodeMarkup must be skipped when tokens/c/lines omitted");
           }
         };
-
     DecompInterface fakeDecomp =
         new DecompInterface() {
           @Override
           public synchronized boolean setOptions(DecompileOptions xmlOptions) {
             return true;
           }
-
           @Override
           public synchronized int flushCache() {
             return 0;
           }
-
           @Override
           public synchronized DecompileResults decompileFunction(
               Function function, int timeoutSecs, TaskMonitor monitor) {
             return guardedResults;
           }
         };
-
     Listing listing =
         proxy(
             Listing.class,
@@ -663,16 +634,13 @@ class ProjectionAdapterTest {
                   default -> defaultValue(m.getReturnType());
                 });
     programHolder[0] = program;
-    GhidraSession session = new GhidraSession(new StubScript(program));
     DecompilationServiceImpl service =
-        new DecompilationServiceImpl(session, new LeasePool<>(1, () -> fakeDecomp));
+        new DecompilationServiceImpl(
+            new GhidraSession(new StubScript(program)), new LeasePool<>(1, () -> fakeDecomp));
 
     DecompilationResource doc =
         service.decompileFunction(
-            "0x00101000",
-            DecompilationResource.Format.DOCUMENT,
-            1_000,
-            false,
+            "0x00101000", DecompilationResource.Format.DOCUMENT, 1_000, false,
             Set.of("entry", "completed"));
     assertEquals("ram:00101000", doc.entry());
     assertEquals("", doc.c());
@@ -680,10 +648,7 @@ class ProjectionAdapterTest {
 
     DecompilationResource tok =
         service.decompileFunction(
-            "0x00101000",
-            DecompilationResource.Format.TOKENS,
-            1_000,
-            false,
+            "0x00101000", DecompilationResource.Format.TOKENS, 1_000, false,
             Set.of("entry", "completed"));
     assertEquals(List.of(), tok.tokens());
 
@@ -693,6 +658,18 @@ class ProjectionAdapterTest {
     GuiDocument rendered = GuiDocument.render(guiGuardedFn, group, true, false);
     assertTrue(rendered.code().contains("return 0;"));
     assertEquals(List.of(), rendered.lines());
+  }
+
+  private static Program namedGuardedProgram(String name) {
+    return proxy(
+        Program.class,
+        (p, m, a) ->
+            switch (m.getName()) {
+              case "getName" -> name;
+              case "getFunctionManager", "getSymbolTable" ->
+                  throw new AssertionError(m.getName() + " must be skipped under projection");
+              default -> defaultValue(m.getReturnType());
+            });
   }
 
   private static Symbol symbol(long id, String name, Address address, Namespace ns) {
@@ -725,49 +702,67 @@ class ProjectionAdapterTest {
             });
   }
 
-  private static FunctionIterator functionIterator(List<Function> items) {
-    Iterator<Function> it = items.iterator();
+  private static Function guardedCallee(Address entry, String name) {
     return proxy(
-        FunctionIterator.class,
+        Function.class,
         (p, m, a) ->
             switch (m.getName()) {
-              case "hasNext" -> it.hasNext();
-              case "next" -> it.next();
-              case "iterator" -> it;
+              case "getEntryPoint" -> entry;
+              case "getName" -> name;
+              case "getProgram", "getParentNamespace", "getSignature" ->
+                  throw new AssertionError(m.getName() + " must be skipped under projection");
               default -> defaultValue(m.getReturnType());
             });
   }
 
-  private static SymbolIterator symbolIterator(List<Symbol> items) {
-    Iterator<Symbol> it = items.iterator();
+  private static Function fnAt(
+      Object target, Address e0, Function f0, Address e1, Function f1, Function f2) {
+    if (e0.equals(target)) return f0;
+    if (e1.equals(target)) return f1;
+    return f2.getEntryPoint().equals(target) ? f2 : null;
+  }
+
+  private static Structure guardedStruct(String path, String name, CategoryPath categoryPath) {
     return proxy(
-        SymbolIterator.class,
+        Structure.class,
         (p, m, a) ->
             switch (m.getName()) {
-              case "hasNext" -> it.hasNext();
-              case "next" -> it.next();
-              case "iterator" -> it;
+              case "getPathName" -> path;
+              case "getName" -> name;
+              case "getCategoryPath" -> categoryPath;
+              case "getLength" -> 4096;
+              case "isZeroLength" -> false;
+              case "getNumComponents", "getComponents", "getComponent", "getDescription" ->
+                  throw new AssertionError(
+                      m.getName() + " must not be called when fields/description are omitted");
               default -> defaultValue(m.getReturnType());
             });
   }
 
-  private static CodeUnitIterator codeUnitIterator(List<CodeUnit> items) {
-    Iterator<CodeUnit> it = items.iterator();
+  private static Category guardedChildCategory(
+      CategoryPath path, AtomicBoolean allowDataTypes, DataType[] dataTypes) {
     return proxy(
-        CodeUnitIterator.class,
+        Category.class,
         (p, m, a) ->
             switch (m.getName()) {
-              case "hasNext" -> it.hasNext();
-              case "next" -> it.next();
-              case "iterator" -> it;
+              case "getCategoryPath" -> path;
+              case "getDataTypes" -> {
+                if (!allowDataTypes.get()) {
+                  throw new AssertionError("getDataTypes must be skipped for category path");
+                }
+                yield dataTypes;
+              }
+              case "getName", "getCategories" ->
+                  throw new AssertionError(
+                      m.getName() + " must be skipped when only category path is projected");
               default -> defaultValue(m.getReturnType());
             });
   }
 
-  private static DataIterator dataIterator(List<Data> items) {
-    Iterator<Data> it = items.iterator();
+  private static <I, E> I iteratorProxy(Class<I> iface, List<E> items) {
+    Iterator<E> it = items.iterator();
     return proxy(
-        DataIterator.class,
+        iface,
         (p, m, a) ->
             switch (m.getName()) {
               case "hasNext" -> it.hasNext();

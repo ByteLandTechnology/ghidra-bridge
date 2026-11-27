@@ -59,7 +59,8 @@ final class FunctionListQueries {
         && (cursorAddress == null || firstAddress.compareTo(cursorAddress) > 0)) {
       Function externalFunction = functionManager.getFunctionAt(firstAddress);
       if (externalFunction != null && !range.afterEnd(externalFunction.getEntryPoint())) {
-        visitFunction(scan, externalFunction, normalizedName, entryFunction, containsAddress, query);
+        visitFunction(
+            scan, externalFunction, normalizedName, entryFunction, containsAddress, query);
         if (scan.stopped()) return scan.finish();
         cursorAddress = externalFunction.getEntryPoint();
       }

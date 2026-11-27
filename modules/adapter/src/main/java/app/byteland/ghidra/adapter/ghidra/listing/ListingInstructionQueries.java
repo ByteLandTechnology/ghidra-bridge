@@ -47,7 +47,9 @@ final class ListingInstructionQueries {
       if (range.afterEnd(address)) break;
       String canonical = AddressUtil.canonicalAddress(address);
       scan.visit(
-          canonical, canonical, ListingDescriptions.toInstructionItem(instruction, context, fields));
+          canonical,
+          canonical,
+          ListingDescriptions.toInstructionItem(instruction, context, fields));
       if (scan.stopped()) break;
     }
 

@@ -32,7 +32,8 @@ public final class DataTypeServiceImpl implements DataTypeService {
   @Override
   public Page<DataTypeCategoryResource> listCategories(
       String categoryPath, int limit, String cursor, Set<String> fields) {
-    return DataTypeQueries.listCategories(dataTypeManager(), categoryPath, limit, cursor, fields);
+    return DataTypeQueries.listCategories(
+        context, dataTypeManager(), categoryPath, limit, cursor, fields);
   }
 
   @Override
@@ -60,7 +61,7 @@ public final class DataTypeServiceImpl implements DataTypeService {
       String cursor,
       Set<String> fields) {
     return DataTypeQueries.searchDataTypes(
-        dataTypeManager(), query, categoryPath, kind, limit, cursor, fields);
+        context, dataTypeManager(), query, categoryPath, kind, limit, cursor, fields);
   }
 
   @Override
