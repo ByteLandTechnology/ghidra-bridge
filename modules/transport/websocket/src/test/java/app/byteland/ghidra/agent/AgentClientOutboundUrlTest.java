@@ -139,12 +139,15 @@ class AgentClientOutboundUrlTest {
           new Thread(
               () -> {
                 try (var socket = rejectServer.accept()) {
+                  socket.setSoTimeout(5_000);
+                  WebSocketHandshake.readHandshake(socket.getInputStream());
                   socket
                       .getOutputStream()
                       .write(
-                          "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"
-                              .getBytes( java.nio.charset.StandardCharsets.US_ASCII));
+                          "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                              .getBytes(java.nio.charset.StandardCharsets.US_ASCII));
                   socket.getOutputStream().flush();
+                  socket.shutdownOutput();
                 } catch (IOException ignored) {
                 }
               });

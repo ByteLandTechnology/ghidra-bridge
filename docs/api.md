@@ -15,9 +15,11 @@
 | `memory_block.get` | `read-only` | Get memory block data from the active program. |
 | `memory_block.list` | `read-only` | List memory block data in the active program. |
 | `memory.read` | `read-only` | Read up to 65536 bytes at an address as hex or base64. The default length is 256 and the default encoding is hex. |
+| `memory.find` | `read-only` | Find byte patterns with optional ?? wildcards in initialized memory. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `memory.write` | `destructive mutation` | Write hex or base64 bytes at an address. |
 | `code_unit.list` | `read-only` | List each code unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `data_unit.list` | `read-only` | List each data unit in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
+| `string.list` | `read-only` | List strings in address order. Filter by text, regex, length, encoding, or candidate bytes. Use next_cursor to get the next page. |
 | `global_variable.get` | `read-only` | Get the global variable at one address. |
 | `global_variable.list` | `read-only` | List global variables in address order. Set a range or time limit if necessary. Use next_cursor to get the next page. |
 | `global_variable.create` | `mutation` | Create typed data and a primary global variable label at an unused address. |

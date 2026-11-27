@@ -2,9 +2,9 @@
 
 Ghidra Bridge 为正在运行的 Ghidra 程序提供网络访问。
 该桥接支持两种网络传输协议：WebSocket JSON-RPC 2.0 与 MCP Streamable HTTP `2026-07-28`。
-注册表定义 56 个公共点分方法，从 `interface.get` 到 `batch.execute`。
-WebSocket 发布全部 56 个方法。
-MCP 发布 55 个方法，且不发布 `interface.get`。
+注册表定义 58 个公共点分方法，从 `interface.get` 到 `batch.execute`。
+WebSocket 发布全部 58 个方法。
+MCP 发布 57 个方法，且不发布 `interface.get`。
 运行时 JAR 包不包含任何第三方依赖。
 
 ## 设计目标
@@ -41,9 +41,11 @@ Ghidra 的后台自动分析在独立线程中运行。
 ## 有界地址扫描
 
 按地址排序的扫描操作以协作方式检查内存项。
-适用的列表查询操作包括：
+适用的查询操作包括：
+- `memory.find`
 - `code_unit.list`
 - `data_unit.list`
+- `string.list`
 - `instruction.list`
 - `function.list`
 - `global_variable.list`
@@ -121,4 +123,4 @@ token 的 `location_address` 是 Ghidra GUI 为该 token 选择的地址。
 - 查阅[体系架构指南](architecture.md)了解模块划分。
 - 阅读[协议规范](protocol.md)掌握信封格式与错误定义。
 - 查阅[批处理与事务](batch-and-transactions.md)了解原子执行机制。
-- 查阅[方法参考](../api.md)获取 56 个方法的完整列表。
+- 查阅[方法参考](../api.md)获取 58 个方法的完整列表。

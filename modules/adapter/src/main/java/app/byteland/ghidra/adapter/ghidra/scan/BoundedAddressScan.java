@@ -83,6 +83,30 @@ public final class BoundedAddressScan<T> {
     return stopReason != null;
   }
 
+  public boolean hasTimedOut() {
+    return elapsedNanos() >= timeoutNanos;
+  }
+
+  public long deadlineNanos() {
+    return startedNanos + timeoutNanos;
+  }
+
+  public LongSupplier nanoTimeSupplier() {
+    return nanoTime;
+  }
+
+  public void stopOnTimeout(String scannedAddress, String fallbackCursor) {
+    if (stopped()) return;
+    if (scannedAddress != null) {
+      if (scannedStart == null) scannedStart = scannedAddress;
+      scannedEnd = scannedAddress;
+    }
+    if (lastCursor == null && fallbackCursor != null) {
+      lastCursor = fallbackCursor;
+    }
+    stopReason = ScanProgress.StopReason.TIMEOUT;
+  }
+
   public Page<T> finish() {
     ScanProgress.StopReason reason =
         stopReason == null ? ScanProgress.StopReason.COMPLETED : stopReason;

@@ -165,6 +165,6 @@ fi
 
 backtick=$'\140'
 method_count="$(grep_nomatch_ok -Ec "^\\| ${backtick}[^${backtick}]+${backtick} \\|" docs/api.md | tr -d '\r')"
-[[ "$method_count" == "56" ]] || fail "docs/api.md documents $method_count methods; expected 56"
+[[ "$method_count" == "58" ]] || fail "docs/api.md documents $method_count methods; expected 58"
 
 echo "repository hygiene check passed"

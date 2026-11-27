@@ -1,9 +1,9 @@
 # プロトコル仕様 (Protocol Specification)
 
 Ghidra Bridge は、WebSocket JSON-RPC 2.0 と MCP Streamable HTTP `2026-07-28` の 2 つのトランスポートをサポートします。
-統一レジストリは 56 個の公開ドット記法メソッドを定義します。
-WebSocket は 56 個すべてを提供します。
-MCP は 55 個を提供し、`interface.get` は提供しません。
+統一レジストリは 58 個の公開ドット記法メソッドを定義します。
+WebSocket は 58 個すべてを提供します。
+MCP は 57 個を提供し、`interface.get` は提供しません。
 
 ## WebSocket JSON-RPC 2.0
 
@@ -26,7 +26,7 @@ WebSocket メッセージは JSON-RPC 2.0 仕様に準拠します。
 サーバーは各フィールドを厳格に検証します:
 - `jsonrpc` は `"2.0"` である必要があります。
 - `id` は文字列または整数の識別子である必要があります。
-- `method` は 56 個の公開ドット記法メソッドのいずれかと一致する必要があります。
+- `method` は 58 個の公開ドット記法メソッドのいずれかと一致する必要があります。
 - `params` はメソッドのスキーマに合致する JSON オブジェクトである必要があります。
 - 未知のフィールドや不正なデータ型は拒否されます。
 
@@ -212,7 +212,7 @@ MCP は操作を 15 個のツールに分類します:
 - `ghidra_help`: ドメインの検索、スキーマ付き操作一覧の表示、単一操作の確認。
 - 14 個のドメインツール: `ghidra_bridge`, `ghidra_program`, `ghidra_address`, `ghidra_memory`, `ghidra_listing`, `ghidra_global_variable`, `ghidra_function`, `ghidra_analysis`, `ghidra_decompilation`, `ghidra_symbol`, `ghidra_reference`, `ghidra_comment`, `ghidra_data_type`, `ghidra_batch`。
 
-ドメインツールは 55 個のメソッドを公開します。`interface.get` は WebSocket 専用です。
+ドメインツールは 57 個のメソッドを公開します。`interface.get` は WebSocket 専用です。
 
 ### ツール名のプレフィックス
 

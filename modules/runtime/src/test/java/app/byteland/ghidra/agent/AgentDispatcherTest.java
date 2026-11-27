@@ -55,7 +55,7 @@ class AgentDispatcherTest {
 
     AgentDispatcher dispatcher = new AgentDispatcher(services, "  session-42  ");
     assertEquals("sample.elf", dispatcher.getProgramName());
-    assertEquals(56, dispatcher.methodCatalog().methods().size());
+    assertEquals(58, dispatcher.methodCatalog().methods().size());
     assertFalse(dispatcher.isShuttingDown());
 
     assertEquals(

@@ -75,8 +75,10 @@ jobs:
       - name: Run repository verification
         run: ./gradlew --no-daemon verify
 
-      - name: Test function mutations
-        run: python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+      - name: Test function mutations and search operations
+        run: |
+          python3 tests/function_mutation_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
+          python3 tests/search_regression.py "$GHIDRA_INSTALL_DIR/support/analyzeHeadless"
 
       - name: Test release archive reproducibility
         run: python3 tests/release_archive_reproducibility.py

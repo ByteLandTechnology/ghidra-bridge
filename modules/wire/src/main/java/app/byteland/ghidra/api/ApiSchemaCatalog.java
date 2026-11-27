@@ -142,6 +142,10 @@ final class ApiSchemaCatalog {
     return requireFilter ? input(properties, FILTER) : input(properties);
   }
 
+  static Map<String, Object> requiredRangeScanListInput(Map<String, Object> filter) {
+    return pagedListInput(filter, true, true, true);
+  }
+
   static Map<String, Object> selectorInput(Map<String, Object> selector) {
     return input(
         props(ApiVocabulary.SELECTOR, selector, FIELDS, ApiRegistry.fieldsSchema()),
@@ -494,6 +498,7 @@ final class ApiSchemaCatalog {
             "primary",
             "completed",
             "comments_complete",
+            "defined",
             "analyzed")
         .contains(field)) {
       return WireSchema.bool();

@@ -39,7 +39,9 @@ import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import app.byteland.ghidra.service.listing.InstructionResource;
 import app.byteland.ghidra.service.listing.ListingService;
+import app.byteland.ghidra.service.listing.StringResource;
 import app.byteland.ghidra.service.memory.MemoryBlockResource;
+import app.byteland.ghidra.service.memory.MemoryMatchResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
@@ -82,7 +84,7 @@ class AgentDispatcherConcurrencyTest {
   }
 
   @Test
-  void allTwentyNineReadOnlyMethodsAndReadOnlyBatchAcquireSharedReadLock() throws Exception {
+  void allReadOnlyMethodsAndReadOnlyBatchAcquireSharedReadLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
       List<String> catalogReadOnly =
@@ -90,7 +92,7 @@ class AgentDispatcherConcurrencyTest {
               .filter(m -> Boolean.TRUE.equals(((Map<?, ?>) m.contractValue().get("effects")).get("read_only")))
               .map(MethodDescriptor::name)
               .toList();
-      assertEquals(29, catalogReadOnly.size(), "Catalog must expose all 29 read-only methods");
+      assertEquals(31, catalogReadOnly.size(), "Catalog must expose all 31 read-only methods");
 
       Map<String, Map<String, Object>> readCalls = validReadRequests();
       assertEquals(Set.copyOf(catalogReadOnly), readCalls.keySet());
@@ -188,7 +190,7 @@ class AgentDispatcherConcurrencyTest {
   void allTwentySixMutationsMutatingBatchesAndShutdownAcquireFairWriteLock() throws Exception {
     TestHarness harness = new TestHarness();
     try (AgentDispatcher dispatcher = harness.dispatcher) {
-      assertEquals(56, dispatcher.methodCatalog().methods().size());
+      assertEquals(58, dispatcher.methodCatalog().methods().size());
 
       List<Map.Entry<String, Map<String, Object>>> writeCalls = validMutationRequests();
       assertEquals(25, writeCalls.size(), "All 25 single-mutation methods must be tested");
@@ -711,8 +713,10 @@ class AgentDispatcherConcurrencyTest {
     calls.put("memory_block.get", Map.of("selector", Map.of("name", ".text")));
     calls.put("memory_block.list", Map.of());
     calls.put("memory.read", Map.of("selector", Map.of("address", "ram:00100000"), "length", 4));
+    calls.put("memory.find", Map.of("filter", Map.of("pattern", "90 90")));
     calls.put("code_unit.list", Map.of());
     calls.put("data_unit.list", Map.of());
+    calls.put("string.list", Map.of());
     calls.put("instruction.get", Map.of("selector", Map.of("address", "ram:00100000")));
     calls.put("instruction.list", Map.of());
     calls.put(
@@ -1146,6 +1150,18 @@ class AgentDispatcherConcurrencyTest {
         }
 
         @Override
+        public Page<MemoryMatchResource> findMemory(MemoryFindQuery query) {
+          observe("memory.find", false);
+          return Page.scanned(
+              List.of(
+                  new MemoryMatchResource(
+                      "ram:00100000", 2, new ByteSequence(ByteSequence.Encoding.HEX, "9090", 2))),
+              query.limit(),
+              null,
+              completedScan());
+        }
+
+        @Override
         public void patchMemory(String startRaw, ByteSequence bytes) {
           observe("memory.write", true);
         }
@@ -1228,6 +1244,23 @@ class AgentDispatcherConcurrencyTest {
                       "0h",
                       new ByteSequence(ByteSequence.Encoding.HEX, "00000000", 4))),
               limit,
+              null,
+              completedScan());
+        }
+
+        @Override
+        public Page<StringResource> listStrings(StringQuery query) {
+          observe("string.list", false);
+          return Page.scanned(
+              List.of(
+                  new StringResource(
+                      "ram:00100200",
+                      6,
+                      "hello",
+                      "US-ASCII",
+                      true,
+                      DataTypeReference.named("/string"))),
+              query.limit(),
               null,
               completedScan());
         }

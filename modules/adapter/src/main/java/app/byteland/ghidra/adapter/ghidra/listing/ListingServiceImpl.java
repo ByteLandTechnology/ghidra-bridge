@@ -9,12 +9,14 @@ import app.byteland.ghidra.service.listing.FlowOverrideScope;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import app.byteland.ghidra.service.listing.InstructionResource;
 import app.byteland.ghidra.service.listing.ListingService;
+import app.byteland.ghidra.service.listing.StringResource;
 import java.util.List;
 
 public final class ListingServiceImpl implements ListingService {
   private final ListingCodeUnitQueries codeUnitQueries;
   private final ListingInstructionQueries instructionQueries;
   private final ListingDataQueries dataQueries;
+  private final ListingStringQueries stringQueries;
   private final ListingFlowOverrideQueries flowOverrideQueries;
   private final ListingFlowOverrideMutations flowOverrideMutations;
 
@@ -22,6 +24,7 @@ public final class ListingServiceImpl implements ListingService {
     this.codeUnitQueries = new ListingCodeUnitQueries(context);
     this.instructionQueries = new ListingInstructionQueries(context);
     this.dataQueries = new ListingDataQueries(context);
+    this.stringQueries = new ListingStringQueries(context);
     ListingFlowOverrideScopes flowOverrideScopes = new ListingFlowOverrideScopes(context);
     this.flowOverrideQueries = new ListingFlowOverrideQueries(context, flowOverrideScopes);
     this.flowOverrideMutations = new ListingFlowOverrideMutations(context, flowOverrideScopes);
@@ -47,6 +50,11 @@ public final class ListingServiceImpl implements ListingService {
   @Override
   public Page<DataUnitResource> listDataUnits(AddressScanOptions scan, int limit, String cursor) {
     return dataQueries.listDataUnits(scan, limit, cursor);
+  }
+
+  @Override
+  public Page<StringResource> listStrings(StringQuery query) {
+    return stringQueries.listStrings(query);
   }
 
   @Override

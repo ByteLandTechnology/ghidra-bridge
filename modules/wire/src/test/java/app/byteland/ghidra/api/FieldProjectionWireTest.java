@@ -36,7 +36,9 @@ import app.byteland.ghidra.service.listing.DataUnitResource;
 import app.byteland.ghidra.service.listing.FlowOverrideValue;
 import app.byteland.ghidra.service.listing.InstructionResource;
 import app.byteland.ghidra.service.listing.ListingService;
+import app.byteland.ghidra.service.listing.StringResource;
 import app.byteland.ghidra.service.memory.MemoryBlockResource;
+import app.byteland.ghidra.service.memory.MemoryMatchResource;
 import app.byteland.ghidra.service.memory.MemoryResource;
 import app.byteland.ghidra.service.memory.MemoryService;
 import app.byteland.ghidra.service.program.AddressSpaceResource;
@@ -341,7 +343,7 @@ class FieldProjectionWireTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void allTwentyEightProjectionMethodsReturnIdenticalProjectedPayloadsAndCursors()
+  void allThirtyProjectionMethodsReturnIdenticalProjectedPayloadsAndCursors()
       throws Exception {
     TestFixture fixture = new TestFixture();
     ApiCatalog catalog = fixture.registry.methodCatalog();
@@ -355,9 +357,9 @@ class FieldProjectionWireTest {
                 })
             .map(ApiCatalog.MethodDescriptor::name)
             .toList();
-    assertEquals(28, projectionMethods.size());
+    assertEquals(30, projectionMethods.size());
 
-    List<MethodCase> cases = fixture.allTwentyEightCases();
+    List<MethodCase> cases = fixture.allThirtyCases();
     assertEquals(
         Set.copyOf(projectionMethods),
         cases.stream().map(MethodCase::method).collect(java.util.stream.Collectors.toSet()));
@@ -686,6 +688,9 @@ class FieldProjectionWireTest {
       MemoryResource memory =
           new MemoryResource(
               "ram:00401000", new ByteSequence(ByteSequence.Encoding.HEX, "4889e590", 4));
+      MemoryMatchResource memoryMatch =
+          new MemoryMatchResource(
+              "ram:00401000", 4, new ByteSequence(ByteSequence.Encoding.HEX, "4889e590", 4));
 
       CodeUnitResource codeUnit =
           new CodeUnitResource(
@@ -705,6 +710,14 @@ class FieldProjectionWireTest {
               "0x2a",
               "42h",
               new ByteSequence(ByteSequence.Encoding.HEX, "2a000000", 4));
+      StringResource stringResource =
+          new StringResource(
+              "ram:00403010",
+              6,
+              "hello",
+              "US-ASCII",
+              true,
+              DataTypeReference.named("/string"));
       InstructionResource instruction =
           new InstructionResource(
               "ram:00401000",
@@ -861,6 +874,8 @@ class FieldProjectionWireTest {
                     case "getMemoryBlockByName" -> block;
                     case "listMemoryBlocks" -> Page.of(List.of(block), 10, ".text");
                     case "readMemoryRange" -> memory;
+                    case "findMemory" ->
+                        Page.scanned(List.of(memoryMatch), 10, "ram:00401000", scan);
                     default -> throw new AssertionError(name);
                   });
       ListingService listingService =
@@ -872,6 +887,8 @@ class FieldProjectionWireTest {
                         Page.scanned(List.of(codeUnit), 10, "ram:00401004", scan);
                     case "listDataUnits" ->
                         Page.scanned(List.of(dataUnit), 10, "ram:00402004", scan);
+                    case "listStrings" ->
+                        Page.scanned(List.of(stringResource), 10, "ram:00403015", scan);
                     case "getInstruction" -> instruction;
                     case "listInstructions", "getFlowOverrides" ->
                         Page.scanned(List.of(instruction), 10, "ram:00401004", scan);
@@ -986,7 +1003,7 @@ class FieldProjectionWireTest {
               () -> {});
     }
 
-    List<MethodCase> allTwentyEightCases() {
+    List<MethodCase> allThirtyCases() {
       return List.of(
           new MethodCase("session.get", Map.of(), List.of("status")),
           new MethodCase("program.get", Map.of(), List.of("image_base", "function_count")),
@@ -1005,8 +1022,13 @@ class FieldProjectionWireTest {
               "memory.read",
               Map.of("selector", Map.of("address", "ram:00401000")),
               List.of("bytes.length")),
+          new MethodCase(
+              "memory.find",
+              Map.of("filter", Map.of("pattern", "48 89 ?? 90")),
+              List.of("bytes")),
           new MethodCase("code_unit.list", Map.of(), List.of("mnemonic")),
           new MethodCase("data_unit.list", Map.of(), List.of("value")),
+          new MethodCase("string.list", Map.of(), List.of("value", "defined")),
           new MethodCase(
               "global_variable.get",
               Map.of("selector", Map.of("address", "ram:00403000")),
