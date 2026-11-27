@@ -92,6 +92,9 @@ class McpHttpServerOriginTest {
 
   @AfterEach
   void tearDown() {
+    if (client != null) {
+      client.close();
+    }
     if (server != null) {
       server.close();
     }

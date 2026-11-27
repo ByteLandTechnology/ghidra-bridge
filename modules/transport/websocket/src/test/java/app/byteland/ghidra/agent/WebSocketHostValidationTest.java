@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class WebSocketHostValidationTest {
+  private static final String LOOPBACK_TOKEN = "loopback-secret-token";
 
   @Test
   @DisplayName("readHandshake rejects missing, blank, malformed, and duplicate Host headers with 400")
@@ -61,7 +62,8 @@ class WebSocketHostValidationTest {
   @DisplayName("WebSocketHandshakeValidator rejects external Host with 403 and missing/duplicate Host with 400")
   void validatorEnforcesHostRulesBeforeUpgrade() {
     AgentConfig config =
-        new AgentConfig(null, "127.0.0.1", 8765, "/ws/agent", null, "session-1", null);
+        new AgentConfig(
+            null, "127.0.0.1", 8765, "/ws/agent", LOOPBACK_TOKEN, "session-1", null);
 
     WebSocketHandshake.HandshakeRequest externalHost =
         new WebSocketHandshake.HandshakeRequest(
@@ -119,7 +121,7 @@ class WebSocketHostValidationTest {
   @DisplayName("AgentWebSocketServer rejects DNS rebinding probes (403) and missing/duplicate Host (400), while allowing loopback Hosts (101)")
   void serverEnforcesHostRulesOverLiveSockets() throws Exception {
     AtomicInteger openCount = new AtomicInteger();
-    try (RunningWsServer running = startWsServer("127.0.0.1", null, openCount)) {
+    try (RunningWsServer running = startWsServer("127.0.0.1", LOOPBACK_TOKEN, openCount)) {
       int port = running.port();
 
       // Exact WebSocket probe from proof harness (without Sec-WebSocket-Key)
@@ -188,6 +190,9 @@ class WebSocketHostValidationTest {
                 "GET /ws/agent HTTP/1.1\r\n"
                     + "Host: "
                     + allowedHost
+                    + "\r\n"
+                    + "Authorization: Bearer "
+                    + LOOPBACK_TOKEN
                     + "\r\n"
                     + "Upgrade: websocket\r\n"
                     + "Connection: Upgrade\r\n"

@@ -10,10 +10,16 @@ import app.byteland.ghidra.network.NetworkBinding;
 import app.byteland.ghidra.service.BridgeServices;
 import app.byteland.ghidra.service.program.ProgramService;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.script.GhidraState;
+import ghidra.app.services.ConsoleService;
+import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.listing.Program;
+import java.io.Console;
 import java.net.BindException;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +40,10 @@ public final class Bootstrap {
   private static final String BRIDGE_PREFIX = "[ghidra-bridge]";
   private static final String MCP_PREFIX = "[ghidra-mcp]";
   private static final String SESSION_ID_ARGUMENT = "session_id";
+  private static final String TOKEN_ARGUMENT = "token";
   private static final String TOOL_PREFIX_ARGUMENT = "tool_prefix";
+  private static final int GENERATED_TOKEN_BYTES = 32;
+  private static final SecureRandom SECURE_RANDOM = new SecureRandom();
   private static final String BANNER_DIVIDER =
       "============================================================";
 
@@ -52,12 +61,32 @@ public final class Bootstrap {
       Function<GhidraScript, BridgeServices> serviceFactory,
       int defaultPort)
       throws Exception {
+    startFromScript(
+        script,
+        args,
+        onShutdown,
+        serviceFactory,
+        defaultPort,
+        script == null ? null : findConsoleService(script));
+  }
+
+  static void startFromScript(
+      GhidraScript script,
+      String[] args,
+      Runnable onShutdown,
+      Function<GhidraScript, BridgeServices> serviceFactory,
+      int defaultPort,
+      ConsoleService guiConsole)
+      throws Exception {
     Program program = requireScriptProgram(script);
     boolean headless = script.isRunningHeadless();
+    Console systemConsole = System.console();
+    boolean interactiveConsoleAvailable = guiConsole != null || systemConsole != null;
     Map<String, String> rawArgs = parseArgsOrPrintUsage(script, args, Bootstrap::printUsage);
     EffectiveConfig initialConfig;
     try {
-      initialConfig = resolveWsConfig(rawArgs, program, defaultPort, false);
+      initialConfig =
+          resolveWsConfig(rawArgs, program, defaultPort, false, interactiveConsoleAvailable, null);
     } catch (IllegalArgumentException error) {
       printUsage(script);
       throw error;
@@ -86,7 +115,10 @@ public final class Bootstrap {
         cancelRequested,
         headless,
         autoPortFallback,
-        defaultPort);
+        defaultPort,
+        guiConsole,
+        systemConsole,
+        interactiveConsoleAvailable);
   }
 
   public static void startMcpFromScript(GhidraScript script, String[] args, Runnable onShutdown)
@@ -280,7 +312,7 @@ public final class Bootstrap {
       return;
     }
 
-    printWsBanner(script, program, config, config.redactedWsUrl());
+    printOutboundWsBanner(script, program, config);
     if (headless) {
       dispatcher.runExclusive(() -> saveCheckpoint(script, program, BRIDGE_PREFIX));
     }
@@ -317,7 +349,10 @@ public final class Bootstrap {
       BooleanSupplier cancelRequested,
       boolean headless,
       boolean autoPortFallback,
-      int defaultPort)
+      int defaultPort,
+      ConsoleService guiConsole,
+      Console systemConsole,
+      boolean interactiveConsoleAvailable)
       throws Exception {
     int maxAttempts = autoPortFallback ? MAX_GUI_PORT_ATTEMPTS : 1;
     EffectiveConfig boundEffective = null;
@@ -332,7 +367,13 @@ public final class Bootstrap {
         EffectiveConfig candidate =
             offset == 0
                 ? initialConfig
-                : resolveWsConfig(rawArgs, program, candidatePort, true);
+                : resolveWsConfig(
+                    rawArgs,
+                    program,
+                    candidatePort,
+                    true,
+                    interactiveConsoleAvailable,
+                    initialConfig.generatedToken());
         AgentDispatcher dispatcher = new AgentDispatcher(services, candidate.config().sessionId());
         AgentClient client = new AgentClient(candidate.config(), dispatcher);
         try {
@@ -368,7 +409,8 @@ public final class Bootstrap {
               + config.port()
               + ".");
     }
-    printWsBanner(script, program, config, config.serverEndpoint());
+    printEmbeddedWsBanner(
+        script, program, config, guiConsole, systemConsole, boundEffective.generatedToken());
     if (headless) {
       AgentDispatcher checkpointDispatcher = boundDispatcher;
       checkpointDispatcher.runExclusive(() -> saveCheckpoint(script, program, BRIDGE_PREFIX));
@@ -388,16 +430,33 @@ public final class Bootstrap {
     }
   }
 
-  private static void printWsBanner(
-      GhidraScript script, Program program, AgentConfig config, String endpointUrl) {
+  private static void printOutboundWsBanner(
+      GhidraScript script, Program program, AgentConfig config) {
     script.println("[ghidra-bridge] " + BANNER_DIVIDER);
     script.println("[ghidra-bridge] WebSocket endpoint ready");
     script.println("[ghidra-bridge]   Program: " + program.getName());
-    script.println("[ghidra-bridge]   Endpoint URL: " + endpointUrl);
+    script.println("[ghidra-bridge]   Endpoint URL: " + config.redactedWsUrl());
     script.println("[ghidra-bridge]   session_id: " + config.sessionId());
     script.println("[ghidra-bridge]   tool_prefix: none (WebSocket JSON-RPC)");
     script.println(
         "[ghidra-bridge]   Auth Token: " + (config.token() == null ? "disabled" : "configured"));
+    script.println("[ghidra-bridge] " + BANNER_DIVIDER);
+  }
+
+  private static void printEmbeddedWsBanner(
+      GhidraScript script,
+      Program program,
+      AgentConfig config,
+      ConsoleService guiConsole,
+      Console systemConsole,
+      String generatedToken) {
+    script.println("[ghidra-bridge] " + BANNER_DIVIDER);
+    script.println("[ghidra-bridge] WebSocket endpoint ready");
+    script.println("[ghidra-bridge]   Program: " + program.getName());
+    script.println("[ghidra-bridge]   Endpoint URL: " + config.serverEndpoint());
+    script.println("[ghidra-bridge]   session_id: " + config.sessionId());
+    script.println("[ghidra-bridge]   tool_prefix: none (WebSocket JSON-RPC)");
+    reportServerAuthToken(script, guiConsole, systemConsole, generatedToken);
     script.println("[ghidra-bridge] " + BANNER_DIVIDER);
   }
 
@@ -461,7 +520,10 @@ public final class Bootstrap {
   private static void printUsage(GhidraScript script) {
     script.printerr("[ghidra-bridge] Invalid startup arguments.");
     script.printerr(
-        "[ghidra-bridge] Defaults are used when ws_url, port, and session_id are omitted.");
+        "[ghidra-bridge] Defaults are used when ws_url, port, token, and session_id are omitted"
+            + " in an interactive console.");
+    script.printerr(
+        "[ghidra-bridge] Non-interactive headless server mode requires token=<secret>.");
     script.printerr(
         "[ghidra-bridge] If you configure transport manually, use ws_url or host/port/path.");
     script.printerr(
@@ -501,8 +563,28 @@ public final class Bootstrap {
     return String.join(", ", allowedOrigins);
   }
 
+  static EffectiveConfig resolveConfig(String[] args, Program program) {
+    return resolveConfig(args, program, true);
+  }
+
+  static EffectiveConfig resolveConfig(
+      String[] args, Program program, boolean interactiveConsoleAvailable) {
+    return resolveWsConfig(
+        NetworkBinding.parseArgs(args),
+        program,
+        DEFAULT_WS_PORT,
+        false,
+        interactiveConsoleAvailable,
+        null);
+  }
+
   static EffectiveConfig resolveWsConfig(
-      Map<String, String> rawArgs, Program program, int candidatePort, boolean fallback) {
+      Map<String, String> rawArgs,
+      Program program,
+      int candidatePort,
+      boolean fallback,
+      boolean interactiveConsoleAvailable,
+      String reusableGeneratedToken) {
     Map<String, String> parsedArgs = new LinkedHashMap<>(rawArgs);
     List<String> defaultMessages = new ArrayList<>();
 
@@ -522,7 +604,71 @@ public final class Bootstrap {
       defaultMessages.add("session_id=" + defaultSessionId);
     }
 
-    return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages);
+    String generatedToken = null;
+    if (NetworkBinding.optionalText(parsedArgs.get("ws_url")) == null
+        && !parsedArgs.containsKey(TOKEN_ARGUMENT)) {
+      if (!interactiveConsoleAvailable) {
+        throw new IllegalArgumentException(
+            "token is required in headless server mode when no interactive console is available;"
+                + " pass token=<secret>");
+      }
+      generatedToken =
+          reusableGeneratedToken != null ? reusableGeneratedToken : generateSessionToken();
+      parsedArgs.put(TOKEN_ARGUMENT, generatedToken);
+      defaultMessages.add("token=<generated>");
+    }
+
+    return new EffectiveConfig(AgentConfig.fromMap(parsedArgs), defaultMessages, generatedToken);
+  }
+
+  static String generateSessionToken() {
+    byte[] bytes = new byte[GENERATED_TOKEN_BYTES];
+    SECURE_RANDOM.nextBytes(bytes);
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+  }
+
+  static boolean reportServerAuthToken(GhidraScript script, String generatedToken) {
+    return reportServerAuthToken(script, findConsoleService(script), System.console(), generatedToken);
+  }
+
+  static boolean reportServerAuthToken(
+      GhidraScript script,
+      ConsoleService guiConsole,
+      Console systemConsole,
+      String generatedToken) {
+    if (generatedToken == null) {
+      script.println("[ghidra-bridge]   Auth Token: configured");
+      return true;
+    }
+    if (guiConsole != null) {
+      script.println("[ghidra-bridge]   Auth Token: generated (printed to console)");
+      guiConsole.println("[ghidra-bridge]   Session Token: " + generatedToken);
+      return true;
+    }
+    if (systemConsole != null) {
+      script.println("[ghidra-bridge]   Auth Token: generated (printed to console)");
+      systemConsole.writer().println("[ghidra-bridge]   Session Token: " + generatedToken);
+      systemConsole.flush();
+      return true;
+    }
+    script.println(
+        "[ghidra-bridge]   Auth Token: generated (no interactive console; pass token=<secret> in"
+            + " headless mode)");
+    return false;
+  }
+
+  private static ConsoleService findConsoleService(GhidraScript script) {
+    final GhidraState state;
+    try {
+      state = script.getState();
+    } catch (NullPointerException uninitializedState) {
+      return null;
+    }
+    if (state == null) {
+      return null;
+    }
+    PluginTool tool = state.getTool();
+    return tool == null ? null : tool.getService(ConsoleService.class);
   }
 
   static McpConfig resolveMcpConfig(
@@ -576,7 +722,8 @@ public final class Bootstrap {
     return normalized == null || LOOPBACK_HOST.equals(normalized);
   }
 
-  record EffectiveConfig(AgentConfig config, List<String> defaultMessages) {
+  record EffectiveConfig(
+      AgentConfig config, List<String> defaultMessages, String generatedToken) {
     EffectiveConfig {
       defaultMessages = List.copyOf(defaultMessages);
     }

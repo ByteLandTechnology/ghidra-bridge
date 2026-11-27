@@ -76,6 +76,8 @@ class WebSocketEnvelopeAndSendErrorTest {
       "{\"jsonrpc\":\"2.0\",\"id\":\"err-data-entry\",\"error\":{\"code\":-32000,\"message\":\"bad\",\"data\":{\"target\":null}}}";
   private static final String FOLLOWUP_SESSION_GET =
       "{\"jsonrpc\":\"2.0\",\"id\":\"followup-1\",\"method\":\"session.get\",\"params\":{}}";
+  private static final String INBOUND_TOKEN = "inbound-secret-token";
+  private static final String HOST_SERVER_TOKEN = "host-secret-token";
 
   @Test
   @DisplayName("MessageEnvelope preserves null values in unmodifiable maps and validates RpcError")
@@ -151,6 +153,7 @@ class WebSocketEnvelopeAndSendErrorTest {
         WebSocket clientSocket =
             httpClient
                 .newWebSocketBuilder()
+                .header("Authorization", "Bearer " + INBOUND_TOKEN)
                 .buildAsync(
                     URI.create("ws://127.0.0.1:" + started.port() + "/ws/agent"),
                     new QueueWebSocketListener(incoming, closed, closeLatch))
@@ -262,7 +265,7 @@ class WebSocketEnvelopeAndSendErrorTest {
               null,
               null,
               null,
-              null,
+              HOST_SERVER_TOKEN,
               "outbound-session",
               null);
       try (AgentDispatcher dispatcher = testDispatcher(outboundConfig, null)) {
@@ -657,7 +660,8 @@ class WebSocketEnvelopeAndSendErrorTest {
     for (int attempt = 0; attempt < 5; attempt++) {
       int port = freeLoopbackPort();
       AgentConfig config =
-          new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "inbound-session", null);
+          new AgentConfig(
+              null, "127.0.0.1", port, "/ws/agent", INBOUND_TOKEN, "inbound-session", null);
       AgentDispatcher dispatcher = testDispatcher(config, null);
       CountDownLatch listening = new CountDownLatch(1);
       AgentClient agentClient =
@@ -706,7 +710,8 @@ class WebSocketEnvelopeAndSendErrorTest {
     for (int attempt = 0; attempt < 5; attempt++) {
       int port = freeLoopbackPort();
       AgentConfig hostServerConfig =
-          new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "host-listener", null);
+          new AgentConfig(
+              null, "127.0.0.1", port, "/ws/agent", HOST_SERVER_TOKEN, "host-listener", null);
       AgentWebSocketServer hostServer = new AgentWebSocketServer(hostServerConfig, handler);
       try {
         hostServer.start();

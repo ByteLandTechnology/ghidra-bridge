@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 class AgentWebSocketFrameAndKeepaliveTest {
+  private static final String TOKEN = "test-token";
   private static final byte[] CLIENT_MASK = new byte[] {0x12, 0x34, 0x56, 0x78};
 
   @Test
@@ -235,7 +236,8 @@ class AgentWebSocketFrameAndKeepaliveTest {
                     "Upgrade: websocket",
                     "Connection: Upgrade",
                     "Sec-WebSocket-Version: 13",
-                    "Sec-WebSocket-Key: " + sampleKey()));
+                    "Sec-WebSocket-Key: " + sampleKey(),
+                    "Authorization: Bearer " + TOKEN));
         assertEquals(409, conflictWhileActive.code());
 
         ServerFrame pingFrame = silentClient.readServerFrame();
@@ -303,7 +305,7 @@ class AgentWebSocketFrameAndKeepaliveTest {
     for (int attempt = 0; attempt < 10; attempt++) {
       int port = freePort();
       AgentConfig config =
-          new AgentConfig(null, "127.0.0.1", port, "/ws/agent", null, "test-session", null);
+          new AgentConfig(null, "127.0.0.1", port, "/ws/agent", TOKEN, "test-session", null);
       AgentWebSocketServer server =
           new AgentWebSocketServer(
               config,
@@ -351,6 +353,7 @@ class AgentWebSocketFrameAndKeepaliveTest {
     headers.add("Connection: Upgrade");
     headers.add("Sec-WebSocket-Version: 13");
     headers.add("Sec-WebSocket-Key: " + sampleKey());
+    headers.add("Authorization: Bearer " + TOKEN);
     writeUpgradeRequest(socket.getOutputStream(), headers);
     InputStream input = new BufferedInputStream(socket.getInputStream());
     HttpStatus status = readHttpHeaders(input);

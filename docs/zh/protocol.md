@@ -292,9 +292,10 @@ MCP 将操作组织为 15 个工具：
 
 ## 认证与网络安全
 
-- **默认回环**：监听器默认绑定 `127.0.0.1`。未设置 `token` 的回环监听器不需要认证。
-- **外部监听器**：外部网络接口上的监听器必须提供 `token` 参数。
-- **浏览器来源策略**：MCP HTTP 服务端默认放行回环地址与已配置 `host` 的来源。可通过 `allowed_origins` 或 `GHIDRA_MCP_ALLOWED_ORIGINS`（`allowed_origins` 优先）覆盖默认规则，或设为 `none` 拒绝所有 `Origin` 头部；包含非回环来源时必须配置 `token`。
+- **默认回环**：监听器默认绑定 `127.0.0.1`。
+- **WebSocket 强制 Token**：回环与外部接口上的所有内嵌 WebSocket 监听器都必须提供非空白 `token`。`Bridge.java` 在交互式服务端模式下未指定 `token` 启动时，会生成 256 位随机会话 Token 并仅输出到控制台；非交互式 headless 服务端模式必须显式传入 `token=<secret>`。未认证的 WebSocket 升级请求返回携带 `WWW-Authenticate: Bearer` 的 HTTP `401`。
+- **MCP HTTP 监听器**：外部网络接口上的 MCP HTTP 监听器必须提供 `token` 参数；未配置 `token` 的回环 MCP HTTP 监听器不需要认证。
+- **浏览器来源策略**：WebSocket 升级仅放行回环地址与已配置 `host` 的来源。MCP HTTP 服务端默认放行回环地址与已配置 `host` 的来源；可通过 `allowed_origins` 或 `GHIDRA_MCP_ALLOWED_ORIGINS`（`allowed_origins` 优先）覆盖默认规则，或设为 `none` 拒绝所有 `Origin` 头部，包含非回环来源时必须配置 `token`。
 - **认证头部**：通过 `Authorization: Bearer <token>` 头部传递凭据。
 - **拒绝 URL Token**：URL 查询参数中携带的 Token 会直接被 HTTP 400 拒绝。
 - **日志脱敏**：安全 Token 绝不会在服务日志中打印。

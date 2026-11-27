@@ -17,14 +17,15 @@ class AgentConfigTest {
   @Test
   void parsesEmbeddedServerDefaultsAndCustomPath() {
     AgentConfig defaults =
-        AgentConfig.fromArgs("port=8765", "session_id=demo", "jar=/opt/ghidra-bridge.jar");
+        AgentConfig.fromArgs(
+            "port=8765", "token=local-secret", "session_id=demo", "jar=/opt/ghidra-bridge.jar");
     assertTrue(defaults.isServerMode());
     assertFalse(defaults.isOutboundMode());
     assertNull(defaults.wsUrl());
     assertEquals(NetworkBinding.DEFAULT_LOOPBACK_HOST, defaults.host());
     assertEquals(8765, defaults.port());
     assertEquals("/ws/agent", defaults.path());
-    assertNull(defaults.token());
+    assertEquals("local-secret", defaults.token());
     assertEquals("demo", defaults.sessionId());
     assertNull(defaults.exitDeadlineSeconds());
     assertNull(defaults.redactedWsUrl());
@@ -46,7 +47,8 @@ class AgentConfigTest {
     assertEquals("remote-demo", custom.sessionId());
     assertEquals("ws://0.0.0.0:9000/custom/ws", custom.serverEndpoint());
 
-    AgentConfig ipv6Server = new AgentConfig(null, "::1", 8765, "/ws/agent", null, "v6-demo", null);
+    AgentConfig ipv6Server =
+        new AgentConfig(null, "::1", 8765, "/ws/agent", "v6-secret", "v6-demo", null);
     assertEquals("ws://[::1]:8765/ws/agent", ipv6Server.serverEndpoint());
   }
 
@@ -108,7 +110,7 @@ class AgentConfigTest {
             .getMessage());
 
     assertEquals(
-        "token is required when binding outside loopback",
+        "token is required",
         assertThrows(
                 IllegalArgumentException.class,
                 () -> AgentConfig.fromArgs("host=0.0.0.0", "port=8765", "session_id=demo"))
@@ -120,7 +122,7 @@ class AgentConfigTest {
                 IllegalArgumentException.class,
                 () ->
                     AgentConfig.fromArgs(
-                        "port=8765", "session_id=demo", "exit_deadline_sec=5"))
+                        "port=8765", "token=s3cr3t", "session_id=demo", "exit_deadline_sec=5"))
             .getMessage());
 
     assertEquals(
@@ -140,6 +142,83 @@ class AgentConfigTest {
                 IllegalArgumentException.class,
                 () -> AgentConfig.fromMap(Map.of("port", "8765", "session_id", "d", "tool_prefix", "x")))
             .getMessage());
+  }
+
+  @Test
+  @DisplayName("Server-mode AgentConfig requires a non-blank token on loopback and non-loopback hosts")
+  void testServerModeRequiresTokenEvenOnLoopback() {
+    String[] hosts = {null, "127.0.0.1", "localhost", "::1", "0.0.0.0"};
+    String[] invalidTokens = {null, "", "   \t\n"};
+
+    for (String host : hosts) {
+      for (String invalidToken : invalidTokens) {
+        IllegalArgumentException error =
+            assertThrows(
+                IllegalArgumentException.class,
+                () -> new AgentConfig(null, host, 8765, "/ws/agent", invalidToken, "demo", null));
+        assertEquals("token is required", error.getMessage());
+      }
+    }
+
+    IllegalArgumentException fromArgsMissing =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> AgentConfig.fromArgs("host=127.0.0.1", "port=8765", "session_id=demo"));
+    assertEquals("token is required", fromArgsMissing.getMessage());
+
+    IllegalArgumentException fromArgsBlank =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                AgentConfig.fromArgs(
+                    "host=127.0.0.1", "port=8765", "session_id=demo", "token=   "));
+    assertEquals("token is required", fromArgsBlank.getMessage());
+  }
+
+  @Test
+  @DisplayName("Server-mode AgentConfig accepts non-blank tokens on loopback and external hosts")
+  void testServerModeAcceptsConfiguredToken() {
+    AgentConfig loopback =
+        AgentConfig.fromArgs(
+            "host=127.0.0.1", "port=8765", "path=/ws/agent", "session_id=demo", "token=secret-1");
+    assertTrue(loopback.isServerMode());
+    assertFalse(loopback.isOutboundMode());
+    assertEquals("127.0.0.1", loopback.host());
+    assertEquals(8765, loopback.port());
+    assertEquals("/ws/agent", loopback.path());
+    assertEquals("secret-1", loopback.token());
+    assertEquals("demo", loopback.sessionId());
+
+    AgentConfig external =
+        AgentConfig.fromArgs("host=0.0.0.0", "port=9000", "session_id=ext", "token=  secret-2  ");
+    assertTrue(external.isServerMode());
+    assertEquals("0.0.0.0", external.host());
+    assertEquals(9000, external.port());
+    assertEquals("secret-2", external.token());
+  }
+
+  @Test
+  @DisplayName("Outbound client mode still permits omitted token")
+  void testOutboundModeAllowsOmittedToken() {
+    AgentConfig outbound =
+        AgentConfig.fromArgs("ws_url=ws://127.0.0.1:8765/ws/agent", "session_id=demo");
+    assertTrue(outbound.isOutboundMode());
+    assertFalse(outbound.isServerMode());
+    assertNull(outbound.token());
+  }
+
+  @Test
+  @DisplayName("NetworkBinding.bearerTokenMatches enforces non-blank expected token and exact Bearer match")
+  void testBearerTokenMatches() {
+    assertTrue(NetworkBinding.bearerTokenMatches("Bearer secret-token", "secret-token"));
+    assertFalse(NetworkBinding.bearerTokenMatches("Bearer wrong-token", "secret-token"));
+    assertFalse(NetworkBinding.bearerTokenMatches("bearer secret-token", "secret-token"));
+    assertFalse(NetworkBinding.bearerTokenMatches("Basic secret-token", "secret-token"));
+    assertFalse(NetworkBinding.bearerTokenMatches("secret-token", "secret-token"));
+    assertFalse(NetworkBinding.bearerTokenMatches(null, "secret-token"));
+    assertFalse(NetworkBinding.bearerTokenMatches("Bearer null", null));
+    assertFalse(NetworkBinding.bearerTokenMatches("Bearer ", ""));
+    assertFalse(NetworkBinding.bearerTokenMatches("Bearer    ", "   "));
   }
 
   @Test

@@ -73,21 +73,27 @@ class AgentClientOutboundUrlTest {
   @Test
   @DisplayName("Matches WebSocketHandshakeValidator rejection for plain and percent-encoded token query parameters")
   void matchesHandshakeValidatorForQueryTokens() {
-    AgentConfig serverConfig = AgentConfig.fromArgs("port=8765", "session_id=server-check");
+    AgentConfig serverConfig =
+        AgentConfig.fromArgs("port=8765", "session_id=server-check", "token=server-secret");
     Map<String, String> validHeaders =
         Map.of(
+            "host", "127.0.0.1:8765",
             "upgrade", "websocket",
             "connection", "Upgrade",
             "sec-websocket-version", "13",
-            "sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ==");
+            "sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ==",
+            "authorization", "Bearer server-secret");
 
     for (String rawQuery : new String[] {"token=marker-query-cred", "%74oken=marker-query-cred"}) {
       WebSocketHandshake.HandshakeRequest request =
           new WebSocketHandshake.HandshakeRequest(
               "GET", "/ws/agent", WebSocketHandshake.parseQuery(rawQuery), validHeaders);
-      assertThrows(
-          WebSocketHandshake.HttpHandshakeException.class,
-          () -> WebSocketHandshakeValidator.validate(serverConfig, request));
+      WebSocketHandshake.HttpHandshakeException handshakeEx =
+          assertThrows(
+              WebSocketHandshake.HttpHandshakeException.class,
+              () -> WebSocketHandshakeValidator.validate(serverConfig, request));
+      assertEquals(400, handshakeEx.status());
+      assertEquals("Query-string tokens are not supported", handshakeEx.getMessage());
 
       IllegalArgumentException clientEx =
           assertThrows(

@@ -62,6 +62,9 @@ public final class AgentWebSocketServer implements AutoCloseable {
       Duration pongTimeout) {
     this.config = Objects.requireNonNull(config, "config");
     this.handler = Objects.requireNonNull(handler, "handler");
+    if (!config.isServerMode()) {
+      throw new IllegalArgumentException("server-mode AgentConfig is required");
+    }
     Objects.requireNonNull(handshakeTimeout, "handshakeTimeout");
     if (handshakeTimeout.isZero() || handshakeTimeout.isNegative()) {
       throw new IllegalArgumentException("handshakeTimeout must be positive");

@@ -133,6 +133,8 @@ class NetworkBindingTest {
     assertFalse(NetworkBinding.bearerTokenMatches("s3cr3t", "s3cr3t"));
     assertFalse(NetworkBinding.bearerTokenMatches(null, "s3cr3t"));
     assertFalse(NetworkBinding.bearerTokenMatches("Bearer null", null));
+    assertFalse(NetworkBinding.bearerTokenMatches("Bearer ", ""));
+    assertFalse(NetworkBinding.bearerTokenMatches("Bearer    ", "   "));
   }
 
   @Test

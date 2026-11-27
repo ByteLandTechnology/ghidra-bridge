@@ -6,6 +6,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 final class WebSocketHandshakeValidator {
   private static final String BAD_REQUEST_REASON = "Bad Request";
@@ -17,6 +18,7 @@ final class WebSocketHandshakeValidator {
   private WebSocketHandshakeValidator() {}
 
   static void validate(AgentConfig config, WebSocketHandshake.HandshakeRequest request) {
+    requireServerConfig(config);
     NetworkBinding.HostValidationResult hostValidation =
         NetworkBinding.validateHostHeader(request.hostHeaders(), config.host(), config.port());
     validateWithHostResult(config, null, request, hostValidation);
@@ -24,10 +26,18 @@ final class WebSocketHandshakeValidator {
 
   static void validate(
       AgentConfig config, boolean loopbackListener, WebSocketHandshake.HandshakeRequest request) {
+    requireServerConfig(config);
     NetworkBinding.HostValidationResult hostValidation =
         NetworkBinding.validateHostHeader(
             request.hostHeaders(), config.host(), config.port(), loopbackListener);
     validateWithHostResult(config, loopbackListener, request, hostValidation);
+  }
+
+  private static void requireServerConfig(AgentConfig config) {
+    Objects.requireNonNull(config, "config");
+    if (!config.isServerMode()) {
+      throw new IllegalArgumentException("server-mode AgentConfig is required");
+    }
   }
 
   private static void validateWithHostResult(
@@ -74,9 +84,8 @@ final class WebSocketHandshakeValidator {
       throw new WebSocketHandshake.HttpHandshakeException(
           400, BAD_REQUEST_REASON, "Query-string tokens are not supported");
     }
-    if (config.token() != null
-        && !NetworkBinding.bearerTokenMatches(
-            request.headers().get("authorization"), config.token())) {
+    if (!NetworkBinding.bearerTokenMatches(
+        request.headers().get("authorization"), config.token())) {
       throw new WebSocketHandshake.HttpHandshakeException(401, "Unauthorized", "Invalid token");
     }
   }

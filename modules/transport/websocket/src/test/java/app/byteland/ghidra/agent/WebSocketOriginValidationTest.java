@@ -27,13 +27,15 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class WebSocketOriginValidationTest {
   private static final String SAMPLE_KEY = "dGhlIHNhbXBsZSBub25jZQ==";
+  private static final String LOOPBACK_TOKEN = "loopback-secret-token";
+  private static final String LOOPBACK_AUTH_HEADER = "Authorization: Bearer " + LOOPBACK_TOKEN;
 
   @Test
   @DisplayName("Permits upgrade requests that omit the Origin header")
   void allowsAbsentOriginHeader() throws IOException {
     AgentConfig config = loopbackConfig("127.0.0.1", 8765);
     WebSocketHandshake.HandshakeRequest request =
-        readHandshake(rawUpgradeRequest("127.0.0.1:8765", List.of()));
+        readHandshake(rawUpgradeRequest("127.0.0.1:8765", List.of(LOOPBACK_AUTH_HEADER)));
 
     assertDoesNotThrow(() -> WebSocketHandshakeValidator.validate(config, request));
   }
@@ -58,7 +60,9 @@ class WebSocketOriginValidationTest {
     for (String bindHost : List.of("127.0.0.1", "127.0.0.2", "localhost", "::1")) {
       AgentConfig config = loopbackConfig(bindHost, 8765);
       WebSocketHandshake.HandshakeRequest request =
-          readHandshake(rawUpgradeRequest("127.0.0.1:8765", List.of("Origin: " + origin)));
+          readHandshake(
+              rawUpgradeRequest(
+                  "127.0.0.1:8765", List.of("Origin: " + origin, LOOPBACK_AUTH_HEADER)));
 
       assertDoesNotThrow(
           () -> WebSocketHandshakeValidator.validate(config, request),
@@ -294,27 +298,33 @@ class WebSocketOriginValidationTest {
       // 3. Right after 403 rejections, permitted loopback Origin upgrades succeed with 101 (not 409).
       assertSuccessfulUpgradeAndClose(
           port,
-          rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://127.0.0.1:" + port)),
+          rawUpgradeRequest(
+              "127.0.0.1:" + port,
+              List.of("Origin: http://127.0.0.1:" + port, LOOPBACK_AUTH_HEADER)),
           handler);
       assertEquals(1, openCount.get());
 
       // 4. Absent Origin header continues to succeed with `101 Switching Protocols`.
       assertSuccessfulUpgradeAndClose(
-          port, rawUpgradeRequest("127.0.0.1:" + port, List.of()), handler);
+          port, rawUpgradeRequest("127.0.0.1:" + port, List.of(LOOPBACK_AUTH_HEADER)), handler);
       assertEquals(2, openCount.get());
 
       // 5. 127.0.0.2, localhost, and [::1] Origin headers also succeed with `101 Switching Protocols`.
       assertSuccessfulUpgradeAndClose(
           port,
-          rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://127.0.0.2:" + port)),
+          rawUpgradeRequest(
+              "127.0.0.1:" + port,
+              List.of("Origin: http://127.0.0.2:" + port, LOOPBACK_AUTH_HEADER)),
           handler);
       assertSuccessfulUpgradeAndClose(
           port,
-          rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://localhost:3000")),
+          rawUpgradeRequest(
+              "127.0.0.1:" + port, List.of("Origin: http://localhost:3000", LOOPBACK_AUTH_HEADER)),
           handler);
       assertSuccessfulUpgradeAndClose(
           port,
-          rawUpgradeRequest("127.0.0.1:" + port, List.of("Origin: http://[::1]:" + port)),
+          rawUpgradeRequest(
+              "127.0.0.1:" + port, List.of("Origin: http://[::1]:" + port, LOOPBACK_AUTH_HEADER)),
           handler);
       assertEquals(5, openCount.get());
     }
@@ -391,7 +401,7 @@ class WebSocketOriginValidationTest {
   }
 
   private static AgentConfig loopbackConfig(String host, int port) {
-    return new AgentConfig(null, host, port, "/ws/agent", null, "test-session", null);
+    return new AgentConfig(null, host, port, "/ws/agent", LOOPBACK_TOKEN, "test-session", null);
   }
 
   private static WebSocketHandshake.HandshakeRequest readHandshake(String rawRequest)

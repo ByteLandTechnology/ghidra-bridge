@@ -21,6 +21,7 @@ import app.byteland.ghidra.service.program.ProgramService;
 import app.byteland.ghidra.service.reference.ReferenceService;
 import app.byteland.ghidra.service.symbol.SymbolService;
 import ghidra.app.script.GhidraScript;
+import ghidra.app.services.ConsoleService;
 import ghidra.program.model.listing.Program;
 import ghidra.util.SystemUtilities;
 import ghidra.util.task.TaskMonitorAdapter;
@@ -191,7 +192,12 @@ class BootstrapGuiAndSaveGuardTest {
           pool.submit(
               () -> {
                 Bootstrap.startFromScript(
-                    tab1.script, new String[0], null, ignored -> tab1.services, basePort);
+                    tab1.script,
+                    new String[0],
+                    null,
+                    ignored -> tab1.services,
+                    basePort,
+                    tab1.consoleService);
                 return null;
               });
       waitForLogLine(tab1.stdout, "Embedded bridge is listening for WebSocket clients.");
@@ -200,7 +206,12 @@ class BootstrapGuiAndSaveGuardTest {
           pool.submit(
               () -> {
                 Bootstrap.startFromScript(
-                    tab2.script, new String[0], null, ignored -> tab2.services, basePort);
+                    tab2.script,
+                    new String[0],
+                    null,
+                    ignored -> tab2.services,
+                    basePort,
+                    tab2.consoleService);
                 return null;
               });
       waitForLogLine(tab2.stdout, "Embedded bridge is listening for WebSocket clients.");
@@ -213,6 +224,8 @@ class BootstrapGuiAndSaveGuardTest {
           tab2.joinedStdout()
               .contains("Endpoint URL: ws://127.0.0.1:" + fallbackPort + "/ws/agent"));
       assertTrue(tab2.joinedStdout().contains("session_id: beta_bin-" + fallbackPort));
+      String fallbackToken = tab2.sessionToken();
+      assertFalse(tab2.joinedStdout().contains(fallbackToken));
 
       // Connect a WebSocket client to the fallback tab and verify session.get works.
       try (HttpClient client = HttpClient.newHttpClient()) {
@@ -220,6 +233,7 @@ class BootstrapGuiAndSaveGuardTest {
         WebSocket ws =
             client
                 .newWebSocketBuilder()
+                .header("Authorization", "Bearer " + fallbackToken)
                 .buildAsync(
                     URI.create("ws://127.0.0.1:" + fallbackPort + "/ws/agent"), listener)
                 .get(5, TimeUnit.SECONDS);
@@ -263,7 +277,7 @@ class BootstrapGuiAndSaveGuardTest {
               () ->
                   Bootstrap.startFromScript(
                       headlessWs.script,
-                      new String[] {"port=" + busyPort},
+                      new String[] {"port=" + busyPort, "token=headless-secret"},
                       null,
                       ignored -> headlessWs.services,
                       busyPort));
@@ -470,6 +484,8 @@ class BootstrapGuiAndSaveGuardTest {
     final AtomicInteger serviceCloses = new AtomicInteger();
     final List<String> stdout = new CopyOnWriteArrayList<>();
     final List<String> stderr = new CopyOnWriteArrayList<>();
+    final List<String> console = new CopyOnWriteArrayList<>();
+    final ConsoleService consoleService;
     final TaskMonitorAdapter monitor = new TaskMonitorAdapter(true);
     final Program program;
     final BridgeServices services;
@@ -542,6 +558,17 @@ class BootstrapGuiAndSaveGuardTest {
               unused(DataTypeService.class),
               transactionRunner,
               programName);
+      this.consoleService =
+          (ConsoleService)
+              Proxy.newProxyInstance(
+                  ConsoleService.class.getClassLoader(),
+                  new Class<?>[] {ConsoleService.class},
+                  (proxy, method, args) -> {
+                    if ("println".equals(method.getName()) && args != null && args.length == 1) {
+                      console.add((String) args[0]);
+                    }
+                    return null;
+                  });
       this.script =
           new GhidraScript() {
             {
@@ -570,6 +597,16 @@ class BootstrapGuiAndSaveGuardTest {
 
     String joinedStdout() {
       return String.join("\n", stdout);
+    }
+
+    String sessionToken() {
+      String prefix = "[ghidra-bridge]   Session Token: ";
+      for (String line : console) {
+        if (line.startsWith(prefix)) {
+          return line.substring(prefix.length());
+        }
+      }
+      throw new AssertionError("Expected generated Session Token in GUI console, got: " + console);
     }
 
     private static <T> T closeTrackingStub(Class<T> type) {

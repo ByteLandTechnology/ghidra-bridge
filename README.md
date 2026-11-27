@@ -79,7 +79,7 @@ The launcher rejects unknown arguments, duplicate arguments, and camelCase keys.
 
 ```text
 # Embedded WebSocket server
-host=127.0.0.1 port=8765 path=/ws/agent session_id=demo
+host=127.0.0.1 port=8765 path=/ws/agent session_id=demo token=secret
 
 # Outbound WebSocket client
 ws_url=ws://127.0.0.1:8765/ws/agent session_id=demo token=secret
@@ -99,7 +99,7 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 | `port` | `8765` (WS) / `8766` (MCP) | TCP port number for the HTTP or WebSocket server. WebSocket uses the default only when `ws_url` is not set. |
 | `path` | `/ws/agent` (WS) / `/mcp` (MCP) | URL path endpoint for request dispatch. |
 | `session_id` | Program name | Unique identifier string for this active session. |
-| `token` | *(none)* | Shared secret token for bearer authentication. |
+| `token` | Random (WS server) / *(none)* | Shared secret token for bearer authentication. In interactive server mode, `Bridge.java` generates a 256-bit random session token when omitted. |
 | `ws_url` | *(none)* | Remote WebSocket URL in outbound client mode. |
 | `tool_prefix` | `ghidra` | MCP only. First part of every tool name, such as `ghidra` in `ghidra_program`. Use a different value for each server that one client connects to. |
 | `allowed_origins` | Loopback and `host` | MCP only. Comma-separated `scheme://host[:port]` browser origins, or `none` to reject all `Origin` headers. Overrides `GHIDRA_MCP_ALLOWED_ORIGINS`. Non-loopback origins require `token`. |
@@ -111,11 +111,11 @@ host=127.0.0.1 port=8767 path=/mcp session_id=other tool_prefix=other
 The bridge enforces strict security boundaries:
 
 - **Loopback Default**: Listeners bind to `127.0.0.1` by default.
-- **Mandatory Token**: A non-loopback listener or a non-loopback origin in `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` requires `token`.
+- **Mandatory Token**: Every embedded WebSocket listener on loopback or external interfaces requires `token`. In interactive server mode without `token`, `Bridge.java` generates a 256-bit random token and prints it only to the console. Non-interactive headless server mode requires `token=<secret>`. A non-loopback MCP HTTP listener or non-loopback origin in `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` also requires `token`.
 - **Browser Origin Policy**: By default, MCP HTTP permits only loopback and `host` origins. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` to override, or `none` to reject all.
-- **Bearer Header**: Inbound requests must send `Authorization: Bearer <token>`.
+- **Bearer Header**: Inbound WebSocket upgrades and token-protected HTTP requests must send `Authorization: Bearer <token>`.
 - **Query Token Rejection**: The server rejects tokens in URL query strings with HTTP 400.
-- **Log Privacy**: The server never writes secret tokens to log files or consoles.
+- **Log Privacy**: The server never writes secret tokens to persistent log files. Configured tokens are never printed, and generated session tokens print only to the console.
 
 ### Verify Release Archives
 

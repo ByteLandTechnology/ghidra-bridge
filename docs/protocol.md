@@ -291,9 +291,10 @@ An unknown operation, or an argument other than `operation` and `params`, return
 
 ## Authentication and Security
 
-- **Loopback Default**: Listeners bind to `127.0.0.1` by default. A loopback listener without `token` does not require authentication.
-- **External Listener**: A listener on an external network interface requires `token`.
-- **Browser Origin Policy**: MCP HTTP permits loopback and `host` origins by default. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` (`allowed_origins` wins) to override, or `none` to reject all `Origin` headers. Non-loopback origins require `token`.
+- **Loopback Default**: Listeners bind to `127.0.0.1` by default.
+- **Mandatory WebSocket Token**: Every embedded WebSocket listener on loopback or external interfaces requires a non-blank `token`. In interactive server mode without `token`, `Bridge.java` generates a 256-bit random token and prints it only to the console. Non-interactive headless server mode requires `token=<secret>`. Unauthenticated WebSocket upgrades return HTTP `401` with `WWW-Authenticate: Bearer`.
+- **MCP HTTP Listener**: An MCP HTTP listener on an external network interface requires `token`. A loopback MCP HTTP listener without `token` does not require authentication.
+- **Browser Origin Policy**: WebSocket upgrades permit only loopback and `host` origins. MCP HTTP permits loopback and `host` origins by default. Set `allowed_origins` or `GHIDRA_MCP_ALLOWED_ORIGINS` (`allowed_origins` wins) to override, or `none` to reject all `Origin` headers. Non-loopback origins require `token`.
 - **Authorization Header**: Send credentials through `Authorization: Bearer <token>`.
 - **Query Token Rejection**: The server rejects tokens in query strings with HTTP 400.
 - **Log Redaction**: Secret tokens never appear in server log files.
